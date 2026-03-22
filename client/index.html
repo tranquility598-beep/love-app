@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' http://26.237.63.189:5000; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http://26.237.63.189:5000 blob:; connect-src 'self' http://26.237.63.189:5000 ws://26.237.63.189:5000; media-src 'self' blob:;">
+  <title>Love</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/auth.css">
+  <link rel="stylesheet" href="styles/sidebar.css">
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/modals.css">
+</head>
+<body>
+
+<!-- ===== LOADING SCREEN ===== -->
+<div class="loading-screen" id="loading-screen">
+  <div class="loading-logo">
+    <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
+      <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+    </svg>
+  </div>
+  <div class="loading-text">LOVE</div>
+  <div class="loading-spinner"></div>
+</div>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div class="auth-screen hidden" id="login-screen">
+  <div class="auth-bg">
+    <div class="auth-bg-shape shape-1"></div>
+    <div class="auth-bg-shape shape-2"></div>
+    <div class="auth-bg-shape shape-3"></div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
+      </svg>
+    </div>
+    <h1 class="auth-title">С возвращением</h1>
+    <p class="auth-subtitle">Рады снова видеть тебя!</p>
+    <div id="login-error" class="auth-error hidden"></div>
+    <div class="auth-field">
+      <label class="auth-label">Email <span class="required">*</span></label>
+      <input type="email" id="login-email" class="auth-input" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label">Пароль <span class="required">*</span></label>
+      <div class="password-wrapper">
+        <input type="password" id="login-password" class="auth-input" placeholder="••••••••" autocomplete="current-password">
+        <button class="password-toggle" onclick="togglePassword('login-password', this)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <button class="auth-btn" id="login-btn" onclick="handleLogin()">
+      Войти
+    </button>
+    <div class="auth-divider">
+      <span>Нет аккаунта?</span>
+      <a class="auth-link" onclick="showRegister()">Зарегистрироваться</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== REGISTER SCREEN ===== -->
+<div class="auth-screen hidden" id="register-screen">
+  <div class="auth-bg">
+    <div class="auth-bg-shape shape-1"></div>
+    <div class="auth-bg-shape shape-2"></div>
+    <div class="auth-bg-shape shape-3"></div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
+      </svg>
+    </div>
+    <h1 class="auth-title">Создать аккаунт</h1>
+    <p class="auth-subtitle">Присоединяйся к Love</p>
+    <div id="register-error" class="auth-error hidden"></div>
+    <div class="auth-field">
+      <label class="auth-label">Email <span class="required">*</span></label>
+      <input type="email" id="register-email" class="auth-input" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label">Имя пользователя <span class="required">*</span></label>
+      <input type="text" id="register-username" class="auth-input" placeholder="username" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label class="auth-label">Пароль <span class="required">*</span></label>
+      <div class="password-wrapper">
+        <input type="password" id="register-password" class="auth-input" placeholder="••••••••" autocomplete="new-password">
+        <button class="password-toggle" onclick="togglePassword('register-password', this)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <button class="auth-btn" id="register-btn" onclick="handleRegister()">
+      Создать аккаунт
+    </button>
+    <div class="auth-divider">
+      <span>Уже есть аккаунт?</span>
+      <a class="auth-link" onclick="showLogin()">Войти</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div class="app hidden" id="app">
+
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <div class="title-bar-drag">
+      <svg width="14" height="14" viewBox="0 0 100 100" fill="none" style="margin-right:6px;opacity:0.4">
+        <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white"/>
+      </svg>
+      LOVE
+    </div>
+    <div class="title-bar-controls">
+      <button class="title-btn" onclick="window.electronAPI.minimizeWindow()" title="Свернуть">
+        <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="title-btn" onclick="window.electronAPI.maximizeWindow()" title="Развернуть">
+        <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" fill="none"/></svg>
+      </button>
+      <button class="title-btn close" onclick="window.electronAPI.closeWindow()" title="Закрыть">
+        <svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Auto Update Banner -->
+  <div class="update-banner hidden" id="update-banner">
+    <div class="update-info">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span id="update-banner-text">Доступно обновление</span>
+    </div>
+    <div class="update-progress-bar hidden" id="update-progress-bar">
+      <div class="update-progress-fill" id="update-progress-fill"></div>
+    </div>
+    <div class="update-actions">
+      <button class="update-btn" id="update-action-btn">Скачивается...</button>
+      <button class="update-close" onclick="closeUpdateBanner()">✕</button>
+    </div>
+  </div>
+
+  <!-- App Layout -->
+  <div class="app-layout">
+
+    <!-- Servers Sidebar -->
+    <div class="servers-sidebar" id="servers-sidebar">
+      <!-- DM Button -->
+      <div class="server-icon dm-icon" id="dm-btn" onclick="showDMView()" title="Личные сообщения">
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none">
+          <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="currentColor"/>
+        </svg>
+        <div class="server-tooltip">Личные сообщения</div>
+      </div>
+
+      <div class="servers-divider"></div>
+
+      <!-- Server list rendered by JS -->
+      <div id="server-list"></div>
+
+      <div class="servers-divider"></div>
+
+      <!-- Add Server -->
+      <div class="server-icon add-server" onclick="showCreateServerModal()" title="Создать сервер">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <div class="server-tooltip">Создать сервер</div>
+      </div>
+
+      <!-- Join Server -->
+      <div class="server-icon join-server" onclick="showJoinServerModal()" title="Присоединиться к серверу">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        <div class="server-tooltip">Присоединиться по коду</div>
+      </div>
+    </div>
+
+    <!-- Channels Sidebar -->
+    <div class="channels-sidebar" id="channels-sidebar">
+
+      <!-- DM View -->
+      <div id="dm-sidebar-view">
+        <div class="channels-header">
+          <span id="channels-header-title">Личные сообщения</span>
+        </div>
+        <div class="dm-search-section" id="dm-search-section">
+          <button class="find-friends-btn" onclick="showFriendsView()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Найти или начать беседу
+          </button>
+        </div>
+        <div class="dm-list" id="dm-list">
+          <div class="dm-section-title">Личные сообщения</div>
+          <div class="dm-conversations" id="dm-conversations"></div>
+        </div>
+      </div>
+
+      <!-- Server Channels View -->
+      <div id="server-sidebar-view" class="hidden">
+        <div class="channels-header" onclick="showServerSettings()">
+          <span id="channels-header-title">Сервер</span>
+          <button class="channels-header-btn" onclick="event.stopPropagation(); showServerSettings()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          </button>
+        </div>
+        <div class="server-channels-list" id="server-channels-list"></div>
+      </div>
+
+      <!-- User Panel -->
+      <div class="user-panel">
+        <div class="user-panel-avatar" onclick="showPersonalProfile()">
+          <img class="avatar-img" id="user-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23222'/%3E%3Cpath d='M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z' fill='white' opacity='0.6'/%3E%3C/svg%3E" alt="Avatar">
+          <div class="user-status-dot online" id="user-status-dot"></div>
+        </div>
+        <div class="user-panel-info" onclick="showPersonalProfile()">
+          <div class="user-panel-name" id="user-panel-name">Загрузка...</div>
+          <div class="user-panel-tag" id="user-panel-tag">#0000</div>
+        </div>
+        <div class="user-panel-controls">
+          <button class="user-control-btn" id="mic-btn" onclick="toggleMic()" title="Микрофон">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="user-control-btn" id="headset-btn" onclick="toggleDeafen()" title="Наушники">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          </button>
+          <button class="user-control-btn" onclick="showSettings()" title="Настройки">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="main-content">
+
+      <!-- Welcome View -->
+      <div class="welcome-view" id="welcome-view">
+        <div class="welcome-content">
+          <div class="welcome-icon">
+            <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.15"/>
+              <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <h2 class="welcome-title">Добро пожаловать в Love</h2>
+          <p class="welcome-subtitle">Выбери сервер или начни личный чат</p>
+        </div>
+      </div>
+
+      <!-- Friends View -->
+      <div class="friends-view hidden" id="friends-view">
+        <div class="friends-header">
+          <div class="friends-header-left">
+            <svg width="20" height="20" viewBox="0 0 100 100" fill="none">
+              <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="currentColor" opacity="0.7"/>
+            </svg>
+            <span class="friends-header-title">Друзья</span>
+          </div>
+          <div class="friends-tabs">
+            <button class="friends-tab active" onclick="showFriendsTab('online')" id="tab-online">В сети</button>
+            <button class="friends-tab" onclick="showFriendsTab('all')" id="tab-all">Все</button>
+            <button class="friends-tab" onclick="showFriendsTab('pending')" id="tab-pending">Ожидающие</button>
+            <button class="friends-tab add-friend-tab" onclick="showFriendsTab('add')" id="tab-add">Добавить</button>
+          </div>
+        </div>
+        <div class="friends-content" id="friends-content"></div>
+      </div>
+
+      <!-- Chat View -->
+      <div class="chat-view hidden" id="chat-view">
+        <div class="chat-header">
+          <div class="chat-header-left">
+            <div class="chat-header-icon" id="chat-header-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div class="chat-header-info">
+              <div class="chat-header-name" id="chat-header-name">канал</div>
+              <div class="chat-header-topic" id="chat-header-topic"></div>
+            </div>
+          </div>
+          <div class="chat-header-right">
+            <button class="chat-header-btn" onclick="toggleMembersList()" title="Участники" id="members-toggle-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="messages-area" id="messages-area">
+          <div class="messages-list" id="messages-list"></div>
+          <div class="typing-indicator" id="typing-indicator"></div>
+        </div>
+
+        <!-- Voice panel (shown when in voice channel) -->
+        <div class="voice-panel hidden" id="voice-panel">
+          <div class="voice-panel-info">
+            <div class="voice-panel-status">
+              <div class="voice-status-dot"></div>
+              <span id="voice-panel-channel">Голосовой канал</span>
+            </div>
+            <div class="voice-panel-server" id="voice-panel-server"></div>
+          </div>
+          <div class="voice-panel-controls">
+            <button class="voice-control-btn" id="voice-mute-btn" onclick="toggleVoiceMute()" title="Микрофон">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            </button>
+            <button class="voice-control-btn" id="voice-deafen-btn" onclick="toggleVoiceDeafen()" title="Звук">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+            </button>
+            <button class="voice-control-btn leave-voice" onclick="leaveVoiceChannel()" title="Покинуть канал">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="message-input-area" id="message-input-area">
+          <div class="reply-preview hidden" id="reply-preview">
+            <div class="reply-preview-content">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+              Ответ на <strong id="reply-author-name"></strong>: <span id="reply-content-preview"></span>
+            </div>
+            <button class="reply-close" onclick="cancelReply()">✕</button>
+          </div>
+          <div class="file-preview hidden" id="file-preview">
+            <div class="file-preview-item">
+              <span>📎</span>
+              <span id="file-preview-name"></span>
+            </div>
+            <button class="file-preview-close" onclick="cancelFile()">✕</button>
+          </div>
+          <div class="message-input-wrapper">
+            <button class="attach-btn" onclick="document.getElementById('file-input').click()" title="Прикрепить файл">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(event)">
+            <div class="message-input-container">
+              <textarea class="message-input" id="message-input" data-placeholder="Написать сообщение..." rows="1"></textarea>
+            </div>
+            <div class="message-input-right">
+              <button class="emoji-btn" onclick="toggleEmojiPicker()" title="Эмодзи">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+              </button>
+              <button class="send-btn" onclick="sendMessage()" title="Отправить">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="emoji-picker-container hidden" id="emoji-picker-container">
+            <emoji-picker id="emoji-picker"></emoji-picker>
+          </div>
+        </div>
+      </div>
+
+      <!-- Members Sidebar -->
+      <div class="members-sidebar hidden" id="members-sidebar">
+        <div class="members-header">Участники</div>
+        <div class="members-list" id="members-list"></div>
+      </div>
+
+    </div><!-- end main-content -->
+  </div><!-- end app-layout -->
+</div><!-- end app -->
+
+<!-- ===== MODALS ===== -->
+
+<!-- Create Server Modal -->
+<div class="modal-overlay hidden" id="create-server-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Создать сервер</h2>
+      <button class="modal-close" onclick="closeModal('create-server-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Дай своему серверу имя и личность. Ты всегда сможешь изменить это позже.</p>
+      <div class="server-icon-upload" onclick="document.getElementById('server-icon-input').click()">
+        <div class="server-icon-preview" id="server-icon-preview">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Загрузить</span>
+        </div>
+      </div>
+      <input type="file" id="server-icon-input" accept="image/*" style="display:none" onchange="previewServerIcon(event)">
+      <div class="modal-field">
+        <label class="modal-label">Название сервера</label>
+        <input type="text" id="server-name-input" class="modal-input" placeholder="Мой сервер" maxlength="100">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Описание (необязательно)</label>
+        <textarea id="server-desc-input" class="modal-textarea" placeholder="О чём этот сервер?" rows="2"></textarea>
+      </div>
+      <div id="create-server-error" class="modal-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeModal('create-server-modal')">Отмена</button>
+      <button class="modal-btn primary" onclick="createServer()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Join Server Modal -->
+<div class="modal-overlay hidden" id="join-server-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Присоединиться к серверу</h2>
+      <button class="modal-close" onclick="closeModal('join-server-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Введи код приглашения чтобы присоединиться к серверу.</p>
+      <div class="modal-field">
+        <label class="modal-label">Код приглашения</label>
+        <input type="text" id="invite-code-input" class="modal-input" placeholder="XXXXXX" maxlength="20" style="text-transform:uppercase;letter-spacing:3px;font-weight:700;font-size:18px;">
+      </div>
+      <div id="join-server-error" class="modal-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeModal('join-server-modal')">Отмена</button>
+      <button class="modal-btn primary" onclick="joinServer()">Присоединиться</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Channel Modal -->
+<div class="modal-overlay hidden" id="create-channel-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Создать канал</h2>
+      <button class="modal-close" onclick="closeModal('create-channel-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="channel-type-selector">
+        <div class="channel-type-option active" onclick="selectChannelType('text', this)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <div>
+            <div class="channel-type-name">Текстовый канал</div>
+            <div class="channel-type-desc">Отправляй сообщения, изображения и файлы</div>
+          </div>
+        </div>
+        <div class="channel-type-option" onclick="selectChannelType('voice', this)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          <div>
+            <div class="channel-type-name">Голосовой канал</div>
+            <div class="channel-type-desc">Общайся голосом с другими участниками</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Название канала</label>
+        <div class="channel-name-input-wrapper">
+          <span class="channel-prefix" id="channel-prefix">#</span>
+          <input type="text" id="channel-name-input" class="modal-input channel-name-input" placeholder="новый-канал" maxlength="100">
+        </div>
+      </div>
+      <div id="create-channel-error" class="modal-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeModal('create-channel-modal')">Отмена</button>
+      <button class="modal-btn primary" onclick="createChannel()">Создать канал</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay hidden" id="settings-modal">
+  <div class="settings-modal">
+    <div class="settings-sidebar">
+      <div class="settings-section-title">Аккаунт</div>
+      <div class="settings-nav-item active" onclick="showSettingsTab('profile', this)">Профиль</div>
+      <div class="settings-nav-item" onclick="showSettingsTab('appearance', this)">Внешний вид</div>
+      <div class="settings-nav-item" onclick="showSettingsTab('notifications', this)">Уведомления</div>
+      <div class="settings-nav-item" onclick="showSettingsTab('voice', this)">Голос и видео</div>
+      <div class="settings-divider"></div>
+      <div class="settings-nav-item danger" onclick="handleLogout()">Выйти</div>
+    </div>
+    <div class="settings-content">
+      <button class="settings-close" onclick="closeModal('settings-modal')">✕</button>
+
+      <!-- Profile Tab -->
+      <div class="settings-tab" id="settings-profile">
+        <h2 class="settings-title">Профиль</h2>
+        <div class="profile-banner">
+          <div class="profile-avatar-wrapper" onclick="document.getElementById('avatar-input').click()">
+            <img class="profile-avatar" id="settings-avatar" src="" alt="Avatar">
+            <div class="avatar-overlay">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Изменить</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:18px;font-weight:700;color:var(--text-primary)" id="settings-username-display"></div>
+            <div style="font-size:13px;color:var(--text-muted)" id="settings-tag-display"></div>
+          </div>
+        </div>
+        <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+        <div class="settings-field">
+          <label class="settings-label">Имя пользователя</label>
+          <input type="text" id="settings-username" class="settings-input" placeholder="username">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">О себе</label>
+          <textarea id="settings-bio" class="settings-textarea" placeholder="Расскажи о себе..." rows="3"></textarea>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Статус</label>
+          <select id="settings-status" class="settings-select">
+            <option value="online">В сети</option>
+            <option value="idle">Не активен</option>
+            <option value="dnd">Не беспокоить</option>
+            <option value="offline">Невидимый</option>
+          </select>
+        </div>
+        <button class="settings-save-btn" onclick="saveProfile()">Сохранить изменения</button>
+      </div>
+
+      <!-- Appearance Tab -->
+      <div class="settings-tab hidden" id="settings-appearance">
+        <h2 class="settings-title">Внешний вид</h2>
+        <div class="settings-field">
+          <label class="settings-label">Тема</label>
+          <div class="theme-options">
+            <div class="theme-option active" onclick="setTheme('dark', this)">
+              <div class="theme-preview dark-theme"></div>
+              <span>Тёмная</span>
+            </div>
+            <div class="theme-option" onclick="setTheme('light', this)">
+              <div class="theme-preview light-theme"></div>
+              <span>Светлая</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications Tab -->
+      <div class="settings-tab hidden" id="settings-notifications">
+        <h2 class="settings-title">Уведомления</h2>
+        <div class="settings-toggle-row">
+          <div>
+            <div class="settings-toggle-title">Уведомления о сообщениях</div>
+            <div class="settings-toggle-desc">Получать уведомления о новых сообщениях</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notif-messages" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-toggle-row">
+          <div>
+            <div class="settings-toggle-title">Уведомления о запросах в друзья</div>
+            <div class="settings-toggle-desc">Получать уведомления о новых запросах</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notif-friends" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Voice Tab -->
+      <div class="settings-tab hidden" id="settings-voice">
+        <h2 class="settings-title">Голос и видео</h2>
+        <div class="settings-field">
+          <label class="settings-label">Устройство ввода (микрофон)</label>
+          <select id="voice-input-device" class="settings-select">
+            <option value="default">По умолчанию</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Устройство вывода (динамики)</label>
+          <select id="voice-output-device" class="settings-select">
+            <option value="default">По умолчанию</option>
+          </select>
+        </div>
+        <div class="settings-toggle-row">
+          <div>
+            <div class="settings-toggle-title">Шумоподавление</div>
+            <div class="settings-toggle-desc">Уменьшить фоновый шум</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="noise-suppression" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Server Settings Modal -->
+<div class="modal-overlay hidden" id="server-settings-modal">
+  <div class="settings-modal">
+    <div class="settings-sidebar">
+      <div class="settings-section-title">Настройки сервера</div>
+      <div class="settings-nav-item active" onclick="showServerSettingsTab('overview', this)">Обзор</div>
+      <div class="settings-nav-item" onclick="showServerSettingsTab('members', this)">Участники</div>
+      <div class="settings-nav-item" onclick="showServerSettingsTab('invites', this)">Приглашения</div>
+      <div class="settings-divider"></div>
+      <div class="settings-nav-item danger" onclick="leaveServer()">Покинуть сервер</div>
+    </div>
+    <div class="settings-content">
+      <button class="settings-close" onclick="closeModal('server-settings-modal')">✕</button>
+
+      <div class="settings-tab" id="server-settings-overview">
+        <h2 class="settings-title">Обзор сервера</h2>
+        <div class="settings-field">
+          <label class="settings-label">Название сервера</label>
+          <input type="text" id="server-settings-name" class="settings-input">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Описание</label>
+          <textarea id="server-settings-desc" class="settings-textarea" rows="3"></textarea>
+        </div>
+        <button class="settings-save-btn" onclick="saveServerSettings()">Сохранить</button>
+      </div>
+
+      <div class="settings-tab hidden" id="server-settings-members">
+        <h2 class="settings-title">Участники</h2>
+        <div class="server-members-list" id="server-members-list"></div>
+      </div>
+
+      <div class="settings-tab hidden" id="server-settings-invites">
+        <h2 class="settings-title">Приглашения</h2>
+        <p class="settings-description">Поделись этим кодом чтобы пригласить людей на сервер.</p>
+        <div class="invite-section">
+          <div class="invite-code-display">
+            <span id="server-invite-code">------</span>
+            <button class="copy-btn" onclick="copyInviteCode()">Копировать</button>
+          </div>
+          <button class="settings-save-btn" onclick="regenerateInviteCode()">Обновить код</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notifications Container -->
+<div class="notifications-container" id="notifications-container"></div>
+
+<!-- Hidden audio elements for voice -->
+<div id="remote-audio-container" style="display:none"></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js" type="module"></script>
+<script src="js/api.js"></script>
+<script src="js/socket.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/servers.js"></script>
+<script src="js/friends.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+// ===== UTILITY FUNCTIONS =====
+
+function togglePassword(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  } else {
+    input.type = 'password';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  }
+}
+
+function showLogin() {
+  document.getElementById('register-screen').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function showRegister() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('register-screen').classList.remove('hidden');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+function selectChannelType(type, el) {
+  document.querySelectorAll('.channel-type-option').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('channel-prefix').textContent = type === 'voice' ? '🔊' : '#';
+  el.dataset.type = type;
+  window._selectedChannelType = type;
+}
+
+function showSettingsTab(tab, el) {
+  document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.settings-tab').forEach(t => t.classList.add('hidden'));
+  document.getElementById('settings-' + tab).classList.remove('hidden');
+}
+
+function showServerSettingsTab(tab, el) {
+  document.querySelectorAll('#server-settings-modal .settings-nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('#server-settings-modal .settings-tab').forEach(t => t.classList.add('hidden'));
+  document.getElementById('server-settings-' + tab).classList.remove('hidden');
+}
+
+function setTheme(theme, el) {
+  document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+  if (theme === 'light') {
+    document.body.classList.add('light-theme');
+  } else {
+    document.body.classList.remove('light-theme');
+  }
+  localStorage.setItem('love-theme', theme);
+}
+
+// Apply saved theme
+const savedTheme = localStorage.getItem('love-theme');
+if (savedTheme === 'light') {
+  document.body.classList.add('light-theme');
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.classList.add('hidden');
+    }
+  });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    const contextMenu = document.querySelector('.context-menu');
+    if (contextMenu) contextMenu.remove();
+    const emojiPicker = document.getElementById('emoji-picker-container');
+    if (emojiPicker) emojiPicker.classList.add('hidden');
+  }
+});
+</script>
+
+</body>
+</html>

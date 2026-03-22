@@ -1,0 +1,371 @@
+/**
+ * Socket.io клиент
+ * Управляет real-time соединением с сервером
+ */
+
+// Загружаем Socket.io клиент
+const SOCKET_URL = 'https://love-app-4dyk.onrender.com';
+
+let socket = null;
+
+/**
+ * Инициализация Socket.io соединения
+ */
+function initSocket(token) {
+  if (socket) {
+    socket.disconnect();
+  }
+
+  // Подключаемся к серверу с токеном авторизации
+  socket = io(SOCKET_URL, {
+    auth: { token },
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000
+  });
+
+  // Обработчики подключения
+  socket.on('connect', () => {
+    console.log('✅ Socket connected:', socket.id);
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('❌ Socket disconnected:', reason);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error.message);
+  });
+
+  socket.on('reconnect', (attemptNumber) => {
+    console.log('🔄 Socket reconnected after', attemptNumber, 'attempts');
+  });
+
+  // ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+
+  // Новое сообщение
+  socket.on('message:new', (data) => {
+    const { channelId, message } = data;
+    if (window.currentChannelId === channelId) {
+      appendMessage(message);
+      scrollToBottom();
+    }
+    // Уведомление если не в этом канале
+    if (window.currentChannelId !== channelId) {
+      showMessageNotification(message);
+    }
+  });
+
+  // Сообщение отредактировано
+  socket.on('message:edited', (data) => {
+    const { channelId, message } = data;
+    if (window.currentChannelId === channelId) {
+      updateMessageInDOM(message);
+    }
+  });
+
+  // Сообщение удалено
+  socket.on('message:deleted', (data) => {
+    const { channelId, messageId } = data;
+    if (window.currentChannelId === channelId) {
+      removeMessageFromDOM(messageId);
+    }
+  });
+
+  // Реакция на сообщение
+  socket.on('message:reaction', (data) => {
+    const { channelId, messageId, reactions } = data;
+    if (window.currentChannelId === channelId) {
+      updateMessageReactions(messageId, reactions);
+    }
+  });
+
+  // ===== ИНДИКАТОР ПЕЧАТИ =====
+
+  socket.on('typing:start', (data) => {
+    const { channelId, userId, username } = data;
+    if (window.currentChannelId === channelId && userId !== window.currentUser?._id) {
+      showTypingIndicator(username);
+    }
+  });
+
+  socket.on('typing:stop', (data) => {
+    const { channelId, userId } = data;
+    if (window.currentChannelId === channelId) {
+      hideTypingIndicator(userId);
+    }
+  });
+
+  // ===== СТАТУСЫ ПОЛЬЗОВАТЕЛЕЙ =====
+
+  socket.on('user:status', (data) => {
+    const { userId, status } = data;
+    updateUserStatusInDOM(userId, status);
+  });
+
+  // ===== ГОЛОСОВЫЕ КАНАЛЫ =====
+
+  socket.on('voice:existing_members', (data) => {
+    const { channelId, members } = data;
+    // Инициируем WebRTC соединения с существующими участниками
+    if (window.voiceManager) {
+      members.forEach(member => {
+        window.voiceManager.initiateConnection(member.socketId, member.userId);
+      });
+    }
+  });
+
+  socket.on('voice:user_joined', (data) => {
+    const { channelId, userId, socketId, username, avatar } = data;
+    if (window.voiceManager && window.currentVoiceChannel === channelId) {
+      // Ждем offer от нового участника
+      updateVoiceChannelUI(channelId);
+    }
+    showNotification('info', `${username} присоединился к голосовому каналу`);
+  });
+
+  socket.on('voice:user_left', (data) => {
+    const { channelId, userId, socketId } = data;
+    if (window.voiceManager) {
+      window.voiceManager.removeConnection(socketId);
+    }
+    updateVoiceChannelUI(channelId);
+  });
+
+  socket.on('voice:members_update', (data) => {
+    const { channelId, members } = data;
+    updateVoiceChannelMembersUI(channelId, members);
+  });
+
+  socket.on('voice:user_speaking', (data) => {
+    const { channelId, userId, speaking } = data;
+    updateSpeakingIndicator(userId, speaking);
+  });
+
+  socket.on('voice:user_muted', (data) => {
+    const { channelId, userId, muted } = data;
+    updateVoiceMuteUI(userId, muted);
+  });
+
+  socket.on('voice:left', (data) => {
+    const { channelId } = data;
+    if (window.voiceManager) {
+      window.voiceManager.cleanup();
+    }
+    hideVoicePanel();
+  });
+
+  // ===== WebRTC СИГНАЛИНГ =====
+
+  socket.on('webrtc:offer', (data) => {
+    const { offer, fromSocketId, fromUserId, channelId } = data;
+    if (window.voiceManager) {
+      window.voiceManager.handleOffer(offer, fromSocketId, fromUserId);
+    }
+  });
+
+  socket.on('webrtc:answer', (data) => {
+    const { answer, fromSocketId } = data;
+    if (window.voiceManager) {
+      window.voiceManager.handleAnswer(answer, fromSocketId);
+    }
+  });
+
+  socket.on('webrtc:ice_candidate', (data) => {
+    const { candidate, fromSocketId } = data;
+    if (window.voiceManager) {
+      window.voiceManager.handleIceCandidate(candidate, fromSocketId);
+    }
+  });
+
+  // ===== ДРУЗЬЯ =====
+
+  socket.on('friend:request_received', (data) => {
+    const { from } = data;
+    showNotification('info', `${from.username} отправил вам запрос в друзья`);
+    // Обновляем счетчик запросов
+    if (window.loadFriends) window.loadFriends();
+  });
+
+  socket.on('friend:request_accepted', (data) => {
+    const { by } = data;
+    showNotification('success', `${by.username} принял ваш запрос в друзья`);
+    if (window.loadFriends) window.loadFriends();
+  });
+
+  // ===== DM =====
+
+  socket.on('dm:new_message', (data) => {
+    const { conversationId, message } = data;
+    // Обновляем список DM
+    if (window.loadDMConversations) window.loadDMConversations();
+    // Показываем уведомление
+    showNotification('info', `Новое сообщение от ${message.author.username}`);
+  });
+
+  // ===== УВЕДОМЛЕНИЯ =====
+
+  socket.on('notification:mention', (data) => {
+    const { from, content } = data;
+    showNotification('info', `${from} упомянул вас: ${content}`);
+  });
+
+  socket.on('error', (data) => {
+    console.error('Socket error:', data.message);
+    showNotification('error', data.message);
+  });
+
+  return socket;
+}
+
+/**
+ * Отключение сокета
+ */
+function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
+/**
+ * Отправка сообщения через сокет
+ */
+function socketSendMessage(channelId, content, replyTo, attachments) {
+  if (socket) {
+    socket.emit('message:send', { channelId, content, replyTo, attachments });
+  }
+}
+
+/**
+ * Отправка события редактирования
+ */
+function socketEditMessage(messageId, content) {
+  if (socket) {
+    socket.emit('message:edit', { messageId, content });
+  }
+}
+
+/**
+ * Отправка события удаления
+ */
+function socketDeleteMessage(messageId) {
+  if (socket) {
+    socket.emit('message:delete', { messageId });
+  }
+}
+
+/**
+ * Отправка реакции
+ */
+function socketReactMessage(messageId, emoji) {
+  if (socket) {
+    socket.emit('message:react', { messageId, emoji });
+  }
+}
+
+/**
+ * Индикатор печати
+ */
+let typingTimeout = null;
+function socketStartTyping(channelId) {
+  if (socket) {
+    socket.emit('typing:start', { channelId });
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      socket.emit('typing:stop', { channelId });
+    }, 3000);
+  }
+}
+
+function socketStopTyping(channelId) {
+  if (socket) {
+    clearTimeout(typingTimeout);
+    socket.emit('typing:stop', { channelId });
+  }
+}
+
+/**
+ * Голосовой канал
+ */
+function socketJoinVoice(channelId) {
+  if (socket) {
+    socket.emit('voice:join', { channelId });
+  }
+}
+
+function socketLeaveVoice(channelId) {
+  if (socket) {
+    socket.emit('voice:leave', { channelId });
+  }
+}
+
+function socketToggleMute(channelId, muted) {
+  if (socket) {
+    socket.emit('voice:toggle_mute', { channelId, muted });
+  }
+}
+
+function socketToggleDeafen(channelId, deafened) {
+  if (socket) {
+    socket.emit('voice:toggle_deafen', { channelId, deafened });
+  }
+}
+
+function socketSpeaking(channelId, speaking) {
+  if (socket) {
+    socket.emit('voice:speaking', { channelId, speaking });
+  }
+}
+
+/**
+ * WebRTC сигналинг
+ */
+function socketSendOffer(targetSocketId, offer, channelId) {
+  if (socket) {
+    socket.emit('webrtc:offer', { targetSocketId, offer, channelId });
+  }
+}
+
+function socketSendAnswer(targetSocketId, answer, channelId) {
+  if (socket) {
+    socket.emit('webrtc:answer', { targetSocketId, answer, channelId });
+  }
+}
+
+function socketSendIceCandidate(targetSocketId, candidate, channelId) {
+  if (socket) {
+    socket.emit('webrtc:ice_candidate', { targetSocketId, candidate, channelId });
+  }
+}
+
+/**
+ * Серверы
+ */
+function socketJoinServer(serverId) {
+  if (socket) {
+    socket.emit('server:join', { serverId });
+  }
+}
+
+function socketLeaveServer(serverId) {
+  if (socket) {
+    socket.emit('server:leave', { serverId });
+  }
+}
+
+/**
+ * Друзья
+ */
+function socketNotifyFriendRequest(targetUserId) {
+  if (socket) {
+    socket.emit('friend:request', { targetUserId });
+  }
+}
+
+function socketNotifyFriendAccepted(targetUserId) {
+  if (socket) {
+    socket.emit('friend:accepted', { targetUserId });
+  }
+}

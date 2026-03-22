@@ -4,7 +4,7 @@
  */
 
 // Загружаем Socket.io клиент
-const SOCKET_URL = 'https://love-app-4dyk.onrender.com';
+const SOCKET_URL = 'https://love-app-2ou3.onrender.com';
 
 let socket = null;
 

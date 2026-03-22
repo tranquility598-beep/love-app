@@ -44,9 +44,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       await initApp();
       return;
     } catch (error) {
-      // Токен невалидный - показываем экран авторизации
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // Проверяем, действительно ли токен недействителен (401)
+      if (error.status === 401 || error.status === 403 || (error.message && error.message.includes('не найден'))) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } else {
+        // Скорее всего сервер Render просто "просыпается" или нет сети
+        const loadingText = document.querySelector('.loading-text');
+        if (loadingText) {
+          loadingText.textContent = 'ПРОБУЖДЕНИЕ СЕРВЕРА...';
+          loadingText.style.fontSize = '18px';
+        }
+        
+        // Пытаемся перезайти через 5 секунд
+        setTimeout(() => window.location.reload(), 5000);
+        return; // прерываем выполнение, чтобы не показать экран авторизации
+      }
     }
   }
   

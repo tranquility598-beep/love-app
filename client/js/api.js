@@ -3,7 +3,7 @@
  * Все HTTP запросы к backend серверу
  */
 
-const API_BASE = 'https://love-app-4dyk.onrender.com/api';
+const API_BASE = 'https://love-app-2ou3.onrender.com/api';
 
 // Получаем токен из localStorage
 function getToken() {
@@ -27,7 +27,9 @@ async function apiFetch(endpoint, options = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || 'Ошибка запроса');
+    const error = new Error(data.message || 'Ошибка запроса');
+    error.status = response.status;
+    throw error;
   }
 
   return data;

@@ -92,11 +92,13 @@ function renderMessage(msg, isGrouped) {
   if (msg.replyTo) {
     const replyAuthor = msg.replyTo.author?.username || 'Неизвестный';
     const replyContent = msg.replyTo.content?.substring(0, 60) || '';
+    const replyPreview = escapeHtml(replyContent); // Define replyPreview
     replyHtml = `
       <div class="message-reply">
-        <img class="message-reply-avatar" src="${getAvatarUrl(msg.replyTo.author?.avatar)}" alt="">
-        <span class="message-reply-author">${replyAuthor}</span>
-        <span class="message-reply-content">${escapeHtml(replyContent)}</span>
+        <div class="message-reply-info">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+          <strong>${replyAuthor}${msg.replyTo.author?.role === 'owner' ? ' 👑' : ''}</strong>: ${replyPreview}
+        </div>
       </div>
     `;
   }
@@ -113,10 +115,10 @@ function renderMessage(msg, isGrouped) {
     attachmentsHtml = '<div class="message-attachments">';
     msg.attachments.forEach(att => {
       if (att.mimetype?.startsWith('image/')) {
-        attachmentsHtml += `<img class="message-image" src="http://localhost:5000${att.url}" alt="${att.filename}" loading="lazy">`;
+        attachmentsHtml += `<img class="message-image" src="http://localhost:5555${att.url}" alt="${att.filename}" loading="lazy">`;
       } else {
         attachmentsHtml += `
-          <div class="message-file" onclick="window.open('http://localhost:5000${att.url}')">
+          <div class="message-file" onclick="window.open('http://localhost:5555${att.url}')">
             <span class="message-file-icon">${getFileIcon(att.mimetype)}</span>
             <div class="message-file-info">
               <div class="message-file-name">${att.filename}</div>
@@ -173,7 +175,7 @@ function renderMessage(msg, isGrouped) {
       <img class="message-avatar" src="${authorAvatar}" alt="${authorName}">
       <div class="message-content-wrapper">
         <div class="message-header">
-          <span class="message-author">${authorName}</span>
+          <span class="message-author">${authorName}${author.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
           <span class="message-time" title="${fullTime}">${time}</span>
         </div>
         ${replyHtml}
@@ -259,12 +261,36 @@ function updateMessageInDOM(msg) {
 
   // Добавляем тег "изменено"
   let editTag = el.querySelector('.message-edited-tag');
-  if (!editTag) {
+  if (!editTag && msg.edited) {
     editTag = document.createElement('span');
     editTag.className = 'message-edited-tag';
     editTag.textContent = '(изм.)';
     const textSpan = el.querySelector('.message-text');
     if (textSpan) textSpan.after(editTag);
+  }
+}
+
+/**
+ * Обновить временное сообщение реальными данными
+ */
+function updateTempMessageInDOM(tempId, msg) {
+  const el = document.querySelector(`[data-message-id="${tempId}"]`);
+  if (!el) return;
+
+  // Обновляем ID
+  el.dataset.messageId = msg._id;
+  
+  // Обновляем содержимое если нужно
+  const textEl = el.querySelector('.message-text');
+  if (textEl && msg.content) {
+    textEl.innerHTML = formatMessageContent(msg.content);
+  }
+
+  // Обновляем время
+  const timeEl = el.querySelector('.message-time, .message-timestamp');
+  if (timeEl) {
+    timeEl.title = formatDate(msg.createdAt);
+    timeEl.textContent = formatTime(msg.createdAt);
   }
 }
 
@@ -369,12 +395,13 @@ async function sendMessage() {
  * Обработка нажатий клавиш в поле ввода
  */
 function handleMessageKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    sendMessage();
-    return false;
+  if (e.key === 'Enter') {
+    if (!e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation(); // Дополнительная защита от всплытия
+      sendMessage();
+    }
+    return;
   }
   if (e.key === 'Escape') {
     cancelReply();
@@ -411,7 +438,7 @@ function startReply(messageId) {
   const content = msgEl.querySelector('.message-text')?.textContent?.substring(0, 50) || '';
 
   const preview = document.getElementById('reply-preview');
-  const authorEl = document.getElementById('reply-author');
+  const authorEl = document.getElementById('reply-author-name'); // Corrected ID
   const contentEl = document.getElementById('reply-content-preview');
 
   if (preview) preview.classList.remove('hidden');

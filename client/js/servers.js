@@ -67,6 +67,10 @@ async function createServer() {
     closeModal('create-server-modal');
     await loadServers();
     await selectServer(server._id);
+    
+    // Присоединяемся к комнате сервера через сокет сразу
+    socketJoinServer(server._id);
+    
     showNotification('success', `Сервер "${name}" создан!`);
   } catch (error) {
     showNotification('error', error.message);
@@ -99,6 +103,10 @@ async function joinServer() {
     closeModal('join-server-modal');
     await loadServers();
     await selectServer(data.server._id);
+    
+    // Присоединяемся к комнате сервера через сокет сразу
+    socketJoinServer(data.server._id);
+    
     showNotification('success', `Вы присоединились к серверу "${data.server.name}"!`);
   } catch (error) {
     if (errorEl) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); }

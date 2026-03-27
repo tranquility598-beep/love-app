@@ -1,13 +1,13 @@
 # Discord Clone - Полноценный клон Discord
 
-Десктопное приложение для Windows, созданное с использованием Electron, Node.js, Socket.io, WebRTC и MongoDB.
+Десктопное приложение для Windows и macOS, созданное с использованием Electron, Node.js, Socket.io, WebRTC и MongoDB.
 
 ## 🚀 Быстрый старт
 
 ### Требования
 - **Node.js** v18+ (https://nodejs.org)
 - **MongoDB** v6+ (https://www.mongodb.com/try/download/community)
-- **Windows** 10/11
+- **Windows** 10/11 или **macOS** 10.15+
 
 ### 1. Установка зависимостей
 
@@ -54,8 +54,17 @@ npm run build
 ```
 
 После сборки в папке `build/dist/` появится:
-- `Discord Clone Setup.exe` — установщик
-- `Discord Clone.exe` — портативная версия
+- `Discord Clone Setup.exe` — установщик для Windows
+- `Discord Clone.exe` — портативная версия для Windows
+
+### Сборка для macOS:
+```bash
+npm run build:mac
+```
+
+После сборки в папке `build/dist/` появится:
+- `Love-1.0.5.dmg` — установщик для macOS
+- `Love-1.0.5-mac.zip` — архив для macOS
 
 ---
 
@@ -158,7 +167,7 @@ Love/
 
 | Компонент | Технология |
 |-----------|-----------|
-| Desktop App | Electron 28 |
+| Desktop App | Electron 28 (Windows, macOS) |
 | Frontend | HTML5, CSS3, JavaScript |
 | Backend | Node.js + Express |
 | Real-time | Socket.io |

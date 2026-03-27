@@ -3,8 +3,7 @@
  * Управляет real-time соединением с сервером
  */
 
-// Загружаем Socket.io клиент
-const SOCKET_URL = 'https://love-app-2ou3.onrender.com';
+const SOCKET_URL = 'http://localhost:5555';
 
 let socket = null;
 
@@ -62,6 +61,14 @@ function initSocket(token) {
     const { channelId, message } = data;
     if (window.currentChannelId === channelId) {
       updateMessageInDOM(message);
+    }
+  });
+
+  // Сообщение сохранено в БД (обновление временного ID)
+  socket.on('message:update', (data) => {
+    const { channelId, tempId, message } = data;
+    if (window.currentChannelId === channelId) {
+      updateTempMessageInDOM(tempId, message);
     }
   });
 

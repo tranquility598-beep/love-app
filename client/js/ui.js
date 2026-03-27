@@ -60,12 +60,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ===== АВАТАРЫ И УТИЛИТЫ =====
-function getAvatarUrl(avatar) {
+function getAvatarUrl(avatar, fallbackUsername) {
   if (!avatar || avatar === '' || avatar === 'undefined' || avatar === 'null') {
-    return generateDefaultAvatar();
+    return generateDefaultAvatar(fallbackUsername || (window.currentUser ? window.currentUser.username : '?'));
   }
   if (avatar.startsWith('http') || avatar.startsWith('data:')) return avatar;
-  return `http://localhost:5000${avatar}`;
+  return `http://localhost:5555${avatar}`;
 }
 
 function generateDefaultAvatar(username) {
@@ -125,9 +125,13 @@ function updateUserPanel() {
   const avatarEl = document.getElementById('user-avatar'); // ID в HTML: user-avatar
   const statusDot = document.getElementById('user-status-dot');
 
-  if (nameEl) nameEl.textContent = user.username || 'Пользователь';
-  if (tagEl) tagEl.textContent = '#' + (user.discriminator || '0000');
-  if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar);
+  if (nameEl) {
+    nameEl.textContent = user.username || 'Пользователь';
+    if (user.role === 'owner') {
+      nameEl.innerHTML += ' <span class="owner-badge" title="Создатель" style="font-size:1.1em; margin-left:4px;">👑</span>';
+    }
+  }
+  if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar, user.username);
   if (statusDot) statusDot.className = 'user-status-dot ' + (user.status || 'online');
 }
 
@@ -332,8 +336,10 @@ function showPersonalProfile() {
   if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar);
   if (usernameEl) usernameEl.value = user.username || '';
   if (bioEl) bioEl.value = user.bio || '';
-  if (usernameDisplay) usernameDisplay.textContent = user.username || '';
-  if (tagDisplay) tagDisplay.textContent = '#' + (user.discriminator || '0000');
+  if (usernameDisplay) {
+    usernameDisplay.textContent = user.username || '';
+    if (user.role === 'owner') usernameDisplay.innerHTML += ' 👑';
+  }
   
   openModal('personal-profile-modal');
 }
@@ -396,12 +402,14 @@ function showSettings() {
   const usernameDisplay = document.getElementById('settings-username-display');
   const tagDisplay = document.getElementById('settings-tag-display');
 
-  if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar);
+  if (avatarEl) avatarEl.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
   if (usernameEl) usernameEl.value = user.username || '';
   if (bioEl) bioEl.value = user.bio || '';
   if (statusEl) statusEl.value = user.status || 'online';
-  if (usernameDisplay) usernameDisplay.textContent = user.username || '';
-  if (tagDisplay) tagDisplay.textContent = '#' + (user.discriminator || '0000');
+  if (usernameDisplay) {
+    usernameDisplay.textContent = user.username || '';
+    if (user.role === 'owner') usernameDisplay.innerHTML += ' 👑';
+  }
 
   openModal('settings-modal');
 }
@@ -500,7 +508,7 @@ function showServerSettings() {
       return '<div class="server-member-item">' +
         '<img class="server-member-avatar" src="' + getAvatarUrl(user.avatar) + '" alt="' + user.username + '">' +
         '<div class="server-member-info">' +
-          '<div class="server-member-name">' + user.username + '</div>' +
+          '<div class="server-member-name">' + user.username + (user.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : '') + '</div>' +
           '<div class="server-member-role">' + (m.roles ? m.roles.join(', ') : 'участник') + '</div>' +
         '</div></div>';
     }).join('');
@@ -566,6 +574,22 @@ function copyInviteCode() {
   const code = document.getElementById('server-invite-code') ? document.getElementById('server-invite-code').textContent : '';
   if (code && code !== '------') {
     navigator.clipboard.writeText(code).then(function() { showNotification('success', 'Код скопирован'); });
+  }
+}
+
+async function deleteServer() {
+  if (!window.currentServer) return;
+  if (!confirm('Вы действительно хотите удалить сервер "' + window.currentServer.name + '"? Это действие необратимо!')) return;
+
+  try {
+    await ServersAPI.delete(window.currentServer._id);
+    closeModal('server-settings-modal');
+    window.currentServer = null;
+    showDMView();
+    await loadServers();
+    showNotification('success', 'Сервер удален');
+  } catch (error) {
+    showNotification('error', error.message || 'Ошибка удаления сервера');
   }
 }
 

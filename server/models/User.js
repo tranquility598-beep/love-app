@@ -34,9 +34,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null // URL аватара
   },
-  discriminator: {
+  role: {
     type: String,
-    default: () => Math.floor(1000 + Math.random() * 9000).toString() // #1234
+    enum: ['user', 'owner', 'admin'],
+    default: 'user'
   },
   bio: {
     type: String,
@@ -143,7 +144,7 @@ userSchema.methods.toPublicJSON = function() {
   return {
     _id: this._id,
     username: this.username,
-    discriminator: this.discriminator,
+    role: this.role,
     avatar: this.avatar,
     bio: this.bio,
     status: this.status,

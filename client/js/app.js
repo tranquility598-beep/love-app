@@ -50,15 +50,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.removeItem('user');
       } else {
         // Скорее всего сервер Render просто "просыпается" или нет сети
-        const loadingText = document.querySelector('.loading-text');
-        if (loadingText) {
-          loadingText.textContent = 'ПРОБУЖДЕНИЕ СЕРВЕРА...';
-          loadingText.style.fontSize = '18px';
+        const retryCount = parseInt(sessionStorage.getItem('connectRetries') || '0');
+        if (retryCount < 3) {
+          sessionStorage.setItem('connectRetries', String(retryCount + 1));
+          const loadingText = document.querySelector('.loading-text');
+          if (loadingText) {
+            loadingText.textContent = 'ПРОБУЖДЕНИЕ СЕРВЕРА... (' + (retryCount + 1) + '/3)';
+            loadingText.style.fontSize = '18px';
+          }
+          setTimeout(() => window.location.reload(), 5000);
+          return;
+        } else {
+          sessionStorage.removeItem('connectRetries');
         }
-        
-        // Пытаемся перезайти через 5 секунд
-        setTimeout(() => window.location.reload(), 5000);
-        return; // прерываем выполнение, чтобы не показать экран авторизации
       }
     }
   }
@@ -150,7 +154,13 @@ function setupMessageInput() {
 async function loadServers() {
   try {
     const data = await ServersAPI.getAll();
-    renderServersList(data.servers || []);
+    const servers = data.servers || [];
+    renderServersList(servers);
+    
+    // Присоединяемся к комнатам сокетов для всех серверов
+    servers.forEach(server => {
+      socketJoinServer(server._id);
+    });
   } catch (error) {
     console.error('Error loading servers:', error);
   }
@@ -432,7 +442,7 @@ function renderMemberItem(member) {
         <div class="status-dot ${status}"></div>
       </div>
       <div class="member-info">
-        <div class="member-name">${user.username}</div>
+        <div class="member-name">${user.username}${user.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
         <div class="member-status">${getStatusText(status)}</div>
       </div>
       <div class="member-speaking-indicator" style="display:none"></div>
@@ -493,7 +503,7 @@ function renderDMConversations(conversations) {
           <div class="status-dot ${other.status || 'offline'}"></div>
         </div>
         <div class="dm-info">
-          <div class="dm-name">${other.username}</div>
+          <div class="dm-name">${other.username}${other.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
           <div class="dm-last-message">${conv.lastMessage?.content?.substring(0, 30) || ''}</div>
         </div>
         <button class="dm-close-btn" onclick="event.stopPropagation()">✕</button>

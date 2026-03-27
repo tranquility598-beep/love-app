@@ -176,7 +176,6 @@ app.whenReady().then(() => {
     startServer();
     setTimeout(() => {
       createWindow();
-      setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
     }, 2000);
   } else {
     // В Production режиме (у пользователей) открываем окно сразу (без локального сервера)

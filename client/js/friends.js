@@ -125,7 +125,7 @@ function renderFriendItem(friend, showActions) {
         <div class="status-dot ${status}"></div>
       </div>
       <div class="friend-info">
-        <div class="friend-name">${friend.username}</div>
+        <div class="friend-name">${friend.username}${friend.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
         <div class="friend-status">${statusText}</div>
       </div>
       ${showActions ? `
@@ -156,7 +156,7 @@ function renderPendingItem(user, type) {
         <img src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
       </div>
       <div class="friend-info">
-        <div class="friend-name">${user.username}</div>
+        <div class="friend-name">${user.username}${user.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
         <div class="friend-status">${type === 'incoming' ? 'Входящий запрос' : 'Исходящий запрос'}</div>
       </div>
       <div class="friend-actions">
@@ -233,7 +233,7 @@ async function sendFriendRequest() {
     }
 
     const data = await FriendsAPI.sendRequest(targetUser._id);
-    
+
     // Проверяем, был ли автоматически принят входящий запрос
     if (data.autoAccepted) {
       showNotification('success', data.message);
@@ -247,7 +247,7 @@ async function sendFriendRequest() {
         resultEl.innerHTML = `<span style="color:var(--green)">Запрос отправлен пользователю ${targetUser.username}!</span>`;
       }
     }
-    
+
     if (input) input.value = '';
     loadFriends();
   } catch (error) {

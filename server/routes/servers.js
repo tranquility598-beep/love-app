@@ -18,9 +18,12 @@ const path = require('path');
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('servers');
+    const user = await User.findById(req.user._id);
     
-    const servers = await Server.find({ _id: { $in: user.servers } })
+    // Фильтруем null/undefined и оставляем только ObjectID перед поиском
+    const validServerIds = (user.servers || []).filter(id => id != null);
+    
+    const servers = await Server.find({ _id: { $in: validServerIds } })
       .populate('channels', 'name type position')
       .populate('members.user', 'username avatar status discriminator');
     

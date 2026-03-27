@@ -45,11 +45,16 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Имя пользователя уже занято' });
     }
     
+    // Если это самый первый пользователь, он становится Создателем (owner)
+    const userCount = await User.countDocuments();
+    const role = userCount === 0 ? 'owner' : 'user';
+    
     // Создаем пользователя
     const user = new User({
       username,
       email: email.toLowerCase(),
-      password
+      password,
+      role
     });
     
     await user.save();
@@ -151,7 +156,7 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
       .populate('servers', 'name icon')
-      .populate('friends', 'username avatar status discriminator')
+      .populate('friends', 'username avatar status role')
       .select('-password');
     
     res.json({ user });

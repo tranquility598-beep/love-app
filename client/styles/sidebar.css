@@ -141,6 +141,14 @@
   border-right: 1px solid var(--border);
 }
 
+/* DM View / Server View Flex */
+#dm-sidebar-view, #server-sidebar-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* Channels header */
 .channels-header {
   height: 48px;
@@ -526,35 +534,16 @@
 }
 
 .user-control-btn.muted {
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.4);
   background: rgba(255,255,255,0.05);
-}
-
-.user-control-btn.muted::after {
-  content: '';
-  position: absolute;
-  width: 2px;
-  height: 24px;
-  background: rgba(255,255,255,0.4);
-  transform: rotate(45deg);
-  border-radius: 1px;
+  position: relative;
 }
 
 /* Voice control buttons muted state */
 .voice-control-btn.muted,
 .voice-control-btn.deafened {
   background: rgba(255,255,255,0.05);
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.4);
   position: relative;
 }
 
-.voice-control-btn.muted::after,
-.voice-control-btn.deafened::after {
-  content: '';
-  position: absolute;
-  width: 2px;
-  height: 28px;
-  background: var(--text-muted);
-  transform: rotate(45deg);
-  border-radius: 1px;
-}

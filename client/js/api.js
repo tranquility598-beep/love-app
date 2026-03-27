@@ -3,7 +3,7 @@
  * Все HTTP запросы к backend серверу
  */
 
-const API_BASE = 'https://love-app-2ou3.onrender.com/api';
+const API_BASE = 'http://localhost:5555/api';
 
 // Получаем токен из localStorage
 function getToken() {
@@ -24,7 +24,17 @@ async function apiFetch(endpoint, options = {}) {
     headers
   });
 
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    if (!response.ok) {
+      const error = new Error(`Сервер недоступен или загружается (Ожидайте...)`);
+      error.status = response.status;
+      throw error;
+    }
+    throw new Error('Ошибка формата ответа от сервера');
+  }
 
   if (!response.ok) {
     const error = new Error(data.message || 'Ошибка запроса');

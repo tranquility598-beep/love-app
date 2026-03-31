@@ -130,6 +130,11 @@ ipcMain.handle('get-is-packaged', () => {
   return app.isPackaged;
 });
 
+// Синхронный обработчик
+ipcMain.on('get-is-packaged-sync', (event) => {
+  event.returnValue = app.isPackaged;
+});
+
 // Обработчик для получения пути к папке загрузок
 ipcMain.handle('get-downloads-path', () => {
   return app.getPath('downloads');

@@ -1,23 +1,30 @@
-window.BASE_URL = 'http://localhost:5555';
-let API_BASE = window.BASE_URL + '/api';
-
-// Промис для инициализации конфига
-window.apiReady = (async () => {
-  if (window.electronAPI && window.electronAPI.isPackaged) {
-    try {
-      const isPackaged = await window.electronAPI.isPackaged();
-      if (isPackaged) {
-        window.BASE_URL = 'https://love-app-2ou3.onrender.com';
-        API_BASE = window.BASE_URL + '/api';
-        console.log('🌐 Production mode: using remote API', API_BASE);
-      } else {
-        console.log('🛠 Development mode: using local API', API_BASE);
-      }
-    } catch (err) {
-      console.error('Failed to get app mode:', err);
+let isPackaged = false;
+try {
+  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+    isPackaged = window.electronAPI.isPackagedSync();
+  } else if (!window.electronAPI) {
+    // Fallback if opened in a regular web browser (e.g. hosted on Vercel/Netlify)
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isFileProtocol = window.location.protocol === 'file:';
+    if (!isLocalhost && !isFileProtocol) {
+      isPackaged = true; // Use production API if hosted anywhere else
     }
   }
-})();
+} catch (e) {
+  console.error('Failed to get app mode synchronously:', e);
+}
+
+window.BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://localhost:5555';
+let API_BASE = window.BASE_URL + '/api';
+
+if (isPackaged) {
+  console.log('🌐 Production mode: using remote API', API_BASE);
+} else {
+  console.log('🛠 Development mode: using local API', API_BASE);
+}
+
+// Промис для инициализации конфига (оставлен для обратной совместимости, если где-то используется await)
+window.apiReady = Promise.resolve();
 
 // Базовый fetch с авторизацией
 async function apiFetch(endpoint, options = {}) {

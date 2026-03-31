@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Режим (разработка/продакшн)
   isPackaged: () => ipcRenderer.invoke('get-is-packaged'),
+  isPackagedSync: () => ipcRenderer.sendSync('get-is-packaged-sync'),
   
   // Автообновления
   onUpdateMessage: (callback) => ipcRenderer.on('updater-message', (_event, data) => callback(data)),

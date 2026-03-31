@@ -1,17 +1,19 @@
 /**
  * Voice модуль - WebRTC голосовой чат
- * Управляет peer-to-peer аудио соединениями
+ * Управляет peer-to-peer аудио соединениями и демонстрацией экрана
  */
 
 class VoiceManager {
   constructor() {
     this.localStream = null;
+    this.screenStream = null;
     this.peerConnections = new Map(); // socketId -> RTCPeerConnection
     this.audioElements = new Map(); // socketId -> HTMLAudioElement
     this.channelId = null;
     this.isMuted = false;
     this.isDeafened = false;
     this.isSpeaking = false;
+    this.isScreenSharing = false;
     this.audioContext = null;
     this.analyser = null;
     this.speakingThreshold = 20;
@@ -78,6 +80,13 @@ class VoiceManager {
    * Очистка ресурсов
    */
   cleanup() {
+    // Останавливаем демонстрацию экрана
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+      this.isScreenSharing = false;
+    }
+
     // Останавливаем локальный поток
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
@@ -113,6 +122,9 @@ class VoiceManager {
     this.isDeafened = false;
     this.isSpeaking = false;
 
+    // Убираем видео демонстрации
+    hideScreenShareVideo();
+
     console.log('🔇 Left voice channel');
   }
 
@@ -130,10 +142,17 @@ class VoiceManager {
         });
       }
 
+      // Если есть демонстрация экрана — добавляем видеотрек
+      if (this.screenStream) {
+        this.screenStream.getTracks().forEach(track => {
+          pc.addTrack(track, this.screenStream);
+        });
+      }
+
       // Создаем offer
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: false
+        offerToReceiveVideo: true
       });
 
       await pc.setLocalDescription(offer);
@@ -159,6 +178,13 @@ class VoiceManager {
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
           pc.addTrack(track, this.localStream);
+        });
+      }
+
+      // Если есть демонстрация экрана — добавляем видеотрек
+      if (this.screenStream) {
+        this.screenStream.getTracks().forEach(track => {
+          pc.addTrack(track, this.screenStream);
         });
       }
 
@@ -211,6 +237,11 @@ class VoiceManager {
    * Создать RTCPeerConnection
    */
   createPeerConnection(socketId) {
+    // Если уже есть connection — закрываем старый
+    if (this.peerConnections.has(socketId)) {
+      this.peerConnections.get(socketId).close();
+    }
+
     const pc = new RTCPeerConnection(this.iceServers);
     this.peerConnections.set(socketId, pc);
 
@@ -223,8 +254,15 @@ class VoiceManager {
 
     // Получение удаленного потока
     pc.ontrack = (event) => {
-      console.log('🔊 Received remote audio track from:', socketId);
-      this.playRemoteAudio(socketId, event.streams[0]);
+      const track = event.track;
+      console.log('🔊 Received remote track:', track.kind, 'from:', socketId);
+
+      if (track.kind === 'audio') {
+        this.playRemoteAudio(socketId, event.streams[0]);
+      } else if (track.kind === 'video') {
+        // Демонстрация экрана от другого пользователя
+        showScreenShareVideo(event.streams[0], socketId);
+      }
     };
 
     // Состояние соединения
@@ -274,6 +312,9 @@ class VoiceManager {
       audio.remove();
       this.audioElements.delete(socketId);
     }
+
+    // Если это был тот, кто шарил экран — убираем видео
+    hideScreenShareVideoForUser(socketId);
   }
 
   /**
@@ -318,6 +359,116 @@ class VoiceManager {
   }
 
   /**
+   * Начать демонстрацию экрана
+   */
+  async startScreenShare() {
+    if (this.isScreenSharing) {
+      this.stopScreenShare();
+      return false;
+    }
+
+    try {
+      // Запрашиваем доступ к экрану
+      this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          cursor: 'always',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
+        audio: false
+      });
+
+      this.isScreenSharing = true;
+
+      // Добавляем видеотрек во все существующие peer connections
+      const videoTrack = this.screenStream.getVideoTracks()[0];
+
+      this.peerConnections.forEach((pc, socketId) => {
+        pc.addTrack(videoTrack, this.screenStream);
+        // Пересоздаем offer для обновления
+        this.renegotiate(socketId);
+      });
+
+      // Показываем свой экран локально (превью)
+      showScreenShareVideo(this.screenStream, 'local');
+
+      // Уведомляем сервер
+      if (socket) {
+        socket.emit('screen:start', { channelId: this.channelId });
+      }
+
+      // Обрабатываем остановку демонстрации через системный UI
+      videoTrack.onended = () => {
+        this.stopScreenShare();
+      };
+
+      showNotification('success', 'Демонстрация экрана запущена');
+      return true;
+
+    } catch (error) {
+      console.error('Error starting screen share:', error);
+      if (error.name !== 'NotAllowedError') {
+        showNotification('error', 'Не удалось начать демонстрацию экрана');
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Остановить демонстрацию экрана
+   */
+  stopScreenShare() {
+    if (!this.isScreenSharing || !this.screenStream) return;
+
+    // Удаляем видеотрек из всех peer connections
+    const videoTrack = this.screenStream.getVideoTracks()[0];
+
+    this.peerConnections.forEach((pc, socketId) => {
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        pc.removeTrack(videoSender);
+        this.renegotiate(socketId);
+      }
+    });
+
+    // Останавливаем поток
+    this.screenStream.getTracks().forEach(track => track.stop());
+    this.screenStream = null;
+    this.isScreenSharing = false;
+
+    // Убираем видео
+    hideScreenShareVideo();
+
+    // Уведомляем сервер
+    if (socket) {
+      socket.emit('screen:stop', { channelId: this.channelId });
+    }
+
+    showNotification('info', 'Демонстрация экрана остановлена');
+  }
+
+  /**
+   * Пересогласование WebRTC соединения (при добавлении/удалении треков)
+   */
+  async renegotiate(socketId) {
+    const pc = this.peerConnections.get(socketId);
+    if (!pc) return;
+
+    try {
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+      await pc.setLocalDescription(offer);
+      socketSendOffer(socketId, offer, this.channelId);
+    } catch (error) {
+      console.error('Error renegotiating:', error);
+    }
+  }
+
+  /**
    * Настройка анализатора для определения говорящего
    */
   setupAudioAnalyser() {
@@ -356,22 +507,49 @@ class VoiceManager {
 // Глобальный экземпляр VoiceManager
 window.voiceManager = null;
 
+// Флаг для защиты от спама входа в войс
+let _isJoiningVoice = false;
+
 /**
  * Присоединиться к голосовому каналу
  */
 async function joinVoiceChannel(channelId, channelName, serverName) {
-  // Если уже в голосовом канале - выходим
-  if (window.currentVoiceChannel) {
-    await leaveVoiceChannel();
+  // ===== ЗАЩИТА ОТ СПАМА =====
+  if (_isJoiningVoice) {
+    console.log('⏳ Already joining voice channel, ignoring...');
+    return;
   }
 
-  window.voiceManager = new VoiceManager();
-  const success = await window.voiceManager.joinChannel(channelId);
+  // Если уже в этом же голосовом канале — переключаем интерфейс обратно на полнoэкранный Voice View
+  if (window.currentVoiceChannel === channelId) {
+    if (typeof showVoiceView === 'function') {
+      showVoiceView();
+    }
+    console.log('ℹ️ Already in this voice channel');
+    return;
+  }
 
-  if (success) {
-    window.currentVoiceChannel = channelId;
-    showVoicePanel(channelName, serverName);
-    showNotification('success', `Вы подключились к каналу "${channelName}"`);
+  _isJoiningVoice = true;
+
+  try {
+    // Если уже в другом голосовом канале - выходим
+    if (window.currentVoiceChannel) {
+      await leaveVoiceChannel();
+    }
+
+    window.voiceManager = new VoiceManager();
+    const success = await window.voiceManager.joinChannel(channelId);
+
+    if (success) {
+      window.currentVoiceChannel = channelId;
+      showVoicePanel(channelName, serverName);
+      showNotification('success', `Вы подключились к каналу "${channelName}"`);
+    }
+  } finally {
+    // Снимаем блокировку через небольшую задержку чтобы предотвратить мгновенный повтор
+    setTimeout(() => {
+      _isJoiningVoice = false;
+    }, 1000);
   }
 }
 
@@ -385,6 +563,16 @@ async function leaveVoiceChannel() {
   }
   window.currentVoiceChannel = null;
   hideVoicePanel();
+
+  // Если открыт полноэкранный интерфейс, закрываем его
+  const voiceView = document.getElementById('voice-view');
+  if (voiceView && !voiceView.classList.contains('hidden')) {
+    if (window.currentChannelId) {
+      if (typeof showChatView === 'function') showChatView();
+    } else {
+      if (typeof showFriendsView === 'function') showFriendsView();
+    }
+  }
 }
 
 /**
@@ -393,13 +581,35 @@ async function leaveVoiceChannel() {
 function toggleVoiceMute() {
   if (window.voiceManager) {
     const muted = window.voiceManager.toggleMute();
+    
+    // Синхронизация с маленькой боковой панелью
     const btn = document.getElementById('voice-mute-btn');
     if (btn) {
       btn.classList.toggle('muted', muted);
       btn.title = muted ? 'Включить микрофон' : 'Выключить микрофон';
     }
-    // Также обновляем кнопку в панели пользователя
-    updateMicButton(muted);
+    
+    // Синхронизация с полноэкранным Voice View панелью
+    const viewBtn = document.getElementById('voice-view-mute-btn');
+    if (viewBtn) {
+      viewBtn.classList.toggle('muted', muted);
+      viewBtn.title = muted ? 'Включить микрофон' : 'Выключить микрофон';
+    }
+    
+    // Синхронизируем с нижней панелью пользователя и глобальной переменной
+    if (typeof globalMicMuted !== 'undefined') globalMicMuted = muted;
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) {
+      micBtn.classList.toggle('muted', muted);
+      const icon = micBtn.querySelector('svg');
+      if (icon) {
+        if (muted) {
+          icon.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/><line x1="1" y1="1" x2="23" y2="23"/>';
+        } else {
+          icon.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>';
+        }
+      }
+    }
   }
 }
 
@@ -414,20 +624,113 @@ function toggleVoiceDeafen() {
       btn.classList.toggle('deafened', deafened);
       btn.title = deafened ? 'Включить звук' : 'Выключить звук';
     }
+
+    // Синхронизация с полноэкранным Voice View
+    const viewBtn = document.getElementById('voice-view-deafen-btn');
+    if (viewBtn) {
+      viewBtn.classList.toggle('deafened', deafened);
+      viewBtn.title = deafened ? 'Включить звук' : 'Выключить звук';
+    }
+    
+    // Синхронизируем с нижней панелью пользователя и глобальной переменной
+    if (typeof globalDeafened !== 'undefined') globalDeafened = deafened;
+    const headsetBtn = document.getElementById('headset-btn');
+    if (headsetBtn) {
+      headsetBtn.classList.toggle('muted', deafened);
+      const icon = headsetBtn.querySelector('svg');
+      if (icon) {
+        if (deafened) {
+          icon.innerHTML = '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><line x1="1" y1="1" x2="23" y2="23"/>';
+        } else {
+          icon.innerHTML = '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>';
+        }
+      }
+    }
+    
+    // Если deafened включён, нужно также визуально выключить микрофон
+    if (deafened) {
+      const muteBtn = document.getElementById('voice-mute-btn');
+      if (muteBtn) {
+        muteBtn.classList.add('muted');
+        muteBtn.title = 'Выключить микрофон';
+      }
+      const vmBtn = document.getElementById('voice-view-mute-btn');
+      if (vmBtn) {
+        vmBtn.classList.add('muted');
+        vmBtn.title = 'Выключить микрофон';
+      }
+      
+      const micBtn = document.getElementById('mic-btn');
+      if (micBtn) {
+        micBtn.classList.add('muted');
+        const icon = micBtn.querySelector('svg');
+        if (icon) {
+          icon.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/><line x1="1" y1="1" x2="23" y2="23"/>';
+        }
+      }
+    }
   }
 }
 
 /**
- * Показать панель голосового чата
+ * Переключить камеру (заглушка)
+ */
+function toggleCamera() {
+  const btn = document.getElementById('voice-view-camera-btn');
+  if (!btn) return;
+  
+  const isActive = btn.classList.toggle('active');
+  btn.title = isActive ? 'Выключить камеру' : 'Включить камеру';
+  
+  if (isActive) {
+    showNotification('info', 'Камера в разработке. Скоро здесь будет ваше видео!');
+  }
+}
+
+/**
+ * Переключить демонстрацию экрана
+ */
+async function toggleScreenShare() {
+  if (!window.voiceManager) {
+    showNotification('warning', 'Сначала подключитесь к голосовому каналу');
+    return;
+  }
+
+  const sharing = await window.voiceManager.startScreenShare();
+  const btn = document.getElementById('voice-screen-btn');
+  if (btn) {
+    btn.classList.toggle('active', sharing);
+    btn.title = sharing ? 'Остановить демонстрацию' : 'Демонстрация экрана';
+  }
+
+  const viewBtn = document.getElementById('voice-view-screen-btn');
+  if (viewBtn) {
+    viewBtn.classList.toggle('active', sharing);
+    viewBtn.title = sharing ? 'Остановить демонстрацию' : 'Демонстрация экрана';
+  }
+}
+
+/**
+ * Показать панель голосового чата и переключить на полноэкранный Voice View
  */
 function showVoicePanel(channelName, serverName) {
   const panel = document.getElementById('voice-panel');
   const nameEl = document.getElementById('voice-channel-name');
   const serverEl = document.getElementById('voice-server-name');
-
+  
+  // Обновляем плавающую боковую панель
   if (panel) panel.classList.remove('hidden');
   if (nameEl) nameEl.textContent = channelName;
   if (serverEl) serverEl.textContent = serverName || '';
+
+  // Обновляем заголовок в полноэкранном Voice View
+  const viewTitle = document.getElementById('voice-view-channel-name');
+  if (viewTitle) viewTitle.textContent = channelName + (serverName ? ` (${serverName})` : '');
+
+  // Переключаем интерфейс на экран голосового чата
+  if (typeof showVoiceView === 'function') {
+    showVoiceView();
+  }
 }
 
 /**
@@ -439,16 +742,107 @@ function hideVoicePanel() {
 }
 
 /**
+ * Показать видео демонстрации экрана
+ */
+function showScreenShareVideo(stream, sourceId) {
+  let container = document.getElementById('screen-share-container'); // Старый контейнер, на всякий случай
+  const gridContainer = document.getElementById('voice-view-grid'); // Новый контейнер
+
+  let video = document.getElementById('screen-share-video-' + sourceId);
+  const targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
+  const screenCardId = 'voice-screen-card-' + targetUserId;
+  let screenCard = document.getElementById(screenCardId);
+
+  if (!video) {
+    video = document.createElement('video');
+    video.id = 'screen-share-video-' + sourceId;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.className = 'voice-card-video screen-share-video';
+    if (sourceId === 'local') {
+      video.muted = true; // Свой экран без звука
+    }
+    
+    if (!screenCard) {
+      screenCard = document.createElement('div');
+      screenCard.id = screenCardId;
+      screenCard.className = 'voice-card screen-share-card';
+      
+      const nameTag = sourceId === 'local' ? 'Вы' : 'Пользователь';
+      
+      screenCard.innerHTML = `
+        <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
+        <button class="fullscreen-btn" title="На весь экран" onclick="const v = this.parentElement.querySelector('video'); if (v && v.requestFullscreen) v.requestFullscreen();">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+      `;
+
+      if (gridContainer) {
+        gridContainer.appendChild(screenCard);
+      } else if (container) {
+        container.querySelector('.screen-share-videos')?.appendChild(screenCard);
+        container.classList.remove('hidden');
+      }
+    }
+    screenCard.appendChild(video);
+  } else if (screenCard && video.parentElement !== screenCard) {
+    screenCard.appendChild(video);
+  }
+
+  video.srcObject = stream;
+}
+
+/**
+ * Скрыть видео демонстрации экрана
+ */
+function hideScreenShareVideo() {
+  const videos = document.querySelectorAll('.screen-share-video');
+  videos.forEach(v => {
+    v.srcObject = null;
+    const card = v.parentElement;
+    if (card && card.classList.contains('screen-share-card')) {
+      card.remove();
+    }
+    v.remove();
+  });
+  
+  const container = document.getElementById('screen-share-container');
+  if (container) {
+    container.classList.add('hidden');
+  }
+}
+
+/**
+ * Скрыть видео демонстрации экрана от конкретного пользователя
+ */
+function hideScreenShareVideoForUser(socketId) {
+  const video = document.getElementById('screen-share-video-' + socketId);
+  if (video) {
+    video.srcObject = null;
+    const card = video.parentElement;
+    if (card && card.classList.contains('screen-share-card')) {
+      card.remove();
+    }
+    video.remove();
+  }
+}
+
+/**
  * Обновить индикатор говорящего
  */
 function updateSpeakingIndicator(userId, speaking) {
-  // Обновляем в списке участников
   const memberEl = document.querySelector(`[data-user-id="${userId}"]`);
   if (memberEl) {
     const indicator = memberEl.querySelector('.member-speaking-indicator');
     if (indicator) {
       indicator.style.display = speaking ? 'block' : 'none';
     }
+  }
+
+  // Обновляем в сетке Voice View
+  const voiceCardEl = document.getElementById(`voice-card-${userId}`);
+  if (voiceCardEl) {
+    voiceCardEl.classList.toggle('speaking', speaking);
   }
 
   // Обновляем в списке голосового канала
@@ -483,6 +877,79 @@ function updateVoiceChannelMembersUI(channelId, members) {
       ${member.muted ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#ed4245"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>' : ''}
     </div>
   `).join('');
+
+  // Также обновим voice-panel участников если панель открыта
+  updateVoicePanelMembers(channelId, members);
+}
+
+/**
+ * Обновить участников в voice-panel
+ */
+/**
+ * Обновить участников в боковой панели и в центральном Grid (Voice View)
+ */
+function updateVoicePanelMembers(channelId, members) {
+  if (window.currentVoiceChannel !== channelId) return;
+  
+  // Обновляем маленькую боковую панель
+  const panelMembers = document.getElementById('voice-panel-members');
+  if (panelMembers) {
+    panelMembers.innerHTML = members.map(member => `
+      <div class="voice-panel-member ${member.userId === window.currentUser?._id ? 'self' : ''}" data-user-id="${member.userId}">
+        <img class="voice-panel-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.username}">
+        <span class="voice-panel-member-name">${member.username}</span>
+        ${member.muted ? '<span class="voice-panel-member-muted">🔇</span>' : ''}
+      </div>
+    `).join('');
+  }
+
+  // Обновляем полноэкранный Grid (Voice View)
+  const gridContainer = document.getElementById('voice-view-grid');
+  if (gridContainer) {
+    gridContainer.innerHTML = members.map(member => `
+      <div class="voice-card" id="voice-card-${member.userId}" data-user-id="${member.userId}">
+        <!-- Если у юзера есть видео (демонстрация экрана), оно будет вставлено сюда поверх аватарки -->
+        <img class="voice-card-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.username}">
+        <div class="voice-card-name-tag">
+          ${member.username} 
+          ${member.muted ? '🔇' : ''}
+          ${member.deafened ? '🎧' : ''}
+        </div>
+      </div>
+    `).join('');
+    
+    // Переразмещаем уже активные видео-элементы в отдельные новые карточки
+    // Это гарантирует, что демонстрация экрана всегда остается в сетке, даже когда зашел новый пользователь и сетка перерисовалась
+    const videos = document.querySelectorAll('.screen-share-video');
+    videos.forEach(v => {
+      const sourceId = v.id.replace('screen-share-video-', '');
+      const targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
+      
+      const memberInfo = members.find(m => m.userId === targetUserId);
+      const nameTag = memberInfo ? memberInfo.username : 'Пользователь';
+
+      let screenCardId = 'voice-screen-card-' + targetUserId;
+      let screenCard = document.getElementById(screenCardId);
+      if (!screenCard) {
+        screenCard = document.createElement('div');
+        screenCard.id = screenCardId;
+        screenCard.className = 'voice-card screen-share-card';
+        screenCard.innerHTML = `
+          <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
+          <button class="fullscreen-btn" title="На весь экран" onclick="const v = this.parentElement.querySelector('video'); if (v && v.requestFullscreen) v.requestFullscreen();">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
+        `;
+        gridContainer.appendChild(screenCard);
+      }
+      screenCard.appendChild(v);
+    });
+    
+    const videoContainer = document.getElementById('screen-share-container');
+    if (videoContainer) {
+      videoContainer.classList.add('hidden');
+    }
+  }
 }
 
 /**

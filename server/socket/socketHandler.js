@@ -449,6 +449,36 @@ module.exports = (io) => {
         
         const channelMembers = voiceChannels.get(channelId);
         
+        // ===== ЗАЩИТА ОТ ДУБЛИКАТОВ =====
+        // Проверяем, есть ли уже этот пользователь в канале
+        const existingMemberIndex = channelMembers.findIndex(m => m.userId === userId);
+        if (existingMemberIndex > -1) {
+          // Пользователь уже в канале — обновляем socketId и выходим
+          channelMembers[existingMemberIndex].socketId = socket.id;
+          socket.join(`voice:${channelId}`);
+          console.log(`⚠️ ${socket.user.username} already in voice channel ${channelId}, updated socketId`);
+          // Отправляем ему существующих участников заново
+          const existingMembers = channelMembers.filter(m => m.userId !== userId).map(m => ({
+            userId: m.userId,
+            socketId: m.socketId,
+            username: m.username,
+            avatar: m.avatar
+          }));
+          socket.emit('voice:existing_members', { channelId, members: existingMembers });
+          return;
+        }
+        
+        // Также проверяем, не находится ли пользователь в ДРУГОМ голосовом канале
+        for (const [otherChannelId, otherMembers] of voiceChannels.entries()) {
+          if (otherChannelId !== channelId) {
+            const idx = otherMembers.findIndex(m => m.userId === userId);
+            if (idx > -1) {
+              // Выходим из другого голосового канала
+              await leaveVoiceChannel(socket, otherChannelId);
+            }
+          }
+        }
+        
         // Получаем список существующих участников для WebRTC
         const existingMembers = channelMembers.map(m => ({
           userId: m.userId,
@@ -468,7 +498,10 @@ module.exports = (io) => {
         // Присоединяемся к комнате голосового канала
         socket.join(`voice:${channelId}`);
         
-        // Обновляем в БД
+        // Обновляем в БД (сначала удаляем старые записи, потом добавляем)
+        await Channel.findByIdAndUpdate(channelId, {
+          $pull: { voiceMembers: { user: userId } }
+        });
         await Channel.findByIdAndUpdate(channelId, {
           $push: {
             voiceMembers: {
@@ -613,6 +646,29 @@ module.exports = (io) => {
       });
     });
 
+    /**
+     * Демонстрация экрана - начало
+     */
+    socket.on('screen:start', (data) => {
+      const { channelId } = data;
+      socket.to(`voice:${channelId}`).emit('screen:started', {
+        channelId,
+        userId,
+        username: socket.user.username
+      });
+    });
+
+    /**
+     * Демонстрация экрана - остановка
+     */
+    socket.on('screen:stop', (data) => {
+      const { channelId } = data;
+      socket.to(`voice:${channelId}`).emit('screen:stopped', {
+        channelId,
+        userId
+      });
+    });
+
     // ==================== СЕРВЕРЫ ====================
     
     /**
@@ -674,10 +730,11 @@ module.exports = (io) => {
       // Удаляем из хранилища
       connectedUsers.delete(userId);
       
-      // Выходим из всех голосовых каналов
-      for (const [channelId, members] of voiceChannels.entries()) {
-        const memberIndex = members.findIndex(m => m.socketId === socket.id);
-        if (memberIndex > -1) {
+      // Выходим из всех голосовых каналов (копируем entries чтобы избежать мутации при итерации)
+      const voiceEntries = Array.from(voiceChannels.entries());
+      for (const [channelId, members] of voiceEntries) {
+        const hasMember = members.some(m => m.userId === userId || m.socketId === socket.id);
+        if (hasMember) {
           await leaveVoiceChannel(socket, channelId);
         }
       }
@@ -704,12 +761,19 @@ module.exports = (io) => {
       const channelMembers = voiceChannels.get(channelId);
       if (!channelMembers) return;
       
-      const memberIndex = channelMembers.findIndex(m => m.socketId === socket.id);
-      if (memberIndex > -1) {
-        channelMembers.splice(memberIndex, 1);
+      // Удаляем ВСЕ записи этого пользователя (защита от дубликатов)
+      const initialLength = channelMembers.length;
+      const filtered = channelMembers.filter(m => m.userId !== userId && m.socketId !== socket.id);
+      
+      if (filtered.length === initialLength) {
+        // Пользователь не был в канале
+        return;
       }
       
-      if (channelMembers.length === 0) {
+      // Заменяем массив отфильтрованным
+      voiceChannels.set(channelId, filtered);
+      
+      if (filtered.length === 0) {
         voiceChannels.delete(channelId);
       }
       
@@ -732,7 +796,7 @@ module.exports = (io) => {
       if (channel && channel.server) {
         io.to(`server:${channel.server}`).emit('voice:members_update', {
           channelId,
-          members: channelMembers || []
+          members: filtered
         });
       }
       

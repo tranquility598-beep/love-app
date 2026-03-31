@@ -167,6 +167,20 @@ async function initSocket(token) {
     hideVoicePanel();
   });
 
+  // ===== ДЕМОНСТРАЦИЯ ЭКРАНА =====
+
+  socket.on('screen:started', (data) => {
+    const { channelId, userId, username } = data;
+    showNotification('info', `${username} начал демонстрацию экрана`);
+  });
+
+  socket.on('screen:stopped', (data) => {
+    const { channelId, userId } = data;
+    // Убираем видео, связанное с этим пользователем
+    // Видео будет удалено через RTCPeerConnection ontrack / removetrack
+    showNotification('info', 'Демонстрация экрана завершена');
+  });
+
   // ===== WebRTC СИГНАЛИНГ =====
 
   socket.on('webrtc:offer', (data) => {
@@ -380,5 +394,20 @@ function socketNotifyFriendRequest(targetUserId) {
 function socketNotifyFriendAccepted(targetUserId) {
   if (socket) {
     socket.emit('friend:accepted', { targetUserId });
+  }
+}
+
+/**
+ * Демонстрация экрана
+ */
+function socketStartScreen(channelId) {
+  if (socket) {
+    socket.emit('screen:start', { channelId });
+  }
+}
+
+function socketStopScreen(channelId) {
+  if (socket) {
+    socket.emit('screen:stop', { channelId });
   }
 }

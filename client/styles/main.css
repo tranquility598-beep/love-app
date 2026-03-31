@@ -1,11 +1,6 @@
-/**
- * Love - Main CSS
- * Black & White aesthetic theme inspired by the heart logo
- */
-
-/* ===== CSS VARIABLES ===== */
+/* ===== CSS VARIABLES & THEMES ===== */
 :root {
-  /* Black & White palette */
+  /* Default Dark Palette (Base) */
   --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
   --bg-tertiary: #1a1a1a;
@@ -14,45 +9,40 @@
   --bg-active: #333333;
   --bg-selected: #1e1e1e;
 
-  /* Text */
+  /* Text Colors */
   --text-primary: #ffffff;
   --text-secondary: #cccccc;
-  --text-muted: #666666;
-  --text-link: #aaaaaa;
+  --text-muted: #777777;
+  --text-link: #4ea8de;
 
-  /* Accent - white glow (like the heart) */
+  /* Accent & Status */
   --accent: #ffffff;
   --accent-hover: #e0e0e0;
   --accent-dim: rgba(255, 255, 255, 0.1);
-  --accent-glow: rgba(255, 255, 255, 0.15);
+  --accent-glow: 0 0 15px rgba(255, 255, 255, 0.2);
+  
+  --green: #43b581;
+  --red: #ed4245;
+  --yellow: #faa61a;
+  --blue: #5865f2;
 
-  /* Status colors (muted for B&W theme) */
-  --green: #7a7a7a;
-  --yellow: #999999;
-  --red: #888888;
-  --blue: #aaaaaa;
-
-  /* Borders */
+  /* Borders & Shadows */
   --border: rgba(255, 255, 255, 0.08);
   --border-hover: rgba(255, 255, 255, 0.15);
-  --border-active: rgba(255, 255, 255, 0.3);
-
-  /* Shadows */
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.8);
-  --shadow-glow: 0 0 20px rgba(255, 255, 255, 0.05);
-
-  /* Scrollbar */
-  --scrollbar-track: #0a0a0a;
-  --scrollbar-thumb: #333333;
-  --scrollbar-thumb-hover: #444444;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
 
   /* Sidebar widths */
   --servers-width: 72px;
   --channels-width: 240px;
   --members-width: 240px;
+  
+  /* Scrollbar */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #333333;
+  --scrollbar-thumb-hover: #444444;
 }
 
-/* Light theme override */
+/* Light Theme Overrides */
 body.light-theme {
   --bg-primary: #f5f5f5;
   --bg-secondary: #ebebeb;
@@ -65,14 +55,71 @@ body.light-theme {
   --text-secondary: #333333;
   --text-muted: #777777;
   --accent: #111111;
-  --accent-hover: #333333;
-  --accent-dim: rgba(0, 0, 0, 0.08);
   --border: rgba(0, 0, 0, 0.1);
-  --border-hover: rgba(0, 0, 0, 0.2);
-  --border-active: rgba(0, 0, 0, 0.4);
 }
 
-/* ===== RESET & BASE ===== */
+/* Premium Space Theme (Glassmorphism & Starfield) */
+body.space-theme {
+  --bg-primary: rgba(10, 10, 10, 0.25);
+  --bg-secondary: rgba(17, 17, 17, 0.35);
+  --bg-tertiary: rgba(26, 26, 26, 0.45);
+  --bg-quaternary: rgba(34, 34, 34, 0.55);
+  --bg-hover: rgba(50, 50, 50, 0.4);
+  --bg-active: rgba(255, 255, 255, 0.15);
+  --bg-selected: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.12);
+  --accent-glow: 0 0 20px rgba(255, 255, 255, 0.3);
+  
+  background: black !important;
+}
+
+/* Apply Glass Effect to all containers in Space Theme */
+body.space-theme .servers-sidebar,
+body.space-theme .channels-sidebar,
+body.space-theme .main-content,
+body.space-theme .chat-view,
+body.space-theme .chat-header,
+body.space-theme .message-input-area,
+body.space-theme .user-panel,
+body.space-theme .voice-panel,
+body.space-theme .modal,
+body.space-theme .settings-modal {
+  backdrop-filter: blur(15px) saturate(160%);
+  -webkit-backdrop-filter: blur(15px) saturate(160%);
+  background-color: var(--bg-primary) !important;
+  border: 1px solid var(--border);
+}
+
+body.space-theme .app-layout,
+body.space-theme #app {
+  background: transparent !important;
+}
+
+/* Active State Glow for Space Theme */
+body.space-theme .channel-item.active,
+body.space-theme .dm-item.active,
+body.space-theme .server-icon.active {
+  box-shadow: var(--accent-glow);
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Starfield Canvas Core Styling */
+#starfield-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* Behind everything */
+  pointer-events: none;
+  display: none;
+}
+
+body.space-theme #starfield-canvas {
+  display: block;
+}
+
+/* Reset & Base Styles */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -231,6 +278,21 @@ html, body {
 }
 
 /* ===== NOTIFICATIONS ===== */
+#starfield-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0; /* Самый задний план */
+  pointer-events: none; /* Чтобы мышь кликала сквозь него */
+  display: none; /* Скрыто по умолчанию */
+}
+
+body.space-theme #starfield-canvas {
+  display: block; /* Показываем только если активна тема космоса */
+}
+
 .notifications-container {
   position: fixed;
   bottom: 20px;
@@ -559,6 +621,26 @@ html, body {
 }
 
 /* Status dots */
+.theme-preview.space-theme {
+  background: black;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-preview.space-theme::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(white, rgba(255,255,255,0) 2px);
+  background-size: 20px 20px;
+  animation: spacePreviewScale 3s linear infinite;
+}
+
+@keyframes spacePreviewScale {
+  0% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.5); opacity: 0.6; }
+  100% { transform: scale(2); opacity: 0; }
+}
 .status-dot {
   width: 10px;
   height: 10px;
@@ -589,15 +671,16 @@ html, body {
 .user-status-dot.dnd { background: #888888; }
 .user-status-dot.offline { background: #444444; }
 
-/* ===== VOICE PANEL ===== */
+/* ===== VOICE PANEL (sidebar placement) ===== */
 .voice-panel {
-  background: #000000;
+  background: rgba(0,0,0,0.6);
   border-top: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 10px 10px 6px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
   flex-shrink: 0;
+  backdrop-filter: blur(10px);
 }
 
 .voice-panel-info {
@@ -619,8 +702,9 @@ html, body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ffffff;
+  background: #43b581;
   animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(67, 181, 129, 0.6);
 }
 
 @keyframes pulse {
@@ -633,14 +717,63 @@ html, body {
   color: var(--text-muted);
 }
 
+/* Voice Panel Members */
+.voice-panel-members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 80px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.voice-panel-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: background 0.1s;
+}
+
+.voice-panel-member:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.voice-panel-member.self {
+  color: var(--text-primary);
+}
+
+.voice-panel-member-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.voice-panel-member-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-panel-member-muted {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
 .voice-panel-controls {
   display: flex;
   gap: 4px;
+  justify-content: center;
 }
 
 .voice-control-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
@@ -657,18 +790,31 @@ html, body {
   color: var(--text-primary);
 }
 
+.voice-control-btn.muted,
+.voice-control-btn.deafened {
+  background: rgba(237, 66, 69, 0.2);
+  border-color: rgba(237, 66, 69, 0.4);
+  color: #ed4245;
+}
+
+.voice-control-btn.active {
+  background: rgba(67, 181, 129, 0.2);
+  border-color: rgba(67, 181, 129, 0.4);
+  color: #43b581;
+}
 
 .voice-control-btn.leave-voice {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.1);
+  background: rgba(237, 66, 69, 0.1);
+  border-color: rgba(237, 66, 69, 0.2);
+  color: #ed4245;
 }
 
 .voice-control-btn.leave-voice:hover {
-  background: rgba(255,255,255,0.15);
-  color: #ffffff;
+  background: rgba(237, 66, 69, 0.3);
+  color: #ff6b6b;
 }
 
-/* Voice channel members */
+/* Voice channel members (sidebar list) */
 .voice-channel-members {
   padding: 2px 0 2px 28px;
 }
@@ -704,7 +850,77 @@ html, body {
 }
 
 .voice-member-speaking .voice-member-avatar {
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+  box-shadow: 0 0 0 2px rgba(67, 181, 129, 0.6);
+}
+
+/* ===== SCREEN SHARE ===== */
+.screen-share-container {
+  background: #000;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 50%;
+  flex-shrink: 0;
+}
+
+.screen-share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.8);
+  border-bottom: 1px solid var(--border);
+}
+
+.screen-share-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #43b581;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.screen-share-label::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #43b581;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.screen-share-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.screen-share-close:hover {
+  background: rgba(237, 66, 69, 0.2);
+  color: #ed4245;
+  border-color: rgba(237, 66, 69, 0.4);
+}
+
+.screen-share-videos {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.screen-share-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
 }
 
 /* ===== AUTO UPDATE BANNER ===== */
@@ -791,6 +1007,8 @@ html, body {
 }
 
 /* ===== MEMBERS SIDEBAR ===== */
+
+
 .members-sidebar {
   width: var(--members-width);
   background: var(--bg-secondary);

@@ -193,43 +193,7 @@ function toggleDeafen() {
   });
 }
 
-// Переключить голосовой микрофон (в голосовом канале)
-function toggleVoiceMute() {
-  const btn = document.getElementById('voice-mute-btn');
-  if (btn) {
-    btn.classList.toggle('muted');
-    // Update icon
-    const icon = btn.querySelector('svg');
-    if (icon) {
-      const isMuted = btn.classList.contains('muted');
-      if (isMuted) {
-        icon.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="1" y1="1" x2="23" y2="23"/>';
-      } else {
-        icon.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>';
-      }
-    }
-  }
-  toggleMic();
-}
-
-// Переключить голосовой звук (в голосовом канале)
-function toggleVoiceDeafen() {
-  const btn = document.getElementById('voice-deafen-btn');
-  if (btn) {
-    btn.classList.toggle('deafened');
-    // Update icon
-    const icon = btn.querySelector('svg');
-    if (icon) {
-      const isDeafened = btn.classList.contains('deafened');
-      if (isDeafened) {
-        icon.innerHTML = '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><line x1="1" y1="1" x2="23" y2="23"/>';
-      } else {
-        icon.innerHTML = '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>';
-      }
-    }
-  }
-  toggleDeafen();
-}
+// Удалены toggleVoiceMute и toggleVoiceDeafen так как они теперь в voice.js
 
 // ===== CREATE CHANNEL MODAL =====
 function showCreateChannelModal(type) {
@@ -475,10 +439,16 @@ async function uploadAvatar(event) {
 
 // ===== ТЕМА =====
 function setTheme(theme, el) {
-  document.body.classList.toggle('light-theme', theme === 'light');
+  document.body.classList.remove('light-theme', 'space-theme');
+  if (theme === 'light') document.body.classList.add('light-theme');
+  if (theme === 'space') document.body.classList.add('space-theme');
+  
   localStorage.setItem('love-theme', theme);
-  document.querySelectorAll('.theme-option').forEach(function(opt) { opt.classList.remove('active'); });
-  if (el) el.classList.add('active');
+  
+  if (el) {
+    el.closest('.theme-options').querySelectorAll('.theme-option').forEach(opt => opt.classList.remove('active'));
+    el.classList.add('active');
+  }
 }
 
 // ===== НАСТРОЙКИ СЕРВЕРА =====

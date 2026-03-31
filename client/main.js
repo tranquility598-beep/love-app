@@ -3,7 +3,7 @@
  * Запускает Electron приложение и управляет окнами
  */
 
-const { app, BrowserWindow, ipcMain, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -181,6 +181,22 @@ ipcMain.on('install-update', () => {
 
 // Запуск приложения
 app.whenReady().then(() => {
+  // Настройка обработчика захвата экрана для getDisplayMedia в Electron
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+      if (sources && sources.length > 0) {
+        // Берем первый доступный экран
+        const source = sources.find(s => s.id.startsWith('screen')) || sources[0];
+        callback({ video: source, audio: 'loopback' });
+      } else {
+        callback();
+      }
+    }).catch(err => {
+      console.error('getDisplayMedia error:', err);
+      callback();
+    });
+  });
+
   if (!isPackaged) {
     // В режиме разработки запускаем локальный сервер
     startServer();

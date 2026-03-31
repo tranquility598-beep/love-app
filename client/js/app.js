@@ -16,9 +16,17 @@ window.currentView = 'welcome'; // 'welcome' | 'chat' | 'friends' | 'dm'
  * Инициализация приложения при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', async () => {
-  // Применяем сохраненную тему
-  const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'light') setTheme('light');
+  // Применяем сохраненную тему (по умолчанию Космос)
+  const savedTheme = localStorage.getItem('love-theme') || 'space';
+  setTheme(savedTheme);
+  
+  // Устанавливаем активную кнопку темы в настройках (если настройки есть в DOM)
+  const themeOptions = document.querySelectorAll('.theme-option');
+  if (themeOptions.length > 0) {
+    if (savedTheme === 'light') themeOptions[1].classList.add('active');
+    else if (savedTheme === 'space') themeOptions[2].classList.add('active');
+    else themeOptions[0].classList.add('active');
+  }
 
   // Инициализация автообновлений
   setupUpdater();
@@ -402,6 +410,8 @@ function showDMView() {
 function showChatView() {
   document.getElementById('welcome-view').classList.add('hidden');
   document.getElementById('friends-view').classList.add('hidden');
+  const voiceView = document.getElementById('voice-view');
+  if (voiceView) voiceView.classList.add('hidden');
   document.getElementById('chat-view').classList.remove('hidden');
 }
 
@@ -412,6 +422,8 @@ function showWelcomeView() {
   document.getElementById('welcome-view').classList.remove('hidden');
   document.getElementById('friends-view').classList.add('hidden');
   document.getElementById('chat-view').classList.add('hidden');
+  const voiceView = document.getElementById('voice-view');
+  if (voiceView) voiceView.classList.add('hidden');
 }
 
 /**
@@ -420,9 +432,25 @@ function showWelcomeView() {
 function showFriendsView() {
   document.getElementById('welcome-view').classList.add('hidden');
   document.getElementById('chat-view').classList.add('hidden');
+  const voiceView = document.getElementById('voice-view');
+  if (voiceView) voiceView.classList.add('hidden');
   document.getElementById('friends-view').classList.remove('hidden');
   window.currentView = 'friends';
   loadFriends();
+}
+
+/**
+ * Показать полноэкранный голосовой чат
+ */
+function showVoiceView() {
+  document.getElementById('welcome-view').classList.add('hidden');
+  document.getElementById('friends-view').classList.add('hidden');
+  document.getElementById('chat-view').classList.add('hidden');
+  
+  const voiceView = document.getElementById('voice-view');
+  if (voiceView) {
+    voiceView.classList.remove('hidden');
+  }
 }
 
 /**

@@ -1,28 +1,45 @@
-/**
- * API модуль
- * Все HTTP запросы к backend серверу
- */
+window.BASE_URL = 'http://localhost:5555';
+let API_BASE = window.BASE_URL + '/api';
 
-const API_BASE = 'http://localhost:5555/api';
-
-// Получаем токен из localStorage
-function getToken() {
-  return localStorage.getItem('token');
-}
+// Промис для инициализации конфига
+window.apiReady = (async () => {
+  if (window.electronAPI && window.electronAPI.isPackaged) {
+    try {
+      const isPackaged = await window.electronAPI.isPackaged();
+      if (isPackaged) {
+        window.BASE_URL = 'https://love-app-2ou3.onrender.com';
+        API_BASE = window.BASE_URL + '/api';
+        console.log('🌐 Production mode: using remote API', API_BASE);
+      } else {
+        console.log('🛠 Development mode: using local API', API_BASE);
+      }
+    } catch (err) {
+      console.error('Failed to get app mode:', err);
+    }
+  }
+})();
 
 // Базовый fetch с авторизацией
 async function apiFetch(endpoint, options = {}) {
-  const token = getToken();
+  await window.apiReady;
+  const token = localStorage.getItem('token');
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...options.headers
   };
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers
+    });
+  } catch (networkError) {
+    // Ошибка сети (сервер недоступен, нет интернета)
+    console.error('Network error:', networkError.message, 'URL:', `${API_BASE}${endpoint}`);
+    throw new Error('Сервер недоступен. Проверьте подключение к интернету или подождите — сервер может загружаться.');
+  }
 
   let data;
   try {
@@ -47,7 +64,8 @@ async function apiFetch(endpoint, options = {}) {
 
 // Загрузка файла
 async function apiUpload(endpoint, formData) {
-  const token = getToken();
+  await window.apiReady;
+  const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: 'POST',
     headers: {

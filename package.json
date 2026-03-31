@@ -35,7 +35,7 @@
           ]
         }
       ],
-      "icon": "client/assets/icon.ico"
+      "icon": "client/assets/icon.png"
     },
     "nsis": {
       "oneClick": false,

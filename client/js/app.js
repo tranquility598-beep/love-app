@@ -226,12 +226,26 @@ function showServerChannels(server) {
   const dmList = document.getElementById('dm-list');
   const dmSearch = document.getElementById('dm-search-section');
   const serverChannels = document.getElementById('server-channels-list');
+  const dmSidebarView = document.getElementById('dm-sidebar-view');
+  const serverSidebarView = document.getElementById('server-sidebar-view');
 
   if (header) header.textContent = server.name;
   if (headerBtn) headerBtn.style.display = 'flex';
   if (dmList) dmList.classList.add('hidden');
   if (dmSearch) dmSearch.classList.add('hidden');
   if (serverChannels) serverChannels.classList.remove('hidden');
+  
+  // Переключаем sidebar views
+  if (dmSidebarView) dmSidebarView.classList.add('hidden');
+  if (serverSidebarView) serverSidebarView.classList.remove('hidden');
+
+  // Показываем/скрываем кнопку удаления в зависимости от прав
+  const deleteBtn = document.getElementById('delete-server-btn');
+  if (deleteBtn) {
+    const isOwner = server.owner === window.currentUser?._id || 
+                    server.owner?._id === window.currentUser?._id;
+    deleteBtn.style.display = isOwner ? 'flex' : 'none';
+  }
 
   // Рендерим каналы
   renderServerChannels(server);
@@ -363,12 +377,18 @@ function showDMView() {
   const dmList = document.getElementById('dm-list');
   const dmSearch = document.getElementById('dm-search-section');
   const serverChannels = document.getElementById('server-channels-list');
+  const dmSidebarView = document.getElementById('dm-sidebar-view');
+  const serverSidebarView = document.getElementById('server-sidebar-view');
 
   if (header) header.textContent = 'Личные сообщения';
   if (headerBtn) headerBtn.style.display = 'none';
   if (dmList) dmList.classList.remove('hidden');
   if (dmSearch) dmSearch.classList.remove('hidden');
   if (serverChannels) serverChannels.classList.add('hidden');
+  
+  // Переключаем sidebar views
+  if (dmSidebarView) dmSidebarView.classList.remove('hidden');
+  if (serverSidebarView) serverSidebarView.classList.add('hidden');
 
   // Показываем друзей только если нет активного DM разговора
   if (!window.currentDMConversation || !window.currentChannelId) {
@@ -517,7 +537,8 @@ function renderDMConversations(conversations) {
  */
 async function openDMConversation(conversation) {
   window.currentDMConversation = conversation;
-  window.currentChannelId = conversation._id;
+  // Сохраняем ID диалога для API вызовов
+  window.currentDMConversationId = conversation._id;
 
   const other = conversation.participants?.find(p => p._id !== window.currentUser?._id);
   if (!other) return;
@@ -543,7 +564,7 @@ async function openDMConversation(conversation) {
   showDMView();
   showChatView();
 
-  // Загружаем сообщения DM
+  // Загружаем сообщения DM — это также установит правильный currentChannelId
   await loadDMMessages(conversation._id);
 
   const input = document.getElementById('message-input');
@@ -556,6 +577,12 @@ async function openDMConversation(conversation) {
 async function loadDMMessages(conversationId) {
   try {
     const data = await DMAPI.getMessages(conversationId);
+    // Устанавливаем правильный channelId (ID канала, не диалога)
+    // Сервер использует channel ID для сокет-событий
+    if (data.channelId) {
+      window.currentChannelId = data.channelId.toString();
+      console.log('📬 DM channel ID set to:', window.currentChannelId);
+    }
     renderMessages(data.messages || [], true);
     scrollToBottom();
   } catch (error) {
@@ -600,23 +627,7 @@ function toggleEmojiPicker() {
   if (container) container.classList.toggle('hidden');
 }
 
-/**
- * Вставить эмодзи в поле ввода
- */
-function insertEmojiIntoInput(emoji) {
-  const input = document.getElementById('message-input');
-  if (!input) return;
-
-  input.focus();
-  const selection = window.getSelection();
-  const range = selection.getRangeAt(0);
-  const textNode = document.createTextNode(emoji);
-  range.insertNode(textNode);
-  range.setStartAfter(textNode);
-  range.setEndAfter(textNode);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
+// insertEmojiIntoInput определена в ui.js (работает с textarea)
 
 /**
  * Удалить канал

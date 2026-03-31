@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Версия приложения
   getVersion: () => process.env.npm_package_version || '1.0.0',
   
+  // Режим (разработка/продакшн)
+  isPackaged: () => ipcRenderer.invoke('get-is-packaged'),
+  
   // Автообновления
   onUpdateMessage: (callback) => ipcRenderer.on('updater-message', (_event, data) => callback(data)),
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),

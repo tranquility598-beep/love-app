@@ -1,16 +1,15 @@
-/**
- * Socket.io клиент
- * Управляет real-time соединением с сервером
- */
-
-const SOCKET_URL = 'http://localhost:5555';
-
 let socket = null;
 
 /**
  * Инициализация Socket.io соединения
  */
-function initSocket(token) {
+async function initSocket(token) {
+  // Ждем пока api.js определит правильный BASE_URL (продакшн или дев)
+  await window.apiReady;
+  
+  const SOCKET_URL = window.BASE_URL || 'http://localhost:5555';
+  console.log('🔌 Socket connecting to:', SOCKET_URL);
+  
   if (socket) {
     socket.disconnect();
   }
@@ -46,12 +45,17 @@ function initSocket(token) {
   // Новое сообщение
   socket.on('message:new', (data) => {
     const { channelId, message } = data;
-    if (window.currentChannelId === channelId) {
-      appendMessage(message);
-      scrollToBottom();
+    const currentCh = window.currentChannelId?.toString();
+    const msgCh = channelId?.toString();
+    if (currentCh && currentCh === msgCh) {
+      // Не дублируем свои сообщения — они уже были мгновенно показаны
+      if (message.author?._id !== window.currentUser?._id) {
+        appendMessage(message);
+        scrollToBottom();
+      }
     }
     // Уведомление если не в этом канале
-    if (window.currentChannelId !== channelId) {
+    if (!currentCh || currentCh !== msgCh) {
       showMessageNotification(message);
     }
   });
@@ -59,7 +63,7 @@ function initSocket(token) {
   // Сообщение отредактировано
   socket.on('message:edited', (data) => {
     const { channelId, message } = data;
-    if (window.currentChannelId === channelId) {
+    if (window.currentChannelId?.toString() === channelId?.toString()) {
       updateMessageInDOM(message);
     }
   });
@@ -67,7 +71,7 @@ function initSocket(token) {
   // Сообщение сохранено в БД (обновление временного ID)
   socket.on('message:update', (data) => {
     const { channelId, tempId, message } = data;
-    if (window.currentChannelId === channelId) {
+    if (window.currentChannelId?.toString() === channelId?.toString()) {
       updateTempMessageInDOM(tempId, message);
     }
   });
@@ -75,7 +79,7 @@ function initSocket(token) {
   // Сообщение удалено
   socket.on('message:deleted', (data) => {
     const { channelId, messageId } = data;
-    if (window.currentChannelId === channelId) {
+    if (window.currentChannelId?.toString() === channelId?.toString()) {
       removeMessageFromDOM(messageId);
     }
   });
@@ -83,7 +87,7 @@ function initSocket(token) {
   // Реакция на сообщение
   socket.on('message:reaction', (data) => {
     const { channelId, messageId, reactions } = data;
-    if (window.currentChannelId === channelId) {
+    if (window.currentChannelId?.toString() === channelId?.toString()) {
       updateMessageReactions(messageId, reactions);
     }
   });
@@ -92,14 +96,14 @@ function initSocket(token) {
 
   socket.on('typing:start', (data) => {
     const { channelId, userId, username } = data;
-    if (window.currentChannelId === channelId && userId !== window.currentUser?._id) {
+    if (window.currentChannelId?.toString() === channelId?.toString() && userId !== window.currentUser?._id) {
       showTypingIndicator(username);
     }
   });
 
   socket.on('typing:stop', (data) => {
     const { channelId, userId } = data;
-    if (window.currentChannelId === channelId) {
+    if (window.currentChannelId?.toString() === channelId?.toString()) {
       hideTypingIndicator(userId);
     }
   });
@@ -205,10 +209,12 @@ function initSocket(token) {
 
   socket.on('dm:new_message', (data) => {
     const { conversationId, message } = data;
-    // Обновляем список DM
+    // Обновляем список DM диалогов
     if (window.loadDMConversations) window.loadDMConversations();
-    // Показываем уведомление
-    showNotification('info', `Новое сообщение от ${message.author.username}`);
+    // Показываем уведомление только если мы НЕ в этом DM диалоге
+    if (!window.currentDMConversation || window.currentDMConversationId !== conversationId) {
+      showNotification('info', `Новое сообщение от ${message.author?.username || 'Пользователь'}`);
+    }
   });
 
   // ===== УВЕДОМЛЕНИЯ =====

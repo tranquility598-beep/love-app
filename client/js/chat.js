@@ -115,10 +115,12 @@ function renderMessage(msg, isGrouped) {
     attachmentsHtml = '<div class="message-attachments">';
     msg.attachments.forEach(att => {
       if (att.mimetype?.startsWith('image/')) {
-        attachmentsHtml += `<img class="message-image" src="http://localhost:5555${att.url}" alt="${att.filename}" loading="lazy">`;
+        const baseUrl = window.BASE_URL || 'http://localhost:5555';
+        attachmentsHtml += `<img class="message-image" src="${baseUrl}${att.url}" alt="${att.filename}" loading="lazy">`;
       } else {
+        const baseUrl = window.BASE_URL || 'http://localhost:5555';
         attachmentsHtml += `
-          <div class="message-file" onclick="window.open('http://localhost:5555${att.url}')">
+          <div class="message-file" onclick="window.open('${baseUrl}${att.url}')">
             <span class="message-file-icon">${getFileIcon(att.mimetype)}</span>
             <div class="message-file-info">
               <div class="message-file-name">${att.filename}</div>
@@ -362,6 +364,7 @@ async function sendMessage() {
   // Очищаем поле ввода
   input.value = '';
   input.style.height = 'auto';
+  const currentReplyTo = replyingTo;
   cancelReply();
 
   try {
@@ -371,7 +374,7 @@ async function sendMessage() {
         const formData = new FormData();
         formData.append('file', file);
         if (content) formData.append('content', content);
-        if (replyingTo) formData.append('replyTo', replyingTo);
+        if (currentReplyTo) formData.append('replyTo', currentReplyTo);
         formData.append('channelId', channelId);
         formData.append('isDM', window.currentDMConversation ? 'true' : 'false');
         await apiUpload('/upload/file', formData);
@@ -379,8 +382,29 @@ async function sendMessage() {
       pendingFiles = [];
       cancelFileUpload();
     } else {
+      // Оптимистичное отображение: показываем сообщение мгновенно
+      const tempId = 'temp_' + Date.now() + '_' + (window.currentUser?._id || '');
+      const tempMessage = {
+        _id: tempId,
+        content: content,
+        author: {
+          _id: window.currentUser?._id,
+          username: window.currentUser?.username,
+          avatar: window.currentUser?.avatar,
+          discriminator: window.currentUser?.discriminator
+        },
+        replyTo: currentReplyTo || null,
+        attachments: [],
+        createdAt: new Date().toISOString(),
+        reactions: []
+      };
+
+      // Показываем сообщение в чате мгновенно
+      appendMessage(tempMessage);
+      scrollToBottom();
+
       // Отправляем текстовое сообщение через сокет
-      socketSendMessage(channelId, content, replyingTo);
+      socketSendMessage(channelId, content, currentReplyTo);
     }
 
     replyingTo = null;

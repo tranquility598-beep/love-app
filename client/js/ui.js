@@ -65,7 +65,8 @@ function getAvatarUrl(avatar, fallbackUsername) {
     return generateDefaultAvatar(fallbackUsername || (window.currentUser ? window.currentUser.username : '?'));
   }
   if (avatar.startsWith('http') || avatar.startsWith('data:')) return avatar;
-  return `http://localhost:5555${avatar}`;
+  const baseUrl = window.BASE_URL || 'http://localhost:5555';
+  return `${baseUrl}${avatar}`;
 }
 
 function generateDefaultAvatar(username) {

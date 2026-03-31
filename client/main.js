@@ -125,6 +125,11 @@ ipcMain.on('show-notification', (event, { title, body }) => {
   }
 });
 
+// Обработчик для получения режима (разработка/продакшн)
+ipcMain.handle('get-is-packaged', () => {
+  return app.isPackaged;
+});
+
 // Обработчик для получения пути к папке загрузок
 ipcMain.handle('get-downloads-path', () => {
   return app.getPath('downloads');

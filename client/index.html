@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://love-app-2ou3.onrender.com http://localhost:5555; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://love-app-2ou3.onrender.com http://localhost:5555 blob:; connect-src 'self' https://love-app-2ou3.onrender.com wss://love-app-2ou3.onrender.com http://localhost:5555 ws://localhost:5555 https://cdn.jsdelivr.net; media-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://love-app-2ou3.onrender.com http://localhost:5555; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://love-app-2ou3.onrender.com http://localhost:5555 blob:; connect-src 'self' https://love-app-2ou3.onrender.com wss://love-app-2ou3.onrender.com http://localhost:5555 ws://localhost:5555 https://cdn.jsdelivr.net https://cdn.socket.io; media-src 'self' blob:;">
   <title>Love</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/auth.css">
@@ -208,6 +208,16 @@
           </button>
         </div>
         <div class="server-channels-list" id="server-channels-list"></div>
+        <div class="server-sidebar-actions" id="server-sidebar-actions">
+          <button class="server-action-btn leave-btn" onclick="leaveServer()" title="Покинуть сервер">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Покинуть сервер
+          </button>
+          <button class="server-action-btn delete-btn" id="delete-server-btn" onclick="deleteServer()" title="Удалить сервер" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Удалить сервер
+          </button>
+        </div>
       </div>
 
       <!-- User Panel -->
@@ -647,6 +657,7 @@
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js" type="module"></script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/socket.js"></script>
 <script src="js/voice.js"></script>

@@ -100,7 +100,10 @@ router.get('/:conversationId/messages', authMiddleware, async (req, res) => {
     }
     
     // Проверяем что пользователь является участником
-    if (!conversation.participants.includes(req.user._id.toString())) {
+    const isParticipant = conversation.participants.some(
+      p => p.toString() === req.user._id.toString()
+    );
+    if (!isParticipant) {
       return res.status(403).json({ message: 'Нет доступа к этому диалогу' });
     }
     

@@ -547,3 +547,44 @@
   position: relative;
 }
 
+/* ===== SERVER ACTION BUTTONS ===== */
+.server-sidebar-actions {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.server-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.server-action-btn.leave-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.server-action-btn.delete-btn {
+  color: #ed4245;
+}
+
+.server-action-btn.delete-btn:hover {
+  background: rgba(237, 66, 69, 0.15);
+  color: #ff5558;
+}
+

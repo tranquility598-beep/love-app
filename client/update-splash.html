@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Установка обновления</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #111111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #ffffff;
+      overflow: hidden;
+      -webkit-app-region: drag; /* Позволяет перетаскивать окно */
+    }
+
+    .heart-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 200px;
+      height: 200px;
+      margin-bottom: 30px;
+    }
+
+    /* Само сердце (SVG) */
+    .heart {
+      width: 120px;
+      height: 120px;
+      fill: #ebebeb; /* Почти белый/светло-серый, как на скриншоте */
+      filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+      animation: pulse 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Эффект пульсации (увеличение и свечение) */
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+      }
+      50% {
+        transform: scale(1.15);
+        filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.8));
+      }
+      100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+      }
+    }
+
+    .text-container {
+      text-align: center;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #888888;
+      animation: blink 1.5s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="heart-container">
+    <!-- Идеально ровное плоское сердце, похожее на скриншот -->
+    <svg class="heart" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </svg>
+  </div>
+  <div class="text-container">
+    <div class="title">Установка обновления...</div>
+    <div class="subtitle">Пожалуйста, подождите</div>
+  </div>
+</body>
+</html>

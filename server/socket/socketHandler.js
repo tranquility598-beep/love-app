@@ -437,12 +437,18 @@ module.exports = (io) => {
       try {
         const { channelId } = data;
         
-        const channel = await Channel.findById(channelId);
-        if (!channel || channel.type !== 'voice') {
-          return socket.emit('error', { message: 'Голосовой канал не найден' });
+        // ===== ПОДДЕРЖКА ЗВОНКОВ В ЛС (Virtual Rooms) =====
+        const isDMCall = channelId.startsWith('dm_call:');
+        let channel = null;
+
+        if (!isDMCall) {
+          channel = await Channel.findById(channelId);
+          if (!channel || channel.type !== 'voice') {
+            return socket.emit('error', { message: 'Голосовой канал не найден' });
+          }
         }
         
-        // Добавляем пользователя в голосовой канал
+        // Добавляем пользователя в голосовой канал (или виртуальную комнату звонка)
         if (!voiceChannels.has(channelId)) {
           voiceChannels.set(channelId, []);
         }
@@ -498,19 +504,21 @@ module.exports = (io) => {
         // Присоединяемся к комнате голосового канала
         socket.join(`voice:${channelId}`);
         
-        // Обновляем в БД (сначала удаляем старые записи, потом добавляем)
-        await Channel.findByIdAndUpdate(channelId, {
-          $pull: { voiceMembers: { user: userId } }
-        });
-        await Channel.findByIdAndUpdate(channelId, {
-          $push: {
-            voiceMembers: {
-              user: userId,
-              muted: false,
-              deafened: false
+        // Обновляем в БД только если это реальный канал сервера
+        if (!isDMCall) {
+          await Channel.findByIdAndUpdate(channelId, {
+            $pull: { voiceMembers: { user: userId } }
+          });
+          await Channel.findByIdAndUpdate(channelId, {
+            $push: {
+              voiceMembers: {
+                user: userId,
+                muted: false,
+                deafened: false
+              }
             }
-          }
-        });
+          });
+        }
         
         // Отправляем новому участнику список существующих
         socket.emit('voice:existing_members', {
@@ -528,7 +536,7 @@ module.exports = (io) => {
         });
         
         // Уведомляем сервер об изменении участников голосового канала
-        if (channel.server) {
+        if (channel && channel.server) {
           io.to(`server:${channel.server}`).emit('voice:members_update', {
             channelId,
             members: channelMembers
@@ -720,6 +728,63 @@ module.exports = (io) => {
           status: socket.user.status
         }
       });
+    });
+
+    // ==================== ГОЛОСОВЫЕ ЗВОНКИ (DM Calls) ====================
+
+    /**
+     * Запрос на звонок (от звонящего к получателю)
+     */
+    socket.on('call:request', (data) => {
+      const { targetUserId } = data;
+      const targetIdStr = targetUserId ? targetUserId.toString() : null;
+      const targetSocketId = connectedUsers.get(targetIdStr);
+
+      console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found socket: ${targetSocketId ? 'YES' : 'NO'}`);
+
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('call:incoming', {
+          from: {
+            _id: userId,
+            username: socket.user.username,
+            avatar: socket.user.avatar
+          }
+        });
+      } else {
+        socket.emit('call:error', { message: 'Пользователь не в сети (Socket connection not found)' });
+      }
+    });
+
+    /**
+     * Ответ на звонок (Принять / Отклонить)
+     */
+    socket.on('call:response', (data) => {
+      const { callerId, accepted } = data;
+      const callerIdStr = callerId ? callerId.toString() : null;
+      const callerSocketId = connectedUsers.get(callerIdStr);
+
+      if (callerSocketId) {
+        io.to(callerSocketId).emit('call:response', {
+          accepted,
+          responderId: userId
+        });
+        console.log(`📞 Call response from ${socket.user.username}: ${accepted ? 'ACCEPTED' : 'DECLINED'}`);
+      }
+    });
+
+    /**
+     * Завершение звонка
+     */
+    socket.on('call:end', (data) => {
+      const { targetUserId } = data;
+      const targetIdStr = targetUserId ? targetUserId.toString() : null;
+      const targetSocketId = connectedUsers.get(targetIdStr);
+
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('call:terminated', {
+          by: userId
+        });
+      }
     });
 
     // ==================== ОТКЛЮЧЕНИЕ ====================

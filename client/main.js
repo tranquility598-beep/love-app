@@ -18,6 +18,7 @@ autoUpdater.logger.transports.file.level = 'info';
 // app.disableHardwareAcceleration();
 
 let mainWindow;
+let incomingCallWindow; // Variable for the popup
 let serverProcess;
 
 // Путь к серверу
@@ -176,7 +177,84 @@ ipcMain.on('check-for-updates', () => {
 });
 
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall();
+  if (mainWindow) {
+    // Прячем основное окно
+    mainWindow.hide();
+  }
+
+  // Создаем кастомный splash-экран обновления
+  const updateWindow = new BrowserWindow({
+    width: 600,
+    height: 400,
+    frame: false,             // Без стандартных Windows рамок
+    transparent: true,        // Прозрачный фон
+    alwaysOnTop: true,        // Поверх всех окон
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  updateWindow.loadFile(path.join(__dirname, 'update-splash.html'));
+
+  // Даем загрузиться анимации 3 секунды, затем запускаем тихий инсталлер
+  setTimeout(() => {
+    // Внимание: после вызова этой функции Electron немедленно закроет приложение
+    // и запустит распаковку обновления в фоне.
+    autoUpdater.quitAndInstall(true, true); 
+  }, 3500);
+});
+
+/**
+ * Управление окном Входящего Звонка
+ */
+ipcMain.on('show-incoming-call', (event, { caller }) => {
+  if (incomingCallWindow) return; // Уже открыто
+
+  incomingCallWindow = new BrowserWindow({
+    width: 380,
+    height: 480,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    show: false,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  incomingCallWindow.loadFile(path.join(__dirname, 'call-popup.html'));
+
+  incomingCallWindow.once('ready-to-show', () => {
+    incomingCallWindow.show();
+    // Отправляем данные вызывающего в попап
+    incomingCallWindow.webContents.send('incoming-call-data', { caller });
+  });
+
+  incomingCallWindow.on('closed', () => {
+    incomingCallWindow = null;
+  });
+});
+
+ipcMain.on('close-incoming-call', () => {
+  if (incomingCallWindow) {
+    incomingCallWindow.close();
+  }
+});
+
+// Пересылаем ответ из попапа в главное окно
+ipcMain.on('call-action', (event, { accepted, callerId }) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('call-response-from-popup', { accepted, callerId });
+  }
+  if (incomingCallWindow) {
+    incomingCallWindow.close();
+  }
 });
 
 // Запуск приложения

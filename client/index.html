@@ -143,7 +143,9 @@
   <!-- Auto Update Banner -->
   <div class="update-banner hidden" id="update-banner">
     <div class="update-info">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <svg class="pulse-heart" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+      </svg>
       <span id="update-banner-text">Доступно обновление</span>
     </div>
     <div class="update-progress-bar hidden" id="update-progress-bar">
@@ -361,9 +363,43 @@
             </div>
           </div>
           <div class="chat-header-right">
-            <button class="chat-header-btn" onclick="toggleMembersList()" title="Участники" id="members-toggle-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <button class="chat-header-btn" id="dm-call-btn" onclick="startDMCall()" title="Начать звонок" style="display:none">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
             </button>
+            <button class="chat-header-btn" onclick="toggleMembersList()" title="Участники" id="members-toggle-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </button>
+          </div>
+        </div>
+        
+        <!-- DM Call Overlay (Caller View) -->
+        <div class="dm-call-overlay hidden" id="dm-call-overlay">
+          <div class="call-overlay-content">
+            <div class="call-overlay-avatars">
+              <div class="caller-avatar-mini" id="caller-mini-my">
+                <img src="" id="caller-mini-my-img">
+              </div>
+              <div class="caller-avatar-mini peer-ringing" id="caller-mini-peer">
+                <img src="" id="caller-mini-peer-img">
+                <div class="mini-waves">
+                  <div class="m-wave"></div>
+                  <div class="m-wave"></div>
+                </div>
+                <div class="bulk-ripple" id="dm-bulk-ripple"></div>
+              </div>
+            </div>
+            <div class="call-overlay-info">
+              <div class="call-overlay-name" id="call-overlay-peer-name">Звонок...</div>
+              <div class="call-overlay-status" id="call-overlay-status">Ожидание ответа</div>
+            </div>
+            <div class="call-overlay-actions">
+              <button class="call-action-btn hide-overlay" onclick="toggleCallOverlay()" title="Скрыть">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+              </button>
+              <button class="call-action-btn end-call" onclick="endDMCall()" title="Завершить">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 2.6 3.41l2.56-2.56"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+              </button>
+            </div>
           </div>
         </div>
 

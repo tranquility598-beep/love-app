@@ -359,6 +359,10 @@ async function selectChannel(channelId, channelName, channelType) {
   // Показываем вид чата
   showChatView();
 
+  // Скрываем кнопку звонка (она только для ЛС)
+  const callBtn = document.getElementById('dm-call-btn');
+  if (callBtn) callBtn.style.display = 'none';
+
   // Загружаем сообщения
   await loadMessages(channelId);
 
@@ -424,6 +428,10 @@ function showWelcomeView() {
   document.getElementById('chat-view').classList.add('hidden');
   const voiceView = document.getElementById('voice-view');
   if (voiceView) voiceView.classList.add('hidden');
+
+  // Скрываем кнопку звонка
+  const callBtn = document.getElementById('dm-call-btn');
+  if (callBtn) callBtn.style.display = 'none';
 }
 
 /**
@@ -583,6 +591,10 @@ async function openDMConversation(conversation) {
   if (headerIcon) headerIcon.innerHTML = `
     <img src="${getAvatarUrl(other.avatar)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" alt="">
   `;
+
+  // Показываем кнопку звонка
+  const callBtn = document.getElementById('dm-call-btn');
+  if (callBtn) callBtn.style.display = 'flex';
 
   // Скрываем список участников для DM
   const membersSidebar = document.getElementById('members-sidebar');

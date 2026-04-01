@@ -231,6 +231,37 @@ async function initSocket(token) {
     }
   });
 
+  // ===== ЗВОНКИ (DM Calls) =====
+
+  // Входящий звонок: показываем Electron окно
+  socket.on('call:incoming', (data) => {
+    const { from } = data;
+    console.log('📞 Incoming call from:', from.username);
+    if (window.electronAPI && window.electronAPI.showIncomingCall) {
+      window.electronAPI.showIncomingCall(from);
+    }
+  });
+
+  // Ответ на наш звонок
+  socket.on('call:response', (data) => {
+    const { accepted, responderId } = data;
+    if (window.handleDMCallResponse) {
+      window.handleDMCallResponse(accepted, responderId);
+    }
+  });
+
+  // Звонок завершен другой стороной
+  socket.on('call:terminated', (data) => {
+    if (window.handleDMCallEnd) {
+      window.handleDMCallEnd();
+    }
+  });
+
+  socket.on('call:error', (data) => {
+    showNotification('error', data.message);
+    if (window.handleDMCallEnd) window.handleDMCallEnd();
+  });
+
   // ===== УВЕДОМЛЕНИЯ =====
 
   socket.on('notification:mention', (data) => {
@@ -410,4 +441,40 @@ function socketStopScreen(channelId) {
   if (socket) {
     socket.emit('screen:stop', { channelId });
   }
+}
+
+/**
+ * Инициализация звонка (сигналинг)
+ */
+function socketRequestCall(targetUserId) {
+  if (socket && targetUserId) {
+    socket.emit('call:request', { targetUserId: targetUserId.toString() });
+  }
+}
+
+function socketSendCallResponse(callerId, accepted) {
+  if (socket && callerId) {
+    socket.emit('call:response', { callerId: callerId.toString(), accepted });
+  }
+}
+
+function socketEndCall(targetUserId) {
+  if (socket && targetUserId) {
+    socket.emit('call:end', { targetUserId: targetUserId.toString() });
+  }
+}
+
+// Обработка ответа из Electron-попапа (для получателя)
+if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
+  window.electronAPI.onCallResponseFromPopup((data) => {
+    const { accepted, callerId } = data;
+    socketSendCallResponse(callerId, accepted);
+    
+    if (accepted) {
+      // Если приняли - инициируем WebRTC
+      if (window.startWebRTCCall) {
+        window.startWebRTCCall(callerId);
+      }
+    }
+  });
 }

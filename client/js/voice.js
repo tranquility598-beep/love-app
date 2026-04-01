@@ -52,6 +52,9 @@ class VoiceManager {
       // Уведомляем сервер о входе в канал
       socketJoinVoice(channelId);
 
+      // Звук входа (Discord-style)
+      if (window.playVoiceSound) window.playVoiceSound('join');
+
       console.log('🎤 Joined voice channel:', channelId);
       return true;
 
@@ -74,6 +77,9 @@ class VoiceManager {
       socketLeaveVoice(this.channelId);
     }
     this.cleanup();
+    
+    // Звук выхода (Discord-style)
+    if (window.playVoiceSound) window.playVoiceSound('disconnect');
   }
 
   /**
@@ -329,6 +335,11 @@ class VoiceManager {
       });
     }
 
+    // Звук мута (Discord-style)
+    if (window.playVoiceSound) {
+      window.playVoiceSound(this.isMuted ? 'mute' : 'unmute');
+    }
+
     socketToggleMute(this.channelId, this.isMuted);
     return this.isMuted;
   }
@@ -352,6 +363,11 @@ class VoiceManager {
           track.enabled = false;
         });
       }
+    }
+
+    // Звук дефена (Discord-style)
+    if (window.playVoiceSound) {
+      window.playVoiceSound(this.isDeafened ? 'deafen' : 'undeafen');
     }
 
     socketToggleDeafen(this.channelId, this.isDeafened);
@@ -884,8 +900,6 @@ function updateVoiceChannelMembersUI(channelId, members) {
 
 /**
  * Обновить участников в voice-panel
- */
-/**
  * Обновить участников в боковой панели и в центральном Grid (Voice View)
  */
 function updateVoicePanelMembers(channelId, members) {
@@ -961,3 +975,207 @@ function updateVoiceMuteUI(userId, muted) {
     voiceMemberEl.classList.toggle('voice-member-muted', muted);
   }
 }
+
+// ==================== DM VOICE CALLS LOGIC ====================
+
+// Звуковое сопровождение (Discord-style)
+const sounds = {
+  calling: new Audio('assets/sounds/call_calling.mp3'),
+  ringing: new Audio('assets/sounds/call_ringing.mp3'),
+  join: new Audio('assets/sounds/user_join.mp3'),
+  leave: new Audio('assets/sounds/user_leave.mp3'),
+  mute: new Audio('assets/sounds/mute.mp3'),
+  unmute: new Audio('assets/sounds/unmute.mp3'),
+  deafen: new Audio('assets/sounds/deafen.mp3'),
+  undeafen: new Audio('assets/sounds/undeafen.mp3'),
+  disconnect: new Audio('assets/sounds/disconnect.mp3'),
+  notification: new Audio('assets/sounds/discord-notification1.mp3')
+};
+
+// Зацикливаем гудки
+sounds.calling.loop = true;
+sounds.ringing.loop = true;
+
+/**
+ * Проиграть звук
+ */
+function playSound(name) {
+  if (sounds[name]) {
+    sounds[name].currentTime = 0;
+    sounds[name].play().catch(() => {});
+  }
+}
+
+/**
+ * Начать звонок в ЛС (как звонящий)
+ */
+async function startDMCall() {
+  if (!window.currentDMConversation) return;
+  const other = window.currentDMConversation.participants?.find(p => p._id !== window.currentUser?._id);
+  if (!other) return;
+
+  console.log('📞 Initiating DM call to:', other.username);
+  
+  // Показываем оверлей
+  showDMCallOverlay(other);
+  
+  // Звук исходящего вызова
+  sounds.calling.play().catch(() => {});
+  
+  // Отправляем сокет-запрос
+  if (window.socketRequestCall) {
+    window.socketRequestCall(other._id);
+  }
+  // playRingingSound();
+}
+
+window.startDMCall = startDMCall;
+
+/**
+ * Показать оверлей звонка (для звонящего)
+ */
+function showDMCallOverlay(peer) {
+  const overlay = document.getElementById('dm-call-overlay');
+  const myImg = document.getElementById('caller-mini-my-img');
+  const peerImg = document.getElementById('caller-mini-peer-img');
+  const peerName = document.getElementById('call-overlay-peer-name');
+  const status = document.getElementById('call-overlay-status');
+  const peerContainer = document.getElementById('caller-mini-peer');
+
+  if (!overlay) return;
+
+  myImg.src = getAvatarUrl(window.currentUser?.avatar);
+  peerImg.src = getAvatarUrl(peer.avatar);
+  peerName.textContent = peer.username;
+  status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
+  
+  peerContainer.classList.add('peer-ringing');
+  overlay.classList.remove('hidden');
+}
+
+/**
+ * Обработка ответа на наш звонок
+ */
+async function handleDMCallResponse(accepted, responderId) {
+  const overlay = document.getElementById('dm-call-overlay');
+  const status = document.getElementById('call-overlay-status');
+  const peerContainer = document.getElementById('caller-mini-peer');
+
+  // Всегда останавливаем гудок
+  sounds.calling.pause();
+  sounds.calling.currentTime = 0;
+
+  if (!accepted) {
+    status.textContent = 'ВЫЗОВ ОТКЛОНЕН';
+    peerContainer.classList.remove('peer-ringing');
+
+    // Визуальный эффект Бульк
+    const ripple = document.getElementById('dm-bulk-ripple');
+    if (ripple) ripple.classList.add('bulk-animate');
+
+    // Анимация уменьшения
+    peerContainer.classList.add('shrinking');
+    playSound('disconnect');
+
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+      peerContainer.classList.remove('shrinking');
+      if (ripple) ripple.classList.remove('bulk-animate');
+    }, 1000);
+    return;
+  }
+
+  // Принято!
+  status.textContent = 'В ЭФИРЕ';
+  peerContainer.classList.remove('peer-ringing');
+  playSound('join');
+  
+  if (!window.voiceManager) {
+    window.voiceManager = new VoiceManager();
+    const callRoomId = `dm_call:${window.currentDMConversationId}`;
+    window.voiceManager.channelId = callRoomId;
+    await window.voiceManager.joinChannel(callRoomId);
+  }
+}
+
+window.handleDMCallResponse = handleDMCallResponse;
+
+/**
+ * Завершение звонка (очистка)
+ */
+function handleDMCallEnd() {
+  const overlay = document.getElementById('dm-call-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  
+  sounds.calling.pause();
+  sounds.calling.currentTime = 0;
+  playSound('disconnect');
+
+  if (window.voiceManager) {
+    window.voiceManager.leaveChannel();
+    window.voiceManager = null;
+  }
+  
+  showNotification('info', 'Звонок завершен');
+}
+
+window.handleDMCallEnd = handleDMCallEnd;
+
+/**
+ * Функция для получателя: войти в WebRTC после нажатия "Принять"
+ */
+async function startWebRTCCall(callerId) {
+  // Останавливаем все звуки вызова (если были)
+  sounds.calling.pause();
+  sounds.ringing.pause();
+
+  if (!window.voiceManager) {
+    window.voiceManager = new VoiceManager();
+    const callRoomId = `dm_call:${window.currentDMConversationId || 'direct'}`;
+    window.voiceManager.channelId = callRoomId;
+    await window.voiceManager.joinChannel(callRoomId);
+  }
+  playSound('join');
+}
+
+window.startWebRTCCall = startWebRTCCall;
+
+// Инициируем звуки при муте/дефене
+window.playVoiceSound = playSound;
+
+function showDMCallOverlay(peer) {
+  const overlay = document.getElementById('dm-call-overlay');
+  const myImg = document.getElementById('caller-mini-my-img');
+  const peerImg = document.getElementById('caller-mini-peer-img');
+  const peerName = document.getElementById('call-overlay-peer-name');
+  const status = document.getElementById('call-overlay-status');
+  const peerContainer = document.getElementById('caller-mini-peer');
+
+  if (!overlay) return;
+
+  myImg.src = getAvatarUrl(window.currentUser?.avatar);
+  peerImg.src = getAvatarUrl(peer.avatar);
+  peerName.textContent = peer.username;
+  status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
+  
+  peerContainer.classList.add('peer-ringing');
+  overlay.classList.remove('hidden');
+}
+
+function endDMCall() {
+  if (!window.currentDMConversation) return;
+  const other = window.currentDMConversation.participants?.find(p => p._id !== window.currentUser?._id);
+  if (other && window.socketEndCall) {
+    window.socketEndCall(other._id);
+  }
+  handleDMCallEnd();
+}
+window.endDMCall = endDMCall;
+
+window.toggleCallOverlay = () => {
+  const overlay = document.getElementById('dm-call-overlay');
+  if (overlay) overlay.classList.toggle('minimized');
+};
+
+
+

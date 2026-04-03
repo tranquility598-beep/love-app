@@ -18,7 +18,8 @@ const authMiddleware = require('../middleware/auth');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const conversations = await DirectMessage.find({
-      participants: req.user._id
+      participants: req.user._id,
+      hiddenBy: { $ne: req.user._id }
     })
     .populate('participants', 'username avatar status discriminator customStatus')
     .populate('lastMessage', 'content createdAt author')
@@ -77,6 +78,12 @@ router.post('/:userId', authMiddleware, async (req, res) => {
       await conversation.save();
       
       await conversation.populate('participants', 'username avatar status discriminator');
+    } else {
+      // Если диалог найден, убираем текущего пользователя из списка скрывших
+      if (conversation.hiddenBy.includes(req.user._id)) {
+        conversation.hiddenBy.pull(req.user._id);
+        await conversation.save();
+      }
     }
     
     res.json({ conversation });
@@ -136,6 +143,40 @@ router.get('/:conversationId/messages', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Get DM messages error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * DELETE /api/dm/:conversationId
+ * Скрыть диалог для текущего пользователя
+ */
+router.delete('/:conversationId', authMiddleware, async (req, res) => {
+  try {
+    const conversation = await DirectMessage.findById(req.params.conversationId);
+    
+    if (!conversation) {
+      return res.status(404).json({ message: 'Диалог не найден' });
+    }
+    
+    // Проверяем что пользователь является участником
+    const isParticipant = conversation.participants.some(
+      p => p.toString() === req.user._id.toString()
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'Нет доступа к этому диалогу' });
+    }
+    
+    // Добавляем в список скрытых
+    if (!conversation.hiddenBy.includes(req.user._id)) {
+      conversation.hiddenBy.push(req.user._id);
+      await conversation.save();
+    }
+    
+    res.json({ message: 'Диалог скрыт' });
+    
+  } catch (error) {
+    console.error('Hide DM error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });

@@ -49,7 +49,13 @@ const directMessageSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  
+  // Пользователи, которые скрыли этот диалог из своего списка
+  hiddenBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 });
 
 // Обновляем updatedAt при изменении

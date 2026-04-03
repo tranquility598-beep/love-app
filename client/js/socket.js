@@ -172,6 +172,12 @@ async function initSocket(token) {
   socket.on('screen:started', (data) => {
     const { channelId, userId, username } = data;
     showNotification('info', `${username} начал демонстрацию экрана`);
+    
+    // Если мы в этом же канале — показываем контейнер (даже если трек еще не дошел)
+    if (window.currentVoiceChannel === channelId) {
+      const container = document.getElementById('screen-share-container');
+      if (container) container.classList.remove('hidden');
+    }
   });
 
   socket.on('screen:stopped', (data) => {

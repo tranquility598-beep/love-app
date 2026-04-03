@@ -361,6 +361,12 @@ async function sendMessage() {
 
   if (!content && pendingFiles.length === 0) return;
 
+  // Пасхалка: триггер на слова
+  const lowerContent = content.toLowerCase();
+  if (lowerContent.includes('love') || lowerContent.includes('люблю')) {
+    if (window.triggerHeartBurst) window.triggerHeartBurst();
+  }
+
   // Очищаем поле ввода
   input.value = '';
   input.style.height = 'auto';

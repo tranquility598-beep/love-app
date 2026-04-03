@@ -229,7 +229,7 @@ async function selectServer(serverId) {
  * Показать каналы сервера
  */
 function showServerChannels(server) {
-  const header = document.getElementById('channels-header-title');
+  const header = document.getElementById('server-header-title');
   const headerBtn = document.getElementById('channels-header-btn');
   const dmList = document.getElementById('dm-list');
   const dmSearch = document.getElementById('dm-search-section');
@@ -265,45 +265,97 @@ function showServerChannels(server) {
 /**
  * Отрендерить каналы сервера
  */
+/**
+ * Отрендерить каналы сервера
+ */
 function renderServerChannels(server) {
   const container = document.getElementById('server-channels-list');
   if (!container) return;
 
   const channels = server.channels || [];
-  const textChannels = channels.filter(c => c.type === 'text');
-  const voiceChannels = channels.filter(c => c.type === 'voice');
+  const serverCategories = server.categories || [];
+  
+  // Группировка каналов по категориям
+  const grouped = {};
+  const normalizedMap = {}; // Исправляем дубликаты (case-insensitive)
 
-  container.innerHTML = `
-    <div class="channel-category">
-      <div class="channel-category-header" onclick="toggleCategory(this)">
-        <svg class="channel-category-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M7 10l5 5 5-5z"/>
-        </svg>
-        ТЕКСТОВЫЕ КАНАЛЫ
-        <button class="channel-category-add channel-action-btn" onclick="event.stopPropagation();showCreateChannelModal('text')" title="Создать канал">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-        </button>
+  const stdText = 'Текстовые каналы';
+  const stdVoice = 'Голосовые каналы';
+
+  // Инициализируем стандартными (в нужном порядке)
+  [stdText, stdVoice].forEach(name => {
+    const uc = name.toUpperCase();
+    normalizedMap[uc] = name;
+    grouped[name] = [];
+  });
+
+  // Добавляем категории сервера, если они еще не в списке
+  serverCategories.forEach(cat => {
+    const uc = cat.name.toUpperCase();
+    if (!normalizedMap[uc]) {
+      normalizedMap[uc] = cat.name;
+      grouped[cat.name] = [];
+    }
+  });
+
+  channels.forEach(ch => {
+    let catName = ch.category;
+    if (!catName) {
+      catName = ch.type === 'voice' ? stdVoice : stdText;
+    }
+    
+    const uc = catName.toUpperCase();
+    const actualKey = normalizedMap[uc] || catName;
+    if (!grouped[actualKey]) grouped[actualKey] = [];
+    grouped[actualKey].push(ch);
+  });
+
+  // Рендерим по категориям
+  container.innerHTML = Object.keys(grouped).map(catName => {
+    const catChannels = grouped[catName];
+    // Сортировка: текст выше голоса, потом по позиции
+    catChannels.sort((a,b) => {
+      if (a.type !== b.type) return a.type === 'text' ? -1 : 1;
+      return (a.position || 0) - (b.position || 0);
+    });
+
+    const isVoiceCat = catName.toLowerCase().includes('голос');
+
+    return `
+      <div class="channel-category">
+        <div class="channel-category-header" onclick="toggleCategory(this)">
+          <svg class="channel-category-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+          ${catName.toUpperCase()}
+          <button class="channel-category-add channel-action-btn" 
+                  onclick="event.stopPropagation(); showCreateChannelModal('${isVoiceCat ? 'voice' : 'text'}', '${catName}')" 
+                  title="Создать канал">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="channel-list">
+          ${catChannels.length > 0 
+            ? catChannels.map(ch => renderChannelItem(ch, server)).join('')
+            : '<div class="channel-empty-msg">Каналов пока нет</div>'
+          }
+        </div>
       </div>
-      <div class="channel-list">
-        ${textChannels.map(ch => renderChannelItem(ch, server)).join('')}
-      </div>
-    </div>
-    <div class="channel-category">
-      <div class="channel-category-header" onclick="toggleCategory(this)">
-        <svg class="channel-category-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M7 10l5 5 5-5z"/>
-        </svg>
-        ГОЛОСОВЫЕ КАНАЛЫ
-        <button class="channel-category-add channel-action-btn" onclick="event.stopPropagation();showCreateChannelModal('voice')" title="Создать канал">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-        </button>
-      </div>
-      <div class="channel-list">
-        ${voiceChannels.map(ch => renderChannelItem(ch, server)).join('')}
-      </div>
-    </div>
-  `;
+    `;
+  }).join('');
 }
+
+/**
+ * Свернуть/развернуть категорию
+ */
+function toggleCategory(header) {
+  const category = header.parentElement;
+  category.classList.toggle('collapsed');
+}
+
+window.toggleCategory = toggleCategory;
 
 /**
  * Отрендерить элемент канала
@@ -540,6 +592,39 @@ async function loadDMConversations() {
 window.loadDMConversations = loadDMConversations;
 
 /**
+ * Удалить (скрыть) DM диалог
+ */
+async function deleteDMConversation(convId) {
+  try {
+    const dmItem = document.querySelector(`.dm-item[data-conv-id="${convId}"]`);
+    
+    // Эффект анимации перед удалением
+    if (dmItem) {
+      dmItem.classList.add('shrinking-out');
+    }
+
+    await DMAPI.delete(convId);
+    
+    // Если удаляем активный диалог - переходим в список друзей
+    if (window.currentDMConversation?._id === convId) {
+      window.currentDMConversation = null;
+      window.currentDMConversationId = null;
+      showFriendsView();
+    }
+
+    // Ждем окончания анимации и перезагружаем список
+    setTimeout(async () => {
+      await loadDMConversations();
+    }, 300);
+
+  } catch (error) {
+    showNotification('error', 'Не удалось скрыть диалог');
+  }
+}
+
+window.deleteDMConversation = deleteDMConversation;
+
+/**
  * Отрендерить DM диалоги
  */
 function renderDMConversations(conversations) {
@@ -562,7 +647,7 @@ function renderDMConversations(conversations) {
           <div class="dm-name">${other.username}${other.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
           <div class="dm-last-message">${conv.lastMessage?.content?.substring(0, 30) || ''}</div>
         </div>
-        <button class="dm-close-btn" onclick="event.stopPropagation()">✕</button>
+        <button class="dm-close-btn" onclick="event.stopPropagation(); deleteDMConversation('${conv._id}')">✕</button>
       </div>
     `;
   }).join('');
@@ -669,24 +754,7 @@ function toggleEmojiPicker() {
 
 // insertEmojiIntoInput определена в ui.js (работает с textarea)
 
-/**
- * Удалить канал
- */
-async function deleteChannelConfirm(channelId) {
-  if (!confirm('Удалить этот канал?')) return;
-  try {
-    await ChannelsAPI.delete(channelId);
-    if (window.currentServer) {
-      const data = await ServersAPI.get(window.currentServer._id);
-      window.currentServer = data.server;
-      renderServerChannels(data.server);
-    }
-    if (window.currentChannelId === channelId) showWelcomeView();
-    showNotification('success', 'Канал удален');
-  } catch (error) {
-    showNotification('error', error.message);
-  }
-}
+// deleteChannelConfirm удалена отсюда, так как она определена в ui.js с использованием Modal.confirm
 
 /**
  * Настройка логики автообновлений

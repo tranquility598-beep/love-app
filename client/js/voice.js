@@ -144,14 +144,20 @@ class VoiceManager {
       // Добавляем локальный поток
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
-          pc.addTrack(track, this.localStream);
+          const senders = pc.getSenders();
+          if (!senders.find(s => s.track === track)) {
+            pc.addTrack(track, this.localStream);
+          }
         });
       }
 
       // Если есть демонстрация экрана — добавляем видеотрек
       if (this.screenStream) {
         this.screenStream.getTracks().forEach(track => {
-          pc.addTrack(track, this.screenStream);
+          const senders = pc.getSenders();
+          if (!senders.find(s => s.track === track)) {
+            pc.addTrack(track, this.screenStream);
+          }
         });
       }
 
@@ -183,14 +189,20 @@ class VoiceManager {
       // Добавляем локальный поток
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
-          pc.addTrack(track, this.localStream);
+          const senders = pc.getSenders();
+          if (!senders.find(s => s.track === track)) {
+            pc.addTrack(track, this.localStream);
+          }
         });
       }
 
       // Если есть демонстрация экрана — добавляем видеотрек
       if (this.screenStream) {
         this.screenStream.getTracks().forEach(track => {
-          pc.addTrack(track, this.screenStream);
+          const senders = pc.getSenders();
+          if (!senders.find(s => s.track === track)) {
+            pc.addTrack(track, this.screenStream);
+          }
         });
       }
 
@@ -243,9 +255,12 @@ class VoiceManager {
    * Создать RTCPeerConnection
    */
   createPeerConnection(socketId) {
-    // Если уже есть connection — закрываем старый
+    // Если уже есть активное соединение — возвращаем его
     if (this.peerConnections.has(socketId)) {
-      this.peerConnections.get(socketId).close();
+      const existingPc = this.peerConnections.get(socketId);
+      if (existingPc.signalingState !== 'closed') {
+        return existingPc;
+      }
     }
 
     const pc = new RTCPeerConnection(this.iceServers);
@@ -263,11 +278,13 @@ class VoiceManager {
       const track = event.track;
       console.log('🔊 Received remote track:', track.kind, 'from:', socketId);
 
+      const stream = event.streams[0] || new MediaStream([track]);
+
       if (track.kind === 'audio') {
-        this.playRemoteAudio(socketId, event.streams[0]);
+        this.playRemoteAudio(socketId, stream);
       } else if (track.kind === 'video') {
         // Демонстрация экрана от другого пользователя
-        showScreenShareVideo(event.streams[0], socketId);
+        showScreenShareVideo(stream, socketId);
       }
     };
 
@@ -286,19 +303,35 @@ class VoiceManager {
    * Воспроизвести удаленный аудио поток
    */
   playRemoteAudio(socketId, stream) {
+    if (!stream) return;
     let audio = this.audioElements.get(socketId);
 
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
+      // Добавляем к body только один раз
       document.body.appendChild(audio);
       this.audioElements.set(socketId, audio);
     }
 
-    audio.srcObject = stream;
+    if (audio.srcObject !== stream) {
+      audio.srcObject = stream;
+    }
 
-    if (this.isDeafened) {
-      audio.muted = true;
+    audio.muted = this.isDeafened;
+    
+    // Принудительный запуск (некоторые браузеры блокируют autoplay без .play())
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.warn('Audio auto-play failed, will try on interaction:', error);
+        // Fallback: запуск по любому клику в документе
+        const resumeAudio = () => {
+          audio.play().catch(() => {});
+          document.removeEventListener('click', resumeAudio);
+        };
+        document.addEventListener('click', resumeAudio);
+      });
     }
   }
 
@@ -401,7 +434,10 @@ class VoiceManager {
       const videoTrack = this.screenStream.getVideoTracks()[0];
 
       this.peerConnections.forEach((pc, socketId) => {
-        pc.addTrack(videoTrack, this.screenStream);
+        const senders = pc.getSenders();
+        if (!senders.find(s => s.track === videoTrack)) {
+          pc.addTrack(videoTrack, this.screenStream);
+        }
         // Пересоздаем offer для обновления
         this.renegotiate(socketId);
       });
@@ -991,6 +1027,9 @@ const sounds = {
   disconnect: new Audio('assets/sounds/disconnect.mp3'),
   notification: new Audio('assets/sounds/discord-notification1.mp3')
 };
+
+// Устанавливаем громкость на 30% (они слишком громкие по умолчанию)
+Object.values(sounds).forEach(s => s.volume = 0.3);
 
 // Зацикливаем гудки
 sounds.calling.loop = true;

@@ -284,7 +284,14 @@ app.whenReady().then(() => {
   } else {
     // В Production режиме (у пользователей) открываем окно сразу (без локального сервера)
     createWindow();
+    
+    // Начальная проверка через 3 секунды после запуска
     setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
+    
+    // Проверять наличие обновлений каждый час, пока приложение открыто
+    setInterval(() => {
+      autoUpdater.checkForUpdatesAndNotify();
+    }, 60 * 60 * 1000); 
   }
 
   app.on('activate', () => {

@@ -6,6 +6,7 @@ try {
     // Fallback if opened in a regular web browser (e.g. hosted on Vercel/Netlify)
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isFileProtocol = window.location.protocol === 'file:';
+    // В Electron-приложении (даже не упакованном) и на хостинге используем логику адекватного определения продакшена
     if (!isLocalhost && !isFileProtocol) {
       isPackaged = true; // Use production API if hosted anywhere else
     }
@@ -14,6 +15,8 @@ try {
   console.error('Failed to get app mode synchronously:', e);
 }
 
+// ПРИНУДИТЕЛЬНО исправляем: если это Electron и он упакован — ВСЕГДА используем Render
+// Если же это не упакованный Electron или обычный браузер на localhost — используем локалку
 window.BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://localhost:5555';
 let API_BASE = window.BASE_URL + '/api';
 
@@ -31,10 +34,14 @@ async function apiFetch(endpoint, options = {}) {
   await window.apiReady;
   const token = localStorage.getItem('token');
   const headers = {
-    'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...options.headers
   };
+
+  // Only add JSON content type if not sending FormData
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   let response;
   try {
@@ -70,11 +77,11 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 // Загрузка файла
-async function apiUpload(endpoint, formData) {
+async function apiUpload(endpoint, formData, method = 'POST') {
   await window.apiReady;
   const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    method: 'POST',
+    method: method,
     headers: {
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     },
@@ -118,7 +125,7 @@ const UsersAPI = {
   uploadAvatar: (file) => {
     const formData = new FormData();
     formData.append('avatar', file);
-    return apiUpload('/upload/avatar', formData);
+    return apiUpload('/users/avatar', formData, 'PUT');
   }
 };
 
@@ -151,14 +158,28 @@ const ServersAPI = {
   uploadIcon: (serverId, file) => {
     const formData = new FormData();
     formData.append('icon', file);
-    return apiUpload(`/servers/${serverId}/icon`, formData);
-  }
+    return apiUpload(`/servers/${serverId}/icon`, formData, 'PUT');
+  },
+
+  addCategory: (serverId, name) =>
+    apiFetch(`/servers/${serverId}/categories`, {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    }),
+
+  deleteCategory: (serverId, categoryId) =>
+    apiFetch(`/servers/${serverId}/categories/${categoryId}`, {
+      method: 'DELETE'
+    })
 };
 
 // ===== CHANNELS API =====
 const ChannelsAPI = {
-  create: (name, type, serverId, topic, category) =>
-    apiFetch('/channels', { method: 'POST', body: JSON.stringify({ name, type, serverId, topic, category }) }),
+  create: (name, type, serverId, category = null) =>
+    apiFetch('/channels', {
+      method: 'POST',
+      body: JSON.stringify({ name, type, serverId, category })
+    }),
 
   get: (channelId) =>
     apiFetch(`/channels/${channelId}`),
@@ -229,5 +250,8 @@ const DMAPI = {
     let url = `/dm/${conversationId}/messages`;
     if (before) url += `?before=${before}`;
     return apiFetch(url);
-  }
+  },
+
+  delete: (conversationId) =>
+    apiFetch(`/dm/${conversationId}`, { method: 'DELETE' })
 };

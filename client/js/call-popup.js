@@ -10,6 +10,7 @@ const bulkRipple = document.getElementById('bulk-ripple');
 const avatarContainer = document.getElementById('avatar-container');
 
 const ringingSound = new Audio('assets/sounds/call_ringing.mp3');
+ringingSound.volume = 0.3;
 ringingSound.loop = true;
 
 let currentCallerId = null;
@@ -62,8 +63,12 @@ function getAvatarUrl(avatar) {
   if (!avatar) return 'assets/default-avatar.png';
   if (avatar.startsWith('http')) return avatar;
   
-  // Определяем базовый URL сервера (как в app.js)
-  // Мы предполагаем, что сервер на 5555 порту или прописан в BASE_URL
-  const BASE_URL = 'http://localhost:5555'; 
+  // Определяем базовый URL сервера динамически
+  let isPackaged = false;
+  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+    isPackaged = window.electronAPI.isPackagedSync();
+  }
+  
+  const BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://localhost:5555'; 
   return `${BASE_URL}/api/users/avatar/${avatar}`;
 }

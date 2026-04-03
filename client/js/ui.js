@@ -3,6 +3,71 @@
  * Исправлены все ID и имена функций для соответствия HTML
  */
 
+// ===== EASTER EGGS LOGIC =====
+let logoClickCount = 0;
+let logoClickTimeout = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const dmBtn = document.getElementById('dm-btn');
+  if (dmBtn) {
+    dmBtn.addEventListener('click', () => {
+      logoClickCount++;
+      
+      if (logoClickTimeout) clearTimeout(logoClickTimeout);
+      
+      if (logoClickCount === 7) {
+        // Если окно уже открыто, не открываем заново
+        const modal = document.getElementById('developer-modal-egg');
+        if (modal && modal.classList.contains('hidden')) {
+          openModal('developer-modal-egg');
+        }
+        logoClickCount = 0;
+      }
+      
+      logoClickTimeout = setTimeout(() => {
+        logoClickCount = 0;
+      }, 500); // Тайм-аут сброса — 0.5 сек для очень быстрых кликов
+    });
+  }
+});
+
+/**
+ * Создает эффект взрыва сердец на экране
+ */
+function triggerHeartBurst() {
+  const heartCount = 40;
+  const area = document.body;
+  
+  for (let i = 0; i < heartCount; i++) {
+    const heart = document.createElement('div');
+    heart.className = 'heart-particle';
+    heart.innerHTML = '🤍'; // Белое сердце для соответствия ЧБ теме
+    
+    // Случайные параметры
+    const startX = Math.random() * window.innerWidth;
+    const startY = window.innerHeight + 50;
+    const size = Math.random() * 20 + 10;
+    const duration = Math.random() * 3 + 2;
+    const delay = Math.random() * 0.5;
+    const rot = Math.random() * 360 - 180;
+    
+    heart.style.left = startX + 'px';
+    heart.style.bottom = '-50px';
+    heart.style.fontSize = size + 'px';
+    heart.style.setProperty('--rot', rot + '0deg');
+    heart.style.animation = `floatUp ${duration}s ease-out ${delay}s forwards`;
+    
+    area.appendChild(heart);
+    
+    // Удаляем после завершения
+    setTimeout(() => {
+      heart.remove();
+    }, (duration + delay) * 1000);
+  }
+}
+
+window.triggerHeartBurst = triggerHeartBurst;
+
 // ===== УВЕДОМЛЕНИЯ =====
 function showNotification(type, message, title) {
   const container = document.getElementById('notifications-container');
@@ -163,11 +228,17 @@ function toggleMic() {
       }
     }
   }
+  
   if (window.voiceManager) {
     window.voiceManager.isMuted = globalMicMuted;
     if (window.voiceManager.localStream) {
       window.voiceManager.localStream.getAudioTracks().forEach(function(t) { t.enabled = !globalMicMuted; });
     }
+  }
+  
+  // Play sound
+  if (window.playVoiceSound) {
+    window.playVoiceSound(globalMicMuted ? 'mute' : 'unmute');
   }
 }
 
@@ -191,42 +262,71 @@ function toggleDeafen() {
   document.querySelectorAll('#remote-audio-container audio').forEach(function(audio) {
     audio.muted = globalDeafened;
   });
+
+  // Play sound
+  if (window.playVoiceSound) {
+    window.playVoiceSound(globalDeafened ? 'deafen' : 'undeafen');
+  }
 }
 
 // Удалены toggleVoiceMute и toggleVoiceDeafen так как они теперь в voice.js
 
 // ===== CREATE CHANNEL MODAL =====
-function showCreateChannelModal(type) {
+function showCreateChannelModal(type, categoryName = '') {
   window._selectedChannelType = type || 'text';
+  window._selectedCategoryName = categoryName;
+  
+  // Clear inputs
+  const nameInput = document.getElementById('channel-name-input');
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.focus();
+  }
+  
   const prefix = document.getElementById('channel-prefix');
   if (prefix) prefix.textContent = type === 'voice' ? '🔊' : '#';
   
+  // Populate hidden category select for compatibility with createChannel
+  const catSelect = document.getElementById('channel-category-select');
+  if (catSelect) {
+    catSelect.innerHTML = `<option value="${categoryName}">${categoryName || 'Без категории'}</option>`;
+    catSelect.value = categoryName;
+  }
+  
   // Update channel type selector
-  document.querySelectorAll('.channel-type-option').forEach(function(opt) {
-    opt.classList.remove('active');
-    if (opt.dataset.type === type) opt.classList.add('active');
-  });
+  if (window.selectChannelType) {
+    window.selectChannelType(window._selectedChannelType);
+  }
   
   openModal('create-channel-modal');
 }
 
 // Create channel
 async function createChannel() {
-  const name = document.getElementById('channel-name-input') ? document.getElementById('channel-name-input').value.trim() : '';
+  const nameInput = document.getElementById('channel-name-input');
+  const catSelect = document.getElementById('channel-category-select');
+  
+  let name = nameInput ? nameInput.value.trim() : '';
+  const category = catSelect ? catSelect.value : '';
   const type = window._selectedChannelType || 'text';
   
   if (!name) {
     showNotification('warning', 'Введите название канала');
     return;
   }
+
+  // Format name (Discord style)
+  if (type === 'text') {
+    name = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-zа-яё0-9-]/gi, '');
+  }
   
   if (!window.currentServer) {
-    showNotification('error', 'Сервер не выбран');
+    showNotification('warning', 'Выберите сервер');
     return;
   }
   
   try {
-    const data = await ChannelsAPI.create(name, type, window.currentServer._id);
+    const data = await ChannelsAPI.create(name, type, window.currentServer._id, category);
     showNotification('success', 'Канал создан');
     closeModal('create-channel-modal');
     
@@ -235,10 +335,7 @@ async function createChannel() {
     window.currentServer = serverData.server;
     renderServerChannels(serverData.server);
     
-    // Clear input
-    const input = document.getElementById('channel-name-input');
-    if (input) input.value = '';
-    
+    if (nameInput) nameInput.value = '';
   } catch (error) {
     showNotification('error', error.message || 'Ошибка создания канала');
   }
@@ -256,35 +353,46 @@ function showPersonalProfile() {
     modal.id = 'personal-profile-modal';
     modal.className = 'modal-overlay hidden';
     modal.innerHTML = `
-      <div class="modal">
+      <div class="modal premium-modal">
         <div class="modal-header">
-          <h2>Личный профиль</h2>
+          <h2 class="modal-header-title">Личный профиль</h2>
           <button class="modal-close" onclick="closeModal('personal-profile-modal')">✕</button>
         </div>
-        <div class="modal-body">
-          <div class="profile-banner">
-            <div class="profile-avatar-wrapper" onclick="document.getElementById('personal-avatar-input').click()">
-              <img class="profile-avatar" id="personal-avatar" src="" alt="Avatar">
-              <div class="avatar-overlay">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="modal-body" style="padding: 24px">
+          <div class="profile-banner-premium">
+            <div class="profile-avatar-container" style="margin: 0 auto 16px;">
+              <img id="personal-avatar" src="" alt="Avatar">
+              <div class="avatar-overlay" onclick="document.getElementById('personal-avatar-input').click()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 <span>Изменить</span>
               </div>
             </div>
-            <div>
-              <div style="font-size:18px;font-weight:700;color:var(--text-primary)" id="personal-username-display"></div>
-              <div style="font-size:13px;color:var(--text-muted)" id="personal-tag-display"></div>
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="font-size:20px;font-weight:700;color:var(--text-primary)" id="personal-username-display"></div>
+              <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="personal-tag-display">Пользователь</div>
             </div>
           </div>
           <input type="file" id="personal-avatar-input" accept="image/*" style="display:none" onchange="uploadPersonalAvatar(event)">
-          <div class="settings-field">
-            <label class="settings-label">Имя пользователя</label>
-            <input type="text" id="personal-username" class="settings-input" placeholder="username">
+          
+          <div class="modal-field">
+            <label class="modal-label">Имя пользователя</label>
+            <div class="premium-input-wrapper">
+              <span class="premium-prefix">👤</span>
+              <input type="text" id="personal-username" class="premium-input" placeholder="Введите имя...">
+            </div>
           </div>
-          <div class="settings-field">
-            <label class="settings-label">О себе</label>
-            <textarea id="personal-bio" class="settings-textarea" placeholder="Расскажи о себе..." rows="3"></textarea>
+          
+          <div class="modal-field">
+            <label class="modal-label">О себе</label>
+            <div class="premium-input-wrapper" style="height: auto; align-items: flex-start; padding: 12px">
+              <textarea id="personal-bio" class="premium-input" style="height: 80px; resize: none;" placeholder="Расскажите о себе..."></textarea>
+            </div>
           </div>
-          <button class="settings-save-btn" onclick="savePersonalProfile()">Сохранить изменения</button>
+          
+          <div class="premium-footer">
+            <button class="modal-btn secondary" onclick="closeModal('personal-profile-modal')">Отмена</button>
+            <button class="modal-btn primary" onclick="savePersonalProfile()">Сохранить изменения</button>
+          </div>
         </div>
       </div>
     `;
@@ -456,12 +564,16 @@ function showServerSettings() {
   const server = window.currentServer;
   if (!server) return;
 
-  // Используем правильные ID из HTML: server-settings-name, server-settings-desc
   const nameInput = document.getElementById('server-settings-name');
   const descInput = document.getElementById('server-settings-desc');
 
   if (nameInput) nameInput.value = server.name || '';
   if (descInput) descInput.value = server.description || '';
+
+  // Visibility of dangerous actions
+  const isOwner = server.owner === window.currentUser?._id || server.owner?._id === window.currentUser?._id;
+  const deleteBtn = document.getElementById('delete-server-item');
+  if (deleteBtn) deleteBtn.style.display = isOwner ? 'block' : 'none';
 
   // Инвайт-код
   if (server.invites && server.invites.length > 0) {
@@ -476,18 +588,22 @@ function showServerSettings() {
   if (membersList && server.members) {
     membersList.innerHTML = server.members.map(function(m) {
       const user = m.user || m;
-      return '<div class="server-member-item">' +
-        '<img class="server-member-avatar" src="' + getAvatarUrl(user.avatar) + '" alt="' + user.username + '">' +
-        '<div class="server-member-info">' +
-          '<div class="server-member-name">' + user.username + (user.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : '') + '</div>' +
-          '<div class="server-member-role">' + (m.roles ? m.roles.join(', ') : 'участник') + '</div>' +
-        '</div></div>';
+      return `
+        <div class="server-member-item">
+          <img class="server-member-avatar" src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
+          <div class="server-member-info">
+            <div class="server-member-name">${user.username}${user.role === 'owner' ? ' <span title="Создатель">👑</span>' : ''}</div>
+            <div class="server-member-role">${m.roles ? m.roles.join(', ') : 'участник'}</div>
+          </div>
+        </div>`;
     }).join('');
   }
 
+  // Categories
+  renderServerCategories();
+
   openModal('server-settings-modal');
 }
-
 async function loadServerInvite(serverId) {
   try {
     const data = await ServersAPI.createInvite(serverId);
@@ -497,6 +613,80 @@ async function loadServerInvite(serverId) {
     console.error('Error loading invite:', e);
   }
 }
+
+/**
+ * Рендер списка категорий в настройках
+ */
+function renderServerCategories() {
+  const container = document.getElementById('server-categories-list');
+  if (!container || !window.currentServer) return;
+
+  const categories = window.currentServer.categories || [];
+  
+  if (categories.length === 0) {
+    container.innerHTML = '<div class="settings-empty">Категорий пока нет</div>';
+    return;
+  }
+
+  container.innerHTML = categories.map(cat => `
+    <div class="category-settings-item">
+      <span>${cat.name}</span>
+      <button class="settings-action-btn danger" onclick="deleteServerCategory('${cat._id}')">Удалить</button>
+    </div>
+  `).join('');
+}
+
+/**
+ * Добавить категорию (настройки)
+ */
+async function addServerCategory() {
+  const input = document.getElementById('new-category-name');
+  const name = input ? input.value.trim() : '';
+
+  if (!name) {
+    showNotification('warning', 'Название не может быть пустым');
+    return;
+  }
+
+  try {
+    const data = await ServersAPI.addCategory(window.currentServer._id, name);
+    window.currentServer.categories = data.categories;
+    renderServerCategories();
+    if (input) input.value = '';
+    showNotification('success', 'Категория добавлена');
+    // Refresh main UI
+    renderServerChannels(window.currentServer);
+  } catch (error) {
+    showNotification('error', error.message || 'Ошибка');
+  }
+}
+
+/**
+ * Удалить категорию (настройки)
+ */
+async function deleteServerCategory(categoryId) {
+  Modal.confirm({
+    title: 'Удалить категорию',
+    body: 'Вы действительно хотите удалить эту категорию? (Каналы останутся, но будут без категории)',
+    confirmText: 'Удалить',
+    isDanger: true,
+    onConfirm: async () => {
+      try {
+        const data = await ServersAPI.deleteCategory(window.currentServer._id, categoryId);
+        window.currentServer.categories = data.categories;
+        renderServerCategories();
+        showNotification('success', 'Категория удалена');
+        // Refresh main UI
+        renderServerChannels(window.currentServer);
+      } catch (error) {
+        showNotification('error', error.message || 'Ошибка');
+      }
+    }
+  });
+}
+
+window.addServerCategory = addServerCategory;
+window.deleteServerCategory = deleteServerCategory;
 
 function showServerSettingsTab(tab, el) {
   document.querySelectorAll('#server-settings-modal .settings-tab').forEach(function(t) { t.classList.add('hidden'); });
@@ -519,7 +709,7 @@ async function saveServerSettings() {
   try {
     const data = await ServersAPI.update(window.currentServer._id, { name, description });
     window.currentServer = Object.assign({}, window.currentServer, (data.server || { name, description }));
-    const headerTitle = document.getElementById('channels-header-title');
+    const headerTitle = document.getElementById('server-header-title');
     if (headerTitle) headerTitle.textContent = name;
     showNotification('success', 'Настройки сервера сохранены');
     closeModal('server-settings-modal');
@@ -548,36 +738,115 @@ function copyInviteCode() {
   }
 }
 
+// ===== CUSTOM CONFIRM SYSTEM =====
+const Modal = {
+  confirm: function({ title, body, confirmText, onConfirm, isDanger = false }) {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const bodyEl = document.getElementById('confirm-body');
+    const okBtn = document.getElementById('confirm-ok');
+    
+    if (!modal || !okBtn) return;
+    
+    titleEl.textContent = title || 'Подтверждение';
+    bodyEl.textContent = body || 'Вы уверены?';
+    okBtn.textContent = confirmText || 'Продолжить';
+    
+    // Danger styling
+    okBtn.className = isDanger ? 'modal-btn danger-btn' : 'modal-btn primary';
+    
+    // Create new element to clear old event listeners
+    const newOkBtn = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+    
+    newOkBtn.addEventListener('click', () => {
+      onConfirm();
+      closeModal('confirm-modal');
+    });
+    
+    openModal('confirm-modal');
+  }
+};
+
+window.Modal = Modal;
+
+/**
+ * Удалить канал на сервере
+ */
+function deleteChannelConfirm(channelId) {
+  Modal.confirm({
+    title: 'Удалить канал',
+    body: 'Вы уверены, что хотите удалить этот канал? Все сообщения будут навсегда удалены.',
+    confirmText: 'Удалить канал',
+    isDanger: true,
+    onConfirm: async () => {
+      try {
+        await ChannelsAPI.delete(channelId);
+        showNotification('success', 'Канал удален');
+        
+        // Refresh server
+        if (window.currentServer) {
+          const data = await ServersAPI.get(window.currentServer._id);
+          window.currentServer = data.server;
+          renderServerChannels(data.server);
+          
+          if (window.currentChannelId === channelId) {
+            showWelcomeView();
+          }
+        }
+      } catch (error) {
+        showNotification('error', 'Не удалось удалить канал');
+      }
+    }
+  });
+}
+
+window.deleteChannelConfirm = deleteChannelConfirm;
+
 async function deleteServer() {
   if (!window.currentServer) return;
-  if (!confirm('Вы действительно хотите удалить сервер "' + window.currentServer.name + '"? Это действие необратимо!')) return;
-
-  try {
-    await ServersAPI.delete(window.currentServer._id);
-    closeModal('server-settings-modal');
-    window.currentServer = null;
-    showDMView();
-    await loadServers();
-    showNotification('success', 'Сервер удален');
-  } catch (error) {
-    showNotification('error', error.message || 'Ошибка удаления сервера');
-  }
+  
+  Modal.confirm({
+    title: 'Удаление сервера',
+    body: `Вы действительно хотите удалить "${window.currentServer.name}"? Это действие необратимо!`,
+    confirmText: 'Удалить сервер',
+    isDanger: true,
+    onConfirm: async () => {
+      try {
+        await ServersAPI.delete(window.currentServer._id);
+        closeModal('server-settings-modal');
+        window.currentServer = null;
+        showDMView();
+        await loadServers();
+        showNotification('success', 'Сервер удален');
+      } catch (error) {
+        showNotification('error', error.message || 'Ошибка удаления сервера');
+      }
+    }
+  });
 }
 
 async function leaveServer() {
   if (!window.currentServer) return;
-  if (!confirm('Покинуть сервер "' + window.currentServer.name + '"?')) return;
-
-  try {
-    await ServersAPI.leave(window.currentServer._id);
-    closeModal('server-settings-modal');
-    window.currentServer = null;
-    showDMView();
-    await loadServers();
-    showNotification('success', 'Вы покинули сервер');
-  } catch (error) {
-    showNotification('error', error.message || 'Ошибка');
-  }
+  
+  Modal.confirm({
+    title: 'Покинуть сервер',
+    body: `Вы действительно хотите покинуть "${window.currentServer.name}"?`,
+    confirmText: 'Покинуть',
+    isDanger: true,
+    onConfirm: async () => {
+      try {
+        await ServersAPI.leave(window.currentServer._id);
+        closeModal('server-settings-modal');
+        window.currentServer = null;
+        showDMView();
+        await loadServers();
+        showNotification('success', 'Вы покинули сервер');
+      } catch (error) {
+        showNotification('error', error.message || 'Ошибка');
+      }
+    }
+  });
 }
 
 // ===== КОНТЕКСТНОЕ МЕНЮ =====

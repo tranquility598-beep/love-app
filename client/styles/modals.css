@@ -755,3 +755,91 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+/* ===== EASTER EGG MODAL (DEVELOPERS) ===== */
+.developer-modal {
+  max-width: 400px;
+  background: #000;
+  border: 1px solid #333;
+  color: #fff;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.developer-modal .modal-header {
+  justify-content: center;
+  border: none;
+  padding: 0;
+  margin-bottom: 30px;
+}
+
+.developer-modal h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: -2px;
+  margin: 0;
+  background: linear-gradient(to bottom, #fff 0%, #333 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: heartPulse 2s infinite ease-in-out;
+}
+
+.developer-list {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.developer-item {
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #888;
+  border-bottom: 1px solid #111;
+  padding-bottom: 8px;
+  transition: color 0.3s;
+}
+
+.developer-item:hover {
+  color: #fff;
+}
+
+.developer-item span {
+  color: #fff;
+  font-weight: 700;
+}
+
+@keyframes heartPulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+/* ===== HEART BURST ANIMATION ===== */
+.heart-particle {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  font-size: 20px;
+  color: white;
+  user-select: none;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 0 5px rgba(255,255,255,0.5));
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-20px) rotate(10deg) scale(1.2);
+  }
+  100% {
+    transform: translateY(-120vh) rotate(var(--rot)) scale(0.5);
+    opacity: 0;
+  }
+}

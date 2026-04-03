@@ -24,7 +24,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const validServerIds = (user.servers || []).filter(id => id != null);
     
     const servers = await Server.find({ _id: { $in: validServerIds } })
-      .populate('channels', 'name type position')
+      .populate('channels', 'name type position category')
       .populate('members.user', 'username avatar status discriminator');
     
     res.json({ servers });
@@ -112,7 +112,7 @@ router.post('/', authMiddleware, async (req, res) => {
     
     // Возвращаем сервер с заполненными данными
     const populatedServer = await Server.findById(server._id)
-      .populate('channels', 'name type position topic')
+      .populate('channels', 'name type position topic category')
       .populate('members.user', 'username avatar status discriminator')
       .populate('owner', 'username avatar');
     
@@ -131,7 +131,7 @@ router.post('/', authMiddleware, async (req, res) => {
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const server = await Server.findById(req.params.id)
-      .populate('channels', 'name type position topic settings')
+      .populate('channels', 'name type position topic settings category')
       .populate('members.user', 'username avatar status discriminator customStatus')
       .populate('owner', 'username avatar');
     
@@ -309,7 +309,7 @@ router.post('/join/:code', authMiddleware, async (req, res) => {
     });
     
     const populatedServer = await Server.findById(server._id)
-      .populate('channels', 'name type position topic')
+      .populate('channels', 'name type position topic category')
       .populate('members.user', 'username avatar status discriminator')
       .populate('owner', 'username avatar');
     
@@ -386,6 +386,56 @@ router.put('/:id/icon', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Update server icon error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * POST /api/servers/:id/categories
+ * Добавить категорию на сервер
+ */
+router.post('/:id/categories', authMiddleware, async (req, res) => {
+  console.log(`[Category] Adding to server: ${req.params.id}, Name: ${req.body.name}`);
+  try {
+    const { name } = req.body;
+    if (!name || name.length < 1) {
+      return res.status(400).json({ message: 'Название категории не может быть пустым' });
+    }
+
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ message: 'Сервер не найден' });
+    if (server.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+
+    server.categories.push({ name, channels: [] });
+    await server.save();
+
+    res.status(201).json({ categories: server.categories, message: 'Категория добавлена' });
+  } catch (error) {
+    console.error('Add category error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * DELETE /api/servers/:id/categories/:categoryId
+ * Удалить категорию с сервера
+ */
+router.delete('/:id/categories/:categoryId', authMiddleware, async (req, res) => {
+  try {
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ message: 'Сервер не найден' });
+    if (server.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+
+    server.categories = server.categories.filter(c => c._id.toString() !== req.params.categoryId);
+    await server.save();
+
+    res.json({ categories: server.categories, message: 'Категория удалена' });
+  } catch (error) {
+    console.error('Delete category error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });

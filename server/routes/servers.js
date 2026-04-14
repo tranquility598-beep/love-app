@@ -9,8 +9,45 @@ const Server = require('../models/Server');
 const Channel = require('../models/Channel');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+const { validateServerName, sanitizeBody } = require('../middleware/validation');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+
+const emojiUploadRoot = path.join(__dirname, '..', 'uploads');
+
+// Настройка multer для загрузки эмодзи
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    try {
+      fs.mkdirSync(emojiUploadRoot, { recursive: true });
+      cb(null, emojiUploadRoot);
+    } catch (e) {
+      cb(e);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'emoji-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Только изображения разрешены (jpeg, jpg, png, gif, webp)'));
+    }
+  }
+});
 
 /**
  * GET /api/servers
@@ -39,13 +76,19 @@ router.get('/', authMiddleware, async (req, res) => {
  * POST /api/servers
  * Создать новый сервер
  */
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, sanitizeBody, validateServerName, async (req, res) => {
   try {
     const { name, description } = req.body;
     
     if (!name || name.length < 2) {
       return res.status(400).json({ message: 'Название сервера должно содержать минимум 2 символа' });
     }
+    
+    // Создаем роли
+    const mongoose = require('mongoose');
+    const ownerRoleId = new mongoose.Types.ObjectId();
+    const adminRoleId = new mongoose.Types.ObjectId();
+    const memberRoleId = new mongoose.Types.ObjectId();
     
     // Создаем сервер
     const server = new Server({
@@ -54,12 +97,61 @@ router.post('/', authMiddleware, async (req, res) => {
       owner: req.user._id,
       members: [{
         user: req.user._id,
-        roles: ['owner', 'admin', 'member']
+        roles: [ownerRoleId, adminRoleId, memberRoleId]
       }],
       roles: [
-        { name: 'owner', color: '#f1c40f', permissions: ['all'], position: 100 },
-        { name: 'admin', color: '#e74c3c', permissions: ['manage_channels', 'manage_messages'], position: 50 },
-        { name: 'member', color: '#99aab5', permissions: ['send_messages', 'read_messages'], position: 0 }
+        { 
+          _id: ownerRoleId,
+          name: 'Владелец', 
+          color: '#f1c40f', 
+          permissions: {
+            administrator: true,
+            manageServer: true,
+            manageRoles: true,
+            manageChannels: true,
+            kickMembers: true,
+            banMembers: true,
+            manageMessages: true,
+            sendMessages: true,
+            readMessages: true,
+            mentionEveryone: true,
+            manageNicknames: true,
+            connect: true,
+            speak: true,
+            muteMembers: true,
+            deafenMembers: true
+          },
+          position: 100,
+          hoist: true
+        },
+        { 
+          _id: adminRoleId,
+          name: 'Администратор', 
+          color: '#e74c3c', 
+          permissions: {
+            manageChannels: true,
+            manageMessages: true,
+            kickMembers: true,
+            sendMessages: true,
+            readMessages: true,
+            connect: true,
+            speak: true
+          },
+          position: 50,
+          hoist: true
+        },
+        { 
+          _id: memberRoleId,
+          name: 'Участник', 
+          color: '#99aab5', 
+          permissions: {
+            sendMessages: true,
+            readMessages: true,
+            connect: true,
+            speak: true
+          },
+          position: 0
+        }
       ]
     });
     
@@ -248,7 +340,7 @@ router.post('/:id/invite', authMiddleware, async (req, res) => {
     
     res.json({ 
       inviteCode,
-      inviteUrl: `discord-clone://invite/${inviteCode}`,
+      inviteUrl: `love-app://invite/${inviteCode}`,
       message: 'Инвайт создан'
     });
     
@@ -292,10 +384,14 @@ router.post('/join/:code', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Инвайт достиг лимита использований' });
     }
     
+    // Находим роль 'Участник'
+    const memberRole = server.roles.find(r => r.name === 'Участник');
+    const defaultRoles = memberRole ? [memberRole._id] : [];
+
     // Добавляем пользователя на сервер
     server.members.push({
       user: req.user._id,
-      roles: ['member']
+      roles: defaultRoles
     });
     
     // Увеличиваем счетчик использований
@@ -437,6 +533,120 @@ router.delete('/:id/categories/:categoryId', authMiddleware, async (req, res) =>
   } catch (error) {
     console.error('Delete category error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * POST /api/servers/:id/emojis
+ * Загрузить кастомный эмодзи на сервер
+ */
+router.post('/:id/emojis', authMiddleware, (req, res, next) => {
+  upload.single('emoji')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'Ошибка загрузки файла' });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const serverId = req.params.id;
+    
+    if (!name || name.length < 2) {
+      return res.status(400).json({ message: 'Название эмодзи должно содержать минимум 2 символа' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ message: 'Файл не загружен' });
+    }
+    
+    const server = await Server.findById(serverId);
+    if (!server) {
+      return res.status(404).json({ message: 'Сервер не найден' });
+    }
+    
+    // Проверяем права (владелец или админ с правом управления сервером)
+    const isOwner = server.owner.toString() === req.user._id.toString();
+    const member = server.members.find(m => m.user.toString() === req.user._id.toString());
+    const hasPermission = member && member.roles && member.roles.some((roleId) => {
+      try {
+        const role = server.roles.id(roleId);
+        const p = role && role.permissions;
+        return !!(p && (p.administrator || p.manageServer));
+      } catch {
+        return false;
+      }
+    });
+
+    if (!isOwner && !hasPermission) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+
+    // Проверяем, не существует ли уже эмодзи с таким именем
+    if (server.emojis.some(e => e.name === name)) {
+      return res.status(400).json({ message: 'Эмодзи с таким именем уже существует' });
+    }
+    
+    // Добавляем эмодзи
+    const emoji = {
+      name,
+      url: `/uploads/${req.file.filename}`,
+      uploadedBy: req.user._id
+    };
+    
+    server.emojis.push(emoji);
+    await server.save();
+    
+    res.json({ 
+      emoji: server.emojis[server.emojis.length - 1],
+      message: 'Эмодзи добавлен' 
+    });
+    
+  } catch (error) {
+    console.error('Upload emoji error:', error);
+    res.status(500).json({ message: 'Ошибка при загрузке эмодзи' });
+  }
+});
+
+/**
+ * DELETE /api/servers/:id/emojis/:emojiId
+ * Удалить кастомный эмодзи
+ */
+router.delete('/:id/emojis/:emojiId', authMiddleware, async (req, res) => {
+  try {
+    const { id: serverId, emojiId } = req.params;
+    
+    const server = await Server.findById(serverId);
+    if (!server) {
+      return res.status(404).json({ message: 'Сервер не найден' });
+    }
+    
+    // Проверяем права
+    const isOwner = server.owner.toString() === req.user._id.toString();
+    const member = server.members.find(m => m.user.toString() === req.user._id.toString());
+    const hasPermission = member && member.roles && member.roles.some((roleId) => {
+      try {
+        const role = server.roles.id(roleId);
+        const p = role && role.permissions;
+        return !!(p && (p.administrator || p.manageServer));
+      } catch {
+        return false;
+      }
+    });
+
+    if (!isOwner && !hasPermission) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+
+    // Удаляем эмодзи
+    server.emojis.pull(emojiId);
+    await server.save();
+    
+    res.json({ message: 'Эмодзи удален' });
+    
+  } catch (error) {
+    console.error('Delete emoji error:', error);
+    res.status(500).json({ message: 'Ошибка при удалении эмодзи' });
   }
 });
 

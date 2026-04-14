@@ -47,7 +47,8 @@ const messageSchema = new mongoose.Schema({
     originalName: String,
     url: String,
     size: Number,
-    type: String, // 'image', 'file', 'video', 'audio'
+    type: { type: String }, // 'image', 'file', 'video', 'audio'
+    mimetype: String,
     width: Number, // для изображений
     height: Number // для изображений
   }],

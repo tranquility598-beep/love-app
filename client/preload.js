@@ -35,5 +35,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeIncomingCall: () => ipcRenderer.send('close-incoming-call'),
   onIncomingCallData: (callback) => ipcRenderer.on('incoming-call-data', (_event, data) => callback(data)),
   sendCallAction: (data) => ipcRenderer.send('call-action', data),
-  onCallResponseFromPopup: (callback) => ipcRenderer.on('call-response-from-popup', (_event, data) => callback(data))
+  onCallResponseFromPopup: (callback) => ipcRenderer.on('call-response-from-popup', (_event, data) => callback(data)),
+  
+  // Платформа
+  platform: process.platform,
+
+  // Google Auth
+  openGoogleLogin: () => ipcRenderer.send('google-login'),
+  onGoogleAuthSuccess: (callback) => ipcRenderer.on('google-auth-success', (_event, token) => callback(token))
 });

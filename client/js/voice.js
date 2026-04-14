@@ -283,8 +283,12 @@ class VoiceManager {
       if (track.kind === 'audio') {
         this.playRemoteAudio(socketId, stream);
       } else if (track.kind === 'video') {
-        // Демонстрация экрана от другого пользователя
-        showScreenShareVideo(stream, socketId);
+        // Проверяем что видео еще не добавлено
+        const existingVideo = document.querySelector(`[data-socket-id="${socketId}"]`);
+        if (!existingVideo) {
+          // Демонстрация экрана от другого пользователя
+          showScreenShareVideo(stream, socketId);
+        }
       }
     };
 
@@ -408,22 +412,42 @@ class VoiceManager {
   }
 
   /**
-   * Начать демонстрацию экрана
+   * Показать настройки демонстрации экрана
    */
-  async startScreenShare() {
+  showScreenShareSettings() {
+    const modal = document.getElementById('screen-share-settings-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * Начать демонстрацию экрана с выбранными настройками
+   */
+  async startScreenShare(quality = 'medium') {
     if (this.isScreenSharing) {
       this.stopScreenShare();
       return false;
     }
 
+    // Настройки качества
+    const qualitySettings = {
+      low: { width: 854, height: 480, frameRate: 10, bitrate: 1000000 },
+      medium: { width: 1280, height: 720, frameRate: 15, bitrate: 2500000 },
+      high: { width: 1920, height: 1080, frameRate: 24, bitrate: 4000000 },
+      ultra: { width: 1920, height: 1080, frameRate: 30, bitrate: 6000000 }
+    };
+
+    const settings = qualitySettings[quality] || qualitySettings.medium;
+
     try {
-      // Запрашиваем доступ к экрану
+      // Запрашиваем доступ к экрану с выбранными настройками
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 }
+          width: { ideal: settings.width },
+          height: { ideal: settings.height },
+          frameRate: { ideal: settings.frameRate }
         },
         audio: false
       });
@@ -433,13 +457,24 @@ class VoiceManager {
       // Добавляем видеотрек во все существующие peer connections
       const videoTrack = this.screenStream.getVideoTracks()[0];
 
-      this.peerConnections.forEach((pc, socketId) => {
-        const senders = pc.getSenders();
-        if (!senders.find(s => s.track === videoTrack)) {
-          pc.addTrack(videoTrack, this.screenStream);
+      this.peerConnections.forEach(async (pc, socketId) => {
+        try {
+          const senders = pc.getSenders();
+          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+          
+          if (videoSender) {
+            // Заменяем существующий видео трек
+            await videoSender.replaceTrack(videoTrack);
+          } else {
+            // Добавляем новый видео трек
+            pc.addTrack(videoTrack, this.screenStream);
+          }
+          
+          // Пересоздаем offer для обновления
+          this.renegotiate(socketId);
+        } catch (err) {
+          console.error('Error adding screen share track:', err);
         }
-        // Пересоздаем offer для обновления
-        this.renegotiate(socketId);
       });
 
       // Показываем свой экран локально (превью)
@@ -748,13 +783,53 @@ async function toggleScreenShare() {
     return;
   }
 
-  const sharing = await window.voiceManager.startScreenShare();
+  // Если уже идет демонстрация, останавливаем
+  if (window.voiceManager.isScreenSharing) {
+    window.voiceManager.stopScreenShare();
+    const btn = document.getElementById('voice-screen-btn');
+    if (btn) {
+      btn.classList.remove('active');
+      btn.title = 'Демонстрация экрана';
+    }
+    return;
+  }
+
+  // Показываем модалку с настройками
+  const modal = document.getElementById('screen-share-settings-modal');
+  if (modal) {
+    // Загружаем сохраненное качество по умолчанию
+    const qualitySelect = document.getElementById('screen-quality');
+    if (qualitySelect && window.settingsManager) {
+      const defaultQuality = window.settingsManager.get('default-screen-quality') || 'medium';
+      qualitySelect.value = defaultQuality;
+    }
+    modal.classList.remove('hidden');
+  }
+}
+
+/**
+ * Подтвердить начало демонстрации экрана с выбранными настройками
+ */
+async function confirmScreenShare() {
+  const qualitySelect = document.getElementById('screen-quality');
+  let quality = qualitySelect ? qualitySelect.value : 'medium';
+  
+  // Если качество не выбрано, используем сохраненное по умолчанию
+  if (!quality && window.settingsManager) {
+    quality = window.settingsManager.get('default-screen-quality') || 'medium';
+  }
+  
+  // Закрываем модалку
+  closeModal('screen-share-settings-modal');
+  
+  // Начинаем демонстрацию
+  const sharing = await window.voiceManager.startScreenShare(quality);
   const btn = document.getElementById('voice-screen-btn');
   if (btn) {
     btn.classList.toggle('active', sharing);
     btn.title = sharing ? 'Остановить демонстрацию' : 'Демонстрация экрана';
   }
-
+  
   const viewBtn = document.getElementById('voice-view-screen-btn');
   if (viewBtn) {
     viewBtn.classList.toggle('active', sharing);

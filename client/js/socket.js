@@ -1,5 +1,11 @@
 let socket = null;
 
+// Кэш маппинга временных ID на реальные ID сообщений
+const tempIdMapping = new Map();
+
+// Экспортируем в глобальную область для доступа из других модулей
+window.tempIdMapping = tempIdMapping;
+
 /**
  * Инициализация Socket.io соединения
  */
@@ -22,10 +28,16 @@ async function initSocket(token) {
     reconnectionAttempts: 5,
     reconnectionDelay: 1000
   });
+  
+  // Экспортируем в глобальную область
+  window.socket = socket;
 
   // Обработчики подключения
   socket.on('connect', () => {
     console.log('✅ Socket connected:', socket.id);
+    if (typeof window.initRoleSocketHandlers === 'function') {
+      window.initRoleSocketHandlers();
+    }
   });
 
   socket.on('disconnect', (reason) => {
@@ -71,6 +83,12 @@ async function initSocket(token) {
   // Сообщение сохранено в БД (обновление временного ID)
   socket.on('message:update', (data) => {
     const { channelId, tempId, message } = data;
+    
+    // Сохраняем маппинг временного ID на реальный
+    if (tempId && message._id) {
+      tempIdMapping.set(tempId, message._id);
+    }
+    
     if (window.currentChannelId?.toString() === channelId?.toString()) {
       updateTempMessageInDOM(tempId, message);
     }
@@ -275,6 +293,34 @@ async function initSocket(token) {
     showNotification('info', `${from} упомянул вас: ${content}`);
   });
 
+  // ===== FOUNDER / АДМИН-ПАНЕЛЬ (обработчики на сокете — всегда после initSocket) =====
+
+  socket.on('founder:stats', (data) => {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val != null ? String(val) : '0';
+    };
+    set('founder-stats-online', data.onlineUsers);
+    set('founder-stats-total', data.totalUsers);
+    set('founder-stats-servers', data.totalServers);
+    set('founder-stats-messages', data.messagesToday);
+  });
+
+  socket.on('founder:announcement', (data) => {
+    if (typeof showGlobalAnnouncementBanner === 'function') {
+      showGlobalAnnouncementBanner(data);
+    } else {
+      showNotification('info', data.message, '📢 Объявление от ' + (data.from || ''));
+    }
+  });
+
+  socket.on('founder:logs', (data) => {
+    const logs = data && data.logs ? data.logs : [];
+    if (window.founderSystem && typeof window.founderSystem.displayLogs === 'function') {
+      window.founderSystem.displayLogs(logs);
+    }
+  });
+
   socket.on('error', (data) => {
     console.error('Socket error:', data.message);
     showNotification('error', data.message);
@@ -290,15 +336,16 @@ function disconnectSocket() {
   if (socket) {
     socket.disconnect();
     socket = null;
+    window.socket = null;
   }
 }
 
 /**
  * Отправка сообщения через сокет
  */
-function socketSendMessage(channelId, content, replyTo, attachments) {
+function socketSendMessage(channelId, content, replyTo, attachments, tempId) {
   if (socket) {
-    socket.emit('message:send', { channelId, content, replyTo, attachments });
+    socket.emit('message:send', { channelId, content, replyTo, attachments, tempId });
   }
 }
 
@@ -306,8 +353,19 @@ function socketSendMessage(channelId, content, replyTo, attachments) {
  * Отправка события редактирования
  */
 function socketEditMessage(messageId, content) {
+  // Проверяем маппинг временных ID
+  let actualMessageId = messageId;
+  if (messageId && messageId.startsWith('temp_')) {
+    if (tempIdMapping.has(messageId)) {
+      actualMessageId = tempIdMapping.get(messageId);
+    } else {
+      showNotification('warning', 'Подождите, пока сообщение сохранится');
+      return;
+    }
+  }
+  
   if (socket) {
-    socket.emit('message:edit', { messageId, content });
+    socket.emit('message:edit', { messageId: actualMessageId, content });
   }
 }
 
@@ -315,8 +373,19 @@ function socketEditMessage(messageId, content) {
  * Отправка события удаления
  */
 function socketDeleteMessage(messageId) {
+  // Проверяем маппинг временных ID
+  let actualMessageId = messageId;
+  if (messageId && messageId.startsWith('temp_')) {
+    if (tempIdMapping.has(messageId)) {
+      actualMessageId = tempIdMapping.get(messageId);
+    } else {
+      showNotification('warning', 'Подождите, пока сообщение сохранится');
+      return;
+    }
+  }
+  
   if (socket) {
-    socket.emit('message:delete', { messageId });
+    socket.emit('message:delete', { messageId: actualMessageId });
   }
 }
 
@@ -324,8 +393,21 @@ function socketDeleteMessage(messageId) {
  * Отправка реакции
  */
 function socketReactMessage(messageId, emoji) {
+  // Проверяем маппинг временных ID
+  let actualMessageId = messageId;
+  if (messageId && messageId.startsWith('temp_')) {
+    // Если есть реальный ID в кэше, используем его
+    if (tempIdMapping.has(messageId)) {
+      actualMessageId = tempIdMapping.get(messageId);
+    } else {
+      // Если маппинга нет, значит сообщение еще не сохранилось
+      showNotification('warning', 'Подождите, пока сообщение сохранится');
+      return;
+    }
+  }
+  
   if (socket) {
-    socket.emit('message:react', { messageId, emoji });
+    socket.emit('message:react', { messageId: actualMessageId, emoji });
   }
 }
 
@@ -484,3 +566,8 @@ if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
     }
   });
 }
+
+// Экспортируем socket в глобальную область
+window.socket = socket;
+window.socketJoinServer = socketJoinServer;
+window.socketLeaveServer = socketLeaveServer;

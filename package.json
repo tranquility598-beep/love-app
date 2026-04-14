@@ -1,6 +1,6 @@
 {
   "name": "love-app",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "description": "Love - A beautiful chat application",
   "main": "client/main.js",
   "scripts": {
@@ -12,7 +12,10 @@
     "build:mac": "npm run build:server && electron-builder build --mac",
     "build:all": "npm run build:server && electron-builder build --win --mac",
     "build:server": "echo Building server...",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build"
   },
   "build": {
     "appId": "com.love.app",
@@ -27,7 +30,9 @@
       "package.json"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "client/assets/icon.png"
     },
     "nsis": {
@@ -56,11 +61,31 @@
     "mac": {
       "category": "public.app-category.social-networking",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "client/assets/icon.png"
     },
+    "protocols": [
+      {
+        "name": "Love App",
+        "schemes": [
+          "love-app"
+        ]
+      }
+    ],
     "dmg": {
       "contents": [
         {
@@ -78,13 +103,13 @@
     }
   },
   "keywords": [
-    "discord",
-    "clone",
+    "love",
     "electron",
-    "chat"
+    "chat",
+    "messaging"
   ],
-  "author": "Discord Clone Dev",
-  "license": "MIT",
+  "author": "Love App",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=18"
   },
@@ -98,13 +123,24 @@
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "dompurify": "^3.3.3",
     "dotenv": "^16.3.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
     "express": "^4.18.2",
     "express-fileupload": "^1.4.3",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
+    "isomorphic-dompurify": "^3.7.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
+    "multer": "^2.1.1",
+    "nodemailer": "^6.9.13",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "resend": "^6.10.0",
     "socket.io": "^4.6.1",
     "socket.io-client": "^4.6.1",
     "uuid": "^9.0.0"

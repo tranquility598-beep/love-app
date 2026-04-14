@@ -4,6 +4,7 @@
 
 // Состояние чата
 let replyingTo = null;
+let replyingToMessage = null; // Полный объект сообщения для оптимистичного отображения
 let editingMessageId = null;
 let pendingFiles = [];
 let isLoadingMessages = false;
@@ -92,9 +93,10 @@ function renderMessage(msg, isGrouped) {
   if (msg.replyTo) {
     const replyAuthor = msg.replyTo.author?.username || 'Неизвестный';
     const replyContent = msg.replyTo.content?.substring(0, 60) || '';
-    const replyPreview = escapeHtml(replyContent); // Define replyPreview
+    const replyPreview = escapeHtml(replyContent);
+    const replyId = msg.replyTo._id || '';
     replyHtml = `
-      <div class="message-reply">
+      <div class="message-reply" onclick="scrollToMessage('${replyId}')" style="cursor: pointer;">
         <div class="message-reply-info">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
           <strong>${replyAuthor}${msg.replyTo.author?.role === 'owner' ? ' 👑' : ''}</strong>: ${replyPreview}
@@ -114,16 +116,24 @@ function renderMessage(msg, isGrouped) {
   if (msg.attachments && msg.attachments.length > 0) {
     attachmentsHtml = '<div class="message-attachments">';
     msg.attachments.forEach(att => {
-      if (att.mimetype?.startsWith('image/')) {
+      const isAudio =
+        att.type === 'audio' ||
+        (att.mimetype && att.mimetype.startsWith('audio/')) ||
+        (att.url && String(att.url).includes('/audio/'));
+      if (att.mimetype?.startsWith('image/') || att.type === 'image') {
         const baseUrl = window.BASE_URL || 'http://localhost:5555';
-        attachmentsHtml += `<img class="message-image" src="${baseUrl}${att.url}" alt="${att.filename}" loading="lazy">`;
+        const fn = att.filename || att.originalName || 'image';
+        attachmentsHtml += `<img class="message-image" src="${baseUrl}${att.url}" alt="${fn}" loading="lazy">`;
+      } else if (isAudio && typeof renderVoiceMessage === 'function') {
+        attachmentsHtml += renderVoiceMessage(att, isOwn);
       } else {
         const baseUrl = window.BASE_URL || 'http://localhost:5555';
+        const fn = att.filename || att.originalName || 'file';
         attachmentsHtml += `
           <div class="message-file" onclick="window.open('${baseUrl}${att.url}')">
             <span class="message-file-icon">${getFileIcon(att.mimetype)}</span>
             <div class="message-file-info">
-              <div class="message-file-name">${att.filename}</div>
+              <div class="message-file-name">${fn}</div>
               <div class="message-file-size">${formatFileSize(att.size)}</div>
             </div>
           </div>
@@ -154,6 +164,7 @@ function renderMessage(msg, isGrouped) {
     <div class="message-actions">
       <button class="message-action-btn" onclick="startReply('${msg._id}')" title="Ответить">💬</button>
       <button class="message-action-btn" onclick="toggleEmojiPickerForReaction('${msg._id}')" title="Реакция">😊</button>
+      <button class="message-action-btn pin-btn" onclick="pinMessage('${msg._id}', '${msg.channel}')" title="Закрепить">📌</button>
       ${isOwn ? `<button class="message-action-btn" onclick="startEditMessage('${msg._id}')" title="Редактировать">✏️</button>` : ''}
       ${isOwn ? `<button class="message-action-btn danger" onclick="confirmDeleteMessage('${msg._id}')" title="Удалить">🗑️</button>` : ''}
     </div>
@@ -177,7 +188,7 @@ function renderMessage(msg, isGrouped) {
       <img class="message-avatar" src="${authorAvatar}" alt="${authorName}">
       <div class="message-content-wrapper">
         <div class="message-header">
-          <span class="message-author">${authorName}${author.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
+          <span class="message-author" data-user-id="${authorId}">${authorName}${author.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
           <span class="message-time" title="${fullTime}">${time}</span>
         </div>
         ${replyHtml}
@@ -194,28 +205,16 @@ function renderMessage(msg, isGrouped) {
  * Форматировать содержимое сообщения (эмодзи, ссылки)
  */
 function formatMessageContent(content) {
-  let text = escapeHtml(content);
-  // Ссылки
-  text = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:var(--text-link)">$1</a>');
-  // Жирный текст **text**
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Курсив *text*
-  text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Код `code`
-  text = text.replace(/`(.+?)`/g, '<code style="background:var(--bg-tertiary);padding:2px 4px;border-radius:3px;font-family:monospace">$1</code>');
-  return text;
+  // Используем безопасную функцию из sanitize.js
+  return window.XSS.formatMarkdown(content);
 }
 
 /**
  * Экранировать HTML
  */
 function escapeHtml(text) {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  // Используем безопасную функцию из sanitize.js
+  return window.XSS.escapeHtml(text);
 }
 
 /**
@@ -241,7 +240,12 @@ function appendMessage(msg) {
   const el = div.firstElementChild;
   if (el) {
     el.dataset.time = msg.createdAt;
-    el.addEventListener('contextmenu', (e) => showContextMenu(e, msg._id, msg.author?._id));
+    // Читаем ID динамически из data-message-id при открытии меню
+    el.addEventListener('contextmenu', (e) => {
+      const currentId = el.dataset.messageId;
+      const currentAuthorId = el.dataset.authorId;
+      showContextMenu(e, currentId, currentAuthorId);
+    });
     el.querySelectorAll('.message-image').forEach(img => {
       img.addEventListener('click', () => openImageViewer(img.src));
     });
@@ -281,6 +285,67 @@ function updateTempMessageInDOM(tempId, msg) {
 
   // Обновляем ID
   el.dataset.messageId = msg._id;
+  
+  // Удаляем ВСЕ старые блоки .message-actions
+  const oldActionsEls = el.querySelectorAll('.message-actions');
+  oldActionsEls.forEach(oldEl => oldEl.remove());
+  
+  // Создаем новый блок с кнопками
+  const isOwn = msg.author?._id === window.currentUser?._id;
+  
+  const newActionsEl = document.createElement('div');
+  newActionsEl.className = 'message-actions';
+  
+  // Создаем кнопки с addEventListener вместо onclick
+  const replyBtn = document.createElement('button');
+  replyBtn.className = 'message-action-btn';
+  replyBtn.title = 'Ответить';
+  replyBtn.textContent = '💬';
+  replyBtn.addEventListener('click', () => startReply(msg._id));
+  
+  const reactionBtn = document.createElement('button');
+  reactionBtn.className = 'message-action-btn';
+  reactionBtn.title = 'Реакция';
+  reactionBtn.textContent = '😊';
+  reactionBtn.addEventListener('click', () => toggleEmojiPickerForReaction(msg._id));
+  
+  newActionsEl.appendChild(replyBtn);
+  newActionsEl.appendChild(reactionBtn);
+  
+  if (isOwn) {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'message-action-btn';
+    editBtn.title = 'Редактировать';
+    editBtn.textContent = '✏️';
+    editBtn.addEventListener('click', () => startEditMessage(msg._id));
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'message-action-btn danger';
+    deleteBtn.title = 'Удалить';
+    deleteBtn.textContent = '🗑️';
+    deleteBtn.addEventListener('click', () => confirmDeleteMessage(msg._id));
+    
+    newActionsEl.appendChild(editBtn);
+    newActionsEl.appendChild(deleteBtn);
+  }
+  
+  // Добавляем новый блок в конец элемента сообщения
+  el.appendChild(newActionsEl);
+  
+  // Обновляем реакции если есть
+  const reactionsEl = el.querySelector('.message-reactions');
+  if (reactionsEl) {
+    const reactionBtns = reactionsEl.querySelectorAll('.reaction-btn');
+    reactionBtns.forEach(btn => {
+      const onclick = btn.getAttribute('onclick');
+      if (onclick && onclick.includes(tempId)) {
+        // Создаем новую кнопку вместо изменения атрибута
+        const newBtn = btn.cloneNode(true);
+        newBtn.setAttribute('onclick', onclick.replace(new RegExp(tempId, 'g'), msg._id));
+        btn.replaceWith(newBtn);
+      }
+    });
+  }
   
   // Обновляем содержимое если нужно
   const textEl = el.querySelector('.message-text');
@@ -345,6 +410,30 @@ function scrollToBottom() {
 }
 
 /**
+ * Прокрутить к конкретному сообщению и подсветить его
+ */
+function scrollToMessage(messageId) {
+  if (!messageId) return;
+  
+  const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
+  if (!msgEl) {
+    showNotification('warning', 'Сообщение не найдено');
+    return;
+  }
+  
+  // Прокручиваем к сообщению
+  msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  // Подсвечиваем сообщение
+  msgEl.style.transition = 'background-color 0.3s';
+  msgEl.style.backgroundColor = 'rgba(88, 101, 242, 0.2)';
+  
+  setTimeout(() => {
+    msgEl.style.backgroundColor = '';
+  }, 2000);
+}
+
+/**
  * Отправить сообщение
  */
 async function sendMessage() {
@@ -371,6 +460,7 @@ async function sendMessage() {
   input.value = '';
   input.style.height = 'auto';
   const currentReplyTo = replyingTo;
+  const currentReplyToMessage = replyingToMessage;
   cancelReply();
 
   try {
@@ -390,6 +480,16 @@ async function sendMessage() {
     } else {
       // Оптимистичное отображение: показываем сообщение мгновенно
       const tempId = 'temp_' + Date.now() + '_' + (window.currentUser?._id || '');
+      
+      // Проверяем если replyTo это временный ID, заменяем на реальный
+      let actualReplyTo = currentReplyTo;
+      if (currentReplyTo && currentReplyTo.startsWith('temp_')) {
+        // Импортируем tempIdMapping из socket.js
+        if (window.tempIdMapping && window.tempIdMapping.has(currentReplyTo)) {
+          actualReplyTo = window.tempIdMapping.get(currentReplyTo);
+        }
+      }
+      
       const tempMessage = {
         _id: tempId,
         content: content,
@@ -399,7 +499,7 @@ async function sendMessage() {
           avatar: window.currentUser?.avatar,
           discriminator: window.currentUser?.discriminator
         },
-        replyTo: currentReplyTo || null,
+        replyTo: currentReplyToMessage || null, // Используем сохраненный объект
         attachments: [],
         createdAt: new Date().toISOString(),
         reactions: []
@@ -409,12 +509,14 @@ async function sendMessage() {
       appendMessage(tempMessage);
       scrollToBottom();
 
-      // Отправляем текстовое сообщение через сокет
-      socketSendMessage(channelId, content, currentReplyTo);
+      // Отправляем текстовое сообщение через сокет с реальным ID ответа
+      socketSendMessage(channelId, content, actualReplyTo, null, tempId);
     }
 
     replyingTo = null;
     socketStopTyping(channelId);
+    isTyping = false; // Сбрасываем флаг печати
+    clearTimeout(typingDebounce); // Очищаем таймер
   } catch (error) {
     showNotification('error', 'Не удалось отправить сообщение');
     input.value = content;
@@ -450,9 +552,137 @@ function autoResizeTextarea(textarea) {
 /**
  * Обработка ввода (индикатор печати)
  */
+let typingDebounce = null;
+let isTyping = false;
+
 function handleMessageInput(e) {
+  const input = e.target;
   const channelId = window.currentChannelId;
-  if (channelId) socketStartTyping(channelId);
+  if (!channelId) return;
+  
+  // Обработка автодополнения упоминаний
+  handleMentionAutocomplete(input);
+  
+  // Проверяем настройку индикатора печати
+  if (window.settingsManager && !window.settingsManager.get('privacy-typing-indicator')) {
+    return; // Не отправляем индикатор если настройка выключена
+  }
+  
+  // Отправляем typing:start только если еще не печатаем
+  if (!isTyping) {
+    socketStartTyping(channelId);
+    isTyping = true;
+  }
+  
+  // Сбрасываем таймер
+  clearTimeout(typingDebounce);
+  
+  // Если пользователь перестал печатать на 3 секунды, отправляем typing:stop
+  typingDebounce = setTimeout(() => {
+    socketStopTyping(channelId);
+    isTyping = false;
+  }, 3000);
+}
+
+/**
+ * Обработка автодополнения упоминаний
+ */
+let mentionAutocompleteIndex = 0;
+let mentionAutocompleteList = [];
+
+function handleMentionAutocomplete(input) {
+  const value = input.value;
+  const cursorPos = input.selectionStart;
+  
+  // Ищем @ перед курсором
+  const textBeforeCursor = value.substring(0, cursorPos);
+  const match = textBeforeCursor.match(/@(\w*)$/);
+  
+  const autocomplete = document.getElementById('mention-autocomplete');
+  if (!autocomplete) return;
+  
+  if (match) {
+    const query = match[1].toLowerCase();
+    
+    // Добавляем @everyone и @here в начало списка
+    let suggestions = [];
+    
+    if ('everyone'.startsWith(query)) {
+      suggestions.push({ type: 'special', name: 'everyone', icon: '📢' });
+    }
+    if ('here'.startsWith(query)) {
+      suggestions.push({ type: 'special', name: 'here', icon: '👥' });
+    }
+    
+    // Получаем список участников сервера
+    const server = window.currentServer;
+    if (server && server.members) {
+      const members = server.members
+        .map(m => ({ type: 'user', user: m.user || m }))
+        .filter(item => item.user.username && item.user.username.toLowerCase().startsWith(query))
+        .slice(0, 5);
+      
+      suggestions = suggestions.concat(members);
+    }
+    
+    mentionAutocompleteList = suggestions;
+    
+    if (mentionAutocompleteList.length > 0) {
+      autocomplete.innerHTML = mentionAutocompleteList.map((item, index) => {
+        if (item.type === 'special') {
+          return `
+            <div class="mention-autocomplete-item ${index === mentionAutocompleteIndex ? 'selected' : ''}" 
+                 onclick="selectMention('${item.name}')"
+                 data-index="${index}">
+              <span style="font-size: 24px;">${item.icon}</span>
+              <span class="mention-autocomplete-name">@${item.name}</span>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="mention-autocomplete-item ${index === mentionAutocompleteIndex ? 'selected' : ''}" 
+                 onclick="selectMention('${item.user.username}')"
+                 data-index="${index}">
+              <img class="mention-autocomplete-avatar" src="${getAvatarUrl(item.user.avatar)}" alt="${item.user.username}">
+              <span class="mention-autocomplete-name">${item.user.username}</span>
+            </div>
+          `;
+        }
+      }).join('');
+      autocomplete.classList.remove('hidden');
+    } else {
+      autocomplete.classList.add('hidden');
+    }
+  } else {
+    autocomplete.classList.add('hidden');
+    mentionAutocompleteIndex = 0;
+  }
+}
+
+/**
+ * Выбрать упоминание из автодополнения
+ */
+function selectMention(username) {
+  const input = document.getElementById('message-input');
+  if (!input) return;
+  
+  const value = input.value;
+  const cursorPos = input.selectionStart;
+  const textBeforeCursor = value.substring(0, cursorPos);
+  const textAfterCursor = value.substring(cursorPos);
+  
+  // Заменяем @query на @username
+  const newTextBefore = textBeforeCursor.replace(/@(\w*)$/, `@${username} `);
+  input.value = newTextBefore + textAfterCursor;
+  input.selectionStart = input.selectionEnd = newTextBefore.length;
+  
+  // Скрываем автодополнение
+  const autocomplete = document.getElementById('mention-autocomplete');
+  if (autocomplete) {
+    autocomplete.classList.add('hidden');
+  }
+  
+  input.focus();
 }
 
 /**
@@ -463,17 +693,30 @@ function startReply(messageId) {
   if (!msgEl) return;
 
   replyingTo = messageId;
+  
+  // Сохраняем полный объект сообщения для оптимистичного отображения
   const authorId = msgEl.dataset.authorId;
   const authorName = msgEl.querySelector('.message-author')?.textContent || 'Пользователь';
-  const content = msgEl.querySelector('.message-text')?.textContent?.substring(0, 50) || '';
+  const content = msgEl.querySelector('.message-text')?.textContent || '';
+  
+  replyingToMessage = {
+    _id: messageId,
+    author: {
+      _id: authorId,
+      username: authorName
+    },
+    content: content
+  };
+  
+  const contentPreview = content.substring(0, 50);
 
   const preview = document.getElementById('reply-preview');
-  const authorEl = document.getElementById('reply-author-name'); // Corrected ID
+  const authorEl = document.getElementById('reply-author-name');
   const contentEl = document.getElementById('reply-content-preview');
 
   if (preview) preview.classList.remove('hidden');
   if (authorEl) authorEl.textContent = authorName;
-  if (contentEl) contentEl.textContent = content;
+  if (contentEl) contentEl.textContent = contentPreview;
 
   document.getElementById('message-input')?.focus();
 }
@@ -483,6 +726,7 @@ function startReply(messageId) {
  */
 function cancelReply() {
   replyingTo = null;
+  replyingToMessage = null;
   const preview = document.getElementById('reply-preview');
   if (preview) preview.classList.add('hidden');
 }
@@ -590,8 +834,7 @@ function hideTypingIndicator(userId) {
 
 function updateTypingIndicator() {
   const indicator = document.getElementById('typing-indicator');
-  const text = document.getElementById('typing-text');
-  if (!indicator || !text) return;
+  if (!indicator) return;
 
   const users = Array.from(typingUsers.keys());
   if (users.length === 0) {
@@ -600,9 +843,20 @@ function updateTypingIndicator() {
   }
 
   indicator.classList.remove('hidden');
-  if (users.length === 1) text.textContent = `${users[0]} печатает...`;
-  else if (users.length === 2) text.textContent = `${users[0]} и ${users[1]} печатают...`;
-  else text.textContent = `Несколько человек печатают...`;
+  
+  let text = '';
+  if (users.length === 1) text = `${users[0]} печатает`;
+  else if (users.length === 2) text = `${users[0]} и ${users[1]} печатают`;
+  else text = `Несколько человек печатают`;
+  
+  indicator.innerHTML = `
+    <span style="color: var(--text-muted); font-size: 13px;">${text}</span>
+    <div class="typing-dots">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  `;
 }
 
 /**

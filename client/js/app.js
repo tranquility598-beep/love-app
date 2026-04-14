@@ -23,9 +23,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Устанавливаем активную кнопку темы в настройках (если настройки есть в DOM)
   const themeOptions = document.querySelectorAll('.theme-option');
   if (themeOptions.length > 0) {
-    if (savedTheme === 'light') themeOptions[1].classList.add('active');
-    else if (savedTheme === 'space') themeOptions[2].classList.add('active');
-    else themeOptions[0].classList.add('active');
+    const themeMap = {
+      'dark': 0,
+      'light': 1,
+      'space': 2,
+      'dark-blue': 3,
+      'purple': 4,
+      'amoled': 5,
+      'cyberpunk': 6,
+      'green': 7,
+      'gradient': 8
+    };
+    const themeIndex = themeMap[savedTheme] || 0;
+    if (themeOptions[themeIndex]) {
+      themeOptions[themeIndex].classList.add('active');
+    }
   }
 
   // Инициализация автообновлений
@@ -94,6 +106,15 @@ function showAuthScreen() {
   document.getElementById('loading-screen').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('register-screen').classList.add('hidden');
+  
+  // Новые экраны
+  const otpScreen = document.getElementById('otp-screen');
+  const forgotScreen = document.getElementById('forgot-password-screen');
+  const resetScreen = document.getElementById('reset-password-screen');
+  if (otpScreen) otpScreen.classList.add('hidden');
+  if (forgotScreen) forgotScreen.classList.add('hidden');
+  if (resetScreen) resetScreen.classList.add('hidden');
+  
   document.getElementById('app').classList.add('hidden');
 }
 
@@ -104,11 +125,24 @@ async function initApp() {
   document.getElementById('loading-screen').classList.add('hidden');
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('register-screen').classList.add('hidden');
+  
+  // Скрываем новые экраны авторизации
+  const otpScreen = document.getElementById('otp-screen');
+  const forgotScreen = document.getElementById('forgot-password-screen');
+  const resetScreen = document.getElementById('reset-password-screen');
+  if (otpScreen) otpScreen.classList.add('hidden');
+  if (forgotScreen) forgotScreen.classList.add('hidden');
+  if (resetScreen) resetScreen.classList.add('hidden');
+
   document.getElementById('app').classList.remove('hidden');
 
   // Инициализируем Socket.io
   const token = localStorage.getItem('token');
   initSocket(token);
+
+  if (window.founderSystem && window.currentUser) {
+    window.founderSystem.checkFounder(window.currentUser);
+  }
 
   // Обновляем панель пользователя
   updateUserPanel();
@@ -163,6 +197,10 @@ async function loadServers() {
   try {
     const data = await ServersAPI.getAll();
     const servers = data.servers || [];
+    
+    // Сохраняем серверы в глобальную переменную для доступа из других модулей
+    window.servers = servers;
+    
     renderServersList(servers);
     
     // Присоединяемся к комнатам сокетов для всех серверов
@@ -205,6 +243,15 @@ async function selectServer(serverId) {
   try {
     const data = await ServersAPI.get(serverId);
     window.currentServer = data.server;
+    window.currentServerId = serverId;
+    
+    // Обновляем сервер в кэше window.servers
+    if (window.servers) {
+      const index = window.servers.findIndex(s => s._id === serverId);
+      if (index !== -1) {
+        window.servers[index] = data.server;
+      }
+    }
 
     // Обновляем активный сервер в UI
     document.querySelectorAll('.server-icon').forEach(el => {
@@ -339,7 +386,7 @@ function renderServerChannels(server) {
         <div class="channel-list">
           ${catChannels.length > 0 
             ? catChannels.map(ch => renderChannelItem(ch, server)).join('')
-            : '<div class="channel-empty-msg">Каналов пока нет</div>'
+            : `<div class="channel-empty-msg">${window.i18n.t('server_no_channels') || 'Каналов пока нет'}</div>`
           }
         </div>
       </div>
@@ -417,13 +464,18 @@ async function selectChannel(channelId, channelName, channelType) {
 
   // Загружаем сообщения
   await loadMessages(channelId);
+  
+  // Загружаем закрепленные сообщения
+  if (typeof loadPinnedMessages === 'function') {
+    loadPinnedMessages(channelId);
+  }
 
   // Загружаем участников
   await loadChannelMembers();
 
   // Обновляем placeholder
   const input = document.getElementById('message-input');
-  if (input) input.dataset.placeholder = `Написать в #${channelName}`;
+  if (input) input.dataset.placeholder = `${window.i18n.t('message_write_in') || 'Написать в'} #${channelName}`;
 }
 
 /**
@@ -444,7 +496,7 @@ function showDMView() {
   const dmSidebarView = document.getElementById('dm-sidebar-view');
   const serverSidebarView = document.getElementById('server-sidebar-view');
 
-  if (header) header.textContent = 'Личные сообщения';
+  if (header) header.textContent = window.i18n.t('dm_title');
   if (headerBtn) headerBtn.style.display = 'none';
   if (dmList) dmList.classList.remove('hidden');
   if (dmSearch) dmSearch.classList.remove('hidden');
@@ -530,9 +582,9 @@ async function loadChannelMembers() {
   const offline = members.filter(m => (m.user?.status || m.status) === 'offline');
 
   membersList.innerHTML = `
-    ${online.length > 0 ? `<div class="members-section-title">В СЕТИ — ${online.length}</div>` : ''}
+    ${online.length > 0 ? `<div class="members-section-title">${window.i18n.t('tab_online').toUpperCase()} — ${online.length}</div>` : ''}
     ${online.map(m => renderMemberItem(m)).join('')}
-    ${offline.length > 0 ? `<div class="members-section-title">НЕ В СЕТИ — ${offline.length}</div>` : ''}
+    ${offline.length > 0 ? `<div class="members-section-title">${window.i18n.t('status_offline').toUpperCase()} — ${offline.length}</div>` : ''}
     ${offline.map(m => renderMemberItem(m)).join('')}
   `;
 }
@@ -543,24 +595,97 @@ async function loadChannelMembers() {
 function renderMemberItem(member) {
   const user = member.user || member;
   const status = user.status || 'offline';
+  
+  // Получаем роли участника
+  let rolesHtml = '';
+  let topRole = null;
+  
+  if (window.currentServer && member.roles && member.roles.length > 0) {
+    const server = window.currentServer;
+    // Получаем роли с hoist (показывать отдельно) и сортируем по позиции
+    const memberRoles = member.roles
+      .map(roleId => server.roles?.find(r => r._id.toString() === roleId.toString()))
+      .filter(role => role && role.hoist)
+      .sort((a, b) => b.position - a.position);
+    
+    if (memberRoles.length > 0) {
+      topRole = memberRoles[0];
+      rolesHtml = `<div class="member-role" style="color: ${topRole.color}">${topRole.name}</div>`;
+    }
+  }
+  
   return `
-    <div class="member-item" data-user-id="${user._id}" onclick="openDMWithUser('${user._id}')">
+    <div class="member-item" 
+         data-user-id="${user._id}" 
+         onclick="openDMWithUser('${user._id}')"
+         oncontextmenu="showMemberContextMenu(event, '${user._id}', '${escapeHtml(user.username)}')">
       <div class="member-avatar">
         <img src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
         <div class="status-dot ${status}"></div>
       </div>
       <div class="member-info">
-        <div class="member-name">${user.username}${user.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
-        <div class="member-status">${getStatusText(status)}</div>
+        <div class="member-name" style="${topRole ? `color: ${topRole.color}` : ''}">${user.username}${user.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
+        ${rolesHtml}
+        ${!rolesHtml ? `<div class="member-status">${getStatusText(status)}</div>` : ''}
       </div>
       <div class="member-speaking-indicator" style="display:none"></div>
     </div>
   `;
 }
 
+/**
+ * Показать контекстное меню участника
+ */
+function showMemberContextMenu(event, userId, username) {
+  event.preventDefault();
+  
+  // Удаляем старое меню если есть
+  const oldMenu = document.querySelector('.context-menu');
+  if (oldMenu) oldMenu.remove();
+  
+  // Создаем новое меню
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.cssText = `
+    position: fixed;
+    left: ${event.clientX}px;
+    top: ${event.clientY}px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 0;
+    z-index: 10000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  `;
+  
+  menu.innerHTML = `
+    <div class="context-menu-item" onclick="openMemberRolesModal('${userId}', '${username}'); this.parentElement.remove();">
+      🎭 ${window.i18n.t('roles_manage') || 'Управление ролями'}
+    </div>
+    <div class="context-menu-item" onclick="openDMWithUser('${userId}'); this.parentElement.remove();">
+      💬 ${window.i18n.t('friends_action_msg')}
+    </div>
+  `;
+  
+  document.body.appendChild(menu);
+  
+  // Закрываем меню при клике вне его
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu() {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    });
+  }, 0);
+}
+
 function getStatusText(status) {
-  const texts = { online: 'В сети', idle: 'Не активен', dnd: 'Не беспокоить', offline: 'Не в сети' };
-  return texts[status] || 'Не в сети';
+  const texts = { 
+    online: window.i18n.t('status_online'), 
+    idle: window.i18n.t('status_idle'), 
+    dnd: window.i18n.t('status_dnd'), 
+    offline: window.i18n.t('status_offline') 
+  };
+  return texts[status] || window.i18n.t('status_offline');
 }
 
 /**
@@ -644,7 +769,7 @@ function renderDMConversations(conversations) {
           <div class="status-dot ${other.status || 'offline'}"></div>
         </div>
         <div class="dm-info">
-          <div class="dm-name">${other.username}${other.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</div>
+          <div class="dm-name">${other.username}${other.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
           <div class="dm-last-message">${conv.lastMessage?.content?.substring(0, 30) || ''}</div>
         </div>
         <button class="dm-close-btn" onclick="event.stopPropagation(); deleteDMConversation('${conv._id}')">✕</button>
@@ -693,7 +818,7 @@ async function openDMConversation(conversation) {
   await loadDMMessages(conversation._id);
 
   const input = document.getElementById('message-input');
-  if (input) input.dataset.placeholder = `Написать ${other.username}`;
+  if (input) input.dataset.placeholder = `${window.i18n.t('message_write') || 'Написать'} ${other.username}`;
 }
 
 /**
@@ -749,7 +874,14 @@ function setupEmojiPicker() {
  */
 function toggleEmojiPicker() {
   const container = document.getElementById('emoji-picker-container');
-  if (container) container.classList.toggle('hidden');
+  if (container) {
+    container.classList.toggle('hidden');
+    
+    // Показываем кастомные эмодзи при открытии
+    if (!container.classList.contains('hidden') && window.showCustomEmojisInPicker) {
+      window.showCustomEmojisInPicker();
+    }
+  }
 }
 
 // insertEmojiIntoInput определена в ui.js (работает с textarea)

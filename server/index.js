@@ -13,9 +13,16 @@ const cors = require('cors');
 const path = require('path');
 const fileUpload = require('express-fileupload');
 const fs = require('fs');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
+const hpp = require('hpp');
 
 const app = express();
 const server = http.createServer(app);
+const passport = require('./config/passport');
+
+// Инициализация Passport
+app.use(passport.initialize());
 
 // Настройка Socket.io с CORS
 const io = socketIO(server, {
@@ -29,7 +36,7 @@ const io = socketIO(server, {
 const PORT = process.env.PORT || 5555;
 
 // Подключение к MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/discord-clone';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
 
 mongoose.connect(MONGODB_URI)
   .then(() => {
@@ -40,11 +47,71 @@ mongoose.connect(MONGODB_URI)
     console.log('⚠️  Running without database - some features may not work');
   });
 
-// Middleware
+// Security Middleware
+// Helmet - защита HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'", 
+        "'unsafe-inline'",
+        "'unsafe-eval'", // Для некоторых библиотек
+        "https://cdn.jsdelivr.net",
+        "https://cdn.socket.io"
+      ],
+      scriptSrcAttr: ["'unsafe-inline'"], // Для inline обработчиков событий (onclick и т.д.)
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: [
+        "'self'", 
+        "data:", 
+        "https:", 
+        "http:",
+        "blob:",
+        "https://lh3.googleusercontent.com" // Google аватары
+      ],
+      connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Для WebRTC
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// Mongo Sanitize - защита от NoSQL injection
+app.use(mongoSanitize({
+  replaceWith: '_',
+  onSanitize: ({ req, key }) => {
+    console.warn(`⚠️  Sanitized potentially malicious key: ${key}`);
+  }
+}));
+
+// HPP - защита от HTTP Parameter Pollution
+app.use(hpp());
+
+// CORS настройка с whitelist
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:5555', 'http://26.237.63.189:5555'];
+
 app.use(cors({
-  origin: '*',
+  origin: function(origin, callback) {
+    // Разрешаем запросы без origin (Electron, Postman, мобильные приложения)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️  Blocked CORS request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  credentials: true
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -70,8 +137,12 @@ const imagesDir = path.join(uploadsDir, 'images');
   }
 });
 
-// Статические файлы (загрузки)
+// Статические файлы (загрузки) - открыты для авторизованных пользователей
+// Для Electron и браузера изображения должны загружаться без дополнительных заголовков
 app.use('/uploads', express.static(uploadsDir));
+
+// Раздача статических файлов клиента
+app.use(express.static(path.join(__dirname, '..', 'client')));
 
 // Импорт роутов
 const authRoutes = require('./routes/auth');
@@ -82,6 +153,10 @@ const messageRoutes = require('./routes/messages');
 const friendRoutes = require('./routes/friends');
 const dmRoutes = require('./routes/directMessages');
 const uploadRoutes = require('./routes/upload');
+
+// Rate Limiting для всех API роутов
+const { generalLimiter } = require('./middleware/rateLimiter');
+app.use('/api', generalLimiter);
 
 // Подключение роутов
 app.use('/api/auth', authRoutes);
@@ -98,9 +173,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Love Server is running' });
 });
 
-// Роут для корня, чтобы браузер/wait-on не выдавал 404
+// Роут для корня - отдаем index.html
 app.get('/', (req, res) => {
-  res.send('Love Server is running. API is at /api');
+  res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
 });
 
 // Инициализация Socket.io обработчиков

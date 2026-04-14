@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+const { validateBio, validateCustomStatus, validateUsername, sanitizeBody } = require('../middleware/validation');
 const path = require('path');
 const fs = require('fs');
 

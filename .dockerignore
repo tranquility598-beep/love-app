@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+build
+dist
+.git
+.gitignore
+.env
+client
+docs
+*.md
+Dockerfile
+docker-compose.yml
+!package.json
+!package-lock.json
+!server

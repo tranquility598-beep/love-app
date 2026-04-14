@@ -249,6 +249,23 @@
   transform: none;
 }
 
+/* Google Button Specific */
+.google-btn {
+  background: #ffffff !important;
+  color: #000000 !important;
+  margin-top: -10px; /* Reducing gap after login btn */
+  margin-bottom: 24px;
+}
+
+.google-btn:hover {
+  background: #f0f0f0 !important;
+  box-shadow: 0 8px 30px rgba(255,255,255,0.15);
+}
+
+.google-btn svg {
+  flex-shrink: 0;
+}
+
 /* Button spinner */
 .btn-spinner {
   width: 18px;
@@ -284,4 +301,49 @@
 .auth-link:hover {
   color: #ffffff;
   text-decoration: underline;
+  cursor: pointer;
+}
+
+/* OTP Input Container */
+.otp-input-container {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 30px 0;
+}
+
+.otp-digit {
+  width: 45px;
+  height: 55px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.otp-digit:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.otp-digit.filled {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Animations */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.shake {
+  animation: shake 0.2s ease-in-out;
 }

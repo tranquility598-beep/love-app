@@ -25,14 +25,25 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
-    minlength: 6
+    required: function() {
+      return !this.googleId; // Пароль обязателен только если нет Google ID
+    },
+    minlength: 8
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true // Позволяет иметь несколько документов с null значением
   },
   
   // Профиль
   avatar: {
     type: String,
     default: null // URL аватара
+  },
+  banner: {
+    type: String,
+    default: null // URL баннера профиля
   },
   role: {
     type: String,
@@ -43,6 +54,30 @@ const userSchema = new mongoose.Schema({
     type: String,
     maxlength: 190,
     default: ''
+  },
+  badges: [{
+    type: String,
+    enum: ['founder', 'verified', 'early_supporter', 'bug_hunter', 'developer', 'moderator', 'partner']
+  }],
+  profileColor: {
+    type: String,
+    default: '#5865F2' // Цвет профиля по умолчанию
+  },
+  
+  // Интеграции и соцсети
+  connectedAccounts: {
+    youtube: {
+      id: String,
+      name: String,
+      url: String,
+      verified: { type: Boolean, default: false }
+    },
+    tiktok: {
+      id: String,
+      name: String,
+      url: String,
+      verified: { type: Boolean, default: false }
+    }
   },
   
   // Статус
@@ -118,6 +153,30 @@ const userSchema = new mongoose.Schema({
   lastSeen: {
     type: Date,
     default: Date.now
+  },
+  
+  // Верификация и OTP
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  otpCode: {
+    type: String,
+    default: null
+  },
+  otpExpires: {
+    type: Date,
+    default: null
+  },
+  
+  // Безопасность и блокировка
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockUntil: {
+    type: Date,
+    default: null
   }
 });
 
@@ -136,6 +195,7 @@ userSchema.pre('save', async function(next) {
 
 // Метод для проверки пароля
 userSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.password || !candidatePassword) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 
@@ -146,7 +206,11 @@ userSchema.methods.toPublicJSON = function() {
     username: this.username,
     role: this.role,
     avatar: this.avatar,
+    banner: this.banner,
     bio: this.bio,
+    badges: this.badges,
+    profileColor: this.profileColor,
+    connectedAccounts: this.connectedAccounts,
     status: this.status,
     customStatus: this.customStatus,
     createdAt: this.createdAt,

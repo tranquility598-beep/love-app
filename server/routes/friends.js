@@ -163,6 +163,30 @@ router.post('/decline/:userId', authMiddleware, async (req, res) => {
 });
 
 /**
+ * DELETE /api/friends/request/:userId
+ * Отменить исходящий запрос в друзья
+ */
+router.delete('/request/:userId', authMiddleware, async (req, res) => {
+  try {
+    const toUserId = req.params.userId;
+    
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { friendRequestsSent: { to: toUserId } }
+    });
+    
+    await User.findByIdAndUpdate(toUserId, {
+      $pull: { friendRequestsReceived: { from: req.user._id } }
+    });
+    
+    res.json({ message: 'Запрос отменен' });
+    
+  } catch (error) {
+    console.error('Cancel friend request error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
  * DELETE /api/friends/:userId
  * Удалить из друзей
  */

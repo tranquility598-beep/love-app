@@ -72,6 +72,12 @@ const channelSchema = new mongoose.Schema({
     default: null
   },
   
+  // Закрепленные сообщения
+  pinnedMessages: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Message'
+  }],
+  
   // Настройки канала
   settings: {
     slowMode: { type: Number, default: 0 }, // секунды

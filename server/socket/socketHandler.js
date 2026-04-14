@@ -4,12 +4,30 @@
  */
 
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const Channel = require('../models/Channel');
 const DirectMessage = require('../models/DirectMessage');
+const { isFounderUser } = require('../utils/founder');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'discord-clone-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
+
+function normalizeMessageAttachments(raw) {
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw
+    .map((a) => ({
+      filename: a.filename || a.name || 'file',
+      originalName: a.originalName || a.name || 'file',
+      url: a.url,
+      size: typeof a.size === 'number' ? a.size : 0,
+      type: a.type || (a.mimetype && String(a.mimetype).startsWith('audio') ? 'audio' : 'file'),
+      mimetype: a.mimetype || undefined,
+      width: a.width,
+      height: a.height
+    }))
+    .filter((a) => a && a.url);
+}
 
 // Хранилище подключенных пользователей
 // { userId: socketId }
@@ -79,9 +97,10 @@ module.exports = (io) => {
      */
     socket.on('message:send', async (data) => {
       try {
-        const { channelId, content, replyTo, attachments } = data;
-        
-        if (!channelId || (!content && (!attachments || attachments.length === 0))) {
+        const { channelId, content, replyTo, attachments, tempId } = data;
+        const normalizedAttachments = normalizeMessageAttachments(attachments);
+
+        if (!channelId || (!content && normalizedAttachments.length === 0)) {
           return socket.emit('error', { message: 'Неверные данные сообщения' });
         }
         
@@ -90,9 +109,22 @@ module.exports = (io) => {
           return socket.emit('error', { message: 'Канал не найден' });
         }
         
+        // Проверяем что replyTo существует, если указан
+        let validReplyTo = null;
+        if (replyTo) {
+          const replyMessage = await Message.findById(replyTo);
+          if (replyMessage) {
+            validReplyTo = replyTo;
+          } else {
+            console.warn(`⚠️  Reply message ${replyTo} not found, ignoring replyTo`);
+          }
+        }
+        
         // ШАГ А: МГНОВЕННО рассылаем сообщение всем в комнате (даже до сохранения в БД)
+        // Используем временный ID от клиента, если он передан
+        const tempMessageId = tempId || ('temp_' + Date.now() + '_' + userId);
         const tempMessage = {
-          _id: 'temp_' + Date.now() + '_' + userId,
+          _id: tempMessageId,
           content: content || '',
           author: {
             _id: userId,
@@ -102,8 +134,8 @@ module.exports = (io) => {
           },
           channel: channelId,
           server: channel.server,
-          replyTo: replyTo || null,
-          attachments: attachments || [],
+          replyTo: validReplyTo,
+          attachments: normalizedAttachments,
           createdAt: new Date().toISOString(),
           reactions: []
         };
@@ -142,8 +174,9 @@ module.exports = (io) => {
             author: userId,
             channel: channelId,
             server: channel.server,
-            replyTo: replyTo || null,
-            attachments: attachments || []
+            replyTo: validReplyTo,
+            attachments: normalizedAttachments,
+            type: normalizedAttachments.length > 0 ? 'file' : 'default'
           });
           
           await message.save();
@@ -152,11 +185,11 @@ module.exports = (io) => {
           await Channel.findByIdAndUpdate(channelId, { lastMessage: message._id });
           
           // Заполняем данные
-          await message.populate('author', 'username avatar discriminator');
-          if (replyTo) {
+          await message.populate('author', 'username avatar discriminator role');
+          if (validReplyTo) {
             await message.populate({
               path: 'replyTo',
-              populate: { path: 'author', select: 'username avatar' }
+              populate: { path: 'author', select: 'username avatar role' }
             });
           }
           
@@ -221,9 +254,9 @@ module.exports = (io) => {
             }
           }
         } catch (dbError) {
-          console.error('Ошибка сохранения в БД (но в чат доставлено):', dbError.message);
+          console.error('Ошибка сохранения в БД (но в чат доставлено):', dbError.message, dbError);
           // Уведомляем отправителя об ошибке сохранения
-          socket.emit('error', { message: 'Сообщение доставлено, но не сохранено в базе данных' });
+          socket.emit('error', { message: `Сообщение доставлено, но не сохранено: ${dbError.message}` });
         }
         
       } catch (error) {
@@ -239,8 +272,15 @@ module.exports = (io) => {
       try {
         const { messageId, content } = data;
         
+        // Проверяем что это не временный ID
+        if (!messageId || messageId.startsWith('temp_')) {
+          return socket.emit('error', { message: 'Нельзя редактировать сообщение до его сохранения' });
+        }
+        
         const message = await Message.findById(messageId);
-        if (!message) return;
+        if (!message) {
+          return socket.emit('error', { message: 'Сообщение не найдено' });
+        }
         
         if (message.author.toString() !== userId) {
           return socket.emit('error', { message: 'Нет прав для редактирования' });
@@ -251,7 +291,7 @@ module.exports = (io) => {
         message.editedAt = new Date();
         await message.save();
         
-        await message.populate('author', 'username avatar discriminator');
+        await message.populate('author', 'username avatar discriminator role');
         
         const channel = await Channel.findById(message.channel);
         
@@ -285,8 +325,15 @@ module.exports = (io) => {
       try {
         const { messageId } = data;
         
+        // Проверяем что это не временный ID
+        if (!messageId || messageId.startsWith('temp_')) {
+          return socket.emit('error', { message: 'Нельзя удалить сообщение до его сохранения' });
+        }
+        
         const message = await Message.findById(messageId);
-        if (!message) return;
+        if (!message) {
+          return socket.emit('error', { message: 'Сообщение не найдено' });
+        }
         
         if (message.author.toString() !== userId) {
           return socket.emit('error', { message: 'Нет прав для удаления' });
@@ -327,8 +374,15 @@ module.exports = (io) => {
       try {
         const { messageId, emoji } = data;
         
+        // Проверяем что это не временный ID
+        if (!messageId || messageId.startsWith('temp_')) {
+          return socket.emit('error', { message: 'Нельзя реагировать на сообщение до его сохранения' });
+        }
+        
         const message = await Message.findById(messageId);
-        if (!message) return;
+        if (!message) {
+          return socket.emit('error', { message: 'Сообщение не найдено' });
+        }
         
         const existingReaction = message.reactions.find(r => r.emoji === emoji);
         
@@ -870,7 +924,740 @@ module.exports = (io) => {
       
       console.log(`🔇 ${socket.user.username} left voice channel ${channelId}`);
     }
+  
+  // ==================== FOUNDER PRIVILEGES ====================
+
+  /**
+   * Отправка объявления всем пользователям (только для создателя)
+   */
+  socket.on('founder:broadcast', async (data) => {
+    try {
+      if (!isFounderUser(socket.user)) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      const { message } = data;
+      if (!message) return;
+      
+      // Отправляем объявление всем подключенным пользователям
+      io.emit('founder:announcement', {
+        message,
+        from: socket.user.username,
+        timestamp: new Date()
+      });
+      
+      console.log(`👑 FOUNDER BROADCAST: ${message}`);
+      
+    } catch (error) {
+      console.error('Error broadcasting message:', error);
+      socket.emit('error', { message: 'Ошибка отправки объявления' });
+    }
   });
+  
+  /**
+   * Получение статистики (только для создателя)
+   */
+  socket.on('founder:get_stats', async () => {
+    try {
+      if (!isFounderUser(socket.user)) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      const Server = require('../models/Server');
+      
+      // Собираем статистику
+      const totalUsers = await User.countDocuments();
+      const onlineUsers = connectedUsers.size;
+      const totalServers = await Server.countDocuments();
+      
+      // Подсчет сообщений за сегодня
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const messagesToday = await Message.countDocuments({
+        createdAt: { $gte: today }
+      });
+      
+      socket.emit('founder:stats', {
+        totalUsers,
+        onlineUsers,
+        totalServers,
+        messagesToday
+      });
+      
+    } catch (error) {
+      console.error('Error getting stats:', error);
+      socket.emit('error', { message: 'Ошибка получения статистики' });
+    }
+  });
+  
+  /**
+   * Получение логов (только для создателя)
+   */
+  socket.on('founder:get_logs', async (data) => {
+    try {
+      if (!isFounderUser(socket.user)) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      const { limit = 100 } = data || {};
+      
+      // Получаем последние логи входа
+      const LoginLog = require('../models/LoginLog');
+      const logs = await LoginLog.find()
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .populate('userId', 'username email');
+      
+      socket.emit('founder:logs', { logs });
+      
+    } catch (error) {
+      console.error('Error getting logs:', error);
+      socket.emit('error', { message: 'Ошибка получения логов' });
+    }
+  });
+  
+  // ==================== ПРОФИЛИ ПОЛЬЗОВАТЕЛЕЙ ====================
+  
+  /**
+   * Обновление профиля пользователя
+   */
+  socket.on('profile:update', async (data) => {
+    try {
+      const { username, bio, banner, profileColor, badges } = data;
+      
+      const updateData = {};
+      
+      // Обработка имени
+      if (username !== undefined && username !== socket.user.username) {
+        if (username.length < 2 || username.length > 32) {
+          return socket.emit('error', { message: 'Имя пользователя должно быть от 2 до 32 символов' });
+        }
+        // Проверка уникальности
+        const existingUser = await User.findOne({ username, _id: { $ne: userId } });
+        if (existingUser) {
+          return socket.emit('error', { message: 'Имя пользователя уже занято' });
+        }
+        updateData.username = username;
+        // Обновляем в сокете кэшированное имя
+        socket.user.username = username;
+      }
+      
+      if (bio !== undefined) updateData.bio = bio;
+      if (banner !== undefined) updateData.banner = banner;
+      if (profileColor !== undefined) updateData.profileColor = profileColor;
+      
+      // Только создатель может менять значки
+      if (badges !== undefined && isFounderUser(socket.user)) {
+        updateData.badges = badges;
+      }
+      
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true }
+      ).select('-password');
+      
+      // Уведомляем всех о обновлении профиля
+      io.emit('profile:updated', {
+        userId,
+        profile: updatedUser.toPublicJSON()
+      });
+      
+      socket.emit('profile:update_success', updatedUser.toPublicJSON());
+      
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      socket.emit('error', { message: 'Ошибка обновления профиля' });
+    }
+  });
+  
+  /**
+   * Получение профиля пользователя
+   */
+  socket.on('profile:get', async (data) => {
+    try {
+      const { userId: targetUserId } = data;
+      
+      const user = await User.findById(targetUserId).select('-password');
+      if (!user) {
+        return socket.emit('error', { message: 'Пользователь не найден' });
+      }
+      
+      socket.emit('profile:data', user.toPublicJSON());
+      
+    } catch (error) {
+      console.error('Error getting profile:', error);
+      socket.emit('error', { message: 'Ошибка получения профиля' });
+    }
+  });
+
+  /**
+   * Подключение интеграций (соц. сетей)
+   */
+  socket.on('integration:connect', async (data) => {
+    try {
+      const { platform, url } = data;
+      
+      if (!['youtube', 'tiktok'].includes(platform)) {
+        return socket.emit('error', { message: 'Неподдерживаемая платформа' });
+      }
+      
+      const user = await User.findById(userId);
+      if (!user) return;
+      
+      if (!user.connectedAccounts) {
+        user.connectedAccounts = {};
+      }
+      
+      // Имитация верификации по URL
+      const mockName = url.split('/').filter(Boolean).pop() || 'User';
+      
+      user.connectedAccounts[platform] = {
+        name: mockName,
+        url: url,
+        verified: true // Имитируем успешное подтверждение
+      };
+      
+      await user.save();
+      
+      socket.emit('profile:update_success', user.toPublicJSON());
+      io.emit('profile:updated', {
+        userId,
+        profile: user.toPublicJSON()
+      });
+      
+    } catch (error) {
+      console.error('Integration error:', error);
+      socket.emit('error', { message: 'Ошибка подключения интеграции' });
+    }
+  });
+  
+  // ==================== БЛОКИРОВКА ПОЛЬЗОВАТЕЛЕЙ ====================
+  
+  /**
+   * Блокировка пользователя
+   */
+  socket.on('user:block', async (data) => {
+    try {
+      const { userId: targetUserId } = data;
+      
+      if (userId === targetUserId) {
+        return socket.emit('error', { message: 'Нельзя заблокировать самого себя' });
+      }
+      
+      const user = await User.findById(userId);
+      if (!user.blockedUsers.includes(targetUserId)) {
+        user.blockedUsers.push(targetUserId);
+        await user.save();
+      }
+      
+      socket.emit('user:blocked', { userId: targetUserId });
+      
+    } catch (error) {
+      console.error('Error blocking user:', error);
+      socket.emit('error', { message: 'Ошибка блокировки пользователя' });
+    }
+  });
+  
+  /**
+   * Разблокировка пользователя
+   */
+  socket.on('user:unblock', async (data) => {
+    try {
+      const { userId: targetUserId } = data;
+      
+      const user = await User.findById(userId);
+      user.blockedUsers = user.blockedUsers.filter(id => id.toString() !== targetUserId);
+      await user.save();
+      
+      socket.emit('user:unblocked', { userId: targetUserId });
+      
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      socket.emit('error', { message: 'Ошибка разблокировки пользователя' });
+    }
+  });
+  
+  /**
+   * Получение списка заблокированных пользователей
+   */
+  socket.on('user:get_blocked', async () => {
+    try {
+      const user = await User.findById(userId).populate('blockedUsers', 'username avatar');
+      socket.emit('user:blocked_list', { blockedUsers: user.blockedUsers });
+      
+    } catch (error) {
+      console.error('Error getting blocked users:', error);
+      socket.emit('error', { message: 'Ошибка получения списка заблокированных' });
+    }
+  });
+  
+  // ==================== ЗАКРЕПЛЕННЫЕ СООБЩЕНИЯ ====================
+  
+  /**
+   * Закрепить сообщение
+   */
+  socket.on('message:pin', async (data) => {
+    try {
+      const { messageId, channelId } = data;
+      
+      const channel = await Channel.findById(channelId);
+      if (!channel) {
+        return socket.emit('error', { message: 'Канал не найден' });
+      }
+      
+      const message = await Message.findById(messageId);
+      if (!message) {
+        return socket.emit('error', { message: 'Сообщение не найдено' });
+      }
+      
+      // Проверяем что сообщение из этого канала
+      if (message.channel.toString() !== channelId) {
+        return socket.emit('error', { message: 'Сообщение не принадлежит этому каналу' });
+      }
+      
+      // Добавляем в закрепленные если еще не закреплено
+      if (!channel.pinnedMessages.includes(messageId)) {
+        channel.pinnedMessages.push(messageId);
+        await channel.save();
+      }
+      
+      // Уведомляем всех в канале
+      io.to(`server:${channel.server}`).emit('message:pinned', {
+        messageId,
+        channelId,
+        pinnedBy: userId
+      });
+      
+      console.log(`📌 Message ${messageId} pinned in channel ${channelId}`);
+      
+    } catch (error) {
+      console.error('Error pinning message:', error);
+      socket.emit('error', { message: 'Ошибка закрепления сообщения' });
+    }
+  });
+  
+  /**
+   * Открепить сообщение
+   */
+  socket.on('message:unpin', async (data) => {
+    try {
+      const { messageId, channelId } = data;
+      
+      const channel = await Channel.findById(channelId);
+      if (!channel) {
+        return socket.emit('error', { message: 'Канал не найден' });
+      }
+      
+      // Удаляем из закрепленных
+      channel.pinnedMessages = channel.pinnedMessages.filter(
+        id => id.toString() !== messageId
+      );
+      await channel.save();
+      
+      // Уведомляем всех в канале
+      io.to(`server:${channel.server}`).emit('message:unpinned', {
+        messageId,
+        channelId
+      });
+      
+      console.log(`📌 Message ${messageId} unpinned from channel ${channelId}`);
+      
+    } catch (error) {
+      console.error('Error unpinning message:', error);
+      socket.emit('error', { message: 'Ошибка открепления сообщения' });
+    }
+  });
+  
+  /**
+   * Получить закрепленные сообщения канала
+   */
+  socket.on('message:get_pinned', async (data) => {
+    try {
+      const { channelId } = data;
+      
+      const channel = await Channel.findById(channelId)
+        .populate({
+          path: 'pinnedMessages',
+          populate: { path: 'author', select: 'username avatar role' }
+        });
+      
+      if (!channel) {
+        return socket.emit('error', { message: 'Канал не найден' });
+      }
+      
+      socket.emit('message:pinned_list', {
+        channelId,
+        messages: channel.pinnedMessages
+      });
+      
+    } catch (error) {
+      console.error('Error getting pinned messages:', error);
+      socket.emit('error', { message: 'Ошибка получения закрепленных сообщений' });
+    }
+  });
+  
+  // ==================== ПОИСК СООБЩЕНИЙ ====================
+  
+  /**
+   * Поиск сообщений в канале
+   */
+  socket.on('message:search', async (data) => {
+    try {
+      const { channelId, query, limit = 50 } = data;
+      
+      if (!query || query.trim().length === 0) {
+        return socket.emit('message:search_results', { results: [] });
+      }
+      
+      const channel = await Channel.findById(channelId);
+      if (!channel) {
+        return socket.emit('error', { message: 'Канал не найден' });
+      }
+      
+      // Поиск сообщений по содержимому
+      const messages = await Message.find({
+        channel: channelId,
+        content: { $regex: query, $options: 'i' } // case-insensitive поиск
+      })
+        .populate('author', 'username avatar role')
+        .sort({ createdAt: -1 })
+        .limit(limit);
+      
+      socket.emit('message:search_results', {
+        channelId,
+        query,
+        results: messages
+      });
+      
+      console.log(`🔍 Search in channel ${channelId}: "${query}" - ${messages.length} results`);
+      
+    } catch (error) {
+      console.error('Error searching messages:', error);
+      socket.emit('error', { message: 'Ошибка поиска сообщений' });
+    }
+  });
+  
+  /**
+   * Поиск сообщений на сервере
+   */
+  socket.on('message:search_server', async (data) => {
+    try {
+      const { serverId, query, limit = 50 } = data;
+      
+      if (!query || query.trim().length === 0) {
+        return socket.emit('message:search_results', { results: [] });
+      }
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Получаем все каналы сервера
+      const channels = await Channel.find({ server: serverId });
+      const channelIds = channels.map(c => c._id);
+      
+      // Поиск сообщений по всем каналам сервера
+      const messages = await Message.find({
+        channel: { $in: channelIds },
+        content: { $regex: query, $options: 'i' }
+      })
+        .populate('author', 'username avatar role')
+        .populate('channel', 'name')
+        .sort({ createdAt: -1 })
+        .limit(limit);
+      
+      socket.emit('message:search_results', {
+        serverId,
+        query,
+        results: messages
+      });
+      
+      console.log(`🔍 Search in server ${serverId}: "${query}" - ${messages.length} results`);
+      
+    } catch (error) {
+      console.error('Error searching messages in server:', error);
+      socket.emit('error', { message: 'Ошибка поиска сообщений' });
+    }
+  });
+  
+  // ==================== РОЛИ И ПРАВА ====================
+  
+  /**
+   * Создать роль на сервере
+   */
+  socket.on('role:create', async (data) => {
+    try {
+      const { serverId, name, color, permissions } = data;
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Проверяем права (только владелец или админ)
+      const isOwner = server.owner.toString() === userId;
+      const member = server.members.find(m => m.user.toString() === userId);
+      
+      console.log('Role create permission check:', {
+        userId,
+        isOwner,
+        hasMember: !!member,
+        memberRoles: member?.roles,
+        serverRoles: server.roles.map(r => ({ id: r._id, name: r.name }))
+      });
+      
+      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
+        const r = server.roles.id(memberRoleId);
+        return r && (r.permissions.administrator || r.permissions.manageRoles);
+      });
+      
+      if (!isOwner && !hasPermission) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      // Создаем роль
+      const newRole = {
+        name: name || 'Новая роль',
+        color: color || '#99aab5',
+        permissions: permissions || {
+          sendMessages: true,
+          readMessages: true,
+          connect: true,
+          speak: true
+        },
+        position: server.roles.length
+      };
+      
+      server.roles.push(newRole);
+      await server.save();
+      
+      // Уведомляем всех на сервере
+      io.to(`server:${serverId}`).emit('role:created', {
+        serverId,
+        role: server.roles[server.roles.length - 1]
+      });
+      
+      console.log(`🎭 Role created: ${newRole.name} on server ${serverId}`);
+      
+    } catch (error) {
+      console.error('Error creating role:', error);
+      socket.emit('error', { message: 'Ошибка создания роли' });
+    }
+  });
+  
+  /**
+   * Обновить роль
+   */
+  socket.on('role:update', async (data) => {
+    try {
+      const { serverId, roleId, updates } = data;
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Проверяем права
+      const isOwner = server.owner.toString() === userId;
+      const member = server.members.find(m => m.user.toString() === userId);
+      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
+        const r = server.roles.id(memberRoleId);
+        return r && (r.permissions.administrator || r.permissions.manageRoles);
+      });
+      
+      if (!isOwner && !hasPermission) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      // Обновляем роль
+      const role = server.roles.id(roleId);
+      if (!role) {
+        return socket.emit('error', { message: 'Роль не найдена' });
+      }
+      
+      if (updates.name) role.name = updates.name;
+      if (updates.color) role.color = updates.color;
+      if (updates.permissions) role.permissions = { ...role.permissions, ...updates.permissions };
+      if (updates.position !== undefined) role.position = updates.position;
+      if (updates.hoist !== undefined) role.hoist = updates.hoist;
+      if (updates.mentionable !== undefined) role.mentionable = updates.mentionable;
+      
+      await server.save();
+      
+      // Уведомляем всех на сервере
+      io.to(`server:${serverId}`).emit('role:updated', {
+        serverId,
+        roleId,
+        role
+      });
+      
+      console.log(`🎭 Role updated: ${role.name} on server ${serverId}`);
+      
+    } catch (error) {
+      console.error('Error updating role:', error);
+      socket.emit('error', { message: 'Ошибка обновления роли' });
+    }
+  });
+  
+  /**
+   * Удалить роль
+   */
+  socket.on('role:delete', async (data) => {
+    try {
+      const { serverId, roleId } = data;
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Проверяем права
+      const isOwner = server.owner.toString() === userId;
+      if (!isOwner) {
+        return socket.emit('error', { message: 'Только владелец может удалять роли' });
+      }
+      
+      // Удаляем роль
+      server.roles.pull(roleId);
+      
+      // Удаляем роль у всех участников
+      server.members.forEach(member => {
+        member.roles = member.roles.filter(r => r.toString() !== roleId.toString());
+      });
+      
+      await server.save();
+      
+      // Уведомляем всех на сервере
+      io.to(`server:${serverId}`).emit('role:deleted', {
+        serverId,
+        roleId
+      });
+      
+      console.log(`🎭 Role deleted: ${roleId} from server ${serverId}`);
+      
+    } catch (error) {
+      console.error('Error deleting role:', error);
+      socket.emit('error', { message: 'Ошибка удаления роли' });
+    }
+  });
+  
+  /**
+   * Назначить роль участнику
+   */
+  socket.on('role:assign', async (data) => {
+    try {
+      const { serverId, targetUserId, roleId } = data;
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Проверяем права
+      const isOwner = server.owner.toString() === userId;
+      const member = server.members.find(m => m.user.toString() === userId);
+      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
+        const r = server.roles.id(memberRoleId);
+        return r && (r.permissions.administrator || r.permissions.manageRoles);
+      });
+      
+      if (!isOwner && !hasPermission) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      // Находим участника
+      const targetMember = server.members.find(m => m.user.toString() === targetUserId);
+      if (!targetMember) {
+        return socket.emit('error', { message: 'Участник не найден' });
+      }
+      
+      const roleIdStr = roleId.toString();
+      const alreadyHas = targetMember.roles.some((rid) => rid.toString() === roleIdStr);
+      if (!alreadyHas) {
+        targetMember.roles.push(mongoose.Types.ObjectId.isValid(roleId)
+          ? new mongoose.Types.ObjectId(roleId)
+          : roleId);
+        await server.save();
+        
+        // Уведомляем всех на сервере
+        io.to(`server:${serverId}`).emit('role:assigned', {
+          serverId,
+          userId: targetUserId,
+          roleId
+        });
+        
+        console.log(`🎭 Role ${roleId} assigned to user ${targetUserId} on server ${serverId}`);
+      }
+      
+    } catch (error) {
+      console.error('Error assigning role:', error);
+      socket.emit('error', { message: 'Ошибка назначения роли' });
+    }
+  });
+  
+  /**
+   * Снять роль с участника
+   */
+  socket.on('role:remove', async (data) => {
+    try {
+      const { serverId, targetUserId, roleId } = data;
+      
+      const Server = require('../models/Server');
+      const server = await Server.findById(serverId);
+      
+      if (!server) {
+        return socket.emit('error', { message: 'Сервер не найден' });
+      }
+      
+      // Проверяем права
+      const isOwner = server.owner.toString() === userId;
+      const member = server.members.find(m => m.user.toString() === userId);
+      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
+        const r = server.roles.id(memberRoleId);
+        return r && (r.permissions.administrator || r.permissions.manageRoles);
+      });
+      
+      if (!isOwner && !hasPermission) {
+        return socket.emit('error', { message: 'Недостаточно прав' });
+      }
+      
+      // Находим участника
+      const targetMember = server.members.find(m => m.user.toString() === targetUserId);
+      if (!targetMember) {
+        return socket.emit('error', { message: 'Участник не найден' });
+      }
+      
+      // Удаляем роль
+      targetMember.roles = targetMember.roles.filter((r) => r.toString() !== roleId.toString());
+      await server.save();
+      
+      // Уведомляем всех на сервере
+      io.to(`server:${serverId}`).emit('role:removed', {
+        serverId,
+        userId: targetUserId,
+        roleId
+      });
+      
+      console.log(`🎭 Role ${roleId} removed from user ${targetUserId} on server ${serverId}`);
+      
+    } catch (error) {
+      console.error('Error removing role:', error);
+      socket.emit('error', { message: 'Ошибка снятия роли' });
+    }
+  });
+  
+  }); // Закрытие io.on('connection')
   
   // Экспортируем для использования в других модулях
   return { connectedUsers, voiceChannels };

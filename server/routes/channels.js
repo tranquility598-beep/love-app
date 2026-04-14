@@ -8,12 +8,14 @@ const router = express.Router();
 const Channel = require('../models/Channel');
 const Server = require('../models/Server');
 const authMiddleware = require('../middleware/auth');
+const { validateChannelName, sanitizeBody } = require('../middleware/validation');
+const { canManageServerChannels } = require('../utils/serverPermissions');
 
 /**
  * POST /api/channels
  * Создать новый канал
  */
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, sanitizeBody, validateChannelName, async (req, res) => {
   try {
     const { name, type, serverId, topic, category } = req.body;
     
@@ -27,9 +29,7 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Сервер не найден' });
     }
     
-    // Проверяем права (владелец или админ)
-    const member = server.members.find(m => m.user.toString() === req.user._id.toString());
-    if (!member || (!member.roles.includes('owner') && !member.roles.includes('admin'))) {
+    if (!canManageServerChannels(server, req.user._id)) {
       return res.status(403).json({ message: 'Недостаточно прав для создания каналов' });
     }
     
@@ -114,8 +114,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     
     if (channel.server) {
       const server = await Server.findById(channel.server);
-      const member = server.members.find(m => m.user.toString() === req.user._id.toString());
-      if (!member || (!member.roles.includes('owner') && !member.roles.includes('admin'))) {
+      if (!canManageServerChannels(server, req.user._id)) {
         return res.status(403).json({ message: 'Недостаточно прав' });
       }
     }
@@ -147,8 +146,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     
     if (channel.server) {
       const server = await Server.findById(channel.server);
-      const member = server.members.find(m => m.user.toString() === req.user._id.toString());
-      if (!member || (!member.roles.includes('owner') && !member.roles.includes('admin'))) {
+      if (!canManageServerChannels(server, req.user._id)) {
         return res.status(403).json({ message: 'Недостаточно прав' });
       }
       

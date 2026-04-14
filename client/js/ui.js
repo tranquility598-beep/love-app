@@ -8,6 +8,18 @@ let logoClickCount = 0;
 let logoClickTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Детекция платформы для адаптации UI (Mac/Windows)
+  if (window.electronAPI && window.electronAPI.platform) {
+    const platform = window.electronAPI.platform;
+    if (platform === 'darwin') {
+      document.body.classList.add('is-mac');
+      console.log('🍎 Running on macOS - adapting UI...');
+    } else {
+      document.body.classList.add('is-windows');
+      console.log('💻 Running on Windows - using standard UI...');
+    }
+  }
+
   const dmBtn = document.getElementById('dm-btn');
   if (dmBtn) {
     dmBtn.addEventListener('click', () => {
@@ -87,10 +99,114 @@ function showNotification(type, message, title) {
   `;
 
   container.appendChild(notif);
+  
+  // Воспроизводим звук если настройка включена
+  if (window.settingsManager && window.settingsManager.get('notif-sound')) {
+    playNotificationSound(type);
+  }
+  
   setTimeout(() => {
     notif.style.animation = 'slideOut 0.3s ease forwards';
     setTimeout(() => notif.remove(), 300);
   }, 4000);
+}
+
+/**
+ * Глобальная полоса объявления сверху экрана (founder:broadcast) — видна всем, включая отправителя
+ */
+function showGlobalAnnouncementBanner(data) {
+  const message = data.message || '';
+  const from = data.from || 'Администратор';
+  let bar = document.getElementById('global-announcement-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'global-announcement-bar';
+    bar.className = 'global-announcement-bar';
+    bar.setAttribute('role', 'alert');
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
+  bar.classList.remove('hidden');
+  const safeMsg = typeof escapeHtml === 'function' ? escapeHtml(message) : message;
+  const safeFrom = typeof escapeHtml === 'function' ? escapeHtml(from) : from;
+  bar.innerHTML = `
+    <div class="global-announcement-inner">
+      <span class="global-announcement-icon" aria-hidden="true">📢</span>
+      <div class="global-announcement-text">
+        <div class="global-announcement-title">Объявление от ${safeFrom}</div>
+        <div class="global-announcement-message">${safeMsg}</div>
+      </div>
+      <button type="button" class="global-announcement-close" aria-label="Закрыть">✕</button>
+    </div>
+  `;
+  const close = bar.querySelector('.global-announcement-close');
+  const app = document.getElementById('app');
+  const applyPadding = () => {
+    if (app) {
+      requestAnimationFrame(() => {
+        app.style.paddingTop = bar.offsetHeight ? `${bar.offsetHeight}px` : '';
+      });
+    }
+  };
+  applyPadding();
+
+  if (close) {
+    close.addEventListener('click', () => {
+      bar.classList.add('hidden');
+      bar.innerHTML = '';
+      if (app) app.style.paddingTop = '';
+    });
+  }
+}
+
+window.showGlobalAnnouncementBanner = showGlobalAnnouncementBanner;
+
+// Воспроизведение звука уведомления
+function playNotificationSound(type) {
+  try {
+    const audio = new Audio();
+    // Разные звуки для разных типов уведомлений
+    const frequencies = {
+      success: [523.25, 659.25], // C5, E5
+      error: [392.00, 329.63],   // G4, E4
+      warning: [440.00, 493.88], // A4, B4
+      info: [523.25, 587.33]     // C5, D5
+    };
+    
+    const freq = frequencies[type] || frequencies.info;
+    
+    // Создаем простой звук используя Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = freq[0];
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+    
+    // Второй тон
+    setTimeout(() => {
+      const osc2 = audioContext.createOscillator();
+      const gain2 = audioContext.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioContext.destination);
+      osc2.frequency.value = freq[1];
+      osc2.type = 'sine';
+      gain2.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.1);
+    }, 50);
+  } catch (err) {
+    console.error('Error playing notification sound:', err);
+  }
 }
 
 function showMessageNotification(message) {
@@ -142,18 +258,101 @@ function generateDefaultAvatar(username) {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
+function getFormatLocaleTag() {
+  const sm = window.settingsManager;
+  if (!sm || !sm.getEffectiveLanguageCode) return 'ru-RU';
+  const lang = sm.getEffectiveLanguageCode();
+  const map = { ru: 'ru-RU', en: 'en-US', uk: 'uk-UA', de: 'de-DE', fr: 'fr-FR', es: 'es-ES' };
+  return map[lang] || 'ru-RU';
+}
+
+function getRelativeDayLabels() {
+  const lang = window.settingsManager?.getEffectiveLanguageCode?.() || 'ru';
+  const L = {
+    ru: { today: 'Сегодня', yesterday: 'Вчера', at: 'в' },
+    en: { today: 'Today', yesterday: 'Yesterday', at: 'at' },
+    uk: { today: 'Сьогодні', yesterday: 'Вчора', at: 'о' },
+    de: { today: 'Heute', yesterday: 'Gestern', at: 'um' },
+    fr: { today: "Aujourd'hui", yesterday: 'Hier', at: 'à' },
+    es: { today: 'Hoy', yesterday: 'Ayer', at: 'a las' }
+  };
+  return L[lang] || L.ru;
+}
+
+function isSameCalendarDay(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function getTimeZoneOptions() {
+  const tz = window.settingsManager?.get('app-timezone');
+  if (!tz || tz === 'auto') return {};
+  return { timeZone: tz };
+}
+
 function formatTime(date) {
   const d = new Date(date);
-  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const locale = getFormatLocaleTag();
+  const hour12 = window.settingsManager?.get('time-format') === '12';
+  return d.toLocaleTimeString(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12,
+    ...getTimeZoneOptions()
+  });
 }
 
 function formatDate(date) {
   const d = new Date(date);
   const now = new Date();
-  const diff = now - d;
-  if (diff < 86400000) return 'Сегодня в ' + formatTime(d);
-  if (diff < 172800000) return 'Вчера в ' + formatTime(d);
-  return d.toLocaleDateString('ru-RU') + ' в ' + formatTime(d);
+  const labels = getRelativeDayLabels();
+  const locale = getFormatLocaleTag();
+  const fmt = window.settingsManager?.get('date-format') || 'dmy';
+
+  if (isSameCalendarDay(d, now)) {
+    return `${labels.today} ${labels.at} ${formatTime(d)}`;
+  }
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (isSameCalendarDay(d, y)) {
+    return `${labels.yesterday} ${labels.at} ${formatTime(d)}`;
+  }
+
+  const tzOpt = getTimeZoneOptions();
+  if (fmt === 'mdy') {
+    return (
+      d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        ...tzOpt
+      }) +
+      ` ${labels.at} ` +
+      formatTime(d)
+    );
+  }
+  if (fmt === 'ymd') {
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...tzOpt
+    }).format(d);
+    return `${ymd} ${labels.at} ${formatTime(d)}`;
+  }
+  return (
+    d.toLocaleDateString(locale, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...tzOpt
+    }) +
+    ` ${labels.at} ` +
+    formatTime(d)
+  );
 }
 
 function formatFileSize(bytes) {
@@ -531,25 +730,54 @@ async function uploadAvatar(event) {
   const file = event.target.files[0];
   if (!file) return;
 
+  // Показываем превью сразу после выбора файла
+  const settingsAvatar = document.getElementById('settings-avatar');
+  if (settingsAvatar && file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      settingsAvatar.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
   try {
     const data = await UsersAPI.uploadAvatar(file);
     window.currentUser.avatar = data.url;
     localStorage.setItem('user', JSON.stringify(window.currentUser));
 
-    const settingsAvatar = document.getElementById('settings-avatar');
-    if (settingsAvatar) settingsAvatar.src = getAvatarUrl(data.url);
+    // Обновляем аватар с сервера (на случай если сервер изменил изображение)
+    if (settingsAvatar) {
+      const avatarUrl = getAvatarUrl(data.url);
+      // Добавляем timestamp только если это не data: URL
+      if (!avatarUrl.startsWith('data:')) {
+        settingsAvatar.src = avatarUrl + '?t=' + Date.now();
+      } else {
+        settingsAvatar.src = avatarUrl;
+      }
+    }
+    
     updateUserPanel();
     showNotification('success', 'Аватар обновлен');
   } catch (error) {
+    // Если ошибка, возвращаем старый аватар
+    if (settingsAvatar && window.currentUser.avatar) {
+      settingsAvatar.src = getAvatarUrl(window.currentUser.avatar);
+    }
     showNotification('error', error.message || 'Ошибка загрузки аватара');
   }
 }
 
 // ===== ТЕМА =====
 function setTheme(theme, el) {
-  document.body.classList.remove('light-theme', 'space-theme');
+  document.body.classList.remove('light-theme', 'space-theme', 'dark-blue-theme', 'purple-theme', 'amoled-theme', 'cyberpunk-theme', 'green-theme', 'gradient-theme');
   if (theme === 'light') document.body.classList.add('light-theme');
   if (theme === 'space') document.body.classList.add('space-theme');
+  if (theme === 'dark-blue') document.body.classList.add('dark-blue-theme');
+  if (theme === 'purple') document.body.classList.add('purple-theme');
+  if (theme === 'amoled') document.body.classList.add('amoled-theme');
+  if (theme === 'cyberpunk') document.body.classList.add('cyberpunk-theme');
+  if (theme === 'green') document.body.classList.add('green-theme');
+  if (theme === 'gradient') document.body.classList.add('gradient-theme');
   
   localStorage.setItem('love-theme', theme);
   
@@ -875,10 +1103,11 @@ function showContextMenu(e, messageId, authorId) {
       '</div>' +
     '</div>' +
     '<div class="context-menu-divider"></div>' +
-    '<div class="context-menu-item" onclick="replyToMessage()">Ответить</div>' +
+    '<div class="context-menu-item" onclick="replyToMessage()">💬 Ответить</div>' +
+    '<div class="context-menu-item" onclick="pinMessageFromContext()">📌 Закрепить</div>' +
     (isOwn ?
-      '<div class="context-menu-item" onclick="editMessage()">Редактировать</div>' +
-      '<div class="context-menu-item danger" onclick="deleteMessage()">Удалить</div>'
+      '<div class="context-menu-item" onclick="editMessage()">✏️ Редактировать</div>' +
+      '<div class="context-menu-item danger" onclick="deleteMessage()">🗑️ Удалить</div>'
     : '');
 
   document.body.appendChild(menu);
@@ -927,6 +1156,19 @@ function addQuickReaction(emoji) {
   hideContextMenu();
 }
 
+function pinMessageFromContext() {
+  if (contextMenuTarget && typeof pinMessage === 'function') {
+    const messageEl = document.querySelector(`[data-message-id="${contextMenuTarget.messageId}"]`);
+    if (messageEl) {
+      const channelId = window.currentChannelId;
+      if (channelId) {
+        pinMessage(contextMenuTarget.messageId, channelId);
+      }
+    }
+  }
+  hideContextMenu();
+}
+
 // ===== ПРОСМОТР ИЗОБРАЖЕНИЙ =====
 function openImageViewer(url) {
   const overlay = document.createElement('div');
@@ -969,3 +1211,128 @@ function autoResizeTextarea(textarea) {
   textarea.style.height = 'auto';
   textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
 }
+/**
+ * Загрузка истории входов
+ */
+async function loadLoginLogs() {
+  const list = document.getElementById('login-logs-list');
+  if (!list) return;
+  
+  try {
+    list.innerHTML = '<div class="logs-loading">Загрузка данных...</div>';
+    
+    const data = await AuthAPI.getLoginLogs();
+    const logs = data.logs || [];
+    
+    if (logs.length === 0) {
+      list.innerHTML = '<div class="logs-empty">История входов пуста</div>';
+      return;
+    }
+    
+    // Получаем текущий Session ID (sid) из JWT
+    let currentSid = null;
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        currentSid = payload.sid;
+      } catch (e) {}
+    }
+
+    list.innerHTML = '';
+    
+    // Разделяем на текущую и остальные
+    const currentSession = logs.find(l => l._id === currentSid);
+    const otherSessions = logs.filter(l => l._id !== currentSid);
+
+    if (currentSession) {
+      const title = document.createElement('div');
+      title.className = 'log-category-title';
+      title.textContent = 'Текущий сеанс';
+      list.appendChild(title);
+      renderLogItem(currentSession, list, true);
+    }
+
+    if (otherSessions.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'log-category-title';
+      title.textContent = 'Другие входы';
+      list.appendChild(title);
+      otherSessions.forEach(log => renderLogItem(log, list, false));
+    }
+    
+  } catch (error) {
+    console.error('Failed to load logs:', error);
+    list.innerHTML = '<div class="logs-empty">Ошибка загрузки истории</div>';
+  }
+}
+
+/**
+ * Вспомогательная функция для отрисовки элемента лога
+ */
+function renderLogItem(log, container, isCurrent) {
+  const item = document.createElement('div');
+  item.className = 'login-log-item';
+  item.id = `log-${log._id}`;
+  
+  const date = new Date(log.timestamp).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+  
+  // Парсим User-Agent
+  let device = 'Неизвестное устройство';
+  const ua = log.userAgent || '';
+  if (ua.includes('Electron')) device = 'Приложение Love (Electron)';
+  else if (ua.includes('Chrome')) device = 'Google Chrome';
+  else if (ua.includes('Firefox')) device = 'Mozilla Firefox';
+  else if (ua.includes('Safari')) device = 'Apple Safari';
+  else if (ua.includes('Mobile')) device = 'Моб. устройство';
+  
+  const statusText = { success: 'Успешно', failed: 'Ошибка', locked: 'Блок' };
+  
+  item.innerHTML = `
+    <div class="log-info">
+      <div class="log-ip-row">
+        <span class="log-ip">${log.ip}</span>
+        ${isCurrent ? '<span class="log-status-badge current">Текущий</span>' : 
+          `<span class="log-status-badge ${log.status}">${statusText[log.status]}</span>`}
+      </div>
+      <div class="log-location">${log.location || 'Местоположение неизвестно'}</div>
+      <div class="log-device">${device}</div>
+      <div class="log-time">${date}</div>
+    </div>
+    <button class="log-delete-btn" onclick="deleteLoginLogRecord('${log._id}')" title="${isCurrent ? 'Завершить этот сеанс' : 'Удалить запись'}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    </button>
+  `;
+  
+  container.appendChild(item);
+}
+
+/**
+ * Удаление записи лога
+ */
+async function deleteLoginLogRecord(logId) {
+  try {
+    const item = document.getElementById(`log-${logId}`);
+    if (item) item.style.opacity = '0.5';
+    
+    await AuthAPI.deleteLoginLog(logId);
+    
+    if (item) {
+      item.style.transform = 'translateX(20px)';
+      item.style.opacity = '0';
+      setTimeout(() => item.remove(), 200);
+    }
+  } catch (error) {
+    console.error('Failed to delete log:', error);
+    if (typeof showNotification === 'function') {
+      showNotification('error', 'Не удалось удалить запись');
+    }
+  }
+}
+
+// Экспортируем функции в глобальную область
+window.loadLoginLogs = loadLoginLogs;
+window.deleteLoginLogRecord = deleteLoginLogRecord;

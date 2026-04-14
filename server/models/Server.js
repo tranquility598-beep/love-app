@@ -47,8 +47,7 @@ const serverSchema = new mongoose.Schema({
       default: null
     },
     roles: [{
-      type: String,
-      default: 'member'
+      type: mongoose.Schema.Types.ObjectId
     }],
     joinedAt: {
       type: Date,
@@ -80,10 +79,48 @@ const serverSchema = new mongoose.Schema({
   
   // Роли сервера
   roles: [{
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId()
+    },
     name: { type: String, required: true },
     color: { type: String, default: '#99aab5' },
-    permissions: { type: [String], default: [] },
-    position: { type: Number, default: 0 }
+    permissions: {
+      administrator: { type: Boolean, default: false },
+      manageServer: { type: Boolean, default: false },
+      manageRoles: { type: Boolean, default: false },
+      manageChannels: { type: Boolean, default: false },
+      kickMembers: { type: Boolean, default: false },
+      banMembers: { type: Boolean, default: false },
+      manageMessages: { type: Boolean, default: false },
+      sendMessages: { type: Boolean, default: true },
+      readMessages: { type: Boolean, default: true },
+      mentionEveryone: { type: Boolean, default: false },
+      manageNicknames: { type: Boolean, default: false },
+      connect: { type: Boolean, default: true },
+      speak: { type: Boolean, default: true },
+      muteMembers: { type: Boolean, default: false },
+      deafenMembers: { type: Boolean, default: false }
+    },
+    position: { type: Number, default: 0 },
+    hoist: { type: Boolean, default: false }, // Показывать отдельно в списке участников
+    mentionable: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  
+  // Кастомные эмодзи сервера
+  emojis: [{
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId()
+    },
+    name: { type: String, required: true },
+    url: { type: String, required: true },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: { type: Date, default: Date.now }
   }],
   
   // Инвайт-ссылки

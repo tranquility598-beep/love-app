@@ -6,8 +6,9 @@ try {
     // Fallback if opened in a regular web browser (e.g. hosted on Vercel/Netlify)
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isFileProtocol = window.location.protocol === 'file:';
+    const isNgrok = window.location.hostname.includes('ngrok');
     // В Electron-приложении (даже не упакованном) и на хостинге используем логику адекватного определения продакшена
-    if (!isLocalhost && !isFileProtocol) {
+    if (!isLocalhost && !isFileProtocol && !isNgrok) {
       isPackaged = true; // Use production API if hosted anywhere else
     }
   }
@@ -16,9 +17,12 @@ try {
 }
 
 // ПРИНУДИТЕЛЬНО исправляем: если это Electron и он упакован — ВСЕГДА используем Render
-// Если же это не упакованный Electron или обычный браузер на localhost — используем локалку
-window.BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://localhost:5555';
+// Если же это не упакованный Electron или обычный браузер на localhost/ngrok — используем текущий хост
+const currentHost = window.location.origin;
+const isNgrokHost = window.location.hostname.includes('ngrok');
+window.BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : (isNgrokHost ? currentHost : 'http://localhost:5555');
 let API_BASE = window.BASE_URL + '/api';
+window.API_BASE = API_BASE;
 
 if (isPackaged) {
   console.log('🌐 Production mode: using remote API', API_BASE);
@@ -68,8 +72,14 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.reload();
+    }
     const error = new Error(data.message || 'Ошибка запроса');
     error.status = response.status;
+    error.data = data;
     throw error;
   }
 
@@ -100,6 +110,18 @@ const AuthAPI = {
 
   login: (email, password) =>
     apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    
+  verifyOtp: (email, code) =>
+    apiFetch('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, code }) }),
+    
+  resendOtp: (email) =>
+    apiFetch('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+    
+  forgotPassword: (email) =>
+    apiFetch('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+    
+  resetPassword: (email, code, newPassword) =>
+    apiFetch('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, newPassword }) }),
 
   logout: () =>
     apiFetch('/auth/logout', { method: 'POST' }),
@@ -108,7 +130,13 @@ const AuthAPI = {
     apiFetch('/auth/me'),
 
   updateStatus: (status, customStatus) =>
-    apiFetch('/auth/update-status', { method: 'PUT', body: JSON.stringify({ status, customStatus }) })
+    apiFetch('/auth/update-status', { method: 'PUT', body: JSON.stringify({ status, customStatus }) }),
+
+  getLoginLogs: () =>
+    apiFetch('/auth/login-logs'),
+
+  deleteLoginLog: (logId) =>
+    apiFetch(`/auth/login-logs/${logId}`, { method: 'DELETE' })
 };
 
 // ===== USERS API =====
@@ -233,6 +261,9 @@ const FriendsAPI = {
 
   decline: (userId) =>
     apiFetch(`/friends/decline/${userId}`, { method: 'POST' }),
+
+  cancelRequest: (userId) =>
+    apiFetch(`/friends/request/${userId}`, { method: 'DELETE' }),
 
   remove: (userId) =>
     apiFetch(`/friends/${userId}`, { method: 'DELETE' })

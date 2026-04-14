@@ -6,7 +6,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'discord-clone-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
 
 /**
  * Проверяет JWT токен и добавляет пользователя в req.user
@@ -25,6 +25,15 @@ const authMiddleware = async (req, res, next) => {
     // Верифицируем токен
     const decoded = jwt.verify(token, JWT_SECRET);
     
+    // ПРОВЕРКА СЕССИИ (Session ID)
+    if (decoded.sid) {
+      const LoginLog = require('../models/LoginLog');
+      const sessionExists = await LoginLog.findById(decoded.sid);
+      if (!sessionExists) {
+        return res.status(401).json({ message: 'Сессия завершена или удалена. Пожалуйста, войдите снова.' });
+      }
+    }
+    
     // Находим пользователя
     const user = await User.findById(decoded.userId).select('-password');
     
@@ -32,8 +41,9 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: 'Пользователь не найден' });
     }
     
-    // Добавляем пользователя в запрос
+    // Добавляем пользователя и ID сессии в запрос
     req.user = user;
+    req.sid = decoded.sid;
     next();
     
   } catch (error) {

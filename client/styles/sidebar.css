@@ -16,6 +16,8 @@
   overflow-x: hidden;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
 }
 
 .servers-sidebar::-webkit-scrollbar { width: 0; }
@@ -34,16 +36,17 @@
   height: 48px;
   border-radius: 50%;
   background: var(--bg-tertiary);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   flex-shrink: 0;
   color: var(--text-muted);
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .server-icon img {
@@ -51,22 +54,32 @@
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .server-icon:hover {
   border-radius: 16px;
   background: var(--bg-hover);
-  border-color: rgba(255,255,255,0.2);
+  border-color: var(--accent);
   color: var(--text-primary);
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.server-icon:hover img {
+  border-radius: 16px;
+  transform: scale(1.1);
 }
 
 .server-icon.active {
   border-radius: 16px;
   background: var(--bg-active);
-  border-color: rgba(255,255,255,0.3);
+  border-color: var(--accent);
   color: var(--text-primary);
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.05);
+  box-shadow: 0 0 0 3px var(--accent-dim), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.server-icon.active img {
+  border-radius: 16px;
 }
 
 /* DM icon special style */
@@ -76,23 +89,24 @@
 
 .server-icon.dm-icon.active,
 .server-icon.dm-icon:hover {
-  background: rgba(255,255,255,0.1);
+  background: var(--bg-hover);
 }
 
 /* Add server button */
 .server-icon.add-server,
 .server-icon.join-server {
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-tertiary);
   border-style: dashed;
-  border-color: rgba(255,255,255,0.12);
+  border-color: var(--border-hover);
 }
 
 .server-icon.add-server:hover,
 .server-icon.join-server:hover {
-  background: rgba(255,255,255,0.1);
+  background: var(--bg-hover);
   border-style: solid;
-  border-color: rgba(255,255,255,0.3);
-  color: #ffffff;
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.05);
 }
 
 /* Tooltip */
@@ -139,6 +153,8 @@
   overflow: hidden;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
 }
 
 /* DM View / Server View Flex */
@@ -159,7 +175,7 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   background: var(--bg-secondary);
 }
 
@@ -168,13 +184,13 @@
 }
 
 #channels-header-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .channels-header-btn {
@@ -188,13 +204,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
 
 .channels-header-btn:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
+  color: var(--accent);
+  transform: scale(1.1);
 }
 
 /* DM search section */
@@ -205,24 +222,27 @@
 
 .find-friends-btn {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
 }
 
 .find-friends-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-hover);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* DM list */
@@ -248,20 +268,23 @@
 .dm-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  animation: slideInLeft 0.3s ease-out;
 }
 
 .dm-item:hover {
   background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
 .dm-item.active {
   background: var(--bg-active);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .dm-avatar {
@@ -274,7 +297,13 @@
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dm-item:hover .dm-avatar img {
+  border-color: var(--accent);
+  transform: scale(1.05);
 }
 
 .dm-info {
@@ -283,12 +312,13 @@
 }
 
 .dm-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .dm-item:hover .dm-name,
@@ -297,7 +327,7 @@
 }
 
 .dm-last-message {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -317,6 +347,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dm-item:hover .dm-close-btn {
@@ -324,8 +355,9 @@
 }
 
 .dm-close-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--red);
+  color: white;
+  transform: scale(1.1);
 }
 
 /* ===== SERVER CHANNELS LIST ===== */
@@ -387,24 +419,28 @@
 .channel-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   color: var(--text-muted);
   position: relative;
   margin: 1px 0;
+  animation: slideInLeft 0.3s ease-out;
 }
 
 .channel-item:hover {
   background: var(--bg-hover);
   color: var(--text-secondary);
+  transform: translateX(2px);
 }
 
 .channel-item.active {
   background: var(--bg-active);
   color: var(--text-primary);
+  box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 600;
 }
 
 .channel-icon {
@@ -412,11 +448,13 @@
   display: flex;
   align-items: center;
   opacity: 0.6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .channel-item:hover .channel-icon,
 .channel-item.active .channel-icon {
   opacity: 1;
+  transform: scale(1.1);
 }
 
 .channel-name {

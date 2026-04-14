@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # Наша база данных (MongoDB)
+  mongo:
+    image: mongo:latest
+    container_name: love-mongo
+    restart: always
+    ports:
+      - "27017:27017" # Порт доступен извне для отладки
+    volumes:
+      - mongo-data:/data/db
+
+  # Наш сервер (Love API)
+  server:
+    build: .
+    container_name: love-server
+    restart: always
+    depends_on:
+      - mongo
+    ports:
+      - "5555:5555"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/love-db
+      - PORT=5555
+      - NODE_ENV=production
+    volumes:
+      - uploads-data:/app/server/uploads
+      - ./.env:/app/.env # Если нужен доступ к локальному файлу настроек
+
+volumes:
+  mongo-data: # Сохраняем данные БД между перезапусками контейнеров
+  uploads-data: # Сохраняем загруженные аватарки и файлы

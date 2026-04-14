@@ -3,7 +3,18 @@
  * Запускает Electron приложение и управляет окнами
  */
 
-const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session, nativeTheme } = require('electron');
+
+// ПРИНУДИТЕЛЬНЫЙ DARK MODE И НОВЫЙ ДИЗАЙН GOOGLE
+app.commandLine.appendSwitch('force-dark-mode');
+app.commandLine.appendSwitch('enable-features', 'WebContentsForceDark');
+// Отключаем подозрительную детекцию 'embedded browser'
+app.commandLine.appendSwitch('disable-features', 'UserAgentClientHint');
+
+// Исправление ошибок кеша - используем временную папку
+app.commandLine.appendSwitch('disk-cache-dir', app.getPath('temp') + '/love-cache');
+app.commandLine.appendSwitch('disk-cache-size', '104857600'); // 100MB
+
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -63,21 +74,21 @@ function startServer() {
  */
 function createWindow() {
   mainWindow = new BrowserWindow({
-    title: 'Love',
     width: 1280,
     height: 800,
-    minWidth: 940,
+    minWidth: 800,
     minHeight: 600,
-    frame: false, // Убираем стандартную рамку для кастомного заголовка
+    frame: false,
     backgroundColor: '#000000',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false // Разрешаем загрузку локальных ресурсов
-    },
     icon: path.join(__dirname, 'assets', 'icon.png'),
-    show: false // Не показываем до загрузки
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      enableRemoteModule: false
+    }
   });
 
   // Загружаем главную страницу
@@ -86,6 +97,14 @@ function createWindow() {
   // Показываем окно когда оно готово
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    
+    // Проверка начальных аргументов (deep link при первом запуске)
+    if (process.platform === 'win32') {
+      const url = process.argv.find(arg => arg.startsWith('love-app://'));
+      if (url) {
+        handleDeepLink(url);
+      }
+    }
   });
 
   // Открываем внешние ссылки в браузере
@@ -247,58 +266,108 @@ ipcMain.on('close-incoming-call', () => {
   }
 });
 
-// Пересылаем ответ из попапа в главное окно
-ipcMain.on('call-action', (event, { accepted, callerId }) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('call-response-from-popup', { accepted, callerId });
+// Регистрация протокола для внешнего браузера
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('love-app', process.execPath, [path.resolve(process.argv[1])]);
   }
-  if (incomingCallWindow) {
-    incomingCallWindow.close();
-  }
-});
+} else {
+  app.setAsDefaultProtocolClient('love-app');
+}
 
-// Запуск приложения
-app.whenReady().then(() => {
-  // Настройка обработчика захвата экрана для getDisplayMedia в Electron
-  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
-      if (sources && sources.length > 0) {
-        // Берем первый доступный экран
-        const source = sources.find(s => s.id.startsWith('screen')) || sources[0];
-        callback({ video: source, audio: 'loopback' });
-      } else {
-        callback();
-      }
-    }).catch(err => {
-      console.error('getDisplayMedia error:', err);
-      callback();
-    });
-  });
+const gotTheLock = app.requestSingleInstanceLock();
 
-  if (!isPackaged) {
-    // В режиме разработки запускаем локальный сервер
-    startServer();
-    setTimeout(() => {
-      createWindow();
-    }, 2000);
-  } else {
-    // В Production режиме (у пользователей) открываем окно сразу (без локального сервера)
-    createWindow();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Если приложение уже запущено, фокусируемся на нем
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
     
-    // Начальная проверка через 3 секунды после запуска
-    setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
-    
-    // Проверять наличие обновлений каждый час, пока приложение открыто
-    setInterval(() => {
-      autoUpdater.checkForUpdatesAndNotify();
-    }, 60 * 60 * 1000); 
-  }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+    // Обработка ссылки для Windows
+    const url = commandLine.pop();
+    if (url && url.includes('love-app://')) {
+      handleDeepLink(url);
     }
   });
+
+  // Запуск сервера с обработкой занятого порта
+  app.whenReady().then(() => {
+    // Настройка обработчика захвата экрана
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+      desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+        if (sources && sources.length > 0) {
+          const source = sources.find(s => s.id.startsWith('screen')) || sources[0];
+          callback({ video: source, audio: 'loopback' });
+        } else {
+          callback();
+        }
+      }).catch(err => {
+        console.error('getDisplayMedia error:', err);
+        callback();
+      });
+    });
+
+    if (!isPackaged) {
+      startServer();
+      setTimeout(() => {
+        createWindow();
+      }, 2000);
+    } else {
+      createWindow();
+      setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
+      setInterval(() => {
+        autoUpdater.checkForUpdatesAndNotify();
+      }, 60 * 60 * 1000); 
+    }
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+}
+
+// Обработка ссылки для macOS
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+// Парсинг токена из ссылки (love-app://login-success?token=...)
+function handleDeepLink(url) {
+  try {
+    console.log('Received deep link:', url);
+    // Извлекаем токен через поиск параметра (надежнее для кастомных протоколов)
+    const tokenMatch = url.match(/[?&]token=([^&]+)/);
+    const token = tokenMatch ? tokenMatch[1] : null;
+    
+    if (token && mainWindow) {
+      // Отправляем токен в рендерер через IPC
+      mainWindow.webContents.send('google-auth-success', token);
+      
+      // Фокусируемся на окне
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  } catch (e) {
+    console.error('Failed to parse deep link URL:', url, e);
+  }
+}
+
+// Обработка Google Auth через системный браузер
+ipcMain.on('google-login', (event) => {
+  // В разработке используем локалхост, в билде — продакшн
+  const authUrl = app.isPackaged 
+    ? 'https://love-app-2ou3.onrender.com/api/auth/google'
+    : 'http://localhost:5555/api/auth/google';
+
+  // Открываем браузер по умолчанию (Chrome/Safari/etc)
+  shell.openExternal(authUrl);
 });
 
 // Закрываем приложение когда все окна закрыты

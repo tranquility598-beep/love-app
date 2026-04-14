@@ -9,6 +9,8 @@ const Message = require('../models/Message');
 const Channel = require('../models/Channel');
 const Server = require('../models/Server');
 const authMiddleware = require('../middleware/auth');
+const { messageLimiter } = require('../middleware/rateLimiter');
+const { validateMessageContent, sanitizeBody } = require('../middleware/validation');
 
 /**
  * GET /api/messages/:channelId
@@ -35,8 +37,11 @@ router.get('/:channelId', authMiddleware, async (req, res) => {
     }
     
     const messages = await Message.find(query)
-      .populate('author', 'username avatar discriminator')
-      .populate('replyTo', 'content author')
+      .populate('author', 'username avatar discriminator role')
+      .populate({
+        path: 'replyTo',
+        populate: { path: 'author', select: 'username avatar role' }
+      })
       .sort({ createdAt: -1 })
       .limit(parseInt(limit));
     
@@ -55,7 +60,7 @@ router.get('/:channelId', authMiddleware, async (req, res) => {
  * POST /api/messages/:channelId
  * Отправить сообщение
  */
-router.post('/:channelId', authMiddleware, async (req, res) => {
+router.post('/:channelId', authMiddleware, messageLimiter, sanitizeBody, validateMessageContent, async (req, res) => {
   try {
     const { channelId } = req.params;
     const { content, replyTo } = req.body;
@@ -69,12 +74,23 @@ router.post('/:channelId', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Канал не найден' });
     }
     
+    // Проверяем что replyTo существует, если указан
+    let validReplyTo = null;
+    if (replyTo) {
+      const replyMessage = await Message.findById(replyTo);
+      if (replyMessage) {
+        validReplyTo = replyTo;
+      } else {
+        console.warn(`⚠️  Reply message ${replyTo} not found, ignoring replyTo`);
+      }
+    }
+    
     const message = new Message({
       content: content || '',
       author: req.user._id,
       channel: channelId,
       server: channel.server,
-      replyTo: replyTo || null
+      replyTo: validReplyTo
     });
     
     await message.save();
@@ -83,9 +99,12 @@ router.post('/:channelId', authMiddleware, async (req, res) => {
     await Channel.findByIdAndUpdate(channelId, { lastMessage: message._id });
     
     // Заполняем данные автора
-    await message.populate('author', 'username avatar discriminator');
-    if (replyTo) {
-      await message.populate('replyTo', 'content author');
+    await message.populate('author', 'username avatar discriminator role');
+    if (validReplyTo) {
+      await message.populate({
+        path: 'replyTo',
+        populate: { path: 'author', select: 'username avatar role' }
+      });
     }
     
     res.status(201).json({ message });
@@ -124,7 +143,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     message.editedAt = new Date();
     
     await message.save();
-    await message.populate('author', 'username avatar discriminator');
+    await message.populate('author', 'username avatar discriminator role');
     
     res.json({ message });
     
@@ -219,7 +238,7 @@ router.post('/:id/react', authMiddleware, async (req, res) => {
     }
     
     await message.save();
-    await message.populate('author', 'username avatar discriminator');
+    await message.populate('author', 'username avatar discriminator role');
     
     res.json({ message });
     

@@ -114,3 +114,114 @@ async function joinServer() {
 }
 
 // Channel creation logic moved to ui.js for consolidation
+
+/**
+ * Единое меню создания/входа.
+ * Открывается по клику на #add-entity-btn ("+" в server-rail).
+ * Содержит три пункта:
+ *   - create-server  → showCreateServerModal()
+ *   - create-room    → window.RoomsUI.showCreateRoomModal()
+ *   - join-by-code   → showJoinServerModal()
+ *
+ * Ничего не ломает в существующих API создания/входа — это всего
+ * лишь UI-обёртка над уже работающими модалками.
+ *
+ * Никаких inline onclick. Закрытие — по клику вне меню, по Esc и
+ * после выбора действия. Позиционирование: справа от рейла, чуть
+ * выше кнопки.
+ */
+function bindAddEntityMenu() {
+  const btn = document.getElementById('add-entity-btn');
+  const menu = document.getElementById('add-entity-menu');
+  if (!btn || !menu) return;
+
+  let isOpen = false;
+  let outsideHandler = null;
+  let escHandler = null;
+
+  const closeMenu = () => {
+    if (!isOpen) return;
+    isOpen = false;
+    menu.classList.add('hidden');
+    menu.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+    if (outsideHandler) document.removeEventListener('mousedown', outsideHandler, true);
+    if (escHandler) document.removeEventListener('keydown', escHandler, true);
+    outsideHandler = null;
+    escHandler = null;
+  };
+
+  const positionMenu = () => {
+    // Прижимаем меню к правой стороне server-rail, на одной горизонтали
+    // с кнопкой. Позиция вычисляется относительно viewport через
+    // getBoundingClientRect и применяется через CSS-переменные.
+    const r = btn.getBoundingClientRect();
+    // Меню рендерится сразу справа от server-rail с небольшим отступом.
+    menu.style.setProperty('--menu-top', `${Math.max(8, r.top - 4)}px`);
+    menu.style.setProperty('--menu-left', `${r.right + 12}px`);
+  };
+
+  const openMenu = () => {
+    if (isOpen) return;
+    isOpen = true;
+    positionMenu();
+    menu.classList.remove('hidden');
+    // requestAnimationFrame чтобы запустить fade-in анимацию.
+    requestAnimationFrame(() => menu.classList.add('is-open'));
+    btn.setAttribute('aria-expanded', 'true');
+
+    outsideHandler = (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) closeMenu();
+    };
+    escHandler = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeMenu();
+        btn.focus();
+      }
+    };
+    document.addEventListener('mousedown', outsideHandler, true);
+    document.addEventListener('keydown', escHandler, true);
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isOpen) closeMenu();
+    else openMenu();
+  });
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openMenu();
+    }
+  });
+
+  // Действия меню. Все три модалки уже существуют — мы только их вызываем.
+  menu.querySelectorAll('.add-entity-menu-item[data-action]').forEach(item => {
+    item.addEventListener('click', () => {
+      const action = item.getAttribute('data-action');
+      closeMenu();
+      switch (action) {
+        case 'create-server':
+          if (typeof showCreateServerModal === 'function') showCreateServerModal();
+          break;
+        case 'create-room':
+          if (window.RoomsUI && typeof window.RoomsUI.showCreateRoomModal === 'function') {
+            window.RoomsUI.showCreateRoomModal();
+          }
+          break;
+        case 'join-by-code':
+          if (typeof showJoinServerModal === 'function') showJoinServerModal();
+          break;
+      }
+    });
+  });
+
+  window.addEventListener('resize', () => { if (isOpen) positionMenu(); });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindAddEntityMenu);
+} else {
+  bindAddEntityMenu();
+}

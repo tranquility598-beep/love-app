@@ -10,6 +10,7 @@ const Message = require('../models/Message');
 const Channel = require('../models/Channel');
 const DirectMessage = require('../models/DirectMessage');
 const { isFounderUser } = require('../utils/founder');
+const { checkAndRecord: checkMessageAntiSpam } = require('../middleware/messageAntiSpam');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
 
@@ -39,26 +40,46 @@ const voiceChannels = new Map();
 
 module.exports = (io) => {
   
-  // Middleware для аутентификации Socket.io соединений
+  // Middleware для аутентификации Socket.io соединений.
+  //
+  // Принимает ТОЛЬКО короткоживущие socket-token'ы (aud='socket'),
+  // выпускаемые через POST /api/auth/socket-token.
+  // Обычные долгоживущие API JWT для socket НЕ принимаются — это часть
+  // security-модели: основной токен живёт только в main process Electron
+  // и никогда не попадает в renderer/socket auth.
+  //
+  // Логи без токена и без секретов: только success/failed + userId/error.
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
-      
+
       if (!token) {
+        console.warn('[socket-auth] failed: no token');
         return next(new Error('Токен не предоставлен'));
       }
-      
+
       const decoded = jwt.verify(token, JWT_SECRET);
+
+      // Жёсткая проверка: принимаем только токены, выпущенные именно для socket.
+      if (decoded.aud !== 'socket') {
+        console.warn('[socket-auth] failed: wrong audience for userId=', decoded.userId);
+        return next(new Error('Недействительный socket token'));
+      }
+
       const user = await User.findById(decoded.userId).select('-password');
-      
+
       if (!user) {
+        console.warn('[socket-auth] failed: user not found for userId=', decoded.userId);
         return next(new Error('Пользователь не найден'));
       }
-      
+
       socket.user = user;
+      console.log('[socket-auth] success userId=', decoded.userId);
       next();
-      
+
     } catch (error) {
+      // jwt.verify бросает TokenExpiredError / JsonWebTokenError — не логируем токен.
+      console.warn('[socket-auth] failed:', error.message);
       next(new Error('Ошибка аутентификации'));
     }
   });
@@ -103,7 +124,25 @@ module.exports = (io) => {
         if (!channelId || (!content && normalizedAttachments.length === 0)) {
           return socket.emit('error', { message: 'Неверные данные сообщения' });
         }
-        
+
+        // Per-user-per-channel anti-spam. Не используем 'error' event,
+        // чтобы фронт не показал общую ошибку — отправляем отдельное
+        // событие message:rate_limited с retryAfter, и фронт сам
+        // включает локальный cooldown с таймером (см. client/js/chat.js).
+        const antiSpam = checkMessageAntiSpam(userId, channelId);
+        if (!antiSpam.ok) {
+          return socket.emit('message:rate_limited', {
+            channelId,
+            tempId: data.tempId || null,
+            retryAfter: antiSpam.retryAfter,
+            code: antiSpam.code,
+            message: antiSpam.message,
+            warningTitle: antiSpam.warningTitle,
+            warningText: antiSpam.warningText,
+            violationLevel: antiSpam.violationLevel,
+          });
+        }
+
         const channel = await Channel.findById(channelId);
         if (!channel) {
           return socket.emit('error', { message: 'Канал не найден' });

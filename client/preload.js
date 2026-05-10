@@ -42,5 +42,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Google Auth
   openGoogleLogin: () => ipcRenderer.send('google-login'),
-  onGoogleAuthSuccess: (callback) => ipcRenderer.on('google-auth-success', (_event, token) => callback(token))
+  onGoogleAuthSuccess: (callback) => ipcRenderer.on('google-auth-success', (_event, token) => callback(token)),
+
+  // Безопасное хранилище токенов (только для сохранения/удаления)
+  storeToken: (token) => ipcRenderer.invoke('store-token', token),
+  clearToken: () => ipcRenderer.invoke('clear-token'),
+  
+  // Прокси для безопасных API запросов (токен подставляется в main process)
+  // Renderer НИКОГДА не получает raw token - все запросы идут через IPC
+  apiRequest: (options) => ipcRenderer.invoke('api-request', options),
+  apiUpload: (options) => ipcRenderer.invoke('api-upload', options)
 });

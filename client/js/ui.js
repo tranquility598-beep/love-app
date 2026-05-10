@@ -88,15 +88,30 @@ function showNotification(type, message, title) {
   const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
   const titles = { success: 'Успешно', error: 'Ошибка', warning: 'Предупреждение', info: 'Уведомление' };
 
+  // Создаем уведомление безопасно через DOM API
   const notif = document.createElement('div');
   notif.className = `notification ${type}`;
-  notif.innerHTML = `
-    <div class="notification-icon">${icons[type] || 'ℹ️'}</div>
-    <div class="notification-content">
-      <div class="notification-title">${title || titles[type]}</div>
-      <div class="notification-body">${message}</div>
-    </div>
-  `;
+  
+  const iconDiv = document.createElement('div');
+  iconDiv.className = 'notification-icon';
+  iconDiv.textContent = icons[type] || 'ℹ️';
+  
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'notification-content';
+  
+  const titleDiv = document.createElement('div');
+  titleDiv.className = 'notification-title';
+  titleDiv.textContent = title || titles[type]; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  const bodyDiv = document.createElement('div');
+  bodyDiv.className = 'notification-body';
+  bodyDiv.textContent = message; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  contentDiv.appendChild(titleDiv);
+  contentDiv.appendChild(bodyDiv);
+  
+  notif.appendChild(iconDiv);
+  notif.appendChild(contentDiv);
 
   container.appendChild(notif);
   
@@ -398,6 +413,57 @@ function updateUserPanel() {
   }
   if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar, user.username);
   if (statusDot) statusDot.className = 'user-status-dot ' + (user.status || 'online');
+
+  // Compact account в server rail (виден в room-mode). Не дубликат
+  // большого user-panel — это отдельный DOM-узел с другими id.
+  const railImg = document.getElementById('rail-account-img');
+  const railDot = document.getElementById('rail-account-dot');
+  const railProfileBtn = document.getElementById('rail-profile-btn');
+  if (railImg) {
+    railImg.src = getAvatarUrl(user.avatar, user.username);
+    railImg.alt = user.username || '';
+  }
+  if (railDot) {
+    railDot.className = 'rail-account-dot ' + (user.status || 'online');
+  }
+  if (railProfileBtn && user.username) {
+    railProfileBtn.title = user.username;
+  }
+}
+
+// Биндинги compact account в server rail. Вызываются один раз
+// (см. _railAccountBound). Только addEventListener, без inline onclick.
+let _railAccountBound = false;
+function bindRailAccount() {
+  if (_railAccountBound) return;
+  const profileBtn = document.getElementById('rail-profile-btn');
+  const settingsBtn = document.getElementById('rail-settings-btn');
+  if (!profileBtn || !settingsBtn) return;
+  profileBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Передаём сам profileBtn как anchor — popover спозиционируется
+    // относительно compact-аватара в server rail, а не относительно
+    // скрытого в room-mode #user-panel-root.
+    if (typeof toggleProfilePopover === 'function') {
+      toggleProfilePopover(e, profileBtn);
+    }
+  });
+  settingsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // showSettings — это account settings, НЕ room settings
+    // (room settings — отдельная кнопка в room-header).
+    if (typeof showSettings === 'function') showSettings();
+  });
+  _railAccountBound = true;
+}
+// Регистрируем биндинги после загрузки DOM. Безопасно вызывается
+// несколько раз — guard'ит флаг.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindRailAccount);
+} else {
+  bindRailAccount();
 }
 
 // ===== КНОПКИ УПРАВЛЕНИЯ =====
@@ -662,6 +728,155 @@ async function savePersonalProfile() {
 }
 
 // ===== НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ =====
+
+// ===== PROFILE POPOVER =====
+//
+// Раньше popover жёстко якорился к #user-panel-root. В room-mode этот
+// узел скрыт вместе с #channels-sidebar (display:none) → getBoundingClientRect
+// возвращает {0,0,0,0} и popover вылетал в угол экрана.
+//
+// Теперь функция принимает второй параметр anchorEl (элемент-якорь).
+// Старые вызовы `toggleProfilePopover(event)` продолжают работать —
+// fallback по цепочке: anchorEl → event.currentTarget → #user-panel-root.
+// Compact avatar в server rail передаёт rail-profile-btn как anchor
+// (см. bindRailAccount).
+function toggleProfilePopover(event, anchorEl) {
+  if (event) event.stopPropagation();
+  const popover = document.getElementById('profile-popover');
+  if (!popover) return;
+
+  if (popover.classList.contains('hidden')) {
+    updateProfilePopover();
+
+    // Выбираем якорь. Если переданный/event-target скрыт (offsetParent=null)
+    // — fallback на видимый rail-profile-btn (room-mode) или user-panel-root.
+    const candidates = [
+      anchorEl,
+      event && event.currentTarget instanceof HTMLElement ? event.currentTarget : null,
+      document.getElementById('rail-profile-btn'),
+      document.getElementById('user-panel-root'),
+    ];
+    let anchor = null;
+    for (const el of candidates) {
+      if (el && el.offsetParent !== null) { anchor = el; break; }
+    }
+    if (!anchor) anchor = document.getElementById('user-panel-root');
+
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      popover.style.left = rect.left + 'px';
+      popover.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+    }
+
+    popover.classList.remove('hidden');
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', closePopoverOnOutsideClick);
+    }, 0);
+  } else {
+    closeProfilePopover();
+  }
+}
+
+function closeProfilePopover() {
+  const popover = document.getElementById('profile-popover');
+  if (popover) popover.classList.add('hidden');
+  document.removeEventListener('click', closePopoverOnOutsideClick);
+}
+
+function closePopoverOnOutsideClick(e) {
+  const popover = document.getElementById('profile-popover');
+  const userPanel = document.getElementById('user-panel-root');
+  // Также игнорируем клик по compact avatar в server rail (room-mode),
+  // иначе клик по нему сразу же закрывает только что открытый popover.
+  const railProfile = document.getElementById('rail-profile-btn');
+  if (
+    popover && !popover.contains(e.target)
+    && (!userPanel || !userPanel.contains(e.target))
+    && (!railProfile || !railProfile.contains(e.target))
+  ) {
+    closeProfilePopover();
+  }
+}
+
+function getStatusText(status) {
+  const map = { 'online': 'В сети', 'idle': 'Не активен', 'dnd': 'Не беспокоить', 'offline': 'Невидимый' };
+  return map[status] || 'В сети';
+}
+
+function updateProfilePopover() {
+  const user = window.currentUser;
+  if (!user) return;
+
+  const avatar = document.getElementById('popover-avatar');
+  const username = document.getElementById('popover-username');
+  const statusText = document.getElementById('popover-status-text');
+  const bio = document.getElementById('popover-bio');
+  const memberSince = document.getElementById('popover-member-since');
+  const statusDot = document.getElementById('popover-status-dot');
+  const banner = document.getElementById('popover-banner');
+  
+  // Принимаем только hex — защита от CSS-инъекций.
+  const rawColor = user.profileColor || '#5865F2';
+  const profileColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawColor) ? rawColor : '#5865F2';
+
+  if (avatar) avatar.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
+  if (username) username.textContent = user.username || '';
+  if (statusText) statusText.textContent = getStatusText(user.status);
+  if (bio) bio.textContent = user.bio ? user.bio : 'Биография не указана';
+  
+  if (memberSince) {
+    if (user.createdAt) {
+      const date = new Date(user.createdAt);
+      memberSince.textContent = `Участник с ${!isNaN(date.valueOf()) ? date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}`;
+      memberSince.style.display = 'block';
+    } else {
+      memberSince.style.display = 'none';
+    }
+  }
+  
+  if (statusDot) {
+    statusDot.className = 'popover-status-dot ' + (user.status || 'online');
+  }
+  
+  // Apply profile color glow to banner
+  if (banner) {
+    banner.style.background = `linear-gradient(135deg, rgba(20,20,28,1) 0%, ${profileColor}33 100%)`;
+    banner.style.boxShadow = `inset 0 -20px 40px -10px ${profileColor}22`;
+  }
+}
+
+// Popover button handlers
+document.addEventListener('DOMContentLoaded', () => {
+  const openProfileBtn = document.getElementById('popover-open-profile');
+  const editProfileBtn = document.getElementById('popover-edit-profile');
+  
+  if (openProfileBtn) {
+    openProfileBtn.addEventListener('click', () => {
+      closeProfilePopover();
+      if (window.currentUser) openProfile(window.currentUser._id);
+    });
+  }
+  
+  if (editProfileBtn) {
+    editProfileBtn.addEventListener('click', () => {
+      closeProfilePopover();
+      openSettingsToProfile();
+    });
+  }
+});
+
+function openSettingsToProfile() {
+  showSettings();
+  setTimeout(() => {
+    const profileTabBtn = document.querySelector('.settings-nav-item');
+    if (profileTabBtn && typeof showSettingsTab === 'function') {
+      showSettingsTab('profile', profileTabBtn);
+    }
+  }, 10);
+}
+
+// ===== SETTINGS =====
 // showSettings - вызывается из HTML onclick="showSettings()"
 function showSettings() {
   const user = window.currentUser;
@@ -672,16 +887,26 @@ function showSettings() {
   const bioEl = document.getElementById('settings-bio');
   const statusEl = document.getElementById('settings-status');
   const usernameDisplay = document.getElementById('settings-username-display');
-  const tagDisplay = document.getElementById('settings-tag-display');
+  const statusDisplay = document.getElementById('settings-status-display');
+  const colorEl = document.getElementById('settings-profile-color');
+  const banner = document.getElementById('settings-profile-banner');
 
   if (avatarEl) avatarEl.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
   if (usernameEl) usernameEl.value = user.username || '';
   if (bioEl) bioEl.value = user.bio || '';
   if (statusEl) statusEl.value = user.status || 'online';
+  if (colorEl) colorEl.value = user.profileColor || '#5865F2';
   if (usernameDisplay) {
     usernameDisplay.textContent = user.username || '';
     if (user.role === 'owner') usernameDisplay.innerHTML += ' 👑';
   }
+  if (statusDisplay) statusDisplay.textContent = getStatusText(user.status);
+
+  // Apply profile color glow to settings banner
+  applyBannerGlow(banner, user.profileColor || '#5865F2');
+
+  // Обновляем состояние кнопки сохранения
+  checkProfileChanges();
 
   openModal('settings-modal');
 }
@@ -700,10 +925,104 @@ function showSettingsTab(tab, el) {
   if (el) el.classList.add('active');
 }
 
+function applyBannerGlow(banner, color) {
+  if (!banner) return;
+  // Валидация: принимаем только hex #RGB или #RRGGBB, иначе — дефолт.
+  // Защита от CSS-инъекций, т.к. значение подставляется в style.
+  const safe = (typeof color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color))
+    ? color
+    : '#5865F2';
+  banner.style.background = `linear-gradient(135deg, rgba(18,18,22,0.97) 0%, ${safe}28 60%, ${safe}15 100%)`;
+  banner.style.boxShadow = `inset 0 0 60px -20px ${safe}30`;
+  // Update avatar border glow
+  const avatarWrap = banner.querySelector('.profile-avatar-wrapper');
+  if (avatarWrap) {
+    avatarWrap.style.borderColor = `${safe}60`;
+    avatarWrap.style.boxShadow = `0 0 16px ${safe}25`;
+  }
+}
+
+function checkProfileChanges() {
+  const user = window.currentUser;
+  if (!user) return;
+
+  const usernameEl = document.getElementById('settings-username');
+  const bioEl = document.getElementById('settings-bio');
+  const statusEl = document.getElementById('settings-status');
+  const colorEl = document.getElementById('settings-profile-color');
+
+  const currentUsername = usernameEl ? usernameEl.value.trim() : '';
+  const currentBio = bioEl ? bioEl.value : '';
+  const currentStatus = statusEl ? statusEl.value : 'online';
+  const currentColor = colorEl ? colorEl.value : '#5865F2';
+
+  const originalUsername = user.username || '';
+  const originalBio = user.bio || '';
+  const originalStatus = user.status || 'online';
+  const originalColor = user.profileColor || '#5865F2';
+
+  const hasChanges = (currentUsername !== originalUsername) || 
+                     (currentBio !== originalBio) || 
+                     (currentStatus !== originalStatus) ||
+                     (currentColor.toLowerCase() !== originalColor.toLowerCase());
+
+  const saveBtn = document.getElementById('settings-save-btn');
+  if (saveBtn) {
+    saveBtn.disabled = !hasChanges;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const fields = ['settings-username', 'settings-bio', 'settings-status', 'settings-profile-color'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', (e) => {
+        checkProfileChanges();
+        
+        // Моментальное обновление имени в превью
+        if (id === 'settings-username') {
+          const display = document.getElementById('settings-username-display');
+          if (display && window.currentUser) {
+            display.textContent = e.target.value.trim() || window.currentUser.username;
+            if (window.currentUser.role === 'owner') {
+              display.innerHTML += ' 👑';
+            }
+          }
+        }
+        
+        // Моментальное обновление градиента баннера при смене цвета
+        if (id === 'settings-profile-color') {
+          const banner = document.getElementById('settings-profile-banner');
+          applyBannerGlow(banner, e.target.value);
+        }
+        
+        // Моментальное обновление статуса в превью
+        if (id === 'settings-status') {
+          const statusDisplay = document.getElementById('settings-status-display');
+          if (statusDisplay) statusDisplay.textContent = getStatusText(e.target.value);
+        }
+      });
+      el.addEventListener('change', (e) => {
+        checkProfileChanges();
+        if (id === 'settings-profile-color') {
+          const banner = document.getElementById('settings-profile-banner');
+          applyBannerGlow(banner, e.target.value);
+        }
+        if (id === 'settings-status') {
+          const statusDisplay = document.getElementById('settings-status-display');
+          if (statusDisplay) statusDisplay.textContent = getStatusText(e.target.value);
+        }
+      });
+    }
+  });
+});
+
 async function saveProfile() {
   const username = document.getElementById('settings-username') ? document.getElementById('settings-username').value.trim() : '';
   const bio = document.getElementById('settings-bio') ? document.getElementById('settings-bio').value : '';
   const status = document.getElementById('settings-status') ? document.getElementById('settings-status').value : 'online';
+  const profileColor = document.getElementById('settings-profile-color') ? document.getElementById('settings-profile-color').value : '#5865F2';
 
   if (!username) {
     showNotification('warning', 'Введите имя пользователя');
@@ -711,16 +1030,26 @@ async function saveProfile() {
   }
 
   try {
-    const data = await UsersAPI.updateProfile({ username, bio });
+    const data = await UsersAPI.updateProfile({ username, bio, profileColor });
     if (status) await AuthAPI.updateStatus(status);
-    window.currentUser = Object.assign({}, window.currentUser, (data.user || {}), { status });
+    window.currentUser = Object.assign({}, window.currentUser, (data.user || {}), { status, profileColor });
     localStorage.setItem('user', JSON.stringify(window.currentUser));
+    
+    // Sync all UI locations
     updateUserPanel();
+    updateProfilePopover();
 
     const usernameDisplay = document.getElementById('settings-username-display');
-    if (usernameDisplay) usernameDisplay.textContent = username;
+    if (usernameDisplay) {
+      usernameDisplay.textContent = username;
+      if (window.currentUser.role === 'owner') usernameDisplay.innerHTML += ' 👑';
+    }
+    
+    const statusDisplay = document.getElementById('settings-status-display');
+    if (statusDisplay) statusDisplay.textContent = getStatusText(status);
 
-    showNotification('success', 'Профиль сохранен');
+    showNotification('success', 'Профиль обновлён');
+    checkProfileChanges();
   } catch (error) {
     showNotification('error', error.message || 'Ошибка сохранения');
   }
@@ -814,17 +1143,46 @@ function showServerSettings() {
   // Участники
   const membersList = document.getElementById('server-members-list');
   if (membersList && server.members) {
-    membersList.innerHTML = server.members.map(function(m) {
+    membersList.innerHTML = ''; // Очищаем безопасно
+    
+    server.members.forEach(function(m) {
       const user = m.user || m;
-      return `
-        <div class="server-member-item">
-          <img class="server-member-avatar" src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
-          <div class="server-member-info">
-            <div class="server-member-name">${user.username}${user.role === 'owner' ? ' <span title="Создатель">👑</span>' : ''}</div>
-            <div class="server-member-role">${m.roles ? m.roles.join(', ') : 'участник'}</div>
-          </div>
-        </div>`;
-    }).join('');
+      
+      // Создаем элемент участника через DOM API
+      const memberItem = document.createElement('div');
+      memberItem.className = 'server-member-item';
+      
+      const avatar = document.createElement('img');
+      avatar.className = 'server-member-avatar';
+      avatar.src = getAvatarUrl(user.avatar);
+      avatar.alt = escapeHtml(user.username);
+      
+      const memberInfo = document.createElement('div');
+      memberInfo.className = 'server-member-info';
+      
+      const memberName = document.createElement('div');
+      memberName.className = 'server-member-name';
+      memberName.textContent = user.username; // ИСПРАВЛЕНО: Безопасно через textContent
+      
+      if (user.role === 'owner') {
+        const crownSpan = document.createElement('span');
+        crownSpan.title = 'Создатель';
+        crownSpan.textContent = ' 👑';
+        memberName.appendChild(crownSpan);
+      }
+      
+      const memberRole = document.createElement('div');
+      memberRole.className = 'server-member-role';
+      memberRole.textContent = m.roles ? m.roles.join(', ') : 'участник';
+      
+      memberInfo.appendChild(memberName);
+      memberInfo.appendChild(memberRole);
+      
+      memberItem.appendChild(avatar);
+      memberItem.appendChild(memberInfo);
+      
+      membersList.appendChild(memberItem);
+    });
   }
 
   // Categories
@@ -856,12 +1214,26 @@ function renderServerCategories() {
     return;
   }
 
-  container.innerHTML = categories.map(cat => `
-    <div class="category-settings-item">
-      <span>${cat.name}</span>
-      <button class="settings-action-btn danger" onclick="deleteServerCategory('${cat._id}')">Удалить</button>
-    </div>
-  `).join('');
+  // Очищаем контейнер безопасно
+  container.innerHTML = '';
+  
+  categories.forEach(cat => {
+    const categoryItem = document.createElement('div');
+    categoryItem.className = 'category-settings-item';
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = cat.name; // ИСПРАВЛЕНО: Безопасно через textContent
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'settings-action-btn danger';
+    deleteBtn.textContent = 'Удалить';
+    deleteBtn.addEventListener('click', () => deleteServerCategory(cat._id));
+    
+    categoryItem.appendChild(nameSpan);
+    categoryItem.appendChild(deleteBtn);
+    
+    container.appendChild(categoryItem);
+  });
 }
 
 /**
@@ -1033,22 +1405,38 @@ window.deleteChannelConfirm = deleteChannelConfirm;
 
 async function deleteServer() {
   if (!window.currentServer) return;
-  
+  // Если это комната (settings.kind === 'room'), показываем
+  // понятный пользователю текст без слова "сервер".
+  const isRoom = window.currentServer.settings && window.currentServer.settings.kind === 'room';
+  const titleText = isRoom ? 'Удалить комнату?' : 'Удаление сервера';
+  const bodyText = isRoom
+    ? 'Это действие нельзя отменить. Комната будет удалена для всех участников.'
+    : `Вы действительно хотите удалить "${window.currentServer.name}"? Это действие необратимо!`;
+  const okText = isRoom ? 'Удалить комнату' : 'Удалить сервер';
+  const successText = isRoom ? 'Комната удалена' : 'Сервер удален';
+  const errorText = isRoom ? 'Ошибка удаления комнаты' : 'Ошибка удаления сервера';
+
   Modal.confirm({
-    title: 'Удаление сервера',
-    body: `Вы действительно хотите удалить "${window.currentServer.name}"? Это действие необратимо!`,
-    confirmText: 'Удалить сервер',
+    title: titleText,
+    body: bodyText,
+    confirmText: okText,
     isDanger: true,
     onConfirm: async () => {
       try {
         await ServersAPI.delete(window.currentServer._id);
         closeModal('server-settings-modal');
+        // Закрываем room settings panel, если был открыт
+        if (typeof window.RoomsUI?.closeSettingsPanel === 'function') {
+          window.RoomsUI.closeSettingsPanel();
+        }
         window.currentServer = null;
-        showDMView();
+        if (typeof exitRoomMode === 'function') exitRoomMode();
+        if (typeof showWelcomeView === 'function') showWelcomeView();
+        else showDMView();
         await loadServers();
-        showNotification('success', 'Сервер удален');
+        showNotification('success', successText);
       } catch (error) {
-        showNotification('error', error.message || 'Ошибка удаления сервера');
+        showNotification('error', error.message || errorText);
       }
     }
   });
@@ -1056,20 +1444,28 @@ async function deleteServer() {
 
 async function leaveServer() {
   if (!window.currentServer) return;
-  
+  const isRoom = window.currentServer.settings && window.currentServer.settings.kind === 'room';
+
   Modal.confirm({
-    title: 'Покинуть сервер',
-    body: `Вы действительно хотите покинуть "${window.currentServer.name}"?`,
-    confirmText: 'Покинуть',
+    title: isRoom ? 'Выйти из комнаты?' : 'Покинуть сервер',
+    body: isRoom
+      ? `Вы перестанете быть участником "${window.currentServer.name}".`
+      : `Вы действительно хотите покинуть "${window.currentServer.name}"?`,
+    confirmText: isRoom ? 'Выйти' : 'Покинуть',
     isDanger: true,
     onConfirm: async () => {
       try {
         await ServersAPI.leave(window.currentServer._id);
         closeModal('server-settings-modal');
+        if (typeof window.RoomsUI?.closeSettingsPanel === 'function') {
+          window.RoomsUI.closeSettingsPanel();
+        }
         window.currentServer = null;
-        showDMView();
+        if (typeof exitRoomMode === 'function') exitRoomMode();
+        if (typeof showWelcomeView === 'function') showWelcomeView();
+        else showDMView();
         await loadServers();
-        showNotification('success', 'Вы покинули сервер');
+        showNotification('success', isRoom ? 'Вы покинули комнату' : 'Вы покинули сервер');
       } catch (error) {
         showNotification('error', error.message || 'Ошибка');
       }
@@ -1223,21 +1619,15 @@ async function loadLoginLogs() {
     
     const data = await AuthAPI.getLoginLogs();
     const logs = data.logs || [];
-    
+
     if (logs.length === 0) {
       list.innerHTML = '<div class="logs-empty">История входов пуста</div>';
       return;
     }
-    
-    // Получаем текущий Session ID (sid) из JWT
-    let currentSid = null;
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        currentSid = payload.sid;
-      } catch (e) {}
-    }
+
+    // currentSid приходит с backend (req.sid из верифицированного токена).
+    // НЕ парсим JWT в renderer — это нарушение security-модели.
+    const currentSid = data.currentSid || null;
 
     list.innerHTML = '';
     

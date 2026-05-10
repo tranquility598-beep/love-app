@@ -723,6 +723,26 @@ body.hide-avatars .message-with-avatar {
   color: var(--text-primary);
 }
 
+/* Anti-spam cooldown: кнопка отправки disabled, поверх неё — компактный
+   обратный отсчёт (секунды). SVG приглушаем, чтобы цифра читалась.
+   Состояние ставит client/js/chat.js (_refreshCooldownUi). */
+.send-btn:disabled,
+.send-btn.is-cooldown {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.04);
+}
+.send-btn.is-cooldown svg { opacity: 0.25; }
+.send-btn-cooldown {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+  line-height: 1;
+}
+.send-btn { position: relative; }
+.send-btn-cooldown:empty { display: none; }
+
 /* Emoji picker */
 .emoji-picker-container {
   position: absolute;

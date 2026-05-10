@@ -134,7 +134,7 @@ function openGoogleAuth() {
 window.addEventListener('message', async (event) => {
   if (event.data.type === 'google-auth-success' && event.data.token) {
     const token = event.data.token;
-    localStorage.setItem('token', token);
+    await storeAuthToken(token);
     
     try {
       const data = await AuthAPI.getMe();
@@ -150,7 +150,7 @@ window.addEventListener('message', async (event) => {
 // Слушатель для Electron (через IPC)
 if (window.electronAPI && window.electronAPI.onGoogleAuthSuccess) {
   window.electronAPI.onGoogleAuthSuccess(async (token) => {
-    localStorage.setItem('token', token);
+    await storeAuthToken(token);
     try {
       const data = await AuthAPI.getMe();
       localStorage.setItem('user', JSON.stringify(data.user));
@@ -178,7 +178,7 @@ async function handleLogin() {
 
   try {
     const data = await AuthAPI.login(email, password);
-    localStorage.setItem('token', data.token);
+    await storeAuthToken(data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     window.currentUser = data.user;
     await initApp();
@@ -237,7 +237,7 @@ async function handleVerifyOtp() {
   
   try {
     const data = await AuthAPI.verifyOtp(window.lastAuthEmail, code);
-    localStorage.setItem('token', data.token);
+    await storeAuthToken(data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     window.currentUser = data.user;
     await initApp();

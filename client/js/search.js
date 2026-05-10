@@ -126,28 +126,50 @@ function createSearchResultElement(msg, query) {
     minute: '2-digit'
   });
   
-  // Подсвечиваем найденный текст
+  // Создаем элементы безопасно через DOM API
+  const header = document.createElement('div');
+  header.className = 'search-result-header';
+  
+  const avatar = document.createElement('img');
+  avatar.className = 'search-result-avatar';
+  avatar.src = authorAvatar;
+  avatar.alt = escapeHtml(authorName);
+  
+  const authorSpan = document.createElement('span');
+  authorSpan.className = 'search-result-author';
+  authorSpan.textContent = authorName; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  header.appendChild(avatar);
+  header.appendChild(authorSpan);
+  
+  // Информация о канале (если поиск по серверу)
+  if (msg.channel && msg.channel.name) {
+    const channelSpan = document.createElement('span');
+    channelSpan.className = 'search-result-channel';
+    channelSpan.textContent = '#' + msg.channel.name;
+    header.appendChild(channelSpan);
+  }
+  
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'search-result-time';
+  timeSpan.textContent = time;
+  
+  header.appendChild(timeSpan);
+  
+  // Контент с подсветкой
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'search-result-content';
+  
+  // Подсвечиваем найденный текст безопасно
   let content = escapeHtml(msg.content || '');
   if (query) {
     const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
     content = content.replace(regex, '<mark>$1</mark>');
   }
+  contentDiv.innerHTML = content; // Безопасно, т.к. content уже экранирован через escapeHtml
   
-  // Информация о канале (если поиск по серверу)
-  let channelInfo = '';
-  if (msg.channel && msg.channel.name) {
-    channelInfo = `<span class="search-result-channel">#${msg.channel.name}</span>`;
-  }
-  
-  div.innerHTML = `
-    <div class="search-result-header">
-      <img class="search-result-avatar" src="${authorAvatar}" alt="${authorName}">
-      <span class="search-result-author">${authorName}</span>
-      ${channelInfo}
-      <span class="search-result-time">${time}</span>
-    </div>
-    <div class="search-result-content">${content}</div>
-  `;
+  div.appendChild(header);
+  div.appendChild(contentDiv);
   
   // Клик по результату - переход к сообщению
   div.addEventListener('click', () => {

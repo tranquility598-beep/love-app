@@ -3,7 +3,7 @@
  * Запускает Electron приложение и управляет окнами
  */
 
-const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session, nativeTheme, safeStorage } = require('electron');
 
 // ПРИНУДИТЕЛЬНЫЙ DARK MODE И НОВЫЙ ДИЗАЙН GOOGLE
 app.commandLine.appendSwitch('force-dark-mode');
@@ -87,7 +87,8 @@ function createWindow() {
       nodeIntegration: false,
       webSecurity: true,
       allowRunningInsecureContent: false,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      webviewTag: false // Запрещаем webview
     }
   });
 
@@ -109,8 +110,20 @@ function createWindow() {
 
   // Открываем внешние ссылки в браузере
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // Разрешаем только http/https
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
     return { action: 'deny' };
+  });
+
+  // Блокируем навигацию главного окна на сторонние сайты
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Разрешаем навигацию только по локальным файлам (index.html)
+    if (!url.startsWith('file://')) {
+      event.preventDefault();
+      console.warn('Заблокирована небезопасная навигация окна на:', url);
+    }
   });
 
   // Обработчик закрытия окна
@@ -142,6 +155,195 @@ ipcMain.on('window-close', () => {
 ipcMain.on('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
+  }
+});
+
+// ====== БЕЗОПАСНОЕ ХРАНЕНИЕ ТОКЕНА ======
+const TOKEN_FILE_PATH = path.join(app.getPath('userData'), 'secure_token.enc');
+
+ipcMain.handle('store-token', async (event, token) => {
+  try {
+    if (!token) return false;
+    
+    // В безопасном хранилище:
+    if (safeStorage.isEncryptionAvailable()) {
+      const encryptedToken = safeStorage.encryptString(token);
+      fs.writeFileSync(TOKEN_FILE_PATH, encryptedToken);
+    } else {
+      // Фолбэк, если шифрование недоступно (например, Linux без кольца ключей)
+      fs.writeFileSync(TOKEN_FILE_PATH, Buffer.from(token, 'utf-8').toString('base64'));
+    }
+    return true;
+  } catch (error) {
+    console.error('Error storing token:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('get-token', async () => {
+  try {
+    if (!fs.existsSync(TOKEN_FILE_PATH)) return null;
+    
+    const tokenData = fs.readFileSync(TOKEN_FILE_PATH);
+    
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(tokenData);
+    } else {
+      return Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
+    }
+  } catch (error) {
+    console.error('Error getting token:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('clear-token', async () => {
+  try {
+    if (fs.existsSync(TOKEN_FILE_PATH)) {
+      fs.unlinkSync(TOKEN_FILE_PATH);
+    }
+    return true;
+  } catch (error) {
+    console.error('Error clearing token:', error);
+    return false;
+  }
+});
+
+// ====== БЕЗОПАСНЫЙ ПРОКСИ API ======
+ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null, headers = {} }) => {
+  try {
+    // 1. Получаем токен
+    let token = null;
+    if (fs.existsSync(TOKEN_FILE_PATH)) {
+      const tokenData = fs.readFileSync(TOKEN_FILE_PATH);
+      token = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(tokenData) : Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
+    }
+
+    // 2. Строгие проверки Path
+    if (!path || typeof path !== 'string' || !path.startsWith('/')) {
+      throw new Error('Уязвимость: Некорректный путь API ' + path);
+    }
+    
+    // Формируем URL в Main Process (надежно)
+    // FIX (Windows + Node 18+): используем 127.0.0.1 вместо localhost, иначе undici
+    // fetch резолвит localhost в ::1 (IPv6), а сервер слушает только 0.0.0.0 (IPv4) →
+    // ECONNREFUSED. Это даёт "transport error" на всех запросах в dev-режиме.
+    const isPackaged = app.isPackaged;
+    const backendOrigin = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://127.0.0.1:5555';
+    const url = `${backendOrigin}/api${path}`;
+
+    // 3. Формируем заголовки
+    const fetchHeaders = { ...headers };
+    if (token) {
+      fetchHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    // 4. Выполняем запрос через встроенный fetch
+    const fetchOptions = {
+      method,
+      headers: fetchHeaders
+    };
+    
+    // Поддерживаем отправку JSON
+    if (body) {
+      if (typeof body === 'string') {
+         fetchOptions.body = body;
+         if (!fetchHeaders['Content-Type']) fetchHeaders['Content-Type'] = 'application/json';
+      }
+    }
+
+    const response = await fetch(url, fetchOptions);
+    
+    // Читаем ответ как текст (иногда сервер может вернуть не JSON)
+    const responseText = await response.text();
+    let responseData;
+    try {
+      responseData = responseText ? JSON.parse(responseText) : {};
+    } catch (e) {
+      responseData = { message: responseText }; // fallback если не JSON
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: responseData
+    };
+
+  } catch (error) {
+    console.error('API proxy error:', error.message);
+    return { ok: false, status: 500, error: error.message };
+  }
+});
+
+// ====== БЕЗОПАСНЫЙ ПРОКСИ ЗАГРУЗКИ ФАЙЛОВ ======
+ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fileName, mimeType, additionalFields = {} }) => {
+  try {
+    let token = null;
+    if (fs.existsSync(TOKEN_FILE_PATH)) {
+      const tokenData = fs.readFileSync(TOKEN_FILE_PATH);
+      token = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(tokenData) : Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
+    }
+
+    if (!path || typeof path !== 'string' || !path.startsWith('/')) {
+      throw new Error('Уязвимость: Некорректный путь API ' + path);
+    }
+    
+    // Тот же fix IPv4 для api-upload (см. комментарий выше).
+    const isPackaged = app.isPackaged;
+    const backendOrigin = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://127.0.0.1:5555';
+    // Для загрузки иногда /api/upload, а иногда /api/servers/...
+    const url = `${backendOrigin}${path.startsWith('/api') ? path : '/api' + path}`;
+
+    const fetchHeaders = {};
+    if (token) {
+      fetchHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    const formData = new FormData();
+    // buffer to blob
+    if (fileData) {
+      const blob = new Blob([fileData], { type: mimeType });
+      // Имя поля FormData выбираем по endpoint'у — backend ожидает
+      // конкретное имя (req.files.<fieldName>):
+      //   /icon          → icon
+      //   /banner        → banner
+      //   /avatar        → avatar
+      //   /emojis        → emoji
+      //   всё остальное  → file
+      let fieldName = 'file';
+      if (path.endsWith('/icon')) fieldName = 'icon';
+      else if (path.endsWith('/banner')) fieldName = 'banner';
+      else if (path.includes('/avatar')) fieldName = 'avatar';
+      else if (path.includes('/emoji')) fieldName = 'emoji';
+      formData.append(fieldName, blob, fileName);
+    }
+    
+    for (const [key, value] of Object.entries(additionalFields)) {
+      formData.append(key, value);
+    }
+
+    const response = await fetch(url, {
+      method,
+      headers: fetchHeaders,
+      body: formData
+    });
+
+    const responseText = await response.text();
+    let responseData;
+    try {
+      responseData = responseText ? JSON.parse(responseText) : {};
+    } catch (e) {
+      responseData = { message: responseText };
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: responseData
+    };
+  } catch (error) {
+    console.error('API upload error:', error);
+    return { ok: false, status: 500, error: error.message };
   }
 });
 
@@ -296,6 +498,44 @@ if (!gotTheLock) {
 
   // Запуск сервера с обработкой занятого порта
   app.whenReady().then(() => {
+    // === Content Security Policy (CSP) ===
+    // ВАЖНО: Текущий CSP использует 'unsafe-inline' и 'unsafe-eval' из-за:
+    // 1. Множество inline onclick обработчиков в HTML (123+ мест)
+    // 2. DOMPurify требует 'unsafe-eval' для работы
+    // 3. CDN скрипты (socket.io, DOMPurify, emoji-picker) требуют разрешения
+    // 
+    // TODO для полной безопасности:
+    // 1. Мигрировать все onclick на addEventListener в JS файлах
+    // 2. Заменить DOMPurify на альтернативу без eval или использовать nonce
+    // 3. Скачать CDN скрипты локально
+    // 4. После миграции включить строгий CSP (см. ниже)
+    //
+    // Строгий CSP (для будущего использования после миграции):
+    // "default-src 'self';" +
+    // "script-src 'self';" +
+    // "style-src 'self';" +
+    // "img-src 'self' data: blob: http://localhost:* https:;" +
+    // "connect-src 'self' http://localhost:* ws://localhost:* https: wss:;" +
+    // "font-src 'self' data:;" +
+    // "media-src 'self' blob: data:;"
+    
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self';" +
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io;" + 
+            "style-src 'self' 'unsafe-inline';" +
+            "img-src 'self' data: blob: http://localhost:* https:;" +
+            "connect-src 'self' http://localhost:* ws://localhost:* https: wss:;" +
+            "font-src 'self' data:;" +
+            "media-src 'self' blob: data:;"
+          ]
+        }
+      });
+    });
+
     // Настройка обработчика захвата экрана
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
       desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
@@ -341,21 +581,21 @@ app.on('open-url', (event, url) => {
 // Парсинг токена из ссылки (love-app://login-success?token=...)
 function handleDeepLink(url) {
   try {
-    console.log('Received deep link:', url);
+    // НЕ логируем сам url целиком (содержит token).
     // Извлекаем токен через поиск параметра (надежнее для кастомных протоколов)
     const tokenMatch = url.match(/[?&]token=([^&]+)/);
     const token = tokenMatch ? tokenMatch[1] : null;
-    
+
     if (token && mainWindow) {
       // Отправляем токен в рендерер через IPC
       mainWindow.webContents.send('google-auth-success', token);
-      
+
       // Фокусируемся на окне
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
   } catch (e) {
-    console.error('Failed to parse deep link URL:', url, e);
+    console.error('Failed to parse deep link URL (redacted):', e.message);
   }
 }
 

@@ -155,7 +155,16 @@ const serverSchema = new mongoose.Schema({
   settings: {
     isPublic: { type: Boolean, default: false },
     verificationLevel: { type: Number, default: 0 },
-    defaultNotifications: { type: String, default: 'all' }
+    defaultNotifications: { type: String, default: 'all' },
+    // kind различает классическую гильдию и упрощённую "комнату".
+    // ВАЖНО: для всех старых документов (без этого поля) mongoose
+    // вернёт default='guild', поэтому существующие серверы НЕ ломаются.
+    // Никакой миграции БД не требуется.
+    kind: { type: String, enum: ['guild', 'room'], default: 'guild' },
+    // Поля комнаты (применяются только при kind === 'room').
+    // Для guild-серверов остаются дефолтными и игнорируются UI.
+    vibeStatus: { type: String, default: '', maxlength: 60 },
+    color: { type: String, default: '' }
   },
   
   // Дата создания

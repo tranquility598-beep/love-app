@@ -548,33 +548,40 @@
 
 .user-panel-controls {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
+/* Кнопки mic / headset / settings в #user-panel-root.
+ * Единый чёрно-белый стиль LOVE: тёмная плашка с тонкой рамкой.
+ * Все три кнопки выглядят одинаково; settings дополнительно имеет
+ * .account-settings-btn — стили совместимы (overlap), визуально одно. */
 .user-control-btn {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   position: relative;
 }
 
 .user-control-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
+/* Состояние «выключено» (mic muted / headset deafened). Аккуратно
+ * заметнее без яркой заливки — чуть плотнее фон, светлее иконка. */
 .user-control-btn.muted {
-  color: rgba(255,255,255,0.4);
-  background: rgba(255,255,255,0.05);
-  position: relative;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* Voice control buttons muted state */
@@ -583,6 +590,118 @@
   background: rgba(255,255,255,0.05);
   color: rgba(255,255,255,0.4);
   position: relative;
+}
+
+/* ===== COMPACT ACCOUNT (server rail) =====
+ * Маленькая кнопка профиля + шестерёнка внизу #servers-sidebar.
+ * НЕ дубликат большого #user-panel-root — это другой DOM-узел
+ * (#server-rail-account) с другими id и обработчиками. Видна
+ * ТОЛЬКО в room-mode, чтобы не дублировать большой профиль в DM.
+ * В DM/обычном сервере используется старый user-panel внутри
+ * #channels-sidebar — layout не трогается.
+ */
+.server-rail-account {
+  /* По умолчанию скрыто. В room-mode переопределяется ниже. */
+  display: none;
+  margin-top: auto;
+  padding: 8px 0 6px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body.room-mode .server-rail-account {
+  display: flex;
+}
+
+.rail-account-avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+
+.rail-account-avatar:hover {
+  transform: scale(1.05);
+}
+
+.rail-account-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.15s;
+}
+
+.rail-account-avatar:hover .rail-account-img {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.rail-account-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--bg-primary);
+}
+
+.rail-account-settings {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.rail-account-settings:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+/* ===== Settings button (shared) =====
+ * Применяется и к шестерёнке в #user-panel-root (DM/server), и к
+ * #rail-settings-btn (compact account в room-mode). Чёрно-белый
+ * стиль LOVE — мягкий border, тонкий fill, никаких ярких заливок.
+ * Layout не меняется: только background/border/color/border-radius.
+ * Размеры элемента наследуются от .user-control-btn (32x32) и
+ * .rail-account-settings (28x28) соответственно. */
+.account-settings-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+  border-radius: 10px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.account-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.account-settings-btn .settings-icon {
+  display: block;
+  pointer-events: none;
 }
 
 /* ===== SERVER ACTION BUTTONS ===== */
@@ -626,3 +745,157 @@
   color: #ff5558;
 }
 
+/* ===== PROFILE POPOVER ===== */
+.profile-popover {
+  position: fixed;
+  width: 300px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+  z-index: 900;
+  overflow: hidden;
+  animation: popoverIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom left;
+}
+
+.profile-popover.hidden {
+  display: none;
+}
+
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.popover-banner {
+  height: 60px;
+  position: relative;
+  background: linear-gradient(135deg, rgba(20,20,28,1) 0%, rgba(35,35,50,1) 100%);
+}
+
+.popover-body {
+  padding: 0 16px 16px;
+  position: relative;
+}
+
+.popover-avatar-wrap {
+  position: relative;
+  display: inline-block;
+  margin-top: -30px;
+  margin-bottom: 8px;
+}
+
+.popover-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid var(--bg-secondary);
+  background: var(--bg-tertiary);
+  object-fit: cover;
+}
+
+.popover-status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid var(--bg-secondary);
+  background: var(--status-offline);
+}
+
+.popover-status-dot.online { background: var(--status-online); }
+.popover-status-dot.idle { background: var(--status-idle); }
+.popover-status-dot.dnd { background: var(--status-dnd); }
+
+.popover-username {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.popover-status-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.popover-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
+}
+
+.popover-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 1.2px;
+  margin-bottom: 4px;
+}
+
+.popover-bio {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.popover-member-since {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.popover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.popover-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.popover-btn-view {
+  background: #5865F2;
+  color: #fff;
+}
+
+.popover-btn-view:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 2px 12px rgba(88, 101, 242, 0.4);
+  transform: translateY(-1px);
+}
+
+.popover-btn-edit {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.popover-btn-edit:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}

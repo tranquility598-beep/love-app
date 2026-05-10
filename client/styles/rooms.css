@@ -1,0 +1,1391 @@
+/**
+ * Room mode styles. Применяются только когда server.settings.kind === 'room'.
+ * Все обработчики живут в rooms.js через addEventListener.
+ * В разметке нет inline onclick / inline style.
+ */
+
+/* ============================================================
+ * Кнопка "Создать комнату" в сайдбаре серверов
+ * ============================================================ */
+.server-icon.room-create-btn {
+  background: #5865f2;
+  color: #fff;
+}
+
+/* ============================================================
+ * Room mode: скрываем legacy channels-sidebar
+ * ============================================================ */
+body.room-mode #channels-sidebar {
+  display: none !important;
+}
+
+/* В room-режиме main-content становится вертикальной колонкой:
+   сверху room-view (chrome), ниже — одна active mode panel.
+   Используем generic селектор .main-content (есть в layout). */
+body.room-mode .main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px clamp(16px, 4vw, 36px);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* В room-режиме legacy voice-view (полноэкранный) и
+   плавающая боковая voice-panel НЕ должны показываться:
+   их роль выполняет встроенная #room-voice-panel. */
+body.room-mode #voice-view,
+body.room-mode #voice-panel {
+  display: none !important;
+}
+
+/* ============================================================
+ * Room chrome: header + tabs (фиксированная верхняя часть)
+ * ============================================================ */
+.room-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-shrink: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.room-view.hidden {
+  display: none;
+}
+
+/* ============================================================
+ * Компактная шапка комнаты
+ * ============================================================ */
+/* Шапка комнаты выступает как полноценный hero/header.
+   - Высота заметно больше, чем простая текстовая полоса.
+   - Когда баннер загружен, фон баннера занимает весь блок;
+     контент сидит поверх через relative + затемнение.
+   - Без баннера — мягкий тонированный фон с лёгким радиальным
+     градиентом на основе room-accent. Не пустая серая коробка. */
+.room-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  min-height: 110px;
+  background-color: rgba(255, 255, 255, 0.035);
+  background-image: radial-gradient(
+    ellipse at top left,
+    var(--room-accent-soft, rgba(88, 101, 242, 0.18)) 0%,
+    transparent 60%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  overflow: hidden;
+}
+
+.room-header-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(255, 255, 255, 0.06);
+}
+
+.room-header-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-header-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.room-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.room-header-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.room-header-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: rgba(59, 165, 93, 0.12);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3ba55d;
+  white-space: nowrap;
+}
+
+.room-header-online-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3ba55d;
+  box-shadow: 0 0 0 2px rgba(59, 165, 93, 0.18);
+}
+
+.room-header-subtitle {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-header-members {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.room-header-members:empty {
+  display: none;
+}
+
+.room-header-member-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  border: 2px solid #1e1f22;
+  margin-left: -8px;
+  overflow: hidden;
+}
+
+.room-header-member-avatar:first-child {
+  margin-left: 0;
+}
+
+.room-header-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-header-member-more {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  border: 2px solid #1e1f22;
+  margin-left: -8px;
+}
+
+.room-header-settings-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.room-header-settings-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.room-header-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.room-header-settings-btn:focus-visible {
+  outline: 2px solid #5865f2;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+ * Три большие плашки переключателя
+ * ============================================================ */
+.room-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 820px) {
+  .room-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.room-tab {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 84px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.room-tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.room-tab:focus-visible {
+  outline: 2px solid #5865f2;
+  outline-offset: 2px;
+}
+
+.room-tab[aria-selected="true"] {
+  background: rgba(88, 101, 242, 0.14);
+  border-color: rgba(88, 101, 242, 0.55);
+  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.25) inset;
+}
+
+.room-tab[aria-selected="true"] .room-tab-icon {
+  background: rgba(88, 101, 242, 0.32);
+  color: #fff;
+}
+
+.room-tab-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(88, 101, 242, 0.16);
+  color: #aab3ff;
+}
+
+.room-tab-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.room-tab-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.room-tab-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.room-tab-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-tab-arrow {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.35);
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+
+.room-tab:hover .room-tab-arrow {
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateX(2px);
+}
+
+/* ============================================================
+ * Embedded chat panel (chat-view re-styled внутри room-mode)
+ * ============================================================ */
+
+/* Mini-strip "Чат · Комната активна" больше не показывается — он
+   создавал ощущение лишнего промежуточного блока. Заголовок чата
+   теперь полностью представлен room-header'ом (имя комнаты, статус,
+   участники), а сама chat-view встраивается прямо под ним как
+   единая карточка. */
+.room-chat-strip {
+  display: none !important;
+}
+
+/* В room-mode chat-view выглядит как единая полноэкранная панель чата,
+   встроенная под шапку комнаты. Без лишних промежуточных границ
+   и без дублирующего легаси-хедера. */
+body.room-mode #chat-view:not(.hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Скрываем всю верхнюю шапку legacy-чата (название канала, кнопки pinned/search/members)
+   — в room-mode её роль выполняет room-header + room-chat-strip. */
+body.room-mode #chat-view > .chat-header {
+  display: none;
+}
+
+/* Лента сообщений в комнате — компактнее, без жёлтых полей. */
+body.room-mode #chat-view .messages-list {
+  padding: 14px 16px 8px;
+  background: transparent;
+}
+
+/* Поле ввода: ровные поля, тонкая рамка вокруг внутреннего блока. */
+body.room-mode #chat-view .message-input-area {
+  padding: 10px 14px 14px;
+  background: transparent;
+}
+
+body.room-mode #chat-view .message-input-wrapper {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+body.room-mode #chat-view .message-input-wrapper:focus-within {
+  border-color: rgba(88, 101, 242, 0.5);
+}
+
+/* В room-mode "Это начало канала" делаем компактнее и мягче,
+   чтобы не выглядело пустой грубой плашкой над сообщениями. */
+body.room-mode #chat-view .channel-start {
+  padding: 28px 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 8px;
+  text-align: center;
+}
+body.room-mode #chat-view .channel-start-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+  opacity: 0.4;
+}
+body.room-mode #chat-view .channel-start-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.92);
+}
+body.room-mode #chat-view .channel-start-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Глобально: hover-фон строки сообщения мягкий, без больших цветных блоков */
+.message-group:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.message-author {
+  letter-spacing: -0.005em;
+}
+
+.message-avatar {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Поле ввода — ровные кнопки (применяется глобально, безопасно). */
+.message-input-container {
+  align-items: center;
+  gap: 6px;
+}
+
+/* ============================================================
+ * Voice mode panel
+ * ============================================================ */
+.room-voice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.room-voice-panel.hidden {
+  display: none;
+}
+
+.room-voice-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-voice-panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.room-voice-panel-subtitle {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.room-voice-panel-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  flex: 1 1 auto;
+  align-content: start;
+}
+
+.room-voice-panel-cards:empty::before {
+  content: 'Никого в войсе. Будь первым.';
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.room-voice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  min-width: 0;
+  position: relative;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+@keyframes roomSpeakingPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(59, 165, 93, 0.18); }
+  50%      { box-shadow: 0 0 0 5px rgba(59, 165, 93, 0.30); }
+}
+
+.room-voice-card[data-speaking="true"] {
+  border-color: rgba(59, 165, 93, 0.55);
+  background: rgba(59, 165, 93, 0.06);
+}
+
+.room-voice-card[data-speaking="true"] .room-voice-card-avatar {
+  animation: roomSpeakingPulse 1.2s ease-in-out infinite;
+}
+
+.room-voice-card-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.room-voice-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-voice-card-name {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+}
+
+.room-voice-card-mute {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ed4245;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+/* Preconnect: одна большая зелёная кнопка по центру */
+.room-voice-preconnect {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+
+.room-voice-preconnect.hidden {
+  display: none;
+}
+
+.room-voice-connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 28px;
+  background: #3ba55d;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.room-voice-connect-btn:hover {
+  background: #339950;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(59, 165, 93, 0.35);
+}
+
+.room-voice-connect-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.room-voice-connect-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Connected: панель управления */
+.room-voice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.room-voice-controls.hidden {
+  display: none;
+}
+
+.room-voice-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.room-voice-ctrl-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.room-voice-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.room-voice-ctrl-btn:focus-visible {
+  outline: 2px solid #5865f2;
+  outline-offset: 2px;
+}
+
+.room-voice-ctrl-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Two-state icons (mic/sound): по умолчанию показываем "on", в muted — "off". */
+.room-voice-ctrl-btn .room-voice-ctrl-icon-off {
+  display: none;
+}
+
+.room-voice-ctrl-btn[data-muted="true"] .room-voice-ctrl-icon-on {
+  display: none;
+}
+
+.room-voice-ctrl-btn[data-muted="true"] .room-voice-ctrl-icon-off {
+  display: inline-block;
+}
+
+.room-voice-ctrl-btn[data-muted="true"] {
+  background: rgba(237, 66, 69, 0.14);
+  border-color: rgba(237, 66, 69, 0.45);
+  color: #ed4245;
+}
+
+/* Screen share: подсветка при активной демонстрации */
+.room-voice-ctrl-btn[data-active="true"] {
+  background: rgba(88, 101, 242, 0.18);
+  border-color: rgba(88, 101, 242, 0.55);
+  color: #aab3ff;
+}
+
+/* Кнопка "Выйти" — красная */
+.room-voice-ctrl-btn-leave {
+  background: rgba(237, 66, 69, 0.10);
+  border-color: rgba(237, 66, 69, 0.35);
+  color: #ed4245;
+}
+
+.room-voice-ctrl-btn-leave:hover {
+  background: rgba(237, 66, 69, 0.18);
+  border-color: rgba(237, 66, 69, 0.6);
+}
+
+/* ============================================================
+ * Empty state для вкладки Медиа
+ * ============================================================ */
+.room-media-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 56px 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  text-align: center;
+  flex: 1 1 auto;
+}
+
+.room-media-empty.hidden {
+  display: none;
+}
+
+.room-media-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.room-media-empty-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.room-media-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.room-media-empty-hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 460px;
+}
+
+/* ============================================================
+   Room Settings — правая выезжающая панель.
+   Открывается только в room-mode (управление в rooms.js).
+   ============================================================ */
+
+.room-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1200;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.room-settings-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.room-settings-backdrop.hidden {
+  display: none;
+}
+
+/* Панель настроек комнаты в монохромном стиле LOVE: чистый тёмный
+   фон, серый/белый текст, без фиолетовых заливок. Цвет комнаты —
+   только мягкий accent (рамка focus, активная вкладка, glow). */
+.room-settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 100vw;
+  background: #14151a;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.55);
+  z-index: 1210;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  color: rgba(255, 255, 255, 0.92);
+}
+.room-settings-panel.visible {
+  transform: translateX(0);
+}
+.room-settings-panel.hidden {
+  display: none;
+}
+
+.room-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+.room-settings-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+.room-settings-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-settings-close:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.room-settings-close svg { width: 18px; height: 18px; }
+
+/* Контейнер: стрелки слева/справа + лента вкладок.
+   Кнопки прокрутки — основной понятный способ. Колёсико тоже работает.
+   Никаких чёрных fade-блоков по краям — стрелки теперь явный сигнал. */
+.room-settings-nav-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  /* Внутренний accent — мягкий glow на focus инпутов. По умолчанию —
+     белый, чтобы при отсутствии цвета комнаты это не было фиолетовым. */
+  --rs-accent: var(--room-accent, rgba(255, 255, 255, 0.5));
+}
+
+.room-settings-nav-arrow {
+  flex-shrink: 0;
+  width: 32px;
+  align-self: center;
+  height: 32px;
+  margin: 6px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+.room-settings-nav-arrow svg { width: 14px; height: 14px; }
+.room-settings-nav-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.room-settings-nav-arrow:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+/* Если контент влезает целиком — стрелки скрываем (экономим место). */
+.room-settings-nav-wrap:not(.is-overflowing) .room-settings-nav-arrow {
+  display: none;
+}
+
+.room-settings-nav {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 4px;
+  padding: 12px 6px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.room-settings-nav::-webkit-scrollbar { height: 0; display: none; }
+
+.room-settings-nav-item {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.room-settings-nav-item:hover { color: #fff; }
+.room-settings-nav-item.active {
+  color: #fff;
+  border-bottom-color: var(--rs-accent);
+}
+.room-settings-nav-danger { color: #ed7373; }
+.room-settings-nav-danger.active { border-bottom-color: #ed4245; color: #ed4245; }
+
+.room-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.room-settings-section { display: none; }
+.room-settings-section.active { display: block; }
+
+.room-settings-field {
+  display: block;
+  margin-bottom: 18px;
+}
+.room-settings-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 6px;
+}
+.room-settings-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.room-settings-input:hover:not(:disabled):not(:focus) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.room-settings-input:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+}
+.room-settings-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.room-settings-textarea { resize: vertical; min-height: 70px; }
+
+.room-settings-vibe-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.room-settings-vibe-preset {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.room-settings-vibe-preset:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.room-settings-color {
+  width: 60px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.room-settings-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+/* Унифицированные кнопки в room-settings: одинаковая высота, скругления
+   и размер шрифта. Цвет комнаты используется как мягкий accent — без
+   ярких заливок, только в primary-кнопке и в подчёркивании активной
+   вкладки. Текст primary-кнопки всегда белый/тёмный исходя из контраста
+   accent (см. .room-settings-btn-primary ниже). */
+.room-settings-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.room-settings-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.room-settings-btn-primary {
+  /* Монохромная primary-кнопка в стиле LOVE: светлая заливка на
+     тёмном фоне, без ярких цветных акцентов. Цвет комнаты отдаётся
+     только активной вкладке и focus-рамкам, а не сплошной заливке. */
+  background: rgba(255, 255, 255, 0.92);
+  color: #111114;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+}
+.room-settings-btn-primary:hover:not(:disabled) {
+  background: #fff;
+  border-color: #fff;
+}
+.room-settings-btn-primary:focus-visible {
+  outline: 2px solid var(--rs-accent, rgba(255, 255, 255, 0.5));
+  outline-offset: 2px;
+}
+.room-settings-btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.room-settings-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.room-settings-btn-warn {
+  background: rgba(237, 115, 115, 0.12);
+  color: #ed7373;
+  border: 1px solid rgba(237, 115, 115, 0.2);
+}
+.room-settings-btn-warn:hover:not(:disabled) { background: rgba(237, 115, 115, 0.2); }
+.room-settings-btn-danger { background: #ed4245; color: #fff; }
+.room-settings-btn-danger:hover:not(:disabled) { background: #c93b3e; }
+
+.room-settings-status {
+  margin-top: 10px;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.room-settings-status.success { background: rgba(67, 181, 129, 0.12); color: #43b581; }
+.room-settings-status.error { background: rgba(237, 66, 69, 0.12); color: #ed4245; }
+.room-settings-status.hidden { display: none; }
+
+.room-settings-invite-row {
+  display: flex;
+  gap: 6px;
+}
+.room-settings-invite-input {
+  flex: 1;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.room-settings-members-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.room-settings-members-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.room-settings-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+}
+.room-settings-member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.room-settings-member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.room-settings-member-name { flex: 1; font-size: 14px; }
+.room-settings-member-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(88, 101, 242, 0.2);
+  color: #a6b0ff;
+}
+
+.room-settings-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.room-settings-hidden-section { display: none !important; }
+
+@media (max-width: 600px) {
+  .room-settings-panel { width: 100vw; }
+}
+
+/* ============================================================
+   Room color theme — мягкий акцент, не заливает весь UI.
+   Применяется через CSS variable --room-accent.
+   Дефолт берётся из существующей палитры.
+   Назначение переменной происходит из JS только после hex-валидации.
+   ============================================================ */
+body.room-mode {
+  --room-accent: #5865f2;
+  --room-accent-soft: rgba(88, 101, 242, 0.18);
+  --room-accent-glow: rgba(88, 101, 242, 0.35);
+}
+
+/* Цвет комнаты — ТОЛЬКО мягкие акценты:
+   - тонкая рамка активной плашки
+   - glow вокруг иконки
+   - focus-обводка input'ов
+   - подсветка стрелки активной плашки
+   Кнопки (primary / danger / ghost / warn) НЕ перекрашиваем — иначе
+   при белом или чёрном цвете комнаты текст становится нечитаемым. */
+body.room-mode .room-tab[aria-selected="true"] {
+  border-color: var(--room-accent);
+  box-shadow: 0 0 0 1px var(--room-accent-soft), 0 8px 24px -12px var(--room-accent-glow);
+}
+body.room-mode .room-tab[aria-selected="true"] .room-tab-arrow {
+  color: var(--room-accent);
+}
+body.room-mode .room-header {
+  border-bottom-color: var(--room-accent-soft);
+}
+body.room-mode .room-settings-input:focus {
+  border-color: var(--room-accent);
+}
+body.room-mode .room-header-icon {
+  box-shadow: 0 0 0 1px var(--room-accent-soft);
+}
+
+/* Если есть кастомный баннер — рисуем его в шапке как фон,
+   с мягким двойным градиентом для читаемости текста.
+   Радиальный accent-градиент при этом отключаем (чтобы он не
+   замешивался поверх фотографии). */
+body.room-mode .room-header.has-banner {
+  background-image: var(--room-banner-image);
+  background-size: cover;
+  background-position: center;
+  background-color: #14151a;
+}
+body.room-mode .room-header.has-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(20, 21, 26, 0.35) 0%, rgba(20, 21, 26, 0.85) 100%),
+    linear-gradient(90deg, rgba(20, 21, 26, 0.55) 0%, rgba(20, 21, 26, 0.0) 60%);
+  pointer-events: none;
+}
+body.room-mode .room-header.has-banner > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== File pickers / previews в настройках ===== */
+.room-settings-file { display: none; }
+
+.room-settings-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.room-settings-icon-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.room-settings-icon-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.room-settings-banner-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 130px;
+  max-height: 200px;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.04);
+  background-image: radial-gradient(
+    ellipse at center,
+    rgba(88, 101, 242, 0.10) 0%,
+    transparent 70%
+  );
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  margin: 6px 0 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+/* Плэйсхолдер «Нет изображения», когда баннер не загружен. */
+.room-settings-banner-preview:not(.has-image)::after {
+  content: "Нет баннера";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+.room-settings-banner-preview.has-image {
+  /* background-image задаётся inline из rooms.js (encoded url) и
+     перекрывает radial-плейсхолдер. */
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================================
+ * Кнопки действий вокруг превью иконки: "Загрузить / Убрать".
+ * Располагаем в колонке справа от preview, чтобы на любой ширине
+ * обе кнопки были одинаково видны и читались в одном стиле.
+ * ============================================================ */
+.room-settings-icon-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.room-settings-icon-actions .room-settings-btn { justify-content: center; }
+
+/* ============================================================
+ * Responsive: маленькое окно приложения
+ * ------------------------------------------------------------
+ * Главное правило: чат всегда остаётся видимым.
+ * - message-input не должен исчезать;
+ * - messages-list не должен схлопываться до нуля (min-height: 0 + flex: 1);
+ * - лишние панели (members, room settings drawer) становятся тоньше
+ *   или занимают весь экран, но с кнопкой закрытия;
+ * - room header и tabs становятся компактнее.
+ * ============================================================ */
+
+/* <=900px — средняя ширина: скрываем правый members-sidebar,
+   ужимаем channels-sidebar, уменьшаем отступы hero-шапки. */
+@media (max-width: 900px) {
+  :root {
+    --channels-width: 200px;
+  }
+  .members-sidebar { display: none !important; }
+
+  .room-header {
+    padding: 14px 14px;
+    min-height: 88px;
+    gap: 12px;
+    border-radius: 12px;
+  }
+  .room-header-icon { width: 48px; height: 48px; border-radius: 12px; }
+  .room-header-title { font-size: 17px; }
+  .room-header-subtitle { font-size: 12px; }
+
+  .room-tabs { gap: 10px; }
+  .room-tab { min-height: 70px; padding: 10px 12px; gap: 12px; }
+  .room-tab-icon { width: 36px; height: 36px; border-radius: 10px; }
+
+  /* Панель настроек: на средних экранах — поуже, но всё ещё drawer. */
+  .room-settings-panel { width: 380px; }
+}
+
+/* <=700px — узкая ширина: rail с серверами тоньше, channels sidebar
+   заметно сокращается, room-tabs превращаются в одну колонку. */
+@media (max-width: 700px) {
+  :root {
+    --servers-width: 60px;
+    --channels-width: 180px;
+  }
+
+  .room-header {
+    padding: 10px 12px;
+    min-height: 72px;
+  }
+  .room-header-title { font-size: 16px; }
+  .room-header-members { display: none; } /* освобождаем место под заголовок */
+
+  /* room-tabs уже умеют становиться колонкой на <=820px (есть в стилях выше).
+     Дополнительно убираем лишние отступы вокруг. */
+  .room-tabs { gap: 8px; }
+
+  /* Настройки комнаты: занимают почти всю ширину, но не весь экран.
+     Важно: кнопка закрытия остаётся видимой (встроена в header панели). */
+  .room-settings-panel { width: 100vw; max-width: 100vw; }
+
+  /* message-input всегда виден — уменьшаем только внутренний padding. */
+  .message-input-area { padding: 0 10px 10px !important; }
+}
+
+/* <=560px — мобильная ширина: скрываем servers rail, делаем channels
+   sidebar узким. Чат занимает максимум места. */
+@media (max-width: 560px) {
+  :root {
+    --channels-width: 160px;
+  }
+  .servers-sidebar { display: none !important; }
+
+  .room-header { padding: 8px 10px; min-height: 64px; gap: 10px; border-radius: 10px; }
+  .room-header-icon { width: 40px; height: 40px; border-radius: 10px; font-size: 15px; }
+  .room-header-title { font-size: 15px; }
+  .room-header-subtitle { display: none; }
+  .room-header-online { display: none; }
+
+  .room-settings-nav { padding: 8px 4px 0; }
+  .room-settings-nav-item { padding: 6px 10px; font-size: 12px; }
+  .room-settings-body { padding: 14px 14px 20px; }
+  .room-settings-section { padding: 12px 12px; }
+}
+
+/* Защита от "исчезновения" чата на любой ширине:
+   - chat-view всегда колонка с минимальной высотой;
+   - messages-area берёт всё оставшееся пространство но может сжиматься;
+   - message-input-area никогда не сжимается до нуля. */
+.chat-view {
+  min-width: 0;
+  min-height: 0;
+}
+.messages-area {
+  min-height: 0;
+}
+.messages-list {
+  min-height: 0;
+}
+.message-input-area {
+  flex-shrink: 0;
+}

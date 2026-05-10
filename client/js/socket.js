@@ -7,9 +7,28 @@ const tempIdMapping = new Map();
 window.tempIdMapping = tempIdMapping;
 
 /**
+ * Получить свежий короткоживущий socket-token (5 минут, aud='socket').
+ * Никогда не логируем сам токен.
+ * Возвращает null если получить не удалось — вызывающий код примет решение.
+ */
+async function fetchSocketToken() {
+  try {
+    const data = await AuthAPI.getSocketToken();
+    if (data && typeof data.token === 'string' && data.token.length > 0) {
+      return data.token;
+    }
+    console.warn('[socket-auth] empty socket token in response');
+    return null;
+  } catch (e) {
+    console.warn('[socket-auth] failed to obtain socket token:', e.message);
+    return null;
+  }
+}
+
+/**
  * Инициализация Socket.io соединения
  */
-async function initSocket(token) {
+async function initSocket() {
   // Ждем пока api.js определит правильный BASE_URL (продакшн или дев)
   await window.apiReady;
   
@@ -20,7 +39,14 @@ async function initSocket(token) {
     socket.disconnect();
   }
 
-  // Подключаемся к серверу с токеном авторизации
+  // Получаем короткоживущий socket-token через обычный apiFetch (под основным
+  // API JWT в main process). Renderer НИКОГДА не видит долгоживущий токен.
+  const token = await fetchSocketToken();
+  if (!token) {
+    console.warn('[socket-auth] no socket token; socket will fail to authenticate');
+  }
+
+  // Подключаемся к серверу с socket-token'ом
   socket = io(SOCKET_URL, {
     auth: { token },
     transports: ['websocket', 'polling'],
@@ -28,7 +54,16 @@ async function initSocket(token) {
     reconnectionAttempts: 5,
     reconnectionDelay: 1000
   });
-  
+
+  // Перед каждой попыткой реконнекта обновляем socket-token: исходный мог
+  // истечь (TTL 5 мин) или быть отозван. socket.io v4 поддерживает
+  // динамическое обновление socket.auth перед reconnect.
+  socket.io.on('reconnect_attempt', async () => {
+    const fresh = await fetchSocketToken();
+    socket.auth = { token: fresh };
+    console.log('[socket-auth] refreshed token for reconnect_attempt');
+  });
+
   // Экспортируем в глобальную область
   window.socket = socket;
 
@@ -324,6 +359,52 @@ async function initSocket(token) {
   socket.on('error', (data) => {
     console.error('Socket error:', data.message);
     showNotification('error', data.message);
+  });
+
+  /**
+   * Backend сказал, что мы спамим. НЕ показываем общую ошибку и НЕ
+   * чистим токен — это нормальная ситуация. Запускаем локальный
+   * cooldown с retryAfter (секунды). Также удаляем optimistic temp
+   * сообщение из чата, чтобы оно не висело "недоставленным".
+   */
+  socket.on('message:rate_limited', (data) => {
+    const retryAfter = Number(data?.retryAfter) || 2;
+    const channelId = data?.channelId || window.currentChannelId;
+
+    // До удаления optimistic temp message — забираем его текст, чтобы
+    // вернуть пользователю в input. Иначе при desync'е (фронт пропустил,
+    // backend заблокировал) текст просто исчезает без следа.
+    let restoredContent = '';
+    if (data?.tempId) {
+      try {
+        const msgEl = document.querySelector(`[data-message-id="${data.tempId}"]`);
+        if (msgEl) {
+          const contentEl = msgEl.querySelector('.message-content, .message-text');
+          restoredContent = (contentEl?.textContent || '').trim();
+        }
+      } catch (e) { /* no-op */ }
+      if (typeof removeMessageFromDOM === 'function') {
+        try { removeMessageFromDOM(data.tempId); } catch (e) { /* no-op */ }
+      }
+    }
+    // Возвращаем текст в input ТОЛЬКО если он сейчас пустой — не
+    // затираем то, что пользователь успел набрать после отправки.
+    if (restoredContent) {
+      const input = document.getElementById('message-input');
+      if (input && !input.value) {
+        input.value = restoredContent;
+      }
+    }
+
+    if (typeof window.triggerMessageCooldown === 'function') {
+      window.triggerMessageCooldown(channelId, retryAfter, {
+        violationLevel: Number(data?.violationLevel) || undefined,
+        warningTitle: data?.warningTitle,
+        warningText: data?.warningText,
+      });
+    } else if (typeof showNotification === 'function') {
+      showNotification('warning', data?.warningText || `Подожди ${retryAfter} сек.`);
+    }
   });
 
   return socket;

@@ -89,31 +89,14 @@ async function uploadEmoji() {
   }
   
   try {
+    // Загрузка через безопасный IPC proxy (apiUpload подставляет токен в main process).
+    // НЕ читаем raw JWT в renderer — это нарушение security-модели.
     const formData = new FormData();
     formData.append('emoji', selectedEmojiFile);
     formData.append('name', name);
-    
-    const apiRoot = window.API_BASE || `${(window.BASE_URL || 'http://localhost:5555').replace(/\/$/, '')}/api`;
-    const response = await fetch(`${apiRoot}/servers/${window.currentServerId}/emojis`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: formData
-    });
 
-    const raw = await response.text();
-    let data = {};
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch {
-      throw new Error(response.status >= 500 ? 'Ошибка сервера' : 'Некорректный ответ сервера');
-    }
+    await apiUpload(`/servers/${window.currentServerId}/emojis`, formData, 'POST');
 
-    if (!response.ok) {
-      throw new Error(data.message || 'Ошибка загрузки');
-    }
-    
     showNotification('success', 'Эмодзи загружен');
     
     // Очищаем форму
@@ -152,13 +135,36 @@ async function loadServerEmojis() {
     return;
   }
   
-  grid.innerHTML = emojis.map(emoji => `
-    <div class="emoji-item">
-      <button class="emoji-item-delete" onclick="deleteEmoji('${emoji._id}')" title="Удалить">×</button>
-      <img src="${window.BASE_URL || 'http://localhost:5555'}${emoji.url}" alt="${emoji.name}">
-      <div class="emoji-item-name">:${emoji.name}:</div>
-    </div>
-  `).join('');
+  // Очищаем grid безопасно
+  grid.innerHTML = '';
+  
+  emojis.forEach(emoji => {
+    const emojiItem = document.createElement('div');
+    emojiItem.className = 'emoji-item';
+    
+    // Кнопка удаления
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'emoji-item-delete';
+    deleteBtn.title = 'Удалить';
+    deleteBtn.textContent = '×';
+    deleteBtn.addEventListener('click', () => deleteEmoji(emoji._id));
+    
+    // Изображение эмодзи
+    const img = document.createElement('img');
+    img.src = `${window.BASE_URL || 'http://localhost:5555'}${emoji.url}`;
+    img.alt = escapeHtml(emoji.name);
+    
+    // Название эмодзи
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'emoji-item-name';
+    nameDiv.textContent = `:${emoji.name}:`; // ИСПРАВЛЕНО: Безопасно через textContent
+    
+    emojiItem.appendChild(deleteBtn);
+    emojiItem.appendChild(img);
+    emojiItem.appendChild(nameDiv);
+    
+    grid.appendChild(emojiItem);
+  });
 }
 
 /**
@@ -173,21 +179,11 @@ async function deleteEmoji(emojiId) {
   }
   
   try {
-    const apiRoot = window.API_BASE || `${(window.BASE_URL || 'http://localhost:5555').replace(/\/$/, '')}/api`;
-    const response = await fetch(`${apiRoot}/servers/${window.currentServerId}/emojis/${emojiId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
+    // Удаление через безопасный IPC proxy (apiFetch подставляет токен в main process).
+    await apiFetch(`/servers/${window.currentServerId}/emojis/${emojiId}`, {
+      method: 'DELETE'
     });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || 'Ошибка удаления');
-    }
-    
+
     showNotification('success', 'Эмодзи удален');
     
     // Обновляем список эмодзи

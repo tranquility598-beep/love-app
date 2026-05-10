@@ -401,6 +401,35 @@ router.post('/logout', authMiddleware, async (req, res) => {
 });
 
 /**
+ * POST /api/auth/socket-token
+ * Выдать короткоживущий JWT специально для Socket.io.
+ *
+ * Дизайн:
+ *  - Доступ только для уже авторизованных пользователей (authMiddleware).
+ *  - Срок жизни 5 минут, чтобы минимизировать ущерб при компрометации.
+ *  - Audience claim 'socket' — socketHandler принимает ТОЛЬКО такие токены,
+ *    обычный долгоживущий API JWT использовать для socket нельзя.
+ *  - В payload — только userId. НИКАКИХ session id (sid) и других чувствительных
+ *    полей. Основной токен пользователя НЕ возвращается.
+ *  - Не логируем сам токен (это секрет).
+ */
+router.post('/socket-token', authMiddleware, async (req, res) => {
+  try {
+    const token = jwt.sign(
+      { userId: req.user._id, aud: 'socket' },
+      JWT_SECRET,
+      { expiresIn: '5m' }
+    );
+    // Логируем только факт выдачи + userId. Без токена.
+    console.log('[socket-token] issued for userId=', req.user._id.toString());
+    res.json({ token, expiresIn: 300 });
+  } catch (error) {
+    console.error('socket-token error:', error.message);
+    res.status(500).json({ message: 'Не удалось выдать socket-token' });
+  }
+});
+
+/**
  * GET /api/auth/me
  * Получить данные текущего пользователя
  */
@@ -461,8 +490,11 @@ router.get('/login-logs', authMiddleware, async (req, res) => {
     const logs = await LoginLog.find({ userId: req.user._id })
       .sort({ timestamp: -1 })
       .limit(20);
-    
-    res.json({ logs });
+
+    // Возвращаем currentSid вместе с логами, чтобы UI мог пометить
+    // текущую сессию БЕЗ парсинга JWT в renderer.
+    // req.sid извлекается authMiddleware из верифицированного токена.
+    res.json({ logs, currentSid: req.sid || null });
   } catch (error) {
     console.error('Get login logs error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });

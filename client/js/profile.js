@@ -15,29 +15,30 @@ function openProfile(userId) {
   
   currentProfileUserId = userId;
   const modal = document.getElementById('profile-modal');
-  const editForm = document.getElementById('profile-edit-form');
   const editBtn = document.getElementById('profile-edit-btn');
   const messageBtn = document.getElementById('profile-message-btn');
   const blockBtn = document.getElementById('profile-block-btn');
   
   // Показываем модалку
-  modal.classList.remove('hidden');
-  editForm.classList.add('hidden');
+  if (modal) modal.classList.remove('hidden');
   
   // Проверяем свой ли это профиль
   const isOwnProfile = userId === window.currentUser._id;
   
   if (isOwnProfile) {
-    editBtn.style.display = 'block';
-    messageBtn.style.display = 'none';
-    blockBtn.style.display = 'none';
+    // В большой карточке прячем кнопку "Редактировать" — она теперь в popover
+    if (editBtn) editBtn.style.display = 'none';
+    if (messageBtn) messageBtn.style.display = 'none';
+    if (blockBtn) blockBtn.style.display = 'none';
+    // Сразу показываем свои данные, чтобы не было пустой карточки до ответа сервера
+    displayProfile(window.currentUser);
   } else {
-    editBtn.style.display = 'none';
-    messageBtn.style.display = 'block';
-    blockBtn.style.display = 'block';
+    if (editBtn) editBtn.style.display = 'none';
+    if (messageBtn) messageBtn.style.display = 'block';
+    if (blockBtn) blockBtn.style.display = 'block';
   }
   
-  // Запрашиваем данные профиля
+  // Запрашиваем актуальные данные профиля
   window.socket.emit('profile:get', { userId });
 }
 
@@ -50,101 +51,7 @@ function closeProfileModal() {
   currentProfileUserId = null;
 }
 
-/**
- * Показать форму редактирования профиля
- */
-function showEditProfile() {
-  const editForm = document.getElementById('profile-edit-form');
-  const editBioTextarea = document.getElementById('profile-edit-bio');
-  const editBannerInput = document.getElementById('profile-edit-banner');
-  const editColorInput = document.getElementById('profile-edit-color');
-  const editUsernameInput = document.getElementById('profile-edit-username');
-  const editYoutubeInput = document.getElementById('profile-edit-youtube');
-  const editTiktokInput = document.getElementById('profile-edit-tiktok');
-  
-  // Заполняем форму текущими данными
-  if (editUsernameInput) editUsernameInput.value = window.currentUser.username || '';
-  editBioTextarea.value = window.currentUser.bio || '';
-  editBannerInput.value = window.currentUser.banner || '';
-  editColorInput.value = window.currentUser.profileColor || '#5865F2';
-  
-  if (window.currentUser.connectedAccounts) {
-    if (window.currentUser.connectedAccounts.youtube && editYoutubeInput) {
-      editYoutubeInput.value = window.currentUser.connectedAccounts.youtube.url || '';
-    }
-    if (window.currentUser.connectedAccounts.tiktok && editTiktokInput) {
-      editTiktokInput.value = window.currentUser.connectedAccounts.tiktok.url || '';
-    }
-  }
-  
-  updateBioCharCount();
-  
-  editForm.classList.remove('hidden');
-}
-
-/**
- * Отменить редактирование профиля
- */
-function cancelEditProfile() {
-  const editForm = document.getElementById('profile-edit-form');
-  editForm.classList.add('hidden');
-}
-
-/**
- * Сохранить изменения профиля
- */
-async function submitProfileModal() {
-  const username = document.getElementById('profile-edit-username').value;
-  const bio = document.getElementById('profile-edit-bio').value;
-  const banner = document.getElementById('profile-edit-banner').value;
-  const profileColor = document.getElementById('profile-edit-color').value;
-  const avatarFileEl = document.getElementById('profile-edit-avatar-file');
-  const avatarFile = avatarFileEl ? avatarFileEl.files[0] : null;
-
-  if (avatarFile) {
-    try {
-      const formData = new FormData();
-      formData.append('avatar', avatarFile);
-      const res = await fetch((window.BASE_URL || '') + '/api/users/avatar', {
-        method: 'PUT',
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-        body: formData
-      });
-      if (!res.ok) throw new Error('Ошибка загрузки аватара');
-    } catch (e) {
-      console.error(e);
-      showNotification('Ошибка загрузки аватара', 'error');
-    }
-  }
-
-  window.socket.emit('profile:update', {
-    username,
-    bio,
-    banner: banner || null,
-    profileColor
-  });
-  
-  cancelEditProfile();
-}
-
-function connectIntegration(platform) {
-  const inputId = platform === 'youtube' ? 'profile-edit-youtube' : 'profile-edit-tiktok';
-  const url = document.getElementById(inputId).value;
-  if (!url) return showNotification('Введите URL', 'error');
-  
-  window.socket.emit('integration:connect', { platform, url });
-}
-
-/**
- * Обновить счетчик символов биографии
- */
-function updateBioCharCount() {
-  const textarea = document.getElementById('profile-edit-bio');
-  const counter = document.getElementById('bio-char-count');
-  if (textarea && counter) {
-    counter.textContent = textarea.value.length;
-  }
-}
+// Функции редактирования профиля перенесены в настройки (settings.js/ui.js)
 
 /**
  * Отобразить данные профиля
@@ -164,7 +71,11 @@ function displayProfile(profile) {
   if (profile.banner) {
     banner.style.backgroundImage = `url(${profile.banner})`;
   } else if (profile.profileColor) {
-    banner.style.background = profile.profileColor;
+    // Допускаем только hex (#RGB / #RRGGBB) — защита от CSS-инъекций.
+    const c = String(profile.profileColor);
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) {
+      banner.style.background = c;
+    }
   }
   
   // Аватар
@@ -174,14 +85,15 @@ function displayProfile(profile) {
   username.textContent = profile.username;
   
   // Биография
-  bio.textContent = profile.bio || 'Биография не указана';
+  bio.textContent = profile.bio ? profile.bio : 'Биография не указана';
   
   // Дата регистрации
   if (profile.createdAt) {
     const date = new Date(profile.createdAt);
     memberSince.textContent = `Участник с: ${!isNaN(date.valueOf()) ? date.toLocaleDateString('ru-RU') : 'Неизвестно'}`;
+    memberSince.style.display = 'block';
   } else {
-    memberSince.textContent = 'Участник с: Неизвестно';
+    memberSince.style.display = 'none';
   }
   
   // Статус
@@ -303,7 +215,9 @@ if (window.socket) {
     }
     
     // Показываем уведомление
-    showNotification('Профиль успешно обновлен', 'success');
+    if (typeof showNotification === 'function') {
+      showNotification('success', 'Профиль успешно обновлен');
+    }
   });
   
   // Профиль другого пользователя обновлен
@@ -316,12 +230,12 @@ if (window.socket) {
   
   // Пользователь заблокирован
   window.socket.on('user:blocked', (data) => {
-    showNotification('Пользователь заблокирован', 'success');
+    if (typeof showNotification === 'function') showNotification('success', 'Пользователь заблокирован');
   });
   
   // Пользователь разблокирован
   window.socket.on('user:unblocked', (data) => {
-    showNotification('Пользователь разблокирован', 'success');
+    if (typeof showNotification === 'function') showNotification('success', 'Пользователь разблокирован');
   });
 }
 
@@ -331,7 +245,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Кнопка редактирования профиля
   const editBtn = document.getElementById('profile-edit-btn');
   if (editBtn) {
-    editBtn.addEventListener('click', showEditProfile);
+    editBtn.addEventListener('click', () => {
+      closeProfileModal();
+      if (typeof showSettings === 'function') {
+        showSettings();
+        setTimeout(() => {
+          const profileTabBtn = document.querySelector('.settings-nav-item'); // Первый пункт - обычно профиль
+          if (profileTabBtn && typeof showSettingsTab === 'function') {
+            showSettingsTab('profile', profileTabBtn);
+          }
+        }, 10);
+      }
+    });
   }
   
   // Кнопка блокировки
@@ -346,11 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     messageBtn.addEventListener('click', messageUser);
   }
   
-  // Счетчик символов биографии
-  const bioTextarea = document.getElementById('profile-edit-bio');
-  if (bioTextarea) {
-    bioTextarea.addEventListener('input', updateBioCharCount);
-  }
+  // Счетчик символов удален вместе с формой
   
   // Клик по имени пользователя в сообщениях
   document.addEventListener('click', (e) => {
@@ -373,30 +294,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Показать уведомление
-function showNotification(message, type = 'info') {
-  // Создаем элемент уведомления
-  const notification = document.createElement('div');
-  notification.className = `notification notification-${type}`;
-  notification.textContent = message;
-  notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 15px 20px;
-    background: ${type === 'success' ? '#43b581' : type === 'error' ? '#f04747' : '#5865f2'};
-    color: white;
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    z-index: 10000;
-    animation: slideIn 0.3s ease;
-  `;
-  
-  document.body.appendChild(notification);
-  
-  // Удаляем через 3 секунды
-  setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease';
-    setTimeout(() => notification.remove(), 300);
-  }, 3000);
-}
+// Дубликат функции showNotification удален. Используется глобальная из ui.js

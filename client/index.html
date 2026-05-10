@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles/chat.css">
   <link rel="stylesheet" href="styles/modals.css">
   <link rel="stylesheet" href="styles/voice-view.css">
+  <link rel="stylesheet" href="styles/rooms.css">
   <script>
     (function() {
       const savedTheme = localStorage.getItem('love-theme') || 'space';
@@ -306,21 +307,90 @@
 
       <div class="servers-divider"></div>
 
-      <!-- Add Server -->
-      <div class="server-icon add-server" onclick="showCreateServerModal()" title="Создать сервер">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <div class="server-tooltip">Создать сервер</div>
+      <!-- Единая точка создания/входа: один "+" открывает компактное
+           меню с тремя действиями (сервер, комната, по коду).
+           Обработчики бинди́тся в client/js/servers.js через
+           addEventListener — никаких inline onclick. -->
+      <div class="server-icon add-server" id="add-entity-btn" role="button"
+           tabindex="0" aria-haspopup="menu" aria-expanded="false"
+           aria-controls="add-entity-menu" title="Создать или войти">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <div class="server-tooltip">Создать или войти</div>
       </div>
 
-      <!-- Join Server -->
-      <div class="server-icon join-server" onclick="showJoinServerModal()" title="Присоединиться к серверу">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-          <polyline points="10 17 15 12 10 7"/>
-          <line x1="15" y1="12" x2="3" y2="12"/>
-        </svg>
-        <div class="server-tooltip">Присоединиться по коду</div>
+      <!-- Скрытая кнопка для обратной совместимости с rooms.js
+           (createRoom binds к #create-room-btn). Меню вызывает её
+           программным click(). -->
+      <div class="server-icon hidden" id="create-room-btn" aria-hidden="true"></div>
+
+      <!-- ===== Compact account для server rail =====
+           Показывается ТОЛЬКО в room-mode (см. styles/sidebar.css), когда
+           основной #user-panel-root внутри #channels-sidebar скрыт вместе
+           с самим channels-sidebar. В DM/обычных серверах compact скрыт,
+           работает старый большой профиль.
+           id="server-rail-account" — другой id, чтобы не дублировать
+           #user-panel-root. Обработчики через addEventListener в ui.js. -->
+      <div class="server-rail-account" id="server-rail-account" aria-hidden="true">
+        <button type="button" class="rail-account-avatar" id="rail-profile-btn" title="Профиль">
+          <img class="rail-account-img" id="rail-account-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23222'/%3E%3Cpath d='M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z' fill='white' opacity='0.6'/%3E%3C/svg%3E" alt="">
+          <span class="rail-account-dot" id="rail-account-dot"></span>
+        </button>
+        <button type="button" class="rail-account-settings account-settings-btn" id="rail-settings-btn" title="Настройки аккаунта">
+          <svg class="settings-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M18 7h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M4 17h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M10 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
       </div>
+    </div>
+
+    <!-- Popover-меню единого создания/входа. Позиционируется в JS
+         (servers.js bindAddEntityMenu). По умолчанию скрыто. -->
+    <div class="add-entity-menu hidden" id="add-entity-menu" role="menu" aria-labelledby="add-entity-btn">
+      <button type="button" class="add-entity-menu-item" data-action="create-server" role="menuitem">
+        <span class="add-entity-menu-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="3"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+          </svg>
+        </span>
+        <span class="add-entity-menu-text">
+          <span class="add-entity-menu-title">Создать сервер</span>
+          <span class="add-entity-menu-desc">Полноценный сервер с категориями</span>
+        </span>
+      </button>
+      <button type="button" class="add-entity-menu-item" data-action="create-room" role="menuitem">
+        <span class="add-entity-menu-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="5" width="18" height="14" rx="2"/>
+            <line x1="3" y1="11" x2="21" y2="11"/>
+          </svg>
+        </span>
+        <span class="add-entity-menu-text">
+          <span class="add-entity-menu-title">Создать комнату</span>
+          <span class="add-entity-menu-desc">Текст и голос в одном месте</span>
+        </span>
+      </button>
+      <button type="button" class="add-entity-menu-item" data-action="join-by-code" role="menuitem">
+        <span class="add-entity-menu-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10 17 15 12 10 7"/>
+            <line x1="15" y1="12" x2="3" y2="12"/>
+          </svg>
+        </span>
+        <span class="add-entity-menu-text">
+          <span class="add-entity-menu-title">Войти по коду</span>
+          <span class="add-entity-menu-desc">Присоединиться по приглашению</span>
+        </span>
+      </button>
     </div>
 
     <!-- Channels Sidebar -->
@@ -381,12 +451,12 @@
         </div>
 
       <!-- User Panel -->
-      <div class="user-panel">
-        <div class="user-panel-avatar" onclick="if(window.currentUser) openProfile(window.currentUser._id)">
+      <div class="user-panel" id="user-panel-root">
+        <div class="user-panel-avatar" onclick="toggleProfilePopover(event)">
           <img class="avatar-img" id="user-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23222'/%3E%3Cpath d='M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z' fill='white' opacity='0.6'/%3E%3C/svg%3E" alt="Avatar">
           <div class="user-status-dot online" id="user-status-dot"></div>
         </div>
-        <div class="user-panel-info" onclick="if(window.currentUser) openProfile(window.currentUser._id)">
+        <div class="user-panel-info" onclick="toggleProfilePopover(event)">
           <div class="user-panel-name" id="user-panel-name">Загрузка...</div>
         </div>
         <div class="user-panel-controls">
@@ -396,8 +466,15 @@
           <button class="user-control-btn" id="headset-btn" onclick="toggleDeafen()" title="Наушники">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
           </button>
-          <button class="user-control-btn" onclick="showSettings()" title="Настройки">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          <button class="user-control-btn account-settings-btn" onclick="showSettings()" title="Настройки">
+            <svg class="settings-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M18 7h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="2"/>
+              <path d="M4 17h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M10 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="2"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -420,6 +497,282 @@
         </div>
       </div>
 
+      <!-- Room chrome — отображается только в room-режиме (body.room-mode).
+           Содержит ТОЛЬКО шапку и переключатель вкладок. Active-панель —
+           отдельный sibling ниже (room-chat-strip+chat-view / voice-panel /
+           media-empty). Все обработчики через addEventListener в rooms.js. -->
+      <div class="room-view hidden" id="room-view">
+
+        <!-- Компактная шапка комнаты: иконка, имя, описание, онлайн-счётчик,
+             превью аватаров, кнопка настроек. Не баннер. -->
+        <header class="room-header">
+          <div class="room-header-icon" id="room-header-icon" aria-hidden="true"></div>
+          <div class="room-header-info">
+            <div class="room-header-title-row">
+              <h2 class="room-header-title" id="room-view-name"></h2>
+              <span class="room-header-online" id="room-view-online" title="Участников онлайн">
+                <span class="room-header-online-dot" aria-hidden="true"></span>
+                <span class="room-header-online-text">0</span>
+              </span>
+            </div>
+            <div class="room-header-subtitle" id="room-view-status"></div>
+          </div>
+          <div class="room-header-members" id="room-view-members" aria-label="Участники комнаты"></div>
+          <button type="button" class="room-header-settings-btn" id="room-settings-btn" title="Настройки комнаты" aria-label="Настройки комнаты">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </header>
+
+        <!-- Три большие плашки: главный переключатель режимов комнаты. -->
+        <div class="room-tabs" role="tablist" aria-label="Разделы комнаты">
+          <button type="button" class="room-tab" id="room-tab-chat" data-room-tab="chat" role="tab" aria-selected="false">
+            <span class="room-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <div class="room-tab-body">
+              <span class="room-tab-label">Чат</span>
+              <span class="room-tab-hint" id="room-tab-chat-meta">Открой текстовый чат комнаты</span>
+            </div>
+            <span class="room-tab-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button type="button" class="room-tab" id="room-tab-voice" data-room-tab="voice" role="tab" aria-selected="false">
+            <span class="room-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </span>
+            <div class="room-tab-body">
+              <span class="room-tab-label">Войс</span>
+              <span class="room-tab-hint" id="room-tab-voice-meta">Никого в войсе</span>
+            </div>
+            <span class="room-tab-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button type="button" class="room-tab" id="room-tab-media" data-room-tab="media" role="tab" aria-selected="false">
+            <span class="room-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </span>
+            <div class="room-tab-body">
+              <span class="room-tab-label">Медиа</span>
+              <span class="room-tab-hint" id="room-tab-media-meta">Скоро</span>
+            </div>
+            <span class="room-tab-arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active mode panels — siblings of #room-view, показываются только в room-режиме.
+           В режиме комнаты одновременно открыта ровно одна из них:
+           chat-view (legacy, restyled через CSS) | room-voice-panel | room-media-empty -->
+
+      <!-- Mini-strip над встроенной chat-view: показывается только в room-mode + chat tab -->
+      <div class="room-chat-strip hidden" id="room-chat-strip" aria-hidden="true">
+        <span class="room-chat-strip-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="room-chat-strip-title">Чат</span>
+        <span class="room-chat-strip-sep" aria-hidden="true">·</span>
+        <span class="room-chat-strip-status" id="room-chat-strip-status">Комната активна</span>
+      </div>
+
+      <!-- Voice mode panel: preconnect (Присоединиться) + connected (Mic/Sound/Screen/Leave) -->
+      <section class="room-voice-panel hidden" id="room-voice-panel" aria-label="Войс комнаты">
+        <div class="room-voice-panel-header">
+          <div class="room-voice-panel-title">Войс комнаты</div>
+          <div class="room-voice-panel-subtitle" id="room-voice-panel-subtitle">Никого в войсе</div>
+        </div>
+        <div class="room-voice-panel-cards" id="room-voice-panel-cards" role="list"></div>
+
+        <!-- Preconnect: одна большая зелёная кнопка -->
+        <div class="room-voice-preconnect" id="room-voice-preconnect">
+          <button type="button" class="room-voice-connect-btn" id="room-voice-connect-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            <span>Присоединиться</span>
+          </button>
+        </div>
+
+        <!-- Connected: панель управления (mic/sound/screen/leave) -->
+        <div class="room-voice-controls hidden" id="room-voice-controls" role="group" aria-label="Управление войсом">
+          <button type="button" class="room-voice-ctrl-btn" id="room-voice-mic-btn" title="Микрофон" aria-label="Микрофон" data-muted="false">
+            <svg class="room-voice-ctrl-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <svg class="room-voice-ctrl-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span class="room-voice-ctrl-label">Микрофон</span>
+          </button>
+
+          <button type="button" class="room-voice-ctrl-btn" id="room-voice-sound-btn" title="Звук" aria-label="Звук" data-muted="false">
+            <svg class="room-voice-ctrl-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+            <svg class="room-voice-ctrl-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M11 5L6 9H2v6h4l5 4V5z"/></svg>
+            <span class="room-voice-ctrl-label">Звук</span>
+          </button>
+
+          <button type="button" class="room-voice-ctrl-btn" id="room-voice-screen-btn" title="Демонстрация экрана" aria-label="Демонстрация экрана" data-active="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="room-voice-ctrl-label">Экран</span>
+          </button>
+
+          <button type="button" class="room-voice-ctrl-btn room-voice-ctrl-btn-leave" id="room-voice-leave-btn" title="Выйти" aria-label="Выйти">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span class="room-voice-ctrl-label">Выйти</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Media mode panel: красивое пустое состояние -->
+      <section class="room-media-empty hidden" id="room-media-empty" role="status" aria-live="polite">
+        <div class="room-media-empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <div class="room-media-empty-title">Медиа появятся здесь</div>
+        <div class="room-media-empty-hint">Когда участники начнут делиться файлами, изображениями, видео и голосовыми — всё это окажется на этой вкладке.</div>
+      </section>
+
+      <!-- Правая выезжающая панель настроек комнаты.
+           Открывается только когда currentServer.settings.kind === 'room'.
+           Управляется из client/js/rooms.js через addEventListener.
+           Никаких inline onclick / inline style — только классы. -->
+      <aside class="room-settings-panel hidden" id="room-settings-panel"
+             role="dialog" aria-modal="false" aria-labelledby="room-settings-title" aria-hidden="true">
+        <header class="room-settings-header">
+          <h3 class="room-settings-title" id="room-settings-title">Настройки комнаты</h3>
+          <button type="button" class="room-settings-close" id="room-settings-close" aria-label="Закрыть настройки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </header>
+
+        <!-- Контейнер вкладок: стрелки слева/справа + сама лента .room-settings-nav.
+             Стрелки появляются автоматически когда контент не помещается
+             (управляется CSS-классами is-overflowing/at-start/at-end из rooms.js). -->
+        <div class="room-settings-nav-wrap">
+          <button type="button" class="room-settings-nav-arrow room-settings-nav-arrow--prev"
+                  id="room-settings-nav-prev" aria-label="Прокрутить влево" tabindex="-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <nav class="room-settings-nav" role="tablist" aria-label="Разделы настроек">
+            <button type="button" class="room-settings-nav-item active" data-rs-section="general" role="tab" aria-selected="true">Основное</button>
+            <button type="button" class="room-settings-nav-item" data-rs-section="appearance" role="tab" aria-selected="false">Внешний вид</button>
+            <button type="button" class="room-settings-nav-item" data-rs-section="members" role="tab" aria-selected="false">Участники</button>
+            <button type="button" class="room-settings-nav-item" data-rs-section="invite" role="tab" aria-selected="false">Приглашение</button>
+            <button type="button" class="room-settings-nav-item room-settings-nav-danger" data-rs-section="danger" role="tab" aria-selected="false">Действия с комнатой</button>
+          </nav>
+          <button type="button" class="room-settings-nav-arrow room-settings-nav-arrow--next"
+                  id="room-settings-nav-next" aria-label="Прокрутить вправо" tabindex="-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="room-settings-body">
+
+          <!-- Основное -->
+          <section class="room-settings-section active" data-rs-section-body="general" role="tabpanel">
+            <label class="room-settings-field">
+              <span class="room-settings-label">Название комнаты</span>
+              <input type="text" class="room-settings-input" id="room-settings-name" maxlength="100" autocomplete="off">
+            </label>
+            <label class="room-settings-field">
+              <span class="room-settings-label">Описание</span>
+              <textarea class="room-settings-input room-settings-textarea" id="room-settings-desc" maxlength="500" rows="3"></textarea>
+            </label>
+            <label class="room-settings-field">
+              <span class="room-settings-label">Вайб статус</span>
+              <input type="text" class="room-settings-input" id="room-settings-vibe" maxlength="60" placeholder="Например: Ночной разговор, Играем, Учёба, Чилл" autocomplete="off">
+              <div class="room-settings-vibe-presets" id="room-settings-vibe-presets">
+                <button type="button" class="room-settings-vibe-preset" data-vibe="Ночной разговор">Ночной разговор</button>
+                <button type="button" class="room-settings-vibe-preset" data-vibe="Играем">Играем</button>
+                <button type="button" class="room-settings-vibe-preset" data-vibe="Учёба">Учёба</button>
+                <button type="button" class="room-settings-vibe-preset" data-vibe="Чилл">Чилл</button>
+              </div>
+            </label>
+            <div class="room-settings-actions">
+              <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-cancel">Отмена</button>
+              <button type="button" class="room-settings-btn room-settings-btn-primary" id="room-settings-save">Сохранить</button>
+            </div>
+            <div class="room-settings-status hidden" id="room-settings-status" aria-live="polite"></div>
+          </section>
+
+          <!-- Внешний вид -->
+          <section class="room-settings-section" data-rs-section-body="appearance" role="tabpanel">
+            <label class="room-settings-field">
+              <span class="room-settings-label">Цвет комнаты</span>
+              <input type="color" class="room-settings-color" id="room-settings-color" value="#5865f2">
+              <p class="room-settings-hint">Используется для активной плашки и тонких акцентов.</p>
+            </label>
+            <div class="room-settings-field">
+              <span class="room-settings-label">Иконка комнаты</span>
+              <div class="room-settings-icon-row">
+                <div class="room-settings-icon-preview" id="room-settings-icon-preview" aria-hidden="true"></div>
+                <div class="room-settings-icon-actions">
+                  <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-icon-btn">Загрузить иконку</button>
+                  <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-icon-clear">Убрать иконку</button>
+                </div>
+                <input type="file" id="room-settings-icon-file" class="room-settings-file" accept="image/png,image/jpeg,image/webp,image/gif">
+              </div>
+              <p class="room-settings-hint">PNG, JPG, WEBP или GIF, до 8 МБ. SVG не поддерживается.</p>
+            </div>
+            <div class="room-settings-field">
+              <span class="room-settings-label">Баннер / фон</span>
+              <div class="room-settings-banner-preview" id="room-settings-banner-preview" aria-hidden="true"></div>
+              <div class="room-settings-icon-row">
+                <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-banner-btn">Загрузить баннер</button>
+                <input type="file" id="room-settings-banner-file" class="room-settings-file" accept="image/png,image/jpeg,image/webp,image/gif">
+                <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-banner-clear">Убрать</button>
+              </div>
+              <p class="room-settings-hint">PNG, JPG, WEBP или GIF, до 12 МБ. SVG не поддерживается.</p>
+            </div>
+            <div class="room-settings-actions">
+              <button type="button" class="room-settings-btn room-settings-btn-primary" id="room-settings-appearance-save">Сохранить цвет</button>
+            </div>
+          </section>
+
+          <!-- Участники -->
+          <section class="room-settings-section" data-rs-section-body="members" role="tabpanel">
+            <div class="room-settings-members-header">
+              <span class="room-settings-label">Участники</span>
+              <button type="button" class="room-settings-btn room-settings-btn-primary" id="room-settings-invite-shortcut">Пригласить</button>
+            </div>
+            <ul class="room-settings-members-list" id="room-settings-members-list" role="list"></ul>
+          </section>
+
+          <!-- Приглашение -->
+          <section class="room-settings-section" data-rs-section-body="invite" role="tabpanel">
+            <div class="room-settings-field">
+              <span class="room-settings-label">Текущий код приглашения</span>
+              <div class="room-settings-invite-row">
+                <input type="text" class="room-settings-input room-settings-invite-input" id="room-settings-invite-code" readonly placeholder="Нет активного кода">
+                <button type="button" class="room-settings-btn room-settings-btn-ghost" id="room-settings-invite-copy">Копировать</button>
+              </div>
+            </div>
+            <div class="room-settings-actions">
+              <button type="button" class="room-settings-btn room-settings-btn-primary" id="room-settings-invite-create">Создать приглашение</button>
+            </div>
+            <div class="room-settings-status hidden" id="room-settings-invite-status" aria-live="polite"></div>
+          </section>
+
+          <!-- Действия с комнатой -->
+          <section class="room-settings-section" data-rs-section-body="danger" role="tabpanel">
+            <div class="room-settings-field" id="room-settings-leave-block">
+              <span class="room-settings-label">Выйти из комнаты</span>
+              <p class="room-settings-hint" id="room-settings-leave-hint">Вы перестанете быть участником этой комнаты.</p>
+              <button type="button" class="room-settings-btn room-settings-btn-warn" id="room-settings-leave">Выйти из комнаты</button>
+            </div>
+            <div class="room-settings-field room-settings-owner-only" id="room-settings-delete-block">
+              <span class="room-settings-label">Удалить комнату</span>
+              <p class="room-settings-hint">Действие необратимо. Комната будет удалена для всех участников.</p>
+              <button type="button" class="room-settings-btn room-settings-btn-danger" id="room-settings-delete">Удалить комнату</button>
+            </div>
+          </section>
+
+        </div>
+      </aside>
+      <div class="room-settings-backdrop hidden" id="room-settings-backdrop" aria-hidden="true"></div>
+
       <!-- Friends View -->
       <div class="friends-view hidden" id="friends-view">
         <div class="friends-header">
@@ -430,11 +783,19 @@
             <span class="friends-header-title">Друзья</span>
           </div>
           <div class="friends-tabs">
-            <button class="friends-tab active" onclick="showFriendsTab('online')" id="tab-online">В сети</button>
-            <button class="friends-tab" onclick="showFriendsTab('all')" id="tab-all">Все</button>
-            <button class="friends-tab" onclick="showFriendsTab('pending')" id="tab-pending">Ожидающие</button>
-            <button class="friends-tab add-friend-tab" onclick="showFriendsTab('add')" id="tab-add">Добавить</button>
+            <button class="friends-tab active" id="tab-all" data-friends-tab="all">Все</button>
+            <button class="friends-tab" id="tab-online" data-friends-tab="online">В сети</button>
+            <button class="friends-tab" id="tab-pending" data-friends-tab="pending">Ожидающие</button>
           </div>
+          <!-- Постоянная кнопка "Добавить в друзья": видна на любой
+               вкладке, переключает на "Добавить" и фокусит input.
+               Обработчик в client/js/friends.js (bindFriendsTabs). -->
+          <button type="button" class="friends-add-btn" id="friends-add-btn" data-friends-tab="add">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>Добавить в друзья</span>
+          </button>
         </div>
         <div class="friends-content" id="friends-content"></div>
       </div>
@@ -616,8 +977,9 @@
               <button class="emoji-btn" onclick="toggleEmojiPicker()" title="Эмодзи">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
               </button>
-              <button class="send-btn" onclick="sendMessage()" title="Отправить">
+              <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Отправить">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <span class="send-btn-cooldown" id="send-btn-cooldown" aria-live="polite"></span>
               </button>
             </div>
           </div>
@@ -678,6 +1040,28 @@
 
 <!-- ===== MODALS ===== -->
 
+<!--
+  Anti-spam warning modal.
+  Управляется client/js/chat.js (showAntispamModal / hideAntispamModal /
+  updateAntispamCountdown). Текст и countdown подставляются через
+  textContent (никакого innerHTML с пользовательскими данными).
+  Кнопка "Понял" биндится через addEventListener в chat.js.
+-->
+<div class="modal-overlay hidden" id="antispam-modal" role="dialog" aria-modal="true" aria-labelledby="antispam-modal-title">
+  <div class="modal antispam-modal">
+    <div class="modal-header">
+      <h2 id="antispam-modal-title">Харе так спешить!</h2>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description" id="antispam-modal-text">Ты отправляешь сообщения слишком быстро. Подожди пару секунд.</p>
+      <div class="antispam-modal-timer" id="antispam-modal-timer" aria-live="polite">Можно писать через 2 сек.</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn primary" id="antispam-modal-ok">Понял</button>
+    </div>
+  </div>
+</div>
+
 <!-- Create Server Modal -->
 <div class="modal-overlay hidden" id="create-server-modal">
   <div class="modal">
@@ -707,6 +1091,33 @@
     <div class="modal-footer">
       <button class="modal-btn secondary" onclick="closeModal('create-server-modal')">Отмена</button>
       <button class="modal-btn primary" onclick="createServer()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Room Modal (минимальная: только название и описание).
+     Все обработчики подключаются в rooms.js через addEventListener. -->
+<div class="modal-overlay hidden" id="create-room-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Создать комнату</h2>
+      <button type="button" class="modal-close" id="create-room-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Комната — это упрощённое пространство с одним чатом и одним голосовым каналом. Медиа-вкладка появится позже.</p>
+      <div class="modal-field">
+        <label class="modal-label">Название комнаты</label>
+        <input type="text" id="room-name-input" class="modal-input" placeholder="Моя комната" maxlength="100">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Описание (необязательно)</label>
+        <textarea id="room-desc-input" class="modal-textarea" placeholder="О чём эта комната?" rows="2"></textarea>
+      </div>
+      <div id="create-room-error" class="modal-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn secondary" id="create-room-cancel">Отмена</button>
+      <button type="button" class="modal-btn primary" id="create-room-submit">Создать</button>
     </div>
   </div>
 </div>
@@ -827,9 +1238,9 @@
         <h2 class="settings-title">Профиль</h2>
         
         <!-- Avatar banner -->
-        <div class="profile-banner">
+        <div class="profile-banner" id="settings-profile-banner">
           <div class="profile-avatar-wrapper" onclick="document.getElementById('avatar-input').click()">
-            <img class="profile-avatar" id="settings-avatar" alt="Avatar">
+            <img class="profile-avatar" id="settings-avatar" alt="">
             <div class="avatar-overlay">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               <span>Изменить</span>
@@ -837,6 +1248,7 @@
           </div>
           <div class="profile-banner-info">
             <div class="profile-banner-name" id="settings-username-display"></div>
+            <div class="profile-banner-status" id="settings-status-display">В сети</div>
             <div class="profile-banner-hint">Нажми на аватар чтобы изменить</div>
           </div>
         </div>
@@ -859,7 +1271,11 @@
             <option value="offline">Невидимый</option>
           </select>
         </div>
-        <button class="settings-save-btn" onclick="saveProfile()">Сохранить изменения</button>
+        <div class="settings-field">
+          <label class="settings-label">Цвет профиля</label>
+          <input type="color" id="settings-profile-color" class="settings-color-input" value="#5865F2">
+        </div>
+        <button class="settings-save-btn" id="settings-save-btn" onclick="saveProfile()" disabled>Сохранить изменения</button>
       </div>
 
       <!-- Appearance Tab -->
@@ -1424,8 +1840,10 @@
 <script src="js/ui.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/servers.js"></script>
+<script src="js/rooms.js"></script>
 <script src="js/friends.js"></script>
 <script src="js/starfield.js"></script>
+<script src="js/xss-tests.js"></script>
 <script src="js/app.js"></script>
 
 <script>
@@ -1620,13 +2038,13 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- Аватар и основная информация -->
     <div class="profile-header">
       <div class="profile-avatar-container">
-        <img id="profile-avatar" class="profile-avatar" src="" alt="Avatar">
+        <img id="profile-avatar" class="profile-avatar" src="" alt="">
         <div class="profile-status-indicator" id="profile-status"></div>
       </div>
       
       <div class="profile-info">
         <div class="profile-username-row">
-          <h2 id="profile-username">Username</h2>
+          <h2 id="profile-username"></h2>
           <div class="profile-badges" id="profile-badges"></div>
         </div>
         <p class="profile-bio" id="profile-bio">Биография не указана</p>
@@ -1641,50 +2059,10 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="profile-actions">
         <button class="modal-btn secondary" id="profile-message-btn">Написать</button>
         <button class="modal-btn danger-btn" id="profile-block-btn">Заблокировать</button>
-        <button class="modal-btn primary" id="profile-edit-btn" style="display: none;">Редактировать профиль</button>
+        <button class="modal-btn" id="profile-edit-btn" style="display: none; background: transparent; border: 1px solid var(--text-muted); color: var(--text-normal);">Редактировать профиль</button>
       </div>
     </div>
     
-    <!-- Форма редактирования профиля -->
-    <div class="profile-edit-form hidden" id="profile-edit-form">
-      <h3>Редактирование профиля</h3>
-      
-      <div class="form-group">
-        <label>Имя пользователя</label>
-        <input type="text" id="profile-edit-username" maxlength="32" placeholder="username">
-      </div>
-
-      <div class="form-group">
-        <label>Загрузить аватар</label>
-        <div style="display: flex; gap: 10px;">
-          <input type="file" id="profile-edit-avatar-file" accept="image/png,image/jpeg,image/webp" style="display: none;" onchange="document.getElementById('profile-edit-avatar-name').textContent = this.files[0] ? this.files[0].name : 'Не выбран'">
-          <button class="modal-btn secondary" style="padding: 8px 16px; font-size: 13px;" onclick="document.getElementById('profile-edit-avatar-file').click()">Выбрать файл</button>
-          <span id="profile-edit-avatar-name" style="align-self: center; font-size: 12px; color: var(--text-muted);">Не выбран</span>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label>Биография</label>
-        <textarea id="profile-edit-bio" maxlength="190" placeholder="Расскажите о себе..."></textarea>
-        <span class="char-count"><span id="bio-char-count">0</span>/190</span>
-      </div>
-
-      
-      <div class="form-group">
-        <label>URL баннера</label>
-        <input type="text" id="profile-edit-banner" placeholder="https://example.com/banner.jpg">
-      </div>
-      
-      <div class="form-group">
-        <label>Цвет профиля</label>
-        <input type="color" id="profile-edit-color" value="#5865F2">
-      </div>
-      
-      <div class="form-actions">
-        <button class="modal-btn primary" onclick="submitProfileModal()">Сохранить</button>
-        <button class="modal-btn secondary" onclick="cancelEditProfile()">Отмена</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1734,6 +2112,31 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <div class="modal-body">
       <div id="member-roles-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Popover (body-level, above all layout) -->
+<div class="profile-popover hidden" id="profile-popover">
+  <div class="popover-banner" id="popover-banner"></div>
+  <div class="popover-body">
+    <div class="popover-avatar-wrap">
+      <img class="popover-avatar" id="popover-avatar" src="" alt="">
+      <div class="popover-status-dot" id="popover-status-dot"></div>
+    </div>
+    <div class="popover-username" id="popover-username"></div>
+    <div class="popover-status-text" id="popover-status-text"></div>
+    <div class="popover-divider"></div>
+    <div class="popover-section-title">О СЕБЕ</div>
+    <div class="popover-bio" id="popover-bio">Биография не указана</div>
+    <div class="popover-member-since" id="popover-member-since"></div>
+    <div class="popover-divider"></div>
+    <div class="popover-actions">
+      <button class="popover-btn popover-btn-view" id="popover-open-profile">Открыть профиль</button>
+      <button class="popover-btn popover-btn-edit" id="popover-edit-profile">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Редактировать профиль
+      </button>
     </div>
   </div>
 </div>

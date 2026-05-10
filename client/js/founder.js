@@ -10,6 +10,7 @@ const FOUNDER_EMAIL = 'putinalnksandr@gmail.com';
 class FounderSystem {
   constructor() {
     this.isFounder = false;
+    this._activated = false;
     this.privileges = {
       rainbowName: true,
       crownBadge: true,
@@ -38,7 +39,8 @@ class FounderSystem {
       user.role === 'owner'
     );
 
-    if (this.isFounder) {
+    if (this.isFounder && !this._activated) {
+      this._activated = true;
       console.log('👑 FOUNDER MODE ACTIVATED');
       this.activatePrivileges();
     }
@@ -141,41 +143,44 @@ class FounderSystem {
       }
     });
     
-    // Добавляем корону в профиль
-    const profileName = document.getElementById('settings-username-display');
-    if (profileName && !profileName.querySelector('.founder-crown')) {
-      const crown = document.createElement('span');
-      crown.className = 'founder-crown';
-      crown.textContent = ' 👑';
-      crown.title = 'Создатель Love';
-      crown.style.cssText = 'font-size: 1.2em; filter: drop-shadow(0 0 8px gold);';
-      profileName.appendChild(crown);
-    }
+    // Корону в settings-username-display НЕ добавляем здесь — она добавляется в ui.js showSettings()
   }
 
-  // Эффект свечения
+  // Мягкий акцент создателя.
+  // Раньше тут был полноширинный жёлтый градиент на всю строку сообщения
+  // и пульсирующая анимация свечения у всех аватаров — это было слишком
+  // визуально шумно. Сейчас оставляем только тонкие штрихи:
+  //  - тонкая золотая рамка у аватара создателя (без анимации);
+  //  - тонкая 2px полоска-акцент слева у строк сообщений создателя;
+  //  - лёгкий hover-фон вместо постоянной заливки.
   applyGlowEffect() {
     const uid = this.founderUserId || FOUNDER_ID;
     const style = document.createElement('style');
     style.id = 'founder-glow-style';
     style.textContent = `
-      @keyframes founderGlow {
-        0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 0 0 40px rgba(255, 215, 0, 0.4); }
-        50% { box-shadow: 0 0 30px rgba(255, 215, 0, 1), 0 0 60px rgba(255, 215, 0, 0.6); }
-      }
-      
       .founder-mode .message-avatar[src*="${uid}"],
       .founder-mode .profile-avatar {
-        animation: founderGlow 2s ease-in-out infinite;
-        border: 2px solid gold;
+        border: 1.5px solid rgba(255, 215, 0, 0.7);
       }
-      
+
       .founder-mode [data-author-id="${uid}"] {
-        background: linear-gradient(90deg, 
-          rgba(255, 215, 0, 0.05) 0%, 
-          rgba(255, 215, 0, 0.1) 50%, 
-          rgba(255, 215, 0, 0.05) 100%);
-        border-left: 3px solid gold;
+        position: relative;
+      }
+
+      .founder-mode [data-author-id="${uid}"]::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 4px;
+        bottom: 4px;
+        width: 2px;
+        background: rgba(255, 215, 0, 0.6);
+        border-radius: 2px;
+        pointer-events: none;
+      }
+
+      .founder-mode [data-author-id="${uid}"]:hover {
+        background: rgba(255, 215, 0, 0.04);
       }
     `;
     document.head.appendChild(style);

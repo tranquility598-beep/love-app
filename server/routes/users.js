@@ -65,7 +65,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
  */
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
-    const { username, bio, customStatus } = req.body;
+    const { username, bio, customStatus, profileColor } = req.body;
     
     const updateData = {};
     
@@ -85,6 +85,20 @@ router.put('/profile', authMiddleware, async (req, res) => {
     
     if (bio !== undefined) updateData.bio = bio;
     if (customStatus !== undefined) updateData.customStatus = customStatus;
+
+    // Цвет баннера/профиля — принимаем ТОЛЬКО hex #RRGGBB или #RGB.
+    // Никаких url(), gradient, expression, var() и т.п. — защита от
+    // CSS-инъекций, т.к. это значение потом подставляется в стили на UI.
+    if (profileColor !== undefined) {
+      const c = String(profileColor).trim();
+      if (c === '') {
+        updateData.profileColor = '#5865F2'; // дефолт
+      } else if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) {
+        updateData.profileColor = c;
+      } else {
+        return res.status(400).json({ message: 'Некорректный цвет профиля' });
+      }
+    }
     
     const user = await User.findByIdAndUpdate(
       req.user._id,

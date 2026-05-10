@@ -12,10 +12,7 @@
     "build:mac": "npm run build:server && electron-builder build --mac",
     "build:all": "npm run build:server && electron-builder build --win --mac",
     "build:server": "echo Building server...",
-    "pack": "electron-builder --dir",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "docker:build": "docker compose build"
+    "pack": "electron-builder --dir"
   },
   "build": {
     "appId": "com.love.app",

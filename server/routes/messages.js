@@ -10,6 +10,7 @@ const Channel = require('../models/Channel');
 const Server = require('../models/Server');
 const authMiddleware = require('../middleware/auth');
 const { messageLimiter } = require('../middleware/rateLimiter');
+const { messageAntiSpamMiddleware } = require('../middleware/messageAntiSpam');
 const { validateMessageContent, sanitizeBody } = require('../middleware/validation');
 
 /**
@@ -60,7 +61,9 @@ router.get('/:channelId', authMiddleware, async (req, res) => {
  * POST /api/messages/:channelId
  * Отправить сообщение
  */
-router.post('/:channelId', authMiddleware, messageLimiter, sanitizeBody, validateMessageContent, async (req, res) => {
+// messageAntiSpamMiddleware — per-user-per-channel защита от флуда (10/5s, cooldown 10s).
+// Идёт ПОСЛЕ authMiddleware (нужен req.user) и messageLimiter (общий IP-limit).
+router.post('/:channelId', authMiddleware, messageLimiter, messageAntiSpamMiddleware, sanitizeBody, validateMessageContent, async (req, res) => {
   try {
     const { channelId } = req.params;
     const { content, replyTo } = req.body;

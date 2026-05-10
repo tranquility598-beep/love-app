@@ -217,6 +217,177 @@ router.post('/', authMiddleware, sanitizeBody, validateServerName, async (req, r
 });
 
 /**
+ * ============================================================
+ * ROOMS (комнаты) — упрощённый профиль Server (settings.kind='room').
+ *
+ * ВАЖНО ПО ПОРЯДКУ РОУТОВ:
+ * Эти статические роуты ОБЯЗАТЕЛЬНО объявлены ВЫШЕ динамических
+ * '/:id', '/:id/...' иначе Express воспримет 'rooms' как :id.
+ *
+ * Старые server endpoints НЕ изменены и продолжают работать.
+ * Комната — это тот же документ Server, просто с settings.kind='room'
+ * и ровно двумя каналами: 1 text (для вкладки Чат) + 1 voice
+ * (для вкладки Войс). Вкладка Медиа — виртуальная (на фронте).
+ * ============================================================
+ */
+
+/**
+ * GET /api/servers/rooms
+ * Список только комнат текущего пользователя.
+ * Старый GET /api/servers продолжает возвращать ВСЁ (и серверы, и комнаты),
+ * чтобы не ломать legacy UI.
+ */
+router.get('/rooms', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    const validIds = (user.servers || []).filter(id => id != null);
+
+    const rooms = await Server.find({
+      _id: { $in: validIds },
+      'settings.kind': 'room'
+    })
+      .populate('channels', 'name type position category')
+      .populate('members.user', 'username avatar status discriminator');
+
+    res.json({ rooms });
+  } catch (error) {
+    console.error('Get rooms error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * POST /api/servers/rooms
+ * Создать комнату: 1 text channel + 1 voice channel, без категорий.
+ */
+router.post('/rooms', authMiddleware, sanitizeBody, validateServerName, async (req, res) => {
+  // Создаваемые каналы трекаем во внешней области, чтобы при любом
+  // последующем сбое (room.save / User.findByIdAndUpdate / populate)
+  // удалить их и не оставить orphan-документы.
+  // Полноценная MongoDB-транзакция требует replica set, которого нет
+  // в типичной dev/standalone установке, поэтому используем cleanup-rollback.
+  let textChannel = null;
+  let voiceChannel = null;
+  let savedRoomId = null;
+
+  try {
+    const { name, description } = req.body;
+
+    if (!name || name.length < 2) {
+      return res.status(400).json({ message: 'Название комнаты должно содержать минимум 2 символа' });
+    }
+
+    const mongoose = require('mongoose');
+    const ownerRoleId = new mongoose.Types.ObjectId();
+    const memberRoleId = new mongoose.Types.ObjectId();
+
+    const room = new Server({
+      name,
+      description: description || '',
+      owner: req.user._id,
+      members: [{
+        user: req.user._id,
+        roles: [ownerRoleId, memberRoleId]
+      }],
+      roles: [
+        {
+          _id: ownerRoleId,
+          name: 'Владелец',
+          color: '#f1c40f',
+          permissions: {
+            administrator: true, manageServer: true, manageRoles: true, manageChannels: true,
+            kickMembers: true, banMembers: true, manageMessages: true, sendMessages: true,
+            readMessages: true, mentionEveryone: true, manageNicknames: true,
+            connect: true, speak: true, muteMembers: true, deafenMembers: true
+          },
+          position: 100,
+          hoist: true
+        },
+        {
+          _id: memberRoleId,
+          name: 'Участник',
+          color: '#99aab5',
+          permissions: {
+            sendMessages: true, readMessages: true, connect: true, speak: true
+          },
+          position: 0
+        }
+      ],
+      settings: { kind: 'room' }
+    });
+
+    // 1 text-канал для вкладки Чат
+    textChannel = new Channel({
+      name: 'chat',
+      type: 'text',
+      topic: 'Чат комнаты',
+      server: room._id,
+      position: 0
+    });
+
+    // 1 voice-канал для вкладки Войс
+    voiceChannel = new Channel({
+      name: 'voice',
+      type: 'voice',
+      server: room._id,
+      position: 1
+    });
+
+    await textChannel.save();
+    await voiceChannel.save();
+
+    room.channels = [textChannel._id, voiceChannel._id];
+
+    // Инвайт-код переиспользует существующий механизм (POST /join/:code)
+    const inviteCode = uuidv4().substring(0, 8).toUpperCase();
+    room.invites = [{ code: inviteCode, createdBy: req.user._id }];
+
+    await room.save();
+    savedRoomId = room._id;
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $push: { servers: room._id }
+    });
+
+    const populatedRoom = await Server.findById(room._id)
+      .populate('channels', 'name type position topic category')
+      .populate('members.user', 'username avatar status discriminator')
+      .populate('owner', 'username avatar');
+
+    res.status(201).json({
+      room: populatedRoom,
+      textChannelId: textChannel._id,
+      voiceChannelId: voiceChannel._id,
+      message: 'Комната создана'
+    });
+  } catch (error) {
+    console.error('Create room error:', error);
+
+    // Cleanup-rollback: удаляем уже созданные документы, чтобы не оставлять orphan.
+    // Ошибки cleanup'а логируем, но клиенту отдаём исходную ошибку.
+    try {
+      if (textChannel && textChannel._id) {
+        await Channel.deleteOne({ _id: textChannel._id });
+      }
+      if (voiceChannel && voiceChannel._id) {
+        await Channel.deleteOne({ _id: voiceChannel._id });
+      }
+      if (savedRoomId) {
+        await Server.deleteOne({ _id: savedRoomId });
+        // Если успели запушить в User.servers — откатываем и это
+        await User.findByIdAndUpdate(req.user._id, {
+          $pull: { servers: savedRoomId }
+        });
+      }
+    } catch (cleanupErr) {
+      console.error('Create room cleanup failed:', cleanupErr);
+    }
+
+    res.status(500).json({ message: 'Ошибка при создании комнаты' });
+  }
+});
+
+/**
  * GET /api/servers/:id
  * Получить данные сервера
  */
@@ -251,7 +422,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
  */
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, vibeStatus, color } = req.body;
     
     const server = await Server.findById(req.params.id);
     
@@ -264,9 +435,41 @@ router.put('/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ message: 'Недостаточно прав' });
     }
     
-    if (name) server.name = name;
-    if (description !== undefined) server.description = description;
-    
+    if (name) {
+      const trimmed = String(name).trim();
+      if (trimmed.length < 2 || trimmed.length > 100) {
+        return res.status(400).json({ message: 'Название должно быть от 2 до 100 символов' });
+      }
+      server.name = trimmed;
+    }
+    if (description !== undefined) {
+      const desc = String(description);
+      if (desc.length > 500) {
+        return res.status(400).json({ message: 'Описание слишком длинное' });
+      }
+      server.description = desc;
+    }
+
+    // Поля комнаты — применяем только если это действительно комната.
+    // Guild-серверы продолжают игнорировать эти поля и работают как раньше.
+    if (server.settings && server.settings.kind === 'room') {
+      if (vibeStatus !== undefined) {
+        const v = String(vibeStatus).trim();
+        if (v.length > 60) {
+          return res.status(400).json({ message: 'Вайб статус слишком длинный' });
+        }
+        server.settings.vibeStatus = v;
+      }
+      if (color !== undefined) {
+        const c = String(color).trim();
+        // Принимаем только пустую строку или hex #rgb / #rrggbb
+        if (c !== '' && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) {
+          return res.status(400).json({ message: 'Некорректный цвет' });
+        }
+        server.settings.color = c;
+      }
+    }
+
     await server.save();
     
     res.json({ server, message: 'Сервер обновлен' });
@@ -449,6 +652,23 @@ router.delete('/:id/leave', authMiddleware, async (req, res) => {
 });
 
 /**
+ * Безопасная проверка загруженного изображения.
+ * Принимает только растровые форматы (png/jpg/jpeg/webp/gif).
+ * SVG ЯВНО запрещён — он может содержать исполняемый JS.
+ */
+const ALLOWED_IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const ALLOWED_IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+function validateImageFile(file, maxBytes) {
+  if (!file) return 'Файл не предоставлен';
+  if (file.size > maxBytes) return 'Файл слишком большой';
+  const mime = String(file.mimetype || '').toLowerCase();
+  if (!ALLOWED_IMAGE_MIME.includes(mime)) return 'Допустимы только PNG, JPG, WEBP, GIF';
+  const ext = path.extname(String(file.name || '')).toLowerCase();
+  if (!ALLOWED_IMAGE_EXT.includes(ext)) return 'Недопустимое расширение файла';
+  return null;
+}
+
+/**
  * PUT /api/servers/:id/icon
  * Обновить иконку сервера
  */
@@ -469,7 +689,11 @@ router.put('/:id/icon', authMiddleware, async (req, res) => {
     }
     
     const iconFile = req.files.icon;
-    const ext = path.extname(iconFile.name);
+    // Проверяем mime/расширение/размер. 8 МБ для иконки — с запасом.
+    const err = validateImageFile(iconFile, 8 * 1024 * 1024);
+    if (err) return res.status(400).json({ message: err });
+
+    const ext = path.extname(iconFile.name).toLowerCase();
     const filename = `server_${server._id}_${Date.now()}${ext}`;
     const uploadPath = path.join(__dirname, '..', 'uploads', 'avatars', filename);
     
@@ -482,6 +706,132 @@ router.put('/:id/icon', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Update server icon error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * PUT /api/servers/:id/banner
+ * Загрузка баннера. Доступно ТОЛЬКО для комнат (settings.kind === 'room')
+ * и только владельцу. Старые guild-серверы через этот endpoint не получают
+ * баннер — они продолжают работать как раньше.
+ */
+router.put('/:id/banner', authMiddleware, async (req, res) => {
+  try {
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ message: 'Сервер не найден' });
+    if (server.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+    // Жёстко ограничиваем баннер только комнатами — чтобы не менять поведение guild.
+    if (!server.settings || server.settings.kind !== 'room') {
+      return res.status(400).json({ message: 'Баннер доступен только для комнат' });
+    }
+
+    if (!req.files || !req.files.banner) {
+      return res.status(400).json({ message: 'Файл баннера не предоставлен' });
+    }
+
+    const bannerFile = req.files.banner;
+    // 12 МБ — баннер обычно крупнее иконки, но всё равно ограничено.
+    const err = validateImageFile(bannerFile, 12 * 1024 * 1024);
+    if (err) return res.status(400).json({ message: err });
+
+    const ext = path.extname(bannerFile.name).toLowerCase();
+    const filename = `room_banner_${server._id}_${Date.now()}${ext}`;
+    const uploadPath = path.join(__dirname, '..', 'uploads', 'images', filename);
+    await bannerFile.mv(uploadPath);
+
+    server.banner = `/uploads/images/${filename}`;
+    await server.save();
+
+    res.json({ server, message: 'Баннер обновлён' });
+  } catch (error) {
+    console.error('Update server banner error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * DELETE /api/servers/:id/icon
+ * Удалить иконку сервера/комнаты. Только владелец. Удаляет файл с
+ * диска (если лежит в /uploads/icons/) и обнуляет server.icon.
+ * Работает для guild и room — в обоих случаях иконка опциональна.
+ */
+router.delete('/:id/icon', authMiddleware, async (req, res) => {
+  try {
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ message: 'Сервер не найден' });
+    if (server.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+
+    // Файлы иконок сохраняются в /uploads/avatars/ (см. PUT /:id/icon).
+    if (typeof server.icon === 'string' && server.icon.startsWith('/uploads/avatars/')) {
+      const rel = server.icon.replace(/^\/+/, '');
+      const filePath = path.join(__dirname, '..', rel);
+      const uploadsRoot = path.join(__dirname, '..', 'uploads', 'avatars');
+      if (filePath.startsWith(uploadsRoot)) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch (e) {
+          console.warn('[icon-delete] unlink failed:', e.message);
+        }
+      }
+    }
+
+    server.icon = '';
+    await server.save();
+    res.json({ server, message: 'Иконка удалена' });
+  } catch (error) {
+    console.error('Delete server icon error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * DELETE /api/servers/:id/banner
+ * Удалить баннер комнаты. Доступно ТОЛЬКО владельцу комнаты
+ * (settings.kind === 'room'). Удаляет файл с диска и обнуляет
+ * server.banner. Для guild-серверов возвращает 400 — у них баннера и не
+ * было.
+ */
+router.delete('/:id/banner', authMiddleware, async (req, res) => {
+  try {
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ message: 'Сервер не найден' });
+    if (server.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Недостаточно прав' });
+    }
+    if (!server.settings || server.settings.kind !== 'room') {
+      return res.status(400).json({ message: 'Баннер доступен только для комнат' });
+    }
+
+    // Удаляем файл с диска, если он лежит в наших uploads.
+    // НЕ ходим по абсолютным путям — только если banner совпадает с
+    // нашим шаблоном /uploads/images/...
+    if (typeof server.banner === 'string' && server.banner.startsWith('/uploads/images/')) {
+      const rel = server.banner.replace(/^\/+/, '');
+      const filePath = path.join(__dirname, '..', rel);
+      // path.join + проверка префикса предотвращают ../-traversal:
+      // server.banner всегда формируется нашим backend, но на всякий
+      // случай явно убеждаемся, что итоговый путь внутри uploads.
+      const uploadsRoot = path.join(__dirname, '..', 'uploads', 'images');
+      if (filePath.startsWith(uploadsRoot)) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch (e) {
+          // Не критично — даже если файл не удалился, обнулим поле в БД.
+          console.warn('[banner-delete] unlink failed:', e.message);
+        }
+      }
+    }
+
+    server.banner = '';
+    await server.save();
+    res.json({ server, message: 'Баннер удалён' });
+  } catch (error) {
+    console.error('Delete server banner error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });

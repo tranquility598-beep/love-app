@@ -88,18 +88,20 @@ function renderMessage(msg, isGrouped) {
   const fullTime = formatDate(msg.createdAt);
   const isOwn = authorId === window.currentUser?._id;
 
-  // Ответ на сообщение
+  // Ответ на сообщение (безопасно через DOM API)
   let replyHtml = '';
   if (msg.replyTo) {
-    const replyAuthor = msg.replyTo.author?.username || 'Неизвестный';
+    const replyAuthor = escapeHtml(msg.replyTo.author?.username || 'Неизвестный'); // ИСПРАВЛЕНО: sanitize username
     const replyContent = msg.replyTo.content?.substring(0, 60) || '';
     const replyPreview = escapeHtml(replyContent);
     const replyId = msg.replyTo._id || '';
+    const isOwner = msg.replyTo.author?.role === 'owner';
+    
     replyHtml = `
       <div class="message-reply" onclick="scrollToMessage('${replyId}')" style="cursor: pointer;">
         <div class="message-reply-info">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-          <strong>${replyAuthor}${msg.replyTo.author?.role === 'owner' ? ' 👑' : ''}</strong>: ${replyPreview}
+          <strong>${replyAuthor}${isOwner ? ' 👑' : ''}</strong>: ${replyPreview}
         </div>
       </div>
     `;
@@ -433,6 +435,326 @@ function scrollToMessage(messageId) {
   }, 2000);
 }
 
+/* ============================================================
+ * Anti-spam (ступенчатый, с warning modal)
+ * ------------------------------------------------------------
+ * UX-зеркало backend-защиты (server/middleware/messageAntiSpam.js).
+ * Настоящая безопасность — на сервере. Этот код:
+ *   - предотвращает обращение к socket/apiUpload во время cooldown'а;
+ *   - показывает modal в стиле LOVE с таймером;
+ *   - при 429 / 'message:rate_limited' от backend подхватывает
+ *     warningTitle/warningText/retryAfter/violationLevel и обновляет modal;
+ *   - после окончания cooldown'а modal закрывается автоматически.
+ *
+ * Лимиты совпадают с backend — менять в обоих местах одновременно.
+ * ============================================================ */
+const MSG_ANTISPAM = {
+  BASE_MAX_MESSAGES: 10,
+  STRICT_MAX_MESSAGES: 5,
+  WINDOW_MS: 5000,
+  FIRST_COOLDOWN_MS: 2000,
+  STRICT_COOLDOWN_MS: 3000,
+  RESET_AFTER_MS: 10000,
+};
+
+// Fallback тексты, если backend не прислал warningTitle/warningText.
+const _FALLBACK_WARNINGS = {
+  1: {
+    title: 'Харе так спешить!',
+    text: 'Ты отправляешь сообщения слишком быстро. Подожди пару секунд.',
+  },
+  2: {
+    title: 'Опять слишком быстро',
+    text: 'Похоже на спам. Сделай небольшую паузу.',
+  },
+  3: {
+    title: 'Притормози',
+    text: 'Сообщения идут слишком часто. Подожди немного.',
+  },
+};
+
+function _fallbackWarning(level) {
+  if (level <= 1) return _FALLBACK_WARNINGS[1];
+  if (level === 2) return _FALLBACK_WARNINGS[2];
+  return _FALLBACK_WARNINGS[3];
+}
+
+/**
+ * Нормализация retryAfter из любого источника (socket message:rate_limited,
+ * REST 429, локальный предиктор) к единственным легальным значениям 2 или 3.
+ *
+ * Backend по протоколу присылает только 2 (FIRST_COOLDOWN_MS) или 3
+ * (STRICT_COOLDOWN_MS). Всё остальное — мусор: WINDOW_MS=5 (5000ms),
+ * RESET_AFTER_MS=10, стейл-renderer и т.п. — НЕ должно попадать в cooldown.
+ *
+ *   raw <= 2  → 2  (первое нарушение)
+ *   raw  > 2  → 3  (повторное)
+ *   raw невалиден → по violationLevel: >=2 → 3, иначе 2
+ */
+function normalizeAntispamRetryAfter(value, violationLevel) {
+  const raw = Number(value);
+  if (Number.isFinite(raw) && raw > 0) {
+    if (raw <= 2) return 2;
+    return 3;
+  }
+  return Number.isFinite(violationLevel) && violationLevel >= 2 ? 3 : 2;
+}
+
+// Состояние per-channel: повторяет backend-bucket для локального предсказания.
+// modalShownForChannelId — какому каналу принадлежит сейчас открытый modal.
+const _antispamState = new Map();
+let _modalShownForChannelId = null;
+let _modalCountdownInterval = null;
+
+function _getAntispamBucket(channelId) {
+  if (!channelId) return null;
+  let b = _antispamState.get(channelId);
+  if (!b) {
+    b = {
+      timestamps: [],
+      cooldownUntil: 0,
+      violationLevel: 0,
+      lastViolationAt: 0,
+      tickInterval: null,
+    };
+    _antispamState.set(channelId, b);
+  }
+  return b;
+}
+
+function isMessageCooldownActive(channelId) {
+  const b = _getAntispamBucket(channelId);
+  if (!b) return { active: false, retryAfter: 0 };
+  const now = Date.now();
+  if (b.cooldownUntil > now) {
+    return { active: true, retryAfter: Math.max(1, Math.ceil((b.cooldownUntil - now) / 1000)) };
+  }
+  return { active: false, retryAfter: 0 };
+}
+
+/**
+ * Локальная проверка/запись попытки отправки. Используется только как
+ * быстрый предохранитель — настоящее решение всё равно за backend.
+ *
+ * Если локально предсказали превышение, возвращаем violationLevel=null,
+ * чтобы дать backend назначить уровень (тексты возьмутся из его ответа,
+ * либо из fallback'а до его прихода).
+ */
+function recordMessageAttempt(channelId) {
+  const b = _getAntispamBucket(channelId);
+  if (!b) return { active: false };
+  const now = Date.now();
+
+  // Local reset (зеркало серверного).
+  if (b.violationLevel > 0 && b.lastViolationAt && now - b.lastViolationAt >= MSG_ANTISPAM.RESET_AFTER_MS) {
+    b.violationLevel = 0;
+    b.timestamps = [];
+  }
+
+  const limit = b.violationLevel === 0 ? MSG_ANTISPAM.BASE_MAX_MESSAGES : MSG_ANTISPAM.STRICT_MAX_MESSAGES;
+  // После cooldown'а старые таймстемпы (которые сами и привели к warning'у)
+  // не должны участвовать в новом окне подсчёта. Иначе первое же сообщение
+  // после ожидания сразу триггерит второй warning. См. зеркальную правку
+  // в server/middleware/messageAntiSpam.js.
+  const cutoff = Math.max(now - MSG_ANTISPAM.WINDOW_MS, b.cooldownUntil || 0);
+  b.timestamps = b.timestamps.filter((t) => t >= cutoff);
+
+  if (b.timestamps.length >= limit) {
+    // Локально — оптимистично поднимаем уровень, чтобы UX был мгновенным.
+    // Backend всё равно пришлёт авторитетные значения и при необходимости
+    // мы перезапишем их в triggerMessageCooldown.
+    const predictedLevel = b.violationLevel + 1;
+    const cooldownMs = predictedLevel === 1 ? MSG_ANTISPAM.FIRST_COOLDOWN_MS : MSG_ANTISPAM.STRICT_COOLDOWN_MS;
+    triggerMessageCooldown(channelId, Math.ceil(cooldownMs / 1000), {
+      violationLevel: predictedLevel,
+    });
+    return { active: true };
+  }
+
+  b.timestamps.push(now);
+  return { active: false };
+}
+
+/**
+ * Запустить (или продлить) cooldown с показом warning modal.
+ * @param {string} channelId
+ * @param {number} retryAfterSeconds
+ * @param {object} [info] — { violationLevel, warningTitle, warningText }
+ */
+function triggerMessageCooldown(channelId, retryAfterSeconds, info = {}) {
+  const b = _getAntispamBucket(channelId);
+  if (!b) return;
+  const now = Date.now();
+  // Нормализация retryAfter. Легальные значения — ТОЛЬКО 2 или 3 секунды
+  // (см. server/middleware/messageAntiSpam.js: FIRST_COOLDOWN_MS=2000,
+  // STRICT_COOLDOWN_MS=3000). Любое другое значение — мусор от стейл-
+  // renderer'а / старого кода / WINDOW_MS=5000, попавшего в cooldown по
+  // ошибке. Нормализуем агрессивно, чтобы UI никогда не показывал 5 сек.
+  //   raw <= 2  → 2 сек (первое нарушение, level<=1)
+  //   raw  > 2  → 3 сек (повторные нарушения, level>=2)
+  //   raw невалиден → по violationLevel: >=2 → 3, иначе 2
+  const safeSeconds = normalizeAntispamRetryAfter(retryAfterSeconds, info.violationLevel);
+  const newUntil = now + safeSeconds * 1000;
+  // Прямая установка (не Math.max со старым значением): свежий ответ
+  // backend — источник истины и должен исправлять застрявший «грязный»
+  // cooldownUntil от прошлых вызовов.
+  b.cooldownUntil = newUntil;
+  b.lastViolationAt = now;
+  b.timestamps = [];
+  if (Number.isFinite(info.violationLevel) && info.violationLevel > b.violationLevel) {
+    b.violationLevel = info.violationLevel;
+  }
+
+  _showAntispamModal(channelId, {
+    title: info.warningTitle || _fallbackWarning(b.violationLevel).title,
+    text: info.warningText || _fallbackWarning(b.violationLevel).text,
+  });
+  _startCooldownUiTimer(channelId);
+}
+
+/**
+ * UI-таймер на send-btn. Тикает каждые 250 мс, по окончании cooldown'а
+ * сам себя гасит, снимает disabled, закрывает modal (если открыт для
+ * этого канала).
+ */
+function _startCooldownUiTimer(channelId) {
+  const b = _getAntispamBucket(channelId);
+  if (!b) return;
+  if (b.tickInterval) {
+    _refreshCooldownUi(channelId);
+    return;
+  }
+  _refreshCooldownUi(channelId);
+  b.tickInterval = setInterval(() => {
+    const now = Date.now();
+    if (b.cooldownUntil <= now) {
+      clearInterval(b.tickInterval);
+      b.tickInterval = null;
+      _refreshCooldownUi(channelId);
+      // Закрываем modal только если он принадлежал ЭТОМУ каналу.
+      if (_modalShownForChannelId === channelId) hideAntispamModal();
+      return;
+    }
+    _refreshCooldownUi(channelId);
+    if (_modalShownForChannelId === channelId) _updateAntispamCountdown(channelId);
+  }, 250);
+}
+
+function _refreshCooldownUi(channelId) {
+  if (channelId !== window.currentChannelId) return;
+  const btn = document.getElementById('send-btn');
+  const label = document.getElementById('send-btn-cooldown');
+  const { active, retryAfter } = isMessageCooldownActive(channelId);
+  if (btn) {
+    btn.disabled = active;
+    btn.classList.toggle('is-cooldown', active);
+    btn.title = active ? `Подожди ${retryAfter} сек` : 'Отправить';
+  }
+  if (label) {
+    label.textContent = active ? `${retryAfter}` : '';
+  }
+}
+
+/* ---------- Antispam modal ---------- */
+
+/**
+ * Показать (или обновить) warning modal. Если modal уже открыт, просто
+ * обновляем тексты и countdown — нового окна не плодим.
+ */
+function _showAntispamModal(channelId, { title, text }) {
+  const overlay = document.getElementById('antispam-modal');
+  const titleEl = document.getElementById('antispam-modal-title');
+  const textEl = document.getElementById('antispam-modal-text');
+  if (!overlay || !titleEl || !textEl) return;
+
+  // textContent — никакого innerHTML с пользовательскими данными.
+  titleEl.textContent = title;
+  textEl.textContent = text;
+  _modalShownForChannelId = channelId;
+
+  if (overlay.classList.contains('hidden')) {
+    overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+  }
+  _updateAntispamCountdown(channelId);
+  _ensureAntispamModalBindings();
+}
+
+function _updateAntispamCountdown(channelId) {
+  const timerEl = document.getElementById('antispam-modal-timer');
+  if (!timerEl) return;
+  const { active, retryAfter } = isMessageCooldownActive(channelId);
+  timerEl.textContent = active
+    ? `Можно писать через ${retryAfter} сек.`
+    : 'Можно писать.';
+}
+
+function hideAntispamModal() {
+  const overlay = document.getElementById('antispam-modal');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden', 'true');
+  _modalShownForChannelId = null;
+}
+
+/**
+ * Биндинги для modal вешаются один раз. Кнопка "Понял" просто прячет
+ * окно — cooldown сам по себе не отменяется (это backend-state).
+ * Кликом по затемнению или Escape тоже можно закрыть.
+ */
+let _antispamModalBound = false;
+function _ensureAntispamModalBindings() {
+  if (_antispamModalBound) return;
+  const overlay = document.getElementById('antispam-modal');
+  const okBtn = document.getElementById('antispam-modal-ok');
+  if (!overlay || !okBtn) return;
+  okBtn.addEventListener('click', hideAntispamModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) hideAntispamModal();
+  });
+  // Глобальный keydown в фазе capture — чтобы перехватить Enter ДО того,
+  // как handleMessageKeydown в textarea вызовет sendMessage.
+  // Поведение:
+  //   - если modal открыт и Enter (без Shift) → закрыть modal как "Понял";
+  //     cooldown продолжается, sendMessage НЕ вызывается;
+  //   - если modal открыт и Escape → закрыть modal;
+  //   - если modal закрыт → ничего не трогаем (обычный chat-флоу).
+  document.addEventListener('keydown', (e) => {
+    if (overlay.classList.contains('hidden')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      hideAntispamModal();
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // stopImmediatePropagation — чтобы Enter ГАРАНТИРОВАННО не дошёл
+      // до handleMessageKeydown на textarea (который тоже навешен в
+      // capture-фазе, см. client/js/app.js). Иначе после закрытия
+      // модалки сразу же вызывается sendMessage: input очищается,
+      // создаётся optimistic temp message, всё это улетает в socket
+      // во время cooldown'а или сразу после.
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      hideAntispamModal();
+    }
+  }, true);
+  _antispamModalBound = true;
+}
+
+// Перерисовываем UI при переключении канала. Modal не трогаем — он
+// логически принадлежит каналу, на котором сработал.
+window.addEventListener('chat:channel-changed', () => {
+  _refreshCooldownUi(window.currentChannelId);
+});
+
+// Экспорт для socket.js.
+window.triggerMessageCooldown = triggerMessageCooldown;
+window.isMessageCooldownActive = isMessageCooldownActive;
+window.hideAntispamModal = hideAntispamModal;
+
 /**
  * Отправить сообщение
  */
@@ -450,6 +772,24 @@ async function sendMessage() {
 
   if (!content && pendingFiles.length === 0) return;
 
+  // === Anti-spam cooldown ===
+  // Если cooldown активен — НЕ вызываем ни socket, ни apiUpload.
+  // Не очищаем input и не трогаем pendingFiles: пользователь сможет
+  // отправить то же самое сразу после окончания cooldown'а.
+  // Modal уже показан (или мы покажем его повторно через countdown update),
+  // нового окна не плодим.
+  const cd = isMessageCooldownActive(channelId);
+  if (cd.active) {
+    _updateAntispamCountdown(channelId);
+    _refreshCooldownUi(channelId);
+    return;
+  }
+
+  // Локальный предохранитель: если уже видно, что это превышение —
+  // показываем modal сразу, не дожидаясь backend.
+  const after = recordMessageAttempt(channelId);
+  if (after.active) return;
+
   // Пасхалка: триггер на слова
   const lowerContent = content.toLowerCase();
   if (lowerContent.includes('love') || lowerContent.includes('люблю')) {
@@ -465,18 +805,36 @@ async function sendMessage() {
 
   try {
     if (pendingFiles.length > 0) {
-      // Отправляем файлы
+      // Отправляем файлы.
+      //
+      // Раньше тут был баг: после apiUpload фронт НЕ создавал Message —
+      // файл сохранялся на диск, но в чат ничего не приходило. Теперь
+      // после успешной загрузки эмитим socket message:send с attachments,
+      // чтобы Message действительно создался и появился в чате.
       for (const file of pendingFiles) {
         const formData = new FormData();
         formData.append('file', file);
-        if (content) formData.append('content', content);
-        if (currentReplyTo) formData.append('replyTo', currentReplyTo);
-        formData.append('channelId', channelId);
-        formData.append('isDM', window.currentDMConversation ? 'true' : 'false');
-        await apiUpload('/upload/file', formData);
+        // content/replyTo передадим уже в message:send, не дублируем в upload.
+        const uploaded = await apiUpload('/upload/file', formData);
+        if (!uploaded || !uploaded.url) {
+          throw new Error('Сервер не вернул URL файла');
+        }
+        const attachment = {
+          url: uploaded.url,
+          filename: uploaded.filename,
+          originalName: uploaded.originalName,
+          size: uploaded.size,
+          type: uploaded.type,
+          mimetype: uploaded.mimetype
+        };
+        const tempId = 'temp_' + Date.now() + '_' + (window.currentUser?._id || '') + '_' + Math.random().toString(36).slice(2, 8);
+        socketSendMessage(channelId, content, currentReplyTo, [attachment], tempId);
       }
-      pendingFiles = [];
-      cancelFileUpload();
+      // Очищаем pendingFiles и прячем preview-плашку (#file-preview).
+      // Раньше тут стояла несуществующая cancelFileUpload() — это
+      // приводило к ReferenceError, обрывая sendMessage и оставляя
+      // input/preview не очищенными после отправки.
+      cancelFile();
     } else {
       // Оптимистичное отображение: показываем сообщение мгновенно
       const tempId = 'temp_' + Date.now() + '_' + (window.currentUser?._id || '');
@@ -518,7 +876,28 @@ async function sendMessage() {
     isTyping = false; // Сбрасываем флаг печати
     clearTimeout(typingDebounce); // Очищаем таймер
   } catch (error) {
-    showNotification('error', 'Не удалось отправить сообщение');
+    console.error('sendMessage error:', error);
+    // Backend rate-limit на upload: 429 + code MESSAGE_SPAM_COOLDOWN.
+    // НЕ показываем техническую ошибку, не чистим токен, не делаем reload.
+    // Запускаем локальный cooldown и возвращаем pendingFiles, чтобы
+    // пользователь мог отправить тот же файл после паузы.
+    const data = error?.data;
+    const isSpam = error?.status === 429 || data?.code === 'MESSAGE_SPAM_COOLDOWN';
+    if (isSpam) {
+      const retryAfter = Number(data?.retryAfter) || 2;
+      triggerMessageCooldown(channelId, retryAfter, {
+        violationLevel: Number(data?.violationLevel) || undefined,
+        warningTitle: data?.warningTitle,
+        warningText: data?.warningText,
+      });
+      // Возвращаем текст и не сбрасываем pendingFiles (cancelFile вызывается
+      // только в успешной ветке — здесь файлы остаются как были).
+      input.value = content;
+      return;
+    }
+    // Обычная ошибка загрузки.
+    const reason = (error && error.message) ? error.message : '';
+    showNotification('error', reason ? `Не удалось отправить файл: ${reason}` : 'Не удалось отправить сообщение');
     input.value = content;
   }
 }
@@ -627,28 +1006,45 @@ function handleMentionAutocomplete(input) {
     
     mentionAutocompleteList = suggestions;
     
+    // Очищаем автокомплит безопасно
+    autocomplete.innerHTML = '';
+    
     if (mentionAutocompleteList.length > 0) {
-      autocomplete.innerHTML = mentionAutocompleteList.map((item, index) => {
+      mentionAutocompleteList.forEach((item, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `mention-autocomplete-item ${index === mentionAutocompleteIndex ? 'selected' : ''}`;
+        itemDiv.dataset.index = index;
+        
         if (item.type === 'special') {
-          return `
-            <div class="mention-autocomplete-item ${index === mentionAutocompleteIndex ? 'selected' : ''}" 
-                 onclick="selectMention('${item.name}')"
-                 data-index="${index}">
-              <span style="font-size: 24px;">${item.icon}</span>
-              <span class="mention-autocomplete-name">@${item.name}</span>
-            </div>
-          `;
+          const iconSpan = document.createElement('span');
+          iconSpan.style.fontSize = '24px';
+          iconSpan.textContent = item.icon;
+          
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'mention-autocomplete-name';
+          nameSpan.textContent = '@' + item.name; // Безопасно через textContent
+          
+          itemDiv.appendChild(iconSpan);
+          itemDiv.appendChild(nameSpan);
+          itemDiv.addEventListener('click', () => selectMention(item.name));
         } else {
-          return `
-            <div class="mention-autocomplete-item ${index === mentionAutocompleteIndex ? 'selected' : ''}" 
-                 onclick="selectMention('${item.user.username}')"
-                 data-index="${index}">
-              <img class="mention-autocomplete-avatar" src="${getAvatarUrl(item.user.avatar)}" alt="${item.user.username}">
-              <span class="mention-autocomplete-name">${item.user.username}</span>
-            </div>
-          `;
+          const avatarImg = document.createElement('img');
+          avatarImg.className = 'mention-autocomplete-avatar';
+          avatarImg.src = getAvatarUrl(item.user.avatar);
+          avatarImg.alt = escapeHtml(item.user.username);
+          
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'mention-autocomplete-name';
+          nameSpan.textContent = item.user.username; // ИСПРАВЛЕНО: Безопасно через textContent
+          
+          itemDiv.appendChild(avatarImg);
+          itemDiv.appendChild(nameSpan);
+          itemDiv.addEventListener('click', () => selectMention(item.user.username));
         }
-      }).join('');
+        
+        autocomplete.appendChild(itemDiv);
+      });
+      
       autocomplete.classList.remove('hidden');
     } else {
       autocomplete.classList.add('hidden');
@@ -742,31 +1138,53 @@ function startEditMessage(messageId) {
   const textEl = msgEl.querySelector('.message-text');
   const currentContent = textEl?.textContent || '';
 
-  // Заменяем текст на textarea
+  // Заменяем текст на textarea безопасно через DOM API
   const wrapper = textEl?.parentElement || msgEl;
   const editArea = document.createElement('div');
-  editArea.innerHTML = `
-    <textarea class="message-edit-input" rows="2">${currentContent}</textarea>
-    <div class="message-edit-hint">
-      Нажмите <a onclick="saveEditMessage('${messageId}')">Enter</a> для сохранения,
-      <a onclick="cancelEditMessage()">Escape</a> для отмены
-    </div>
-  `;
+  
+  // Создаем textarea
+  const textarea = document.createElement('textarea');
+  textarea.className = 'message-edit-input';
+  textarea.rows = 2;
+  textarea.value = currentContent; // ИСПРАВЛЕНО: Безопасно через .value вместо innerHTML
+  
+  // Создаем подсказку
+  const hint = document.createElement('div');
+  hint.className = 'message-edit-hint';
+  hint.textContent = 'Нажмите ';
+  
+  const saveLink = document.createElement('a');
+  saveLink.textContent = 'Enter';
+  saveLink.style.cursor = 'pointer';
+  saveLink.addEventListener('click', () => saveEditMessage(messageId));
+  
+  hint.appendChild(saveLink);
+  hint.appendChild(document.createTextNode(' для сохранения, '));
+  
+  const cancelLink = document.createElement('a');
+  cancelLink.textContent = 'Escape';
+  cancelLink.style.cursor = 'pointer';
+  cancelLink.addEventListener('click', () => cancelEditMessage());
+  
+  hint.appendChild(cancelLink);
+  hint.appendChild(document.createTextNode(' для отмены'));
+  
+  editArea.appendChild(textarea);
+  editArea.appendChild(hint);
 
   if (textEl) textEl.replaceWith(editArea);
 
-  const textarea = editArea.querySelector('textarea');
-  if (textarea) {
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        saveEditMessage(messageId);
-      }
-      if (e.key === 'Escape') cancelEditMessage();
-    });
-  }
+  // Фокусируемся на textarea
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveEditMessage(messageId);
+    }
+    if (e.key === 'Escape') cancelEditMessage();
+  });
 }
 
 /**
@@ -844,19 +1262,31 @@ function updateTypingIndicator() {
 
   indicator.classList.remove('hidden');
   
+  // Очищаем индикатор безопасно
+  indicator.innerHTML = '';
+  
+  // Создаем текст безопасно
+  const textSpan = document.createElement('span');
+  textSpan.style.color = 'var(--text-muted)';
+  textSpan.style.fontSize = '13px';
+  
   let text = '';
-  if (users.length === 1) text = `${users[0]} печатает`;
-  else if (users.length === 2) text = `${users[0]} и ${users[1]} печатают`;
+  if (users.length === 1) text = `${escapeHtml(users[0])} печатает`; // ИСПРАВЛЕНО: sanitize username
+  else if (users.length === 2) text = `${escapeHtml(users[0])} и ${escapeHtml(users[1])} печатают`; // ИСПРАВЛЕНО: sanitize usernames
   else text = `Несколько человек печатают`;
   
-  indicator.innerHTML = `
-    <span style="color: var(--text-muted); font-size: 13px;">${text}</span>
-    <div class="typing-dots">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-  `;
+  textSpan.textContent = text;
+  
+  // Создаем точки анимации
+  const dotsDiv = document.createElement('div');
+  dotsDiv.className = 'typing-dots';
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('span');
+    dotsDiv.appendChild(dot);
+  }
+  
+  indicator.appendChild(textSpan);
+  indicator.appendChild(dotsDiv);
 }
 
 /**

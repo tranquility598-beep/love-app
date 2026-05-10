@@ -16,6 +16,17 @@
   animation: overlayIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Confirm-диалог должен всегда быть выше любых настроек/панелей.
+   Используется для подтверждения удаления сервера, канала, категории и т.п.
+   Слои:
+     1000 — обычные modal-overlay (settings, profile, ...)
+     1200 — room-settings-backdrop
+     1210 — room-settings-panel
+     1300 — confirm-modal  ← всегда поверх */
+#confirm-modal.modal-overlay {
+  z-index: 1300;
+}
+
 @keyframes overlayIn {
   from { 
     opacity: 0;
@@ -508,24 +519,52 @@
 
 .settings-save-btn {
   padding: 10px 24px;
-  background: rgba(255,255,255,0.9);
+  background: #5865F2;
   border: none;
   border-radius: 6px;
-  color: #000000;
+  color: #fff;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+  margin-top: 8px;
 }
 
-.settings-save-btn:hover {
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(255,255,255,0.15);
+.settings-save-btn:not(:disabled):hover {
+  box-shadow: 0 4px 18px rgba(88, 101, 242, 0.4);
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.settings-save-btn:disabled {
+  background: var(--bg-quaternary, #2b2d31);
+  color: var(--text-muted, #72767d);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  opacity: 0.6;
+}
+
+.settings-color-input {
+  width: 100%;
+  height: 40px;
+  padding: 2px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.settings-color-input:hover {
+  border-color: var(--border-hover);
 }
 
 /* Profile section */
 .profile-banner {
-  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-quaternary) 100%);
+  position: relative;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px 20px;
@@ -533,12 +572,14 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(18,18,22,0.95) 0%, rgba(30,30,40,0.95) 100%);
 }
 
 .profile-banner-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .profile-banner-name {
@@ -548,9 +589,17 @@
   letter-spacing: 0.3px;
 }
 
+.profile-banner-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
 .profile-banner-hint {
   font-size: 12px;
   color: var(--text-muted);
+  margin-top: 2px;
+  opacity: 0.6;
 }
 
 .profile-avatar-wrapper {
@@ -1137,3 +1186,68 @@
 .social-badge.youtube:hover { color: #ff0000; border-color: #ff0000; }
 .social-badge.tiktok:hover { color: #00f2fe; border-color: #00f2fe; }
 
+
+/* ============================================================
+ * Anti-spam warning modal (LOVE style).
+ * Тёмный фон, белый заголовок, серый текст, тонкая рамка, мягкая тень,
+ * плюс компактный countdown-бейдж и primary-кнопка "Понял".
+ * Управляется client/js/chat.js.
+ * ============================================================ */
+.modal.antispam-modal {
+  max-width: 420px;
+  background: #14151a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  border-radius: 14px;
+  text-align: center;
+}
+.modal.antispam-modal .modal-header {
+  border-bottom: none;
+  padding: 22px 24px 6px;
+  justify-content: center;
+}
+.modal.antispam-modal .modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.modal.antispam-modal .modal-body {
+  padding: 0 24px 4px;
+}
+.modal.antispam-modal .modal-description {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+.antispam-modal-timer {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.modal.antispam-modal .modal-footer {
+  padding: 14px 24px 22px;
+  justify-content: center;
+  border-top: none;
+}
+.modal.antispam-modal .modal-btn.primary {
+  min-width: 120px;
+  padding: 10px 22px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111114;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  font-weight: 600;
+}
+.modal.antispam-modal .modal-btn.primary:hover {
+  background: #fff;
+  border-color: #fff;
+}

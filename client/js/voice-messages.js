@@ -9,6 +9,20 @@ let recordingInterval = null;
 let isRecording = false;
 
 /**
+ * Безопасное форматирование длительности в "M:SS".
+ * WebM blob от MediaRecorder часто не содержит валидной duration —
+ * HTMLMediaElement в этом случае возвращает Infinity или NaN, что приводит
+ * к строке "Infinity:NaN" в UI. Возвращаем "--:--" пока длительность не известна.
+ */
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
+  const total = Math.floor(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
  * Переключить запись голосового сообщения
  */
 async function toggleVoiceRecording() {
@@ -214,10 +228,9 @@ function showVoicePreview(audioBlob) {
   // Получаем длительность
   const audio = new Audio(audioUrl);
   audio.addEventListener('loadedmetadata', () => {
-    const duration = Math.floor(audio.duration);
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
-    const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    // Защита от Infinity/NaN: WebM blob часто не имеет валидной duration
+    // до первого seek. Если длительность неизвестна — показываем "--:--".
+    const durationText = formatDuration(audio.duration);
     
     // Создаем превью
     const preview = document.createElement('div');
@@ -284,27 +297,14 @@ async function sendVoiceMessage() {
   if (!window.currentVoiceBlob) return;
   
   try {
-    // Создаем FormData для загрузки
+    // Создаем FormData для загрузки.
+    // ВАЖНО: поле должно называться 'file', как ожидает сервер.
     const formData = new FormData();
-    // ВАЖНО: поле должно называться 'file', как ожидает сервер
     formData.append('file', window.currentVoiceBlob, 'voice-message.webm');
-    
-    // Загружаем файл
-    const response = await fetch(`${window.BASE_URL}/api/upload`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Upload error:', errorData);
-      throw new Error('Upload failed: ' + (errorData.message || response.statusText));
-    }
-    
-    const data = await response.json();
+
+    // Загрузка через безопасный IPC proxy (apiUpload подставляет токен в main process).
+    // НЕ читаем raw JWT в renderer.
+    const data = await apiUpload('/upload', formData, 'POST');
     const audioUrl = data.url;
 
     // Отправляем сообщение с аудио (поля согласованы с Message.attachments на сервере)
@@ -375,12 +375,14 @@ function playVoiceMessage(url, button) {
     </svg>
   `;
   
-  // Обновляем прогресс
+  // Обновляем прогресс. Если duration ещё неизвестна (Infinity/NaN),
+  // не пишем NaN% в DOM.
   audio.addEventListener('timeupdate', () => {
-    const percent = (audio.currentTime / audio.duration) * 100;
-    if (progress) {
-      progress.style.width = percent + '%';
-    }
+    if (!progress) return;
+    const dur = audio.duration;
+    if (!Number.isFinite(dur) || dur <= 0) return;
+    const percent = (audio.currentTime / dur) * 100;
+    progress.style.width = percent + '%';
   });
   
   // Когда закончится

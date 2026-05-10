@@ -784,11 +784,12 @@ body.space-theme #starfield-canvas {
   padding: 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-secondary);
 }
+.friends-header-left { margin-right: auto; }
 
 .friends-header-left {
   display: flex;
@@ -840,6 +841,42 @@ body.space-theme #starfield-canvas {
 .friends-tab.add-friend-tab.active {
   background: rgba(255,255,255,0.15);
   color: var(--text-primary);
+}
+
+/* Постоянная кнопка "Добавить в друзья" в шапке вкладки Friends.
+   Стиль LOVE: тёмная, тонкая светлая рамка, мягкий hover, без
+   ярких синих/фиолетовых заливок. Иконка + текст. */
+.friends-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.friends-add-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.friends-add-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+.friends-add-btn svg { flex-shrink: 0; }
+
+/* На очень узких экранах: прячем текст, оставляем только "+" — шапка
+   не должна разваливаться. Сам таб "Добавить" всё ещё доступен. */
+@media (max-width: 560px) {
+  .friends-add-btn span { display: none; }
+  .friends-add-btn { padding: 6px 8px; }
 }
 
 .friends-content {
@@ -1017,6 +1054,129 @@ body.space-theme #starfield-canvas {
 .empty-state-desc {
   font-size: 13px;
   color: var(--text-muted);
+  max-width: 360px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.empty-state-btn {
+  margin-top: 18px;
+  padding: 9px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #5865f2;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.empty-state-btn:hover { background: #4752c4; }
+
+/* Состояния сообщения результата при добавлении друга — управляются
+   из friends.js через is-success/is-error, без inline style. */
+.add-friend-result {
+  margin-top: 12px;
+  font-size: 14px;
+  min-height: 18px;
+}
+.add-friend-result.is-success { color: var(--green, #43b581); }
+.add-friend-result.is-error { color: var(--red, #ed4245); }
+
+.friends-section-title--spaced { margin-top: 16px; }
+
+/* ============================================================
+ * Единое popover-меню "+" для создания/входа.
+ * Позиция контролируется CSS-переменными --menu-top/--menu-left,
+ * которые выставляются из servers.js (bindAddEntityMenu) на основе
+ * getBoundingClientRect кнопки. Никаких inline onclick.
+ * ============================================================ */
+/* Монохромный popover в стиле LOVE: только тёмный фон, серый текст,
+   аккуратная белая иконка. Без фиолетовых заливок и accent-цветов. */
+.add-entity-menu {
+  position: fixed;
+  top: var(--menu-top, 80px);
+  left: var(--menu-left, 80px);
+  z-index: 1000;
+  min-width: 264px;
+  padding: 6px;
+  background: rgba(20, 21, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.add-entity-menu.hidden { display: none; }
+.add-entity-menu.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.add-entity-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.add-entity-menu-item:hover,
+.add-entity-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  outline: none;
+}
+
+.add-entity-menu-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.add-entity-menu-item:hover .add-entity-menu-icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.add-entity-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.add-entity-menu-title {
+  font-weight: 500;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.005em;
+}
+.add-entity-menu-desc {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.3;
 }
 
 /* Status dots */

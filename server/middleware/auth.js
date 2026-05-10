@@ -24,7 +24,19 @@ const authMiddleware = async (req, res, next) => {
     
     // Верифицируем токен
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
+    // ЖЁСТКАЯ ИЗОЛЯЦИЯ AUDIENCE:
+    // socket-token (aud='socket', выпускается POST /api/auth/socket-token)
+    // НЕ должен приниматься обычными REST API. Это часть security-модели:
+    //  - socket-token имеет короткий TTL (5 мин) и расширенную поверхность
+    //    (кладётся в io auth, в renderer памяти на время сессии);
+    //  - REST API должен принимать только основной long-lived JWT с sid.
+    // Лог без токена и без секретов.
+    if (decoded.aud === 'socket') {
+      console.warn('[auth] rejected socket-token used for REST; userId=', decoded.userId);
+      return res.status(401).json({ message: 'Недействительный токен для REST API' });
+    }
+
     // ПРОВЕРКА СЕССИИ (Session ID)
     if (decoded.sid) {
       const LoginLog = require('../models/LoginLog');

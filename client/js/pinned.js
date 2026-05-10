@@ -140,18 +140,52 @@ function createPinnedMessageElement(msg) {
     minute: '2-digit'
   });
   
-  div.innerHTML = `
-    <div class="pinned-message-header">
-      <img class="pinned-message-avatar" src="${authorAvatar}" alt="${authorName}">
-      <span class="pinned-message-author">${authorName}</span>
-      <span class="pinned-message-time">${time}</span>
-    </div>
-    <div class="pinned-message-body">${escapeHtml(msg.content || '')}</div>
-    <div class="pinned-message-actions">
-      <button class="pinned-action-btn" onclick="jumpToMessage('${msg._id}')">Перейти</button>
-      <button class="pinned-action-btn unpin" onclick="unpinMessage('${msg._id}', '${msg.channel}')">Открепить</button>
-    </div>
-  `;
+  // Создаем элементы безопасно через DOM API
+  const header = document.createElement('div');
+  header.className = 'pinned-message-header';
+  
+  const avatar = document.createElement('img');
+  avatar.className = 'pinned-message-avatar';
+  avatar.src = authorAvatar;
+  avatar.alt = escapeHtml(authorName);
+  
+  const authorSpan = document.createElement('span');
+  authorSpan.className = 'pinned-message-author';
+  authorSpan.textContent = authorName; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'pinned-message-time';
+  timeSpan.textContent = time;
+  
+  header.appendChild(avatar);
+  header.appendChild(authorSpan);
+  header.appendChild(timeSpan);
+  
+  // Тело сообщения
+  const body = document.createElement('div');
+  body.className = 'pinned-message-body';
+  body.textContent = msg.content || ''; // ИСПРАВЛЕНО: Безопасно через textContent (уже было escapeHtml, но textContent надежнее)
+  
+  // Действия
+  const actions = document.createElement('div');
+  actions.className = 'pinned-message-actions';
+  
+  const jumpBtn = document.createElement('button');
+  jumpBtn.className = 'pinned-action-btn';
+  jumpBtn.textContent = 'Перейти';
+  jumpBtn.addEventListener('click', () => jumpToMessage(msg._id));
+  
+  const unpinBtn = document.createElement('button');
+  unpinBtn.className = 'pinned-action-btn unpin';
+  unpinBtn.textContent = 'Открепить';
+  unpinBtn.addEventListener('click', () => unpinMessage(msg._id, msg.channel));
+  
+  actions.appendChild(jumpBtn);
+  actions.appendChild(unpinBtn);
+  
+  div.appendChild(header);
+  div.appendChild(body);
+  div.appendChild(actions);
   
   return div;
 }

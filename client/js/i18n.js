@@ -608,7 +608,6 @@ const I18N_MAP = [
   { sel: '#tab-online', key: 'tab_online', type: 'text' },
   { sel: '#tab-all', key: 'tab_all', type: 'text' },
   { sel: '#tab-pending', key: 'tab_pending', type: 'text' },
-  { sel: '#tab-add', key: 'tab_add', type: 'text' },
   { sel: '.members-header', key: 'members_header', type: 'text' },
   { sel: '#search-input', key: 'search_placeholder', type: 'placeholder' },
   { sel: '.search-placeholder', key: 'search_placeholder_text', type: 'text' },

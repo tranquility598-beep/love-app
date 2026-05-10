@@ -33,9 +33,79 @@ if (isPackaged) {
 // Промис для инициализации конфига (оставлен для обратной совместимости, если где-то используется await)
 window.apiReady = Promise.resolve();
 
-// Базовый fetch с авторизацией
+// Безопасное сохранение токена (только для login/register)
+async function storeAuthToken(token) {
+  if (window.electronAPI && window.electronAPI.storeToken) {
+    await window.electronAPI.storeToken(token);
+  } else {
+    // Fallback для веб-версии (не Electron)
+    localStorage.setItem('token', token);
+  }
+}
+
+// Безопасное удаление токена
+async function clearAuthToken() {
+  if (window.electronAPI && window.electronAPI.clearToken) {
+    await window.electronAPI.clearToken();
+  }
+  // Всегда очищаем localStorage на случай старых данных
+  localStorage.removeItem('token');
+}
+
+// FIX: 401 от auth-эндпоинтов (login/register/verify-otp) НЕ должен
+// триггерить clearAuthToken+reload — это нормальный ответ "неверные креды"
+// и ошибку нужно показать в UI. Reload оставляем только для 401 на
+// уже-авторизованных запросах (протух токен).
+function isAuthEntryEndpoint(endpoint) {
+  return typeof endpoint === 'string' && (
+    endpoint.startsWith('/auth/login') ||
+    endpoint.startsWith('/auth/register') ||
+    endpoint.startsWith('/auth/verify-otp') ||
+    endpoint.startsWith('/auth/forgot-password') ||
+    endpoint.startsWith('/auth/reset-password') ||
+    endpoint.startsWith('/auth/resend-otp')
+  );
+}
+
+// Базовый fetch с авторизацией через IPC proxy
 async function apiFetch(endpoint, options = {}) {
   await window.apiReady;
+
+  // В Electron используем безопасный IPC proxy
+  if (window.electronAPI && window.electronAPI.apiRequest) {
+    try {
+      const result = await window.electronAPI.apiRequest({
+        path: endpoint,
+        method: options.method || 'GET',
+        body: options.body,
+        headers: options.headers || {}
+      });
+
+      if (!result.ok) {
+        if (result.status === 401 && !isAuthEntryEndpoint(endpoint)) {
+          // Только для авторизованных запросов с протухшим токеном
+          await clearAuthToken();
+          localStorage.removeItem('user');
+          window.location.reload();
+        }
+        const error = new Error(result.data?.message || 'Ошибка запроса');
+        error.status = result.status;
+        error.data = result.data;
+        throw error;
+      }
+      
+      return result.data;
+    } catch (error) {
+      // Если это уже наша ошибка с статусом, пробрасываем дальше
+      if (error.status) throw error;
+      
+      // Иначе это сетевая ошибка
+      console.error('Network error:', error.message);
+      throw new Error('Сервер недоступен. Проверьте подключение к интернету или подождите — сервер может загружаться.');
+    }
+  }
+  
+  // Fallback для веб-версии (не Electron) - используем прямой fetch с localStorage
   const token = localStorage.getItem('token');
   const headers = {
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -54,7 +124,6 @@ async function apiFetch(endpoint, options = {}) {
       headers
     });
   } catch (networkError) {
-    // Ошибка сети (сервер недоступен, нет интернета)
     console.error('Network error:', networkError.message, 'URL:', `${API_BASE}${endpoint}`);
     throw new Error('Сервер недоступен. Проверьте подключение к интернету или подождите — сервер может загружаться.');
   }
@@ -73,7 +142,7 @@ async function apiFetch(endpoint, options = {}) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      localStorage.removeItem('token');
+      await clearAuthToken();
       localStorage.removeItem('user');
       window.location.reload();
     }
@@ -86,9 +155,55 @@ async function apiFetch(endpoint, options = {}) {
   return data;
 }
 
-// Загрузка файла
+// Загрузка файла через IPC proxy
 async function apiUpload(endpoint, formData, method = 'POST') {
   await window.apiReady;
+  
+  // В Electron используем безопасный IPC proxy для загрузки файлов
+  if (window.electronAPI && window.electronAPI.apiUpload) {
+    try {
+      // Извлекаем файл из FormData
+      const file = formData.get('file') || formData.get('avatar') || formData.get('icon') || formData.get('emoji') || formData.get('banner');
+      const additionalFields = {};
+      
+      // Собираем дополнительные поля
+      for (const [key, value] of formData.entries()) {
+        if (key !== 'file' && key !== 'avatar' && key !== 'icon' && key !== 'emoji' && key !== 'banner') {
+          additionalFields[key] = value;
+        }
+      }
+      
+      let fileData = null;
+      let fileName = null;
+      let mimeType = null;
+      
+      if (file && file instanceof File) {
+        fileData = await file.arrayBuffer();
+        fileName = file.name;
+        mimeType = file.type;
+      }
+      
+      const result = await window.electronAPI.apiUpload({
+        path: endpoint,
+        method: method,
+        fileData: fileData,
+        fileName: fileName,
+        mimeType: mimeType,
+        additionalFields: additionalFields
+      });
+      
+      if (!result.ok) {
+        throw new Error(result.data?.message || 'Ошибка загрузки');
+      }
+      
+      return result.data;
+    } catch (error) {
+      console.error('Upload error:', error);
+      throw error;
+    }
+  }
+  
+  // Fallback для веб-версии (не Electron)
   const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: method,
@@ -128,6 +243,11 @@ const AuthAPI = {
 
   getMe: () =>
     apiFetch('/auth/me'),
+
+  // Короткоживущий socket-token. Используется ТОЛЬКО в socket.js перед io().
+  // Не сохранять, не логировать. Получается заново при каждом (re)connect.
+  getSocketToken: () =>
+    apiFetch('/auth/socket-token', { method: 'POST' }),
 
   updateStatus: (status, customStatus) =>
     apiFetch('/auth/update-status', { method: 'PUT', body: JSON.stringify({ status, customStatus }) }),
@@ -189,6 +309,18 @@ const ServersAPI = {
     return apiUpload(`/servers/${serverId}/icon`, formData, 'PUT');
   },
 
+  deleteIcon: (serverId) =>
+    apiFetch(`/servers/${serverId}/icon`, { method: 'DELETE' }),
+
+  uploadBanner: (serverId, file) => {
+    const formData = new FormData();
+    formData.append('banner', file);
+    return apiUpload(`/servers/${serverId}/banner`, formData, 'PUT');
+  },
+
+  deleteBanner: (serverId) =>
+    apiFetch(`/servers/${serverId}/banner`, { method: 'DELETE' }),
+
   addCategory: (serverId, name) =>
     apiFetch(`/servers/${serverId}/categories`, {
       method: 'POST',
@@ -199,6 +331,37 @@ const ServersAPI = {
     apiFetch(`/servers/${serverId}/categories/${categoryId}`, {
       method: 'DELETE'
     })
+};
+
+// ===== ROOMS API =====
+// Тонкая обёртка поверх ServersAPI. Не дублирует функциональность,
+// а лишь добавляет два эндпоинта для упрощённых "комнат" (settings.kind='room').
+// Управление, инвайты, выход, аплоад иконки и т.п. для комнат идут через
+// существующие ServersAPI (room — это тот же Server-документ).
+const RoomsAPI = {
+  // Список только комнат пользователя
+  getAll: () =>
+    apiFetch('/servers/rooms'),
+
+  // Создание комнаты (бекенд сам создаёт 1 text + 1 voice канал)
+  create: (name, description) =>
+    apiFetch('/servers/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ name, description })
+    }),
+
+  // Присоединение по инвайт-коду переиспользует существующий endpoint
+  join: (code) => ServersAPI.join(code),
+
+  // Выход / удаление / обновление — те же, что у Server
+  leave: (roomId) => ServersAPI.leave(roomId),
+  delete: (roomId) => ServersAPI.delete(roomId),
+  update: (roomId, data) => ServersAPI.update(roomId, data),
+  uploadIcon: (roomId, file) => ServersAPI.uploadIcon(roomId, file),
+  deleteIcon: (roomId) => ServersAPI.deleteIcon(roomId),
+  uploadBanner: (roomId, file) => ServersAPI.uploadBanner(roomId, file),
+  deleteBanner: (roomId) => ServersAPI.deleteBanner(roomId),
+  createInvite: (roomId) => ServersAPI.createInvite(roomId)
 };
 
 // ===== CHANNELS API =====

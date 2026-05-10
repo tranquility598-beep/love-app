@@ -44,13 +44,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupUpdater();
 
   // Проверяем авторизацию
-  const token = localStorage.getItem('token');
+  // Токен теперь хранится в main process, проверяем наличие пользователя
   const savedUser = localStorage.getItem('user');
 
-  if (token && savedUser) {
+  if (savedUser) {
     try {
       window.currentUser = JSON.parse(savedUser);
-      // Верифицируем токен на сервере
+      // Верифицируем токен на сервере (токен добавится автоматически в main process)
       const data = await AuthAPI.getMe();
       window.currentUser = data.user;
       localStorage.setItem('user', JSON.stringify(data.user));
@@ -66,8 +66,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
       // Проверяем, действительно ли токен недействителен (401)
       if (error.status === 401 || error.status === 403 || (error.message && error.message.includes('не найден'))) {
-        localStorage.removeItem('token');
+        await clearAuthToken();
         localStorage.removeItem('user');
+      } else if (error.status === 429) {
+        // 429 = rate limit. НИКОГДА не reload'имся в этом случае —
+        // иначе попадаем в цикл: reload → getMe → 429 → reload → ...
+        // Каждый reload сам по себе делает несколько запросов, что только
+        // усугубляет ситуацию. Просто показываем сообщение и даём UI
+        // подняться. Пользователь может перезайти позже.
+        sessionStorage.removeItem('connectRetries');
+        const loadingText = document.querySelector('.loading-text');
+        if (loadingText) {
+          loadingText.textContent = 'СЛИШКОМ МНОГО ЗАПРОСОВ. ПОДОЖДИТЕ МИНУТУ И ПОПРОБУЙТЕ СНОВА.';
+          loadingText.style.fontSize = '14px';
+        }
+        // Не делаем clearAuthToken — токен валидный, просто превышен лимит.
+        return;
       } else {
         // Скорее всего сервер Render просто "просыпается" или нет сети
         const retryCount = parseInt(sessionStorage.getItem('connectRetries') || '0');
@@ -136,9 +150,8 @@ async function initApp() {
 
   document.getElementById('app').classList.remove('hidden');
 
-  // Инициализируем Socket.io
-  const token = localStorage.getItem('token');
-  initSocket(token);
+  // Инициализируем Socket.io (токен будет получен внутри initSocket)
+  initSocket();
 
   if (window.founderSystem && window.currentUser) {
     window.founderSystem.checkFounder(window.currentUser);
@@ -219,21 +232,35 @@ function renderServersList(servers) {
   const list = document.getElementById('server-list');
   if (!list) return;
 
-  list.innerHTML = servers.map(server => {
-    const initials = server.name.substring(0, 2).toUpperCase();
-    return `
-      <div class="server-icon ${window.currentServer?._id === server._id ? 'active' : ''}"
-           data-server-id="${server._id}"
-           onclick="selectServer('${server._id}')"
-           title="${server.name}">
-        ${server.icon
-          ? `<img src="${getAvatarUrl(server.icon)}" alt="${server.name}">`
-          : `<span style="font-size:14px;font-weight:700">${initials}</span>`
-        }
-        <div class="server-tooltip">${server.name}</div>
-      </div>
-    `;
-  }).join('');
+  list.innerHTML = ''; // Очищаем список безопасно
+  
+  servers.forEach(server => {
+    const iconDiv = document.createElement('div');
+    iconDiv.className = `server-icon ${window.currentServer?._id === server._id ? 'active' : ''}`;
+    iconDiv.dataset.serverId = server._id;
+    iconDiv.title = server.name; // Защита браузера: title экранируется автоматически
+    iconDiv.onclick = () => selectServer(server._id); // Это безопасно, так как мы назначаем функцию, а не строку
+
+    if (server.icon) {
+      const img = document.createElement('img');
+      img.src = getAvatarUrl(server.icon);
+      img.alt = server.name; // Защита браузера
+      iconDiv.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.style.fontSize = '14px';
+      span.style.fontWeight = '700';
+      span.textContent = server.name.substring(0, 2).toUpperCase(); // textContent защищает от XSS
+      iconDiv.appendChild(span);
+    }
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'server-tooltip';
+    tooltip.textContent = server.name; // textContent защищает от XSS
+    iconDiv.appendChild(tooltip);
+
+    list.appendChild(iconDiv);
+  });
 }
 
 /**
@@ -357,8 +384,10 @@ function renderServerChannels(server) {
     grouped[actualKey].push(ch);
   });
 
-  // Рендерим по категориям
-  container.innerHTML = Object.keys(grouped).map(catName => {
+  // Очищаем контейнер безопасно
+  container.innerHTML = '';
+  
+  Object.keys(grouped).forEach(catName => {
     const catChannels = grouped[catName];
     // Сортировка: текст выше голоса, потом по позиции
     catChannels.sort((a,b) => {
@@ -368,30 +397,88 @@ function renderServerChannels(server) {
 
     const isVoiceCat = catName.toLowerCase().includes('голос');
 
-    return `
-      <div class="channel-category">
-        <div class="channel-category-header" onclick="toggleCategory(this)">
-          <svg class="channel-category-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7 10l5 5 5-5z"/>
-          </svg>
-          ${catName.toUpperCase()}
-          <button class="channel-category-add channel-action-btn" 
-                  onclick="event.stopPropagation(); showCreateChannelModal('${isVoiceCat ? 'voice' : 'text'}', '${catName}')" 
-                  title="Создать канал">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
-        </div>
-        <div class="channel-list">
-          ${catChannels.length > 0 
-            ? catChannels.map(ch => renderChannelItem(ch, server)).join('')
-            : `<div class="channel-empty-msg">${window.i18n.t('server_no_channels') || 'Каналов пока нет'}</div>`
-          }
-        </div>
-      </div>
-    `;
-  }).join('');
+    // Создаем категорию через DOM API (безопасно)
+    const categoryDiv = document.createElement('div');
+    categoryDiv.className = 'channel-category';
+    
+    // Заголовок категории
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'channel-category-header';
+    headerDiv.addEventListener('click', function() { toggleCategory(this); });
+    
+    // SVG стрелка
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrow.setAttribute('class', 'channel-category-arrow');
+    arrow.setAttribute('width', '12');
+    arrow.setAttribute('height', '12');
+    arrow.setAttribute('viewBox', '0 0 24 24');
+    arrow.setAttribute('fill', 'currentColor');
+    const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    arrowPath.setAttribute('d', 'M7 10l5 5 5-5z');
+    arrow.appendChild(arrowPath);
+    
+    headerDiv.appendChild(arrow);
+    headerDiv.appendChild(document.createTextNode(' ' + catName.toUpperCase())); // Безопасно через textContent
+    
+    // Кнопка добавления канала
+    const addBtn = document.createElement('button');
+    addBtn.className = 'channel-category-add channel-action-btn';
+    addBtn.title = 'Создать канал';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showCreateChannelModal(isVoiceCat ? 'voice' : 'text', catName);
+    });
+    
+    const addSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    addSvg.setAttribute('width', '14');
+    addSvg.setAttribute('height', '14');
+    addSvg.setAttribute('viewBox', '0 0 24 24');
+    addSvg.setAttribute('fill', 'none');
+    addSvg.setAttribute('stroke', 'currentColor');
+    addSvg.setAttribute('stroke-width', '2');
+    
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line1.setAttribute('x1', '12');
+    line1.setAttribute('y1', '5');
+    line1.setAttribute('x2', '12');
+    line1.setAttribute('y2', '19');
+    
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line2.setAttribute('x1', '5');
+    line2.setAttribute('y1', '12');
+    line2.setAttribute('x2', '19');
+    line2.setAttribute('y2', '12');
+    
+    addSvg.appendChild(line1);
+    addSvg.appendChild(line2);
+    addBtn.appendChild(addSvg);
+    
+    headerDiv.appendChild(addBtn);
+    
+    // Список каналов
+    const channelList = document.createElement('div');
+    channelList.className = 'channel-list';
+    
+    if (catChannels.length > 0) {
+      catChannels.forEach(ch => {
+        const channelItemHtml = renderChannelItem(ch, server);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = channelItemHtml;
+        if (tempDiv.firstElementChild) {
+          channelList.appendChild(tempDiv.firstElementChild);
+        }
+      });
+    } else {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'channel-empty-msg';
+      emptyMsg.textContent = window.i18n.t('server_no_channels') || 'Каналов пока нет';
+      channelList.appendChild(emptyMsg);
+    }
+    
+    categoryDiv.appendChild(headerDiv);
+    categoryDiv.appendChild(channelList);
+    container.appendChild(categoryDiv);
+  });
 }
 
 /**
@@ -581,28 +668,48 @@ async function loadChannelMembers() {
   const online = members.filter(m => (m.user?.status || m.status) !== 'offline');
   const offline = members.filter(m => (m.user?.status || m.status) === 'offline');
 
-  membersList.innerHTML = `
-    ${online.length > 0 ? `<div class="members-section-title">${window.i18n.t('tab_online').toUpperCase()} — ${online.length}</div>` : ''}
-    ${online.map(m => renderMemberItem(m)).join('')}
-    ${offline.length > 0 ? `<div class="members-section-title">${window.i18n.t('status_offline').toUpperCase()} — ${offline.length}</div>` : ''}
-    ${offline.map(m => renderMemberItem(m)).join('')}
-  `;
+  // Очищаем список безопасно
+  membersList.innerHTML = '';
+  
+  // Секция онлайн
+  if (online.length > 0) {
+    const onlineTitle = document.createElement('div');
+    onlineTitle.className = 'members-section-title';
+    onlineTitle.textContent = `${window.i18n.t('tab_online').toUpperCase()} — ${online.length}`;
+    membersList.appendChild(onlineTitle);
+    
+    online.forEach(m => {
+      const memberEl = createMemberElement(m);
+      membersList.appendChild(memberEl);
+    });
+  }
+  
+  // Секция оффлайн
+  if (offline.length > 0) {
+    const offlineTitle = document.createElement('div');
+    offlineTitle.className = 'members-section-title';
+    offlineTitle.textContent = `${window.i18n.t('status_offline').toUpperCase()} — ${offline.length}`;
+    membersList.appendChild(offlineTitle);
+    
+    offline.forEach(m => {
+      const memberEl = createMemberElement(m);
+      membersList.appendChild(memberEl);
+    });
+  }
 }
 
 /**
- * Отрендерить участника
+ * Создать элемент участника безопасно через DOM API
  */
-function renderMemberItem(member) {
+function createMemberElement(member) {
   const user = member.user || member;
   const status = user.status || 'offline';
   
   // Получаем роли участника
-  let rolesHtml = '';
   let topRole = null;
   
   if (window.currentServer && member.roles && member.roles.length > 0) {
     const server = window.currentServer;
-    // Получаем роли с hoist (показывать отдельно) и сортируем по позиции
     const memberRoles = member.roles
       .map(roleId => server.roles?.find(r => r._id.toString() === roleId.toString()))
       .filter(role => role && role.hoist)
@@ -610,27 +717,88 @@ function renderMemberItem(member) {
     
     if (memberRoles.length > 0) {
       topRole = memberRoles[0];
-      rolesHtml = `<div class="member-role" style="color: ${topRole.color}">${topRole.name}</div>`;
     }
   }
   
-  return `
-    <div class="member-item" 
-         data-user-id="${user._id}" 
-         onclick="openDMWithUser('${user._id}')"
-         oncontextmenu="showMemberContextMenu(event, '${user._id}', '${escapeHtml(user.username)}')">
-      <div class="member-avatar">
-        <img src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
-        <div class="status-dot ${status}"></div>
-      </div>
-      <div class="member-info">
-        <div class="member-name" style="${topRole ? `color: ${topRole.color}` : ''}">${user.username}${user.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
-        ${rolesHtml}
-        ${!rolesHtml ? `<div class="member-status">${getStatusText(status)}</div>` : ''}
-      </div>
-      <div class="member-speaking-indicator" style="display:none"></div>
-    </div>
-  `;
+  // Создаем элемент через DOM API
+  const memberItem = document.createElement('div');
+  memberItem.className = 'member-item';
+  memberItem.dataset.userId = user._id;
+  memberItem.addEventListener('click', () => openDMWithUser(user._id));
+  memberItem.addEventListener('contextmenu', (e) => showMemberContextMenu(e, user._id, user.username));
+  
+  // Аватар
+  const memberAvatar = document.createElement('div');
+  memberAvatar.className = 'member-avatar';
+  
+  const avatarImg = document.createElement('img');
+  avatarImg.src = getAvatarUrl(user.avatar);
+  avatarImg.alt = escapeHtml(user.username);
+  
+  const statusDot = document.createElement('div');
+  statusDot.className = `status-dot ${status}`;
+  
+  memberAvatar.appendChild(avatarImg);
+  memberAvatar.appendChild(statusDot);
+  
+  // Информация
+  const memberInfo = document.createElement('div');
+  memberInfo.className = 'member-info';
+  
+  const memberName = document.createElement('div');
+  memberName.className = 'member-name';
+  if (topRole) {
+    memberName.style.color = topRole.color;
+  }
+  memberName.textContent = user.username; // Безопасно через textContent
+  
+  if (user.role === 'owner') {
+    const crownSpan = document.createElement('span');
+    crownSpan.title = window.i18n.t('role_creator');
+    crownSpan.style.fontSize = '1.1em';
+    crownSpan.textContent = '👑';
+    memberName.appendChild(document.createTextNode(' '));
+    memberName.appendChild(crownSpan);
+  }
+  
+  memberInfo.appendChild(memberName);
+  
+  // Роль или статус
+  if (topRole) {
+    const memberRole = document.createElement('div');
+    memberRole.className = 'member-role';
+    memberRole.style.color = topRole.color;
+    memberRole.textContent = topRole.name;
+    memberInfo.appendChild(memberRole);
+  } else {
+    const memberStatus = document.createElement('div');
+    memberStatus.className = 'member-status';
+    memberStatus.textContent = getStatusText(status);
+    memberInfo.appendChild(memberStatus);
+  }
+  
+  // Индикатор говорения
+  const speakingIndicator = document.createElement('div');
+  speakingIndicator.className = 'member-speaking-indicator';
+  speakingIndicator.style.display = 'none';
+  
+  memberItem.appendChild(memberAvatar);
+  memberItem.appendChild(memberInfo);
+  memberItem.appendChild(speakingIndicator);
+  
+  return memberItem;
+}
+
+/**
+ * Отрендерить участника (устаревшая функция, используется только в старых местах)
+ * TODO: Заменить все вызовы на createMemberElement
+ */
+function renderMemberItem(member) {
+  // Используем безопасную версию
+  const el = createMemberElement(member);
+  const wrapper = document.createElement('div');
+  wrapper.appendChild(el);
+  return wrapper.innerHTML;
 }
 
 /**
@@ -756,26 +924,72 @@ function renderDMConversations(conversations) {
   const container = document.getElementById('dm-conversations');
   if (!container) return;
 
-  container.innerHTML = conversations.map(conv => {
+  // Очищаем контейнер безопасно
+  container.innerHTML = '';
+  
+  conversations.forEach(conv => {
     const other = conv.participants?.find(p => p._id !== window.currentUser?._id);
-    if (!other) return '';
+    if (!other) return;
 
-    return `
-      <div class="dm-item ${window.currentDMConversation?._id === conv._id ? 'active' : ''}"
-           data-conv-id="${conv._id}"
-           onclick="openDMConversation(${JSON.stringify(conv).replace(/"/g, '&quot;')})">
-        <div class="dm-avatar">
-          <img src="${getAvatarUrl(other.avatar)}" alt="${other.username}">
-          <div class="status-dot ${other.status || 'offline'}"></div>
-        </div>
-        <div class="dm-info">
-          <div class="dm-name">${other.username}${other.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
-          <div class="dm-last-message">${conv.lastMessage?.content?.substring(0, 30) || ''}</div>
-        </div>
-        <button class="dm-close-btn" onclick="event.stopPropagation(); deleteDMConversation('${conv._id}')">✕</button>
-      </div>
-    `;
-  }).join('');
+    // Создаем элементы через DOM API (безопасно)
+    const dmItem = document.createElement('div');
+    dmItem.className = `dm-item ${window.currentDMConversation?._id === conv._id ? 'active' : ''}`;
+    dmItem.dataset.convId = conv._id;
+    dmItem.addEventListener('click', () => openDMConversation(conv));
+
+    // Аватар
+    const dmAvatar = document.createElement('div');
+    dmAvatar.className = 'dm-avatar';
+    
+    const avatarImg = document.createElement('img');
+    avatarImg.src = getAvatarUrl(other.avatar);
+    avatarImg.alt = escapeHtml(other.username);
+    
+    const statusDot = document.createElement('div');
+    statusDot.className = `status-dot ${other.status || 'offline'}`;
+    
+    dmAvatar.appendChild(avatarImg);
+    dmAvatar.appendChild(statusDot);
+
+    // Информация
+    const dmInfo = document.createElement('div');
+    dmInfo.className = 'dm-info';
+    
+    const dmName = document.createElement('div');
+    dmName.className = 'dm-name';
+    dmName.textContent = other.username; // Безопасно через textContent
+    
+    if (other.role === 'owner') {
+      const crownSpan = document.createElement('span');
+      crownSpan.title = window.i18n.t('role_creator');
+      crownSpan.style.fontSize = '1.1em';
+      crownSpan.textContent = '👑';
+      dmName.appendChild(document.createTextNode(' '));
+      dmName.appendChild(crownSpan);
+    }
+    
+    const dmLastMessage = document.createElement('div');
+    dmLastMessage.className = 'dm-last-message';
+    dmLastMessage.textContent = conv.lastMessage?.content?.substring(0, 30) || ''; // Безопасно через textContent
+    
+    dmInfo.appendChild(dmName);
+    dmInfo.appendChild(dmLastMessage);
+
+    // Кнопка закрытия
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'dm-close-btn';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteDMConversation(conv._id);
+    });
+
+    dmItem.appendChild(dmAvatar);
+    dmItem.appendChild(dmInfo);
+    dmItem.appendChild(closeBtn);
+    
+    container.appendChild(dmItem);
+  });
 }
 
 /**

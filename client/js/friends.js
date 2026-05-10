@@ -2,7 +2,7 @@
  * Friends модуль - система друзей
  */
 
-let currentFriendsTab = 'online';
+let currentFriendsTab = 'all';
 
 /**
  * Загрузить список друзей
@@ -53,68 +53,194 @@ function renderFriendsTab(tab, data) {
   const pending = data.requestsSent || [];
   const incoming = data.requestsReceived || [];
 
+  // Очищаем безопасно — пустой контейнер, потом наполняем DOM API.
+  content.innerHTML = '';
+
   switch (tab) {
-    case 'online':
+    case 'all': {
+      if (friends.length === 0) {
+        content.appendChild(buildEmptyAllFriends());
+      } else {
+        const title = document.createElement('div');
+        title.className = 'friends-section-title';
+        title.textContent = `${(window.i18n?.t('tab_all') || 'Все').toUpperCase()} — ${friends.length}`;
+        content.appendChild(title);
+        friends.forEach(f => content.appendChild(buildFriendItem(f, true)));
+      }
+      break;
+    }
+
+    case 'online': {
       const onlineFriends = friends.filter(f => f.status !== 'offline');
-      content.innerHTML = renderFriendsList(onlineFriends, window.i18n.t('tab_online').toUpperCase(), window.i18n.t('friends_empty_online'), true);
+      if (onlineFriends.length === 0) {
+        content.appendChild(buildEmptyOnlineFriends());
+      } else {
+        const title = document.createElement('div');
+        title.className = 'friends-section-title';
+        title.textContent = `${(window.i18n?.t('tab_online') || 'В сети').toUpperCase()} — ${onlineFriends.length}`;
+        content.appendChild(title);
+        onlineFriends.forEach(f => content.appendChild(buildFriendItem(f, true)));
+      }
       break;
+    }
 
-    case 'all':
-      content.innerHTML = renderFriendsList(friends, `${window.i18n.t('tab_all').toUpperCase()} — ${friends.length}`, window.i18n.t('friends_empty_all'), true);
-      break;
-
-    case 'pending':
-      let pendingHtml = '';
+    case 'pending': {
+      if (incoming.length === 0 && pending.length === 0) {
+        content.appendChild(buildEmptyPending());
+        break;
+      }
       if (incoming.length > 0) {
-        pendingHtml += `<div class="friends-section-title">${window.i18n.t('friends_incoming')} — ${incoming.length}</div>`;
-        pendingHtml += incoming.map(item => renderPendingItem(item.from, 'incoming')).join('');
+        const t = document.createElement('div');
+        t.className = 'friends-section-title';
+        t.textContent = `${window.i18n?.t('friends_incoming') || 'ВХОДЯЩИЕ'} — ${incoming.length}`;
+        content.appendChild(t);
+        incoming.forEach(item => content.appendChild(buildPendingItem(item.from, 'incoming')));
       }
       if (pending.length > 0) {
-        pendingHtml += `<div class="friends-section-title" style="margin-top:16px">${window.i18n.t('friends_outgoing')} — ${pending.length}</div>`;
-        pendingHtml += pending.map(item => renderPendingItem(item.to, 'outgoing')).join('');
+        const t = document.createElement('div');
+        t.className = 'friends-section-title friends-section-title--spaced';
+        t.textContent = `${window.i18n?.t('friends_outgoing') || 'ИСХОДЯЩИЕ'} — ${pending.length}`;
+        content.appendChild(t);
+        pending.forEach(item => content.appendChild(buildPendingItem(item.to, 'outgoing')));
       }
-      if (incoming.length === 0 && pending.length === 0) {
-        pendingHtml = renderEmptyState('📭', window.i18n.t('friends_empty_pending_title'), window.i18n.t('friends_empty_pending_desc'));
-      }
-      content.innerHTML = pendingHtml;
       break;
+    }
 
-    case 'add':
-      content.innerHTML = `
-        <div class="add-friend-section">
-          <div class="add-friend-title">${window.i18n.t('tab_add').toUpperCase()}</div>
-          <div class="add-friend-desc">${window.i18n.t('friends_add_desc')}</div>
-          <div class="add-friend-input-wrapper">
-            <input type="text" class="add-friend-input" id="add-friend-input"
-                   placeholder="${window.i18n.t('auth_username')}"
-                   onkeydown="if(event.key==='Enter') sendFriendRequest()">
-            <button class="add-friend-btn" onclick="sendFriendRequest()">${window.i18n.t('friends_add_btn')}</button>
-          </div>
-          <div id="add-friend-result" style="margin-top:12px;font-size:14px"></div>
-        </div>
-      `;
+    case 'add': {
+      content.appendChild(buildAddFriendSection());
       break;
+    }
   }
 }
 
 /**
- * Отрендерить список друзей
+ * Empty state — общий конструктор. ВАЖНО: title/desc приходят из i18n
+ * (статика), но всё равно вставляем через textContent — никогда не
+ * рендерим пользовательские данные через innerHTML.
  */
-function renderFriendsList(friends, title, emptyText, showActions) {
-  if (friends.length === 0) {
-    return renderEmptyState('👥', emptyText, '');
+function buildEmptyState(icon, title, desc, action) {
+  const wrap = document.createElement('div');
+  wrap.className = 'empty-state';
+
+  const iconEl = document.createElement('div');
+  iconEl.className = 'empty-state-icon';
+  iconEl.textContent = icon;
+  wrap.appendChild(iconEl);
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'empty-state-title';
+  titleEl.textContent = title;
+  wrap.appendChild(titleEl);
+
+  if (desc) {
+    const descEl = document.createElement('div');
+    descEl.className = 'empty-state-desc';
+    descEl.textContent = desc;
+    wrap.appendChild(descEl);
   }
 
-  return `
-    <div class="friends-section-title">${title}</div>
-    ${friends.map(friend => renderFriendItem(friend, showActions)).join('')}
-  `;
+  if (action && typeof action.onClick === 'function') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'empty-state-btn';
+    btn.textContent = action.label;
+    btn.addEventListener('click', action.onClick);
+    wrap.appendChild(btn);
+  }
+
+  return wrap;
+}
+
+function buildEmptyAllFriends() {
+  return buildEmptyState(
+    '👥',
+    'У тебя пока нет друзей',
+    'Добавь друга по имени пользователя, чтобы начать общение.',
+    {
+      label: 'Добавить в друзья',
+      onClick: () => {
+        switchFriendsTab('add');
+        // Дать DOM перерисоваться, потом сфокусировать input.
+        requestAnimationFrame(() => {
+          const input = document.getElementById('add-friend-input');
+          if (input) input.focus();
+        });
+      }
+    }
+  );
+}
+
+function buildEmptyOnlineFriends() {
+  return buildEmptyState(
+    '🌙',
+    'Сейчас никого нет в сети',
+    'Когда друзья появятся онлайн, они будут здесь.'
+  );
+}
+
+function buildEmptyPending() {
+  return buildEmptyState(
+    '📭',
+    'Нет ожидающих заявок',
+    'Новые входящие и исходящие заявки появятся здесь.'
+  );
 }
 
 /**
- * Отрендерить элемент друга
+ * Add Friend секция — собирается через DOM API, обработчики через
+ * addEventListener (никаких inline onclick / onkeydown).
  */
-function renderFriendItem(friend, showActions) {
+function buildAddFriendSection() {
+  const section = document.createElement('div');
+  section.className = 'add-friend-section';
+
+  const title = document.createElement('div');
+  title.className = 'add-friend-title';
+  title.textContent = (window.i18n?.t('tab_add') || 'Добавить').toUpperCase();
+  section.appendChild(title);
+
+  const desc = document.createElement('div');
+  desc.className = 'add-friend-desc';
+  desc.textContent = window.i18n?.t('friends_add_desc') || 'Вы можете добавить друга по его имени пользователя.';
+  section.appendChild(desc);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'add-friend-input-wrapper';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'add-friend-input';
+  input.id = 'add-friend-input';
+  input.placeholder = window.i18n?.t('auth_username') || 'Имя пользователя';
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendFriendRequest();
+  });
+  wrapper.appendChild(input);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'add-friend-btn';
+  btn.textContent = window.i18n?.t('friends_add_btn') || 'Добавить';
+  btn.addEventListener('click', sendFriendRequest);
+  wrapper.appendChild(btn);
+
+  section.appendChild(wrapper);
+
+  const result = document.createElement('div');
+  result.id = 'add-friend-result';
+  result.className = 'add-friend-result';
+  section.appendChild(result);
+
+  return section;
+}
+
+/**
+ * Построить DOM-элемент друга. Все пользовательские данные (username,
+ * status) вставляются через textContent — никаких innerHTML для user
+ * data. SVG-иконки кнопок — статика, поэтому innerHTML допустим только
+ * для них.
+ */
+function buildFriendItem(friend, showActions) {
   const status = friend.status || 'offline';
   const statusText = { 
     online: window.i18n.t('status_online'), 
@@ -123,69 +249,168 @@ function renderFriendItem(friend, showActions) {
     offline: window.i18n.t('status_offline') 
   }[status] || window.i18n.t('status_offline');
 
-  return `
-    <div class="friend-item" data-user-id="${friend._id}">
-      <div class="friend-avatar">
-        <img src="${getAvatarUrl(friend.avatar)}" alt="${friend.username}">
-        <div class="status-dot ${status}"></div>
-      </div>
-      <div class="friend-info">
-        <div class="friend-name">${friend.username}${friend.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
-        <div class="friend-status">${statusText}</div>
-      </div>
-      ${showActions ? `
-        <div class="friend-actions">
-          <button class="friend-action-btn" onclick="openDMWithUser('${friend._id}')" title="${window.i18n.t('friends_action_msg')}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-            </svg>
-          </button>
-          <button class="friend-action-btn remove" onclick="removeFriend('${friend._id}')" title="${window.i18n.t('friends_action_remove')}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-          </button>
-        </div>
-      ` : ''}
-    </div>
-  `;
+  // Создаем элемент через DOM API для безопасности
+  const friendItem = document.createElement('div');
+  friendItem.className = 'friend-item';
+  friendItem.dataset.userId = friend._id;
+  
+  // Аватар
+  const friendAvatar = document.createElement('div');
+  friendAvatar.className = 'friend-avatar';
+  
+  const avatarImg = document.createElement('img');
+  avatarImg.src = getAvatarUrl(friend.avatar);
+  avatarImg.alt = escapeHtml(friend.username);
+  
+  const statusDot = document.createElement('div');
+  statusDot.className = `status-dot ${status}`;
+  
+  friendAvatar.appendChild(avatarImg);
+  friendAvatar.appendChild(statusDot);
+  
+  // Информация
+  const friendInfo = document.createElement('div');
+  friendInfo.className = 'friend-info';
+  
+  const friendName = document.createElement('div');
+  friendName.className = 'friend-name';
+  friendName.textContent = friend.username; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  if (friend.role === 'owner') {
+    const crownSpan = document.createElement('span');
+    crownSpan.title = window.i18n.t('role_creator');
+    crownSpan.style.fontSize = '1.1em';
+    crownSpan.textContent = ' 👑';
+    friendName.appendChild(crownSpan);
+  }
+  
+  const friendStatus = document.createElement('div');
+  friendStatus.className = 'friend-status';
+  friendStatus.textContent = statusText;
+  
+  friendInfo.appendChild(friendName);
+  friendInfo.appendChild(friendStatus);
+  
+  friendItem.appendChild(friendAvatar);
+  friendItem.appendChild(friendInfo);
+  
+  // Действия
+  if (showActions) {
+    const friendActions = document.createElement('div');
+    friendActions.className = 'friend-actions';
+    
+    // Кнопка сообщения
+    const msgBtn = document.createElement('button');
+    msgBtn.className = 'friend-action-btn';
+    msgBtn.title = window.i18n.t('friends_action_msg');
+    msgBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+    </svg>`;
+    msgBtn.addEventListener('click', () => openDMWithUser(friend._id));
+    
+    // Кнопка удаления
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'friend-action-btn remove';
+    removeBtn.title = window.i18n.t('friends_action_remove');
+    removeBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+    </svg>`;
+    removeBtn.addEventListener('click', () => removeFriend(friend._id));
+    
+    friendActions.appendChild(msgBtn);
+    friendActions.appendChild(removeBtn);
+    friendItem.appendChild(friendActions);
+  }
+
+  return friendItem;
 }
 
 /**
- * Отрендерить ожидающий запрос
+ * Построить DOM-элемент ожидающей заявки.
  */
-function renderPendingItem(user, type) {
-  return `
-    <div class="friend-item" data-user-id="${user._id}">
-      <div class="friend-avatar">
-        <img src="${getAvatarUrl(user.avatar)}" alt="${user.username}">
-      </div>
-      <div class="friend-info">
-        <div class="friend-name">${user.username}${user.role === 'owner' ? ` <span title="${window.i18n.t('role_creator')}" style="font-size:1.1em">👑</span>` : ''}</div>
-        <div class="friend-status">${type === 'incoming' ? window.i18n.t('friends_req_incoming') : window.i18n.t('friends_req_outgoing')}</div>
-      </div>
-      <div class="friend-actions">
-        ${type === 'incoming' ? `
-          <button class="friend-action-btn accept" onclick="acceptFriendRequest('${user._id}')" title="${window.i18n.t('friends_action_accept')}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-            </svg>
-          </button>
-          <button class="friend-action-btn decline" onclick="declineFriendRequest('${user._id}')" title="${window.i18n.t('friends_action_decline')}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
-          </button>
-        ` : `
-          <button class="friend-action-btn decline" onclick="cancelFriendRequest('${user._id}')" title="${window.i18n.t('friends_action_cancel')}">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
-          </button>
-        `}
-      </div>
-    </div>
-  `;
+function buildPendingItem(user, type) {
+  // Создаем элемент через DOM API для безопасности
+  const friendItem = document.createElement('div');
+  friendItem.className = 'friend-item';
+  friendItem.dataset.userId = user._id;
+  
+  // Аватар
+  const friendAvatar = document.createElement('div');
+  friendAvatar.className = 'friend-avatar';
+  
+  const avatarImg = document.createElement('img');
+  avatarImg.src = getAvatarUrl(user.avatar);
+  avatarImg.alt = escapeHtml(user.username);
+  
+  friendAvatar.appendChild(avatarImg);
+  
+  // Информация
+  const friendInfo = document.createElement('div');
+  friendInfo.className = 'friend-info';
+  
+  const friendName = document.createElement('div');
+  friendName.className = 'friend-name';
+  friendName.textContent = user.username; // ИСПРАВЛЕНО: Безопасно через textContent
+  
+  if (user.role === 'owner') {
+    const crownSpan = document.createElement('span');
+    crownSpan.title = window.i18n.t('role_creator');
+    crownSpan.style.fontSize = '1.1em';
+    crownSpan.textContent = ' 👑';
+    friendName.appendChild(crownSpan);
+  }
+  
+  const friendStatus = document.createElement('div');
+  friendStatus.className = 'friend-status';
+  friendStatus.textContent = type === 'incoming' ? window.i18n.t('friends_req_incoming') : window.i18n.t('friends_req_outgoing');
+  
+  friendInfo.appendChild(friendName);
+  friendInfo.appendChild(friendStatus);
+  
+  friendItem.appendChild(friendAvatar);
+  friendItem.appendChild(friendInfo);
+  
+  // Действия
+  const friendActions = document.createElement('div');
+  friendActions.className = 'friend-actions';
+  
+  if (type === 'incoming') {
+    // Кнопка принять
+    const acceptBtn = document.createElement('button');
+    acceptBtn.className = 'friend-action-btn accept';
+    acceptBtn.title = window.i18n.t('friends_action_accept');
+    acceptBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+    </svg>`;
+    acceptBtn.addEventListener('click', () => acceptFriendRequest(user._id));
+    
+    // Кнопка отклонить
+    const declineBtn = document.createElement('button');
+    declineBtn.className = 'friend-action-btn decline';
+    declineBtn.title = window.i18n.t('friends_action_decline');
+    declineBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </svg>`;
+    declineBtn.addEventListener('click', () => declineFriendRequest(user._id));
+    
+    friendActions.appendChild(acceptBtn);
+    friendActions.appendChild(declineBtn);
+  } else {
+    // Кнопка отменить
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'friend-action-btn decline';
+    cancelBtn.title = window.i18n.t('friends_action_cancel');
+    cancelBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </svg>`;
+    cancelBtn.addEventListener('click', () => cancelFriendRequest(user._id));
+    
+    friendActions.appendChild(cancelBtn);
+  }
+  
+  friendItem.appendChild(friendActions);
+
+  return friendItem;
 }
 
 // Алиас для совместимости с HTML
@@ -196,16 +421,34 @@ window.sendFriendRequest = sendFriendRequest;
 window.removeFriend = removeFriend;
 
 /**
- * Отрендерить пустое состояние
+ * Биндинг кнопок вкладок Friends. Никаких inline onclick — только
+ * addEventListener. Делается один раз при загрузке DOM.
  */
-function renderEmptyState(icon, title, desc) {
-  return `
-    <div class="empty-state">
-      <div class="empty-state-icon">${icon}</div>
-      <div class="empty-state-title">${title}</div>
-      <div class="empty-state-desc">${desc}</div>
-    </div>
-  `;
+function bindFriendsTabs() {
+  // Берём ВСЕ элементы с data-friends-tab внутри friends-view:
+  //  - .friends-tab — собственно вкладки;
+  //  - #friends-add-btn — постоянная кнопка "Добавить в друзья" в шапке;
+  //  - .empty-state-btn (динамические) биндятся отдельно при создании.
+  document.querySelectorAll('#friends-view [data-friends-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-friends-tab');
+      if (!tab) return;
+      switchFriendsTab(tab);
+      // Если переключаемся на "Добавить" — сразу фокусим input.
+      if (tab === 'add') {
+        requestAnimationFrame(() => {
+          const input = document.getElementById('add-friend-input');
+          if (input) input.focus();
+        });
+      }
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindFriendsTabs);
+} else {
+  bindFriendsTabs();
 }
 
 /**
@@ -218,22 +461,29 @@ async function sendFriendRequest() {
 
   if (!username) return;
 
+  // Утилита: задать сообщение результата с правильным состоянием
+  // через CSS класс — без inline style.
+  const setResult = (text, kind) => {
+    if (!resultEl) return;
+    resultEl.textContent = text;
+    resultEl.classList.remove('is-success', 'is-error');
+    if (kind) resultEl.classList.add(kind === 'success' ? 'is-success' : 'is-error');
+  };
+
   try {
     // Ищем пользователя
     const searchData = await UsersAPI.search(username);
     const users = searchData.users || [];
 
     if (users.length === 0) {
-      if (resultEl) {
-        resultEl.innerHTML = `<span style="color:var(--red)">${window.i18n.t('friends_err_not_found')}</span>`;
-      }
+      setResult(window.i18n.t('friends_err_not_found'), 'error');
       return;
     }
 
     const targetUser = users.find(u => u.username.toLowerCase() === username.toLowerCase()) || users[0];
 
     if (targetUser._id === window.currentUser?._id) {
-      if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)">${window.i18n.t('friends_err_self')}</span>`;
+      setResult(window.i18n.t('friends_err_self'), 'error');
       return;
     }
 
@@ -242,23 +492,17 @@ async function sendFriendRequest() {
     // Проверяем, был ли автоматически принят входящий запрос
     if (data.autoAccepted) {
       showNotification('success', data.message);
-      if (resultEl) {
-        resultEl.innerHTML = `<span style="color:var(--green)">${data.message}</span>`;
-      }
+      setResult(data.message, 'success');
     } else {
       socketNotifyFriendRequest(targetUser._id);
       showNotification('success', `Запрос в друзья отправлен ${targetUser.username}`);
-      if (resultEl) {
-        resultEl.innerHTML = `<span style="color:var(--green)">Запрос отправлен пользователю ${targetUser.username}!</span>`;
-      }
+      setResult(`Запрос отправлен пользователю ${targetUser.username}!`, 'success');
     }
 
     if (input) input.value = '';
     loadFriends();
   } catch (error) {
-    if (resultEl) {
-      resultEl.innerHTML = `<span style="color:var(--red)">${error.message}</span>`;
-    }
+    setResult(error.message, 'error');
   }
 }
 

@@ -50,53 +50,66 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (savedUser) {
     try {
       window.currentUser = JSON.parse(savedUser);
+
+      // Прогреваем сервер (Render free-план может спать до 60 сек).
+      // Не делаем reload окна — просто ждём, пока /api/health ответит.
+      const loadingText = document.querySelector('.loading-text');
+      const warmedUp = await warmupServer({
+        onAttempt: (attempt, max) => {
+          if (loadingText) {
+            loadingText.textContent = `ПРОБУЖДЕНИЕ СЕРВЕРА... (${attempt}/${max})`;
+            loadingText.style.fontSize = '18px';
+          }
+        }
+      });
+
+      if (!warmedUp) {
+        if (loadingText) {
+          loadingText.textContent = 'СЕРВЕР НЕДОСТУПЕН. ПРОВЕРЬТЕ ИНТЕРНЕТ И ПОПРОБУЙТЕ ПОЗЖЕ.';
+          loadingText.style.fontSize = '14px';
+        }
+        return;
+      }
+
+      if (loadingText) {
+        loadingText.textContent = 'ВХОД...';
+      }
+
       // Верифицируем токен на сервере (токен добавится автоматически в main process)
       const data = await AuthAPI.getMe();
       window.currentUser = data.user;
       localStorage.setItem('user', JSON.stringify(data.user));
-      
+
       // Скрываем экран загрузки сразу
       const loadingScreen = document.getElementById('loading-screen');
       if (loadingScreen) {
         loadingScreen.classList.add('hidden');
       }
-      
+
       await initApp();
       return;
     } catch (error) {
-      // Проверяем, действительно ли токен недействителен (401)
+      // Токен недействителен — выкидываем на экран логина
       if (error.status === 401 || error.status === 403 || (error.message && error.message.includes('не найден'))) {
         await clearAuthToken();
         localStorage.removeItem('user');
       } else if (error.status === 429) {
-        // 429 = rate limit. НИКОГДА не reload'имся в этом случае —
-        // иначе попадаем в цикл: reload → getMe → 429 → reload → ...
-        // Каждый reload сам по себе делает несколько запросов, что только
-        // усугубляет ситуацию. Просто показываем сообщение и даём UI
-        // подняться. Пользователь может перезайти позже.
-        sessionStorage.removeItem('connectRetries');
+        // Rate limit — НЕ перезагружаемся, иначе цикл reload→429→reload.
         const loadingText = document.querySelector('.loading-text');
         if (loadingText) {
           loadingText.textContent = 'СЛИШКОМ МНОГО ЗАПРОСОВ. ПОДОЖДИТЕ МИНУТУ И ПОПРОБУЙТЕ СНОВА.';
           loadingText.style.fontSize = '14px';
         }
-        // Не делаем clearAuthToken — токен валидный, просто превышен лимит.
         return;
       } else {
-        // Скорее всего сервер Render просто "просыпается" или нет сети
-        const retryCount = parseInt(sessionStorage.getItem('connectRetries') || '0');
-        if (retryCount < 3) {
-          sessionStorage.setItem('connectRetries', String(retryCount + 1));
-          const loadingText = document.querySelector('.loading-text');
-          if (loadingText) {
-            loadingText.textContent = 'ПРОБУЖДЕНИЕ СЕРВЕРА... (' + (retryCount + 1) + '/3)';
-            loadingText.style.fontSize = '18px';
-          }
-          setTimeout(() => window.location.reload(), 5000);
-          return;
-        } else {
-          sessionStorage.removeItem('connectRetries');
+        // Прочая ошибка после успешного прогрева — показываем юзеру и не циклимся.
+        const loadingText = document.querySelector('.loading-text');
+        if (loadingText) {
+          loadingText.textContent = 'НЕ УДАЛОСЬ ВОЙТИ. ПЕРЕЗАПУСТИТЕ ПРИЛОЖЕНИЕ.';
+          loadingText.style.fontSize = '14px';
         }
+        console.error('Init error:', error);
+        return;
       }
     }
   }

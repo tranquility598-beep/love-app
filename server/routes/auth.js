@@ -371,6 +371,10 @@ router.post('/reset-password', otpLimiter, sanitizeBody, validateEmail, validate
     user.otpCode = null;
     user.otpExpires = null;
     user.isVerified = true; // Сброс пароля по почте подтверждает владение почтой
+    // Сбрасываем блокировку аккаунта: владелец почты подтверждён, держать
+    // его залоченным после успешного сброса пароля бессмысленно.
+    user.loginAttempts = 0;
+    user.lockUntil = null;
     await user.save();
     
     res.json({ message: 'Пароль успешно изменен. Теперь вы можете войти.' });

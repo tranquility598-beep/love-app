@@ -18,19 +18,35 @@ const rateLimit = require('express-rate-limit');
 // строгие лимитеры (authLimiter, registerLimiter, otpLimiter).
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 минута
-  max: 240, // 240 запросов в минуту = 4 rps в среднем — с запасом для нормального UX
+  max: 600, // 600 запросов в минуту = 10 rps — с запасом на reconnect-штормы и быстрое переключение каналов
   message: { message: 'Слишком много запросов с этого IP, попробуйте позже' },
   standardHeaders: true,
   legacyHeaders: false,
-  // Не считаем поллинговые/служебные endpoint'ы, чтобы UI не "залипал".
-  // Их безопасность обеспечивается authMiddleware и отдельными лимитерами.
+  // Лимитим по userId, если запрос авторизован — иначе несколько юзеров за
+  // одним NAT/корпоративным IP делят один счётчик и быстро упираются.
+  // Для неавторизованных запросов используем IP (стандарт).
+  keyGenerator: (req) => {
+    if (req.user && req.user._id) return `u:${req.user._id}`;
+    return req.ip;
+  },
+  // Не считаем поллинговые/служебные endpoint'ы и идемпотентные GET'ы,
+  // которые делает UI на каждое переключение комнаты/канала. У них есть
+  // authMiddleware — нет смысла лимитить их так же строго, как POST'ы.
   skip: (req) => {
     const p = req.path || '';
-    return (
-      p === '/health' ||
-      p === '/auth/me' ||
-      p === '/auth/socket-token'
-    );
+    if (p === '/health' || p === '/auth/me' || p === '/auth/socket-token') return true;
+    if (req.method === 'GET') {
+      return (
+        p === '/friends' ||
+        p === '/dm' ||
+        p === '/servers' ||
+        p.startsWith('/servers/') ||
+        p.startsWith('/channels/') ||
+        p.startsWith('/messages/') ||
+        p.startsWith('/dm/')
+      );
+    }
+    return false;
   },
   handler: (req, res) => {
     console.warn(`⚠️  Rate limit exceeded for IP: ${req.ip} on ${req.method} ${req.originalUrl}`);

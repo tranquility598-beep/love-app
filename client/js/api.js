@@ -33,6 +33,60 @@ if (isPackaged) {
 // Промис для инициализации конфига (оставлен для обратной совместимости, если где-то используется await)
 window.apiReady = Promise.resolve();
 
+/**
+ * Прогрев сервера: пингуем /api/health пока не ответит.
+ * Render free-план "засыпает" через 15 минут — первый запрос может занять до 60 сек.
+ * Возвращает true если сервер ответил, false если все попытки исчерпаны.
+ *
+ * @param {object} opts
+ * @param {number} opts.maxAttempts — сколько раз пробовать (default 12)
+ * @param {number} opts.timeoutMs — таймаут одного запроса (default 8000)
+ * @param {number} opts.delayMs — пауза между попытками (default 3000)
+ * @param {(attempt:number, max:number)=>void} opts.onAttempt — колбэк для UI
+ */
+async function warmupServer(opts = {}) {
+  const {
+    maxAttempts = 12,
+    timeoutMs = 8000,
+    delayMs = 3000,
+    onAttempt = null
+  } = opts;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (onAttempt) {
+      try { onAttempt(attempt, maxAttempts); } catch (_) {}
+    }
+
+    try {
+      // В Electron используем IPC (обходит CORS и работает идентично остальным запросам)
+      if (window.electronAPI && window.electronAPI.apiRequest) {
+        const result = await Promise.race([
+          window.electronAPI.apiRequest({ path: '/health', method: 'GET' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs))
+        ]);
+        if (result && result.ok) return true;
+      } else {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+          const response = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
+          if (response.ok) return true;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+    } catch (_) {
+      // молча — это ожидаемое поведение для холодного старта
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  return false;
+}
+window.warmupServer = warmupServer;
+
 // Безопасное сохранение токена (только для login/register)
 async function storeAuthToken(token) {
   if (window.electronAPI && window.electronAPI.storeToken) {

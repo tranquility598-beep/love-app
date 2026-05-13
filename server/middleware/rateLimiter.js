@@ -4,6 +4,7 @@
  */
 
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 
 // Общий лимит для API.
 // ВАЖНО: лимит должен быть адекватным для Electron-клиента. В обычной
@@ -25,9 +26,10 @@ const generalLimiter = rateLimit({
   // Лимитим по userId, если запрос авторизован — иначе несколько юзеров за
   // одним NAT/корпоративным IP делят один счётчик и быстро упираются.
   // Для неавторизованных запросов используем IP (стандарт).
-  keyGenerator: (req) => {
+  keyGenerator: (req, res) => {
     if (req.user && req.user._id) return `u:${req.user._id}`;
-    return req.ip;
+    // Используем хелпер библиотеки для корректной нормализации IPv6 (/64 префикс).
+    return ipKeyGenerator(req, res);
   },
   // Не считаем поллинговые/служебные endpoint'ы и идемпотентные GET'ы,
   // которые делает UI на каждое переключение комнаты/канала. У них есть

@@ -137,10 +137,14 @@ async function apiFetch(endpoint, options = {}) {
 
       if (!result.ok) {
         if (result.status === 401 && !isAuthEntryEndpoint(endpoint)) {
-          // Только для авторизованных запросов с протухшим токеном
+          // Авторизованный запрос с протухшим токеном — чистим и
+          // мягко выкидываем на экран логина. БЕЗ reload, чтобы не было
+          // циклов перезагрузки при долгоживущих сбоях.
           await clearAuthToken();
           localStorage.removeItem('user');
-          window.location.reload();
+          if (typeof showAuthScreen === 'function') {
+            try { showAuthScreen(); } catch (_) {}
+          }
         }
         const error = new Error(result.data?.message || 'Ошибка запроса');
         error.status = result.status;
@@ -195,10 +199,12 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && !isAuthEntryEndpoint(endpoint)) {
       await clearAuthToken();
       localStorage.removeItem('user');
-      window.location.reload();
+      if (typeof showAuthScreen === 'function') {
+        try { showAuthScreen(); } catch (_) {}
+      }
     }
     const error = new Error(data.message || 'Ошибка запроса');
     error.status = response.status;

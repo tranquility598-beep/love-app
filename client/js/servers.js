@@ -152,12 +152,29 @@ function bindAddEntityMenu() {
   };
 
   const positionMenu = () => {
-    // Прижимаем меню к правой стороне server-rail, на одной горизонтали
-    // с кнопкой. Позиция вычисляется относительно viewport через
-    // getBoundingClientRect и применяется через CSS-переменные.
+    // Прижимаем меню к правой стороне server-rail. Открываем ВВЕРХ
+    // от кнопки — иначе меню уезжает за нижний край вьюпорта
+    // (кнопка "+" живёт у нижней панели servers-sidebar).
     const r = btn.getBoundingClientRect();
-    // Меню рендерится сразу справа от server-rail с небольшим отступом.
-    menu.style.setProperty('--menu-top', `${Math.max(8, r.top - 4)}px`);
+
+    // Чтобы измерить высоту, временно делаем меню разметным, но
+    // невидимым (если оно ещё .hidden). offsetHeight в display:none = 0.
+    const wasHidden = menu.classList.contains('hidden');
+    let prevVisibility = '';
+    if (wasHidden) {
+      prevVisibility = menu.style.visibility;
+      menu.style.visibility = 'hidden';
+      menu.classList.remove('hidden');
+    }
+    const menuHeight = menu.offsetHeight;
+    if (wasHidden) {
+      menu.classList.add('hidden');
+      menu.style.visibility = prevVisibility;
+    }
+
+    // Нижний край меню — на 8px выше верхнего края кнопки.
+    const desiredTop = r.top - menuHeight - 8;
+    menu.style.setProperty('--menu-top', `${Math.max(8, desiredTop)}px`);
     menu.style.setProperty('--menu-left', `${r.right + 12}px`);
   };
 

@@ -10,6 +10,7 @@ const authMiddleware = require('../middleware/auth');
 const { validateBio, validateCustomStatus, validateUsername, sanitizeBody } = require('../middleware/validation');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('../config/cloudinary');
 
 /**
  * GET /api/users/search
@@ -126,38 +127,47 @@ router.put('/avatar', authMiddleware, async (req, res) => {
     
     const avatarFile = req.files.avatar;
     
-    // Проверяем тип файла
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(avatarFile.mimetype)) {
       return res.status(400).json({ message: 'Допустимые форматы: JPEG, PNG, GIF, WebP' });
     }
     
-    // Проверяем размер (5MB)
     if (avatarFile.size > 5 * 1024 * 1024) {
       return res.status(400).json({ message: 'Размер файла не должен превышать 5MB' });
     }
     
-    // Сохраняем файл
     const ext = path.extname(avatarFile.name);
-    const filename = `avatar_${req.user._id}_${Date.now()}${ext}`;
-    const uploadPath = path.join(__dirname, '..', 'uploads', 'avatars', filename);
+    const publicId = `avatars/avatar_${req.user._id}_${Date.now()}`;
     
-    await avatarFile.mv(uploadPath);
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'avatars',
+          public_id: publicId,
+          resource_type: 'image',
+          transformation: [{ width: 200, height: 200, crop: 'fill', radius: 'max' }]
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      streamifier.createReadStream(avatarFile.data).pipe(uploadStream);
+    });
     
-    // Удаляем старый аватар если есть
     const oldUser = await User.findById(req.user._id);
-    if (oldUser.avatar && oldUser.avatar.includes('/uploads/avatars/')) {
-      const oldPath = path.join(__dirname, '..', oldUser.avatar.replace('/uploads/', 'uploads/'));
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
+    if (oldUser.avatar && oldUser.avatar.includes('cloudinary.com')) {
+      const publicIdMatch = oldUser.avatar.match(/\/v\d+\/(.+)\./);
+      if (publicIdMatch) {
+        try {
+          await cloudinary.uploader.destroy(publicIdMatch[1]);
+        } catch (e) {}
       }
     }
     
-    // Обновляем URL аватара
-    const avatarUrl = `/uploads/avatars/${filename}`;
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { avatar: avatarUrl },
+      { avatar: uploadResult.secure_url },
       { new: true }
     ).select('-password');
     
@@ -165,7 +175,7 @@ router.put('/avatar', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Update avatar error:', error);
-    res.status(500).json({ message: 'Ошибка сервера' });
+    res.status(500).json({ message: 'Ошибка при загрузке аватара' });
   }
 });
 

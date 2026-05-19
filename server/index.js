@@ -68,7 +68,8 @@ app.use(helmet({
         "https:", 
         "http:",
         "blob:",
-        "https://lh3.googleusercontent.com" // Google аватары
+        "https://lh3.googleusercontent.com",
+        "https://res.cloudinary.com"
       ],
       connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
       fontSrc: ["'self'", "data:"],

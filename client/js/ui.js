@@ -1071,12 +1071,12 @@ async function uploadAvatar(event) {
 
   try {
     const data = await UsersAPI.uploadAvatar(file);
-    window.currentUser.avatar = data.url;
+    const avatarUrl = data.user?.avatar || data.url;
+    window.currentUser.avatar = avatarUrl;
     localStorage.setItem('user', JSON.stringify(window.currentUser));
 
-    // Обновляем аватар с сервера (на случай если сервер изменил изображение)
     if (settingsAvatar) {
-      const avatarUrl = getAvatarUrl(data.url);
+      const resolvedUrl = getAvatarUrl(avatarUrl);
       // Добавляем timestamp только если это не data: URL
       if (!avatarUrl.startsWith('data:')) {
         settingsAvatar.src = avatarUrl + '?t=' + Date.now();

@@ -140,20 +140,18 @@ router.put('/avatar', authMiddleware, async (req, res) => {
     const ext = path.extname(avatarFile.name);
     const publicId = `avatars/avatar_${req.user._id}_${Date.now()}`;
     
-    const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'avatars',
-          public_id: publicId,
-          resource_type: 'image',
-          transformation: [{ width: 200, height: 200, crop: 'fill', radius: 'max' }]
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      streamifier.createReadStream(avatarFile.data).pipe(uploadStream);
+    let filePath;
+    if (avatarFile.tempFilePath) {
+      filePath = avatarFile.tempFilePath;
+    } else {
+      filePath = avatarFile.data;
+    }
+    
+    const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: 'avatars',
+      public_id: publicId,
+      resource_type: 'image',
+      transformation: [{ width: 200, height: 200, crop: 'fill', radius: 'max' }]
     });
     
     const oldUser = await User.findById(req.user._id);

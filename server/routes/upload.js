@@ -42,23 +42,19 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
     if (isImage) folder = 'images';
     if (isAudio) folder = 'audio';
     
-    const publicId = `${folder}/${validation.sanitizedName}_${Date.now()}`;
-    const resourceType = isAudio ? 'video' : 'image';
+    let filePath;
+    if (file.tempFilePath) {
+      filePath = file.tempFilePath;
+    } else {
+      filePath = file.data;
+    }
     
-    const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: publicId,
-          resource_type: resourceType,
-          use_filename: true,
-          unique_filename: true
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      streamifier.createReadStream(file.data).pipe(uploadStream);
+    const resourceType = isAudio ? 'video' : 'image';
+    const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true
     });
     
     res.json({
@@ -100,22 +96,19 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
     }
     
     const folder = isImage ? 'images' : 'files';
-    const publicId = `${folder}/${validation.sanitizedName}_${Date.now()}`;
     
-    const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: publicId,
-          resource_type: 'image',
-          use_filename: true,
-          unique_filename: true
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      streamifier.createReadStream(file.data).pipe(uploadStream);
+    let filePath;
+    if (file.tempFilePath) {
+      filePath = file.tempFilePath;
+    } else {
+      filePath = file.data;
+    }
+    
+    const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: 'image',
+      use_filename: true,
+      unique_filename: true
     });
     
     res.json({
@@ -156,20 +149,18 @@ router.post('/avatar', authMiddleware, uploadLimiter, async (req, res) => {
     const ext = path.extname(validation.sanitizedName);
     const publicId = `avatars/avatar_${req.user._id}_${Date.now()}`;
     
-    const uploadResult = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'avatars',
-          public_id: publicId,
-          resource_type: 'image',
-          transformation: [{ width: 200, height: 200, crop: 'fill', radius: 'max' }]
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      streamifier.createReadStream(avatarFile.data).pipe(uploadStream);
+    let filePath;
+    if (avatarFile.tempFilePath) {
+      filePath = avatarFile.tempFilePath;
+    } else {
+      filePath = avatarFile.data;
+    }
+    
+    const uploadResult = await cloudinary.uploader.upload(filePath, {
+      folder: 'avatars',
+      public_id: publicId,
+      resource_type: 'image',
+      transformation: [{ width: 200, height: 200, crop: 'fill', radius: 'max' }]
     });
     
     res.json({

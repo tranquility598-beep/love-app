@@ -12,6 +12,63 @@ window.currentVoiceChannel = null;
 window.currentDMConversation = null;
 window.currentView = 'welcome'; // 'welcome' | 'chat' | 'friends' | 'dm'
 
+// Ручное тестирование warmup UI без ожидания реального холодного старта.
+// Вызов из DevTools: testWarmupUI()
+window.testWarmupUI = async function() {
+  const loadingScreen = document.getElementById('loading-screen');
+  const content = document.getElementById('loading-content');
+  const status = document.getElementById('loading-status');
+  const fill = document.getElementById('loading-progress-fill');
+  const progressBar = document.querySelector('.loading-progress-bar');
+
+  loadingScreen.style.display = '';
+  loadingScreen.classList.remove('hidden');
+  loadingScreen.style.opacity = '1';
+  loadingScreen.style.transition = '';
+  if (content) content.style.transform = '';
+  if (status) { status.style.opacity = '0'; status.textContent = ''; }
+  if (progressBar) progressBar.style.opacity = '0';
+  if (fill) fill.style.width = '0%';
+
+  const steps = 8;
+  for (let i = 1; i <= steps; i++) {
+    await new Promise(r => setTimeout(r, 600));
+
+    if (i === 2) {
+      if (content) content.style.transform = 'translateY(-40px)';
+      setTimeout(() => {
+        if (status) status.style.opacity = '1';
+        if (progressBar) progressBar.style.opacity = '1';
+      }, 300);
+    }
+
+    if (i >= 2) {
+      if (status) {
+        status.style.opacity = '0';
+        await new Promise(r => setTimeout(r, 200));
+        if (i === 2) status.textContent = 'Сервер просыпается...';
+        else if (i <= 5) status.textContent = 'Подождите немного...';
+        else status.textContent = 'Это занимает чуть дольше обычного...';
+        status.style.opacity = '1';
+      }
+      if (fill) fill.style.width = (i / steps * 100) + '%';
+    }
+  }
+
+  await new Promise(r => setTimeout(r, 800));
+  loadingScreen.style.transition = 'opacity 0.5s ease';
+  loadingScreen.style.opacity = '0';
+  setTimeout(() => {
+    loadingScreen.style.display = 'none';
+    loadingScreen.classList.add('hidden');
+    if (content) content.style.transform = '';
+    if (status) status.style.opacity = '0';
+    if (progressBar) progressBar.style.opacity = '0';
+    loadingScreen.style.opacity = '';
+    loadingScreen.style.transition = '';
+  }, 500);
+};
+
 /**
  * Инициализация приложения при загрузке страницы
  */
@@ -53,26 +110,51 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Прогреваем сервер (Render free-план может спать до 60 сек).
       // Не делаем reload окна — просто ждём, пока /api/health ответит.
-      const loadingText = document.querySelector('.loading-text');
+      const loadingStatus = document.getElementById('loading-status');
+      const loadingProgressFill = document.getElementById('loading-progress-fill');
       const warmedUp = await warmupServer({
         onAttempt: (attempt, max) => {
-          if (loadingText) {
-            loadingText.textContent = `ПРОБУЖДЕНИЕ СЕРВЕРА... (${attempt}/${max})`;
-            loadingText.style.fontSize = '18px';
+          if (attempt === 1) {
+            // сервер скорее всего ответит быстро — не показываем UI ожидания
+            return;
+          }
+
+          if (attempt === 2) {
+            // Сдвигаем всю группу (логотип + текст + спиннер) вверх как единое целое.
+            const content = document.getElementById('loading-content');
+            const progressBar = document.querySelector('.loading-progress-bar');
+            if (content) content.style.transform = 'translateY(-40px)';
+
+            // Через 300ms показываем прогресс-бар и статус
+            setTimeout(() => {
+              if (loadingStatus) loadingStatus.style.opacity = '1';
+              if (progressBar) progressBar.style.opacity = '1';
+            }, 300);
+          }
+
+          let msg;
+          if (attempt <= 4) msg = 'Подождите немного...';
+          else msg = 'Это занимает чуть дольше обычного...';
+          if (loadingStatus) {
+            loadingStatus.textContent = msg;
+          }
+          if (loadingProgressFill) {
+            loadingProgressFill.style.width = `${(attempt / max) * 100}%`;
           }
         }
       });
 
       if (!warmedUp) {
-        if (loadingText) {
-          loadingText.textContent = 'СЕРВЕР НЕДОСТУПЕН. ПРОВЕРЬТЕ ИНТЕРНЕТ И ПОПРОБУЙТЕ ПОЗЖЕ.';
-          loadingText.style.fontSize = '14px';
+        if (loadingStatus) {
+          loadingStatus.textContent = 'Сервер недоступен. Проверьте интернет и попробуйте позже.';
+          loadingStatus.style.opacity = '1';
         }
         return;
       }
 
-      if (loadingText) {
-        loadingText.textContent = 'ВХОД...';
+      if (loadingStatus) {
+        loadingStatus.textContent = 'Входим...';
+        loadingStatus.style.opacity = '1';
       }
 
       // Верифицируем токен на сервере (токен добавится автоматически в main process)
@@ -80,10 +162,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.currentUser = data.user;
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Скрываем экран загрузки сразу
+      // Скрываем экран загрузки плавно
       const loadingScreen = document.getElementById('loading-screen');
       if (loadingScreen) {
-        loadingScreen.classList.add('hidden');
+        loadingScreen.style.transition = 'opacity 0.5s ease';
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => {
+          loadingScreen.classList.add('hidden');
+          loadingScreen.style.display = 'none';
+          loadingScreen.style.opacity = '';
+          loadingScreen.style.transition = '';
+          // Сбрасываем трансформ группы и opacity вспомогательных элементов,
+          // чтобы следующий показ начинался с нуля.
+          const content = document.getElementById('loading-content');
+          const progressBar = document.querySelector('.loading-progress-bar');
+          const status = document.getElementById('loading-status');
+          if (content) content.style.transform = '';
+          if (status) status.style.opacity = '0';
+          if (progressBar) progressBar.style.opacity = '0';
+        }, 500);
       }
 
       await initApp();
@@ -95,18 +192,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.removeItem('user');
       } else if (error.status === 429) {
         // Rate limit — НЕ перезагружаемся, иначе цикл reload→429→reload.
-        const loadingText = document.querySelector('.loading-text');
-        if (loadingText) {
-          loadingText.textContent = 'СЛИШКОМ МНОГО ЗАПРОСОВ. ПОДОЖДИТЕ МИНУТУ И ПОПРОБУЙТЕ СНОВА.';
-          loadingText.style.fontSize = '14px';
+        const status = document.getElementById('loading-status');
+        if (status) {
+          status.textContent = 'Слишком много запросов. Подождите минуту и попробуйте снова.';
+          status.style.opacity = '1';
         }
         return;
       } else {
         // Прочая ошибка после успешного прогрева — показываем юзеру и не циклимся.
-        const loadingText = document.querySelector('.loading-text');
-        if (loadingText) {
-          loadingText.textContent = 'НЕ УДАЛОСЬ ВОЙТИ. ПЕРЕЗАПУСТИТЕ ПРИЛОЖЕНИЕ.';
-          loadingText.style.fontSize = '14px';
+        const status = document.getElementById('loading-status');
+        if (status) {
+          status.textContent = 'Не удалось войти. Перезапустите приложение.';
+          status.style.opacity = '1';
         }
         console.error('Init error:', error);
         return;
@@ -130,7 +227,23 @@ document.addEventListener('DOMContentLoaded', async () => {
  * Показать экран авторизации
  */
 function showAuthScreen() {
-  document.getElementById('loading-screen').classList.add('hidden');
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.transition = 'opacity 0.5s ease';
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => {
+      loadingScreen.classList.add('hidden');
+      loadingScreen.style.display = 'none';
+      loadingScreen.style.opacity = '';
+      loadingScreen.style.transition = '';
+      const content = document.getElementById('loading-content');
+      const progressBar = document.querySelector('.loading-progress-bar');
+      const status = document.getElementById('loading-status');
+      if (content) content.style.transform = '';
+      if (status) status.style.opacity = '0';
+      if (progressBar) progressBar.style.opacity = '0';
+    }, 500);
+  }
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('register-screen').classList.add('hidden');
   
@@ -149,7 +262,23 @@ function showAuthScreen() {
  * Инициализация главного приложения после авторизации
  */
 async function initApp() {
-  document.getElementById('loading-screen').classList.add('hidden');
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.transition = 'opacity 0.5s ease';
+    loadingScreen.style.opacity = '0';
+    setTimeout(() => {
+      loadingScreen.classList.add('hidden');
+      loadingScreen.style.display = 'none';
+      loadingScreen.style.opacity = '';
+      loadingScreen.style.transition = '';
+      const content = document.getElementById('loading-content');
+      const progressBar = document.querySelector('.loading-progress-bar');
+      const status = document.getElementById('loading-status');
+      if (content) content.style.transform = '';
+      if (status) status.style.opacity = '0';
+      if (progressBar) progressBar.style.opacity = '0';
+    }, 500);
+  }
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('register-screen').classList.add('hidden');
   

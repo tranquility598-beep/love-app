@@ -24,15 +24,21 @@
 <body>
 
 <!-- ===== LOADING SCREEN ===== -->
-<div class="loading-screen" id="loading-screen">
-  <div class="loading-logo">
-    <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
-      <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-    </svg>
+<div class="loading-screen" id="loading-screen" style="opacity:1;">
+  <div class="loading-content" id="loading-content">
+    <div class="loading-logo">
+      <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
+        <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      </svg>
+    </div>
+    <div class="loading-text">LOVE</div>
+    <div class="loading-spinner"></div>
   </div>
-  <div class="loading-text">LOVE</div>
-  <div class="loading-spinner"></div>
+  <div class="loading-progress-bar">
+    <div class="loading-progress-fill" id="loading-progress-fill"></div>
+  </div>
+  <div class="loading-status" id="loading-status"></div>
 </div>
 
 <!-- ===== LOGIN SCREEN ===== -->

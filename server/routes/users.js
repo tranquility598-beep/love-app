@@ -11,6 +11,7 @@ const { validateBio, validateCustomStatus, validateUsername, sanitizeBody } = re
 const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
+const streamifier = require('streamifier');
 
 /**
  * GET /api/users/search
@@ -175,6 +176,7 @@ router.put('/avatar', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Update avatar error:', error);
+    console.error('Update avatar error details:', error.stack);
     res.status(500).json({ message: 'Ошибка при загрузке аватара' });
   }
 });

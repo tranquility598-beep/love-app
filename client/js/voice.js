@@ -983,6 +983,14 @@ function updateSpeakingIndicator(userId, speaking) {
   if (voiceMemberEl) {
     voiceMemberEl.classList.toggle('voice-member-speaking', speaking);
   }
+
+  // Обновляем карточку в Rooms voice panel (data-speaking атрибут).
+  // Сервер не шлёт voice:user_speaking автору (socket.to исключает sender),
+  // поэтому self-индикатор для room cards обновляем локально здесь.
+  const roomCardEl = document.querySelector(`.room-voice-card[data-user-id="${userId}"]`);
+  if (roomCardEl) {
+    roomCardEl.dataset.speaking = String(!!speaking);
+  }
 }
 
 /**

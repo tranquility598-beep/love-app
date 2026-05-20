@@ -1570,14 +1570,83 @@ function openImageViewer(url) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.style.zIndex = '9999';
-  overlay.innerHTML =
-    '<div class="image-viewer">' +
-      '<button class="image-viewer-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button>' +
-      '<img src="' + url + '" alt="Image">' +
-    '</div>';
+  overlay.innerHTML = `
+    <div class="image-viewer" role="dialog" aria-label="Просмотр изображения">
+      <div class="image-viewer-toolbar">
+        <button type="button" class="image-viewer-tool" data-action="zoom-out" title="Уменьшить">−</button>
+        <button type="button" class="image-viewer-tool" data-action="reset" title="Сбросить масштаб">100%</button>
+        <button type="button" class="image-viewer-tool" data-action="zoom-in" title="Увеличить">+</button>
+        <button type="button" class="image-viewer-close" data-action="close" title="Закрыть">✕</button>
+      </div>
+      <div class="image-viewer-stage">
+        <img src="${url}" alt="Image" draggable="false">
+      </div>
+    </div>`;
   document.body.appendChild(overlay);
+
+  const viewer = overlay.querySelector('.image-viewer');
+  const img = overlay.querySelector('img');
+  const resetBtn = overlay.querySelector('[data-action="reset"]');
+  let scale = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+
+  function applyTransform() {
+    img.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    if (resetBtn) resetBtn.textContent = `${Math.round(scale * 100)}%`;
+    viewer.classList.toggle('is-zoomed', scale > 1);
+  }
+
+  function setScale(nextScale) {
+    scale = Math.min(5, Math.max(0.25, nextScale));
+    if (scale <= 1) {
+      offsetX = 0;
+      offsetY = 0;
+    }
+    applyTransform();
+  }
+
   overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) overlay.remove();
+    const action = e.target?.dataset?.action;
+    if (action === 'close' || e.target === overlay) {
+      overlay.remove();
+      return;
+    }
+    if (action === 'zoom-in') setScale(scale + 0.25);
+    if (action === 'zoom-out') setScale(scale - 0.25);
+    if (action === 'reset') setScale(1);
+  });
+
+  overlay.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    setScale(scale + (e.deltaY < 0 ? 0.15 : -0.15));
+  }, { passive: false });
+
+  img.addEventListener('dblclick', function() {
+    setScale(scale > 1 ? 1 : 2);
+  });
+
+  img.addEventListener('pointerdown', function(e) {
+    if (scale <= 1) return;
+    dragging = true;
+    startX = e.clientX - offsetX;
+    startY = e.clientY - offsetY;
+    img.setPointerCapture(e.pointerId);
+  });
+
+  img.addEventListener('pointermove', function(e) {
+    if (!dragging) return;
+    offsetX = e.clientX - startX;
+    offsetY = e.clientY - startY;
+    applyTransform();
+  });
+
+  img.addEventListener('pointerup', function(e) {
+    dragging = false;
+    img.releasePointerCapture(e.pointerId);
   });
 }
 

@@ -1301,7 +1301,9 @@ function updateTypingIndicator() {
  * Загрузка файлов
  */
 function triggerFileUpload() {
-  document.getElementById('file-input')?.click();
+  const fileInput = document.getElementById('file-input');
+  if (!fileInput) return;
+  fileInput.click();
 }
 
 function handleFileSelect(event) {
@@ -1323,6 +1325,15 @@ function handleFileSelect(event) {
 
   // Сбрасываем input
   event.target.value = '';
+
+  // После выбора файла возвращаем фокус в поле сообщения:
+  // Enter должен отправлять выбранный файл, а не повторно активировать
+  // кнопку прикрепления/открывать file picker.
+  const input = document.getElementById('message-input');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
 }
 
 function cancelFile() {

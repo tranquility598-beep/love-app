@@ -18,13 +18,29 @@ class VoiceManager {
     this.analyser = null;
     this.speakingThreshold = 20;
     this.speakingCheckInterval = null;
+    this.remoteAudioStatsIntervals = new Map();
 
     // ICE серверы для WebRTC
     this.iceServers = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        { urls: 'stun:stun2.l.google.com:19302' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
       ]
     };
   }
@@ -45,6 +61,13 @@ class VoiceManager {
         },
         video: false
       });
+      console.log('🎙️ Local audio tracks:', this.localStream.getAudioTracks().map(track => ({
+        id: track.id,
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState
+      })));
 
       // Настраиваем анализатор для определения говорящего
       this.setupAudioAnalyser();
@@ -111,6 +134,9 @@ class VoiceManager {
       audio.remove();
     });
     this.audioElements.clear();
+
+    this.remoteAudioStatsIntervals.forEach(intervalId => clearInterval(intervalId));
+    this.remoteAudioStatsIntervals.clear();
 
     // Останавливаем анализатор
     if (this.speakingCheckInterval) {
@@ -299,7 +325,15 @@ class VoiceManager {
     // Получение удаленного потока
     pc.ontrack = (event) => {
       const track = event.track;
-      console.log('🔊 Received remote track:', track.kind, 'from:', socketId);
+      console.log('🔊 Received remote track:', track.kind, 'from:', socketId, {
+        id: track.id,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState
+      });
+      track.onmute = () => console.warn('🔇 Remote track muted:', socketId, track.kind);
+      track.onunmute = () => console.log('🔊 Remote track unmuted:', socketId, track.kind);
+      track.onended = () => console.warn('⏹️ Remote track ended:', socketId, track.kind);
 
       const stream = event.streams[0] || new MediaStream([track]);
 
@@ -326,9 +360,43 @@ class VoiceManager {
           this.removeConnection(socketId);
         }
       }
+      if (pc.connectionState === 'connected') {
+        this.startRemoteAudioStats(socketId, pc);
+      }
     };
 
     return pc;
+  }
+
+  startRemoteAudioStats(socketId, pc) {
+    if (this.remoteAudioStatsIntervals.has(socketId)) return;
+
+    const intervalId = setInterval(async () => {
+      if (!this.peerConnections.has(socketId) || pc.connectionState === 'closed') {
+        clearInterval(intervalId);
+        this.remoteAudioStatsIntervals.delete(socketId);
+        return;
+      }
+
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+            console.log('📊 Remote audio stats:', socketId, {
+              bytesReceived: report.bytesReceived,
+              packetsReceived: report.packetsReceived,
+              packetsLost: report.packetsLost,
+              jitter: report.jitter,
+              audioLevel: report.audioLevel
+            });
+          }
+        });
+      } catch (error) {
+        console.warn('Failed to read remote audio stats:', error);
+      }
+    }, 3000);
+
+    this.remoteAudioStatsIntervals.set(socketId, intervalId);
   }
 
   /**
@@ -341,6 +409,14 @@ class VoiceManager {
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
+      audio.playsInline = true;
+      audio.controls = false;
+      audio.volume = 1;
+      audio.setAttribute('autoplay', 'true');
+      audio.setAttribute('playsinline', 'true');
+      audio.addEventListener('playing', () => console.log('🔈 Remote audio element playing:', socketId));
+      audio.addEventListener('pause', () => console.log('⏸️ Remote audio element paused:', socketId));
+      audio.addEventListener('error', () => console.error('Remote audio element error:', audio.error, socketId));
       // Добавляем к body только один раз
       document.body.appendChild(audio);
       this.audioElements.set(socketId, audio);
@@ -351,18 +427,32 @@ class VoiceManager {
     }
 
     audio.muted = this.isDeafened;
+    audio.volume = this.isDeafened ? 0 : 1;
     
     // Принудительный запуск (некоторые браузеры блокируют autoplay без .play())
     const playPromise = audio.play();
     if (playPromise !== undefined) {
-      playPromise.catch(error => {
+      playPromise
+      .then(() => {
+        console.log('🔈 Remote audio play() resolved:', socketId, {
+          muted: audio.muted,
+          volume: audio.volume,
+          paused: audio.paused,
+          readyState: audio.readyState
+        });
+      })
+      .catch(error => {
         console.warn('Audio auto-play failed, will try on interaction:', error);
         // Fallback: запуск по любому клику в документе
         const resumeAudio = () => {
+          audio.muted = this.isDeafened;
+          audio.volume = this.isDeafened ? 0 : 1;
           audio.play().catch(() => {});
           document.removeEventListener('click', resumeAudio);
+          document.removeEventListener('keydown', resumeAudio);
         };
         document.addEventListener('click', resumeAudio);
+        document.addEventListener('keydown', resumeAudio);
       });
     }
   }
@@ -382,6 +472,12 @@ class VoiceManager {
       audio.srcObject = null;
       audio.remove();
       this.audioElements.delete(socketId);
+    }
+
+    const statsInterval = this.remoteAudioStatsIntervals.get(socketId);
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      this.remoteAudioStatsIntervals.delete(socketId);
     }
 
     // Если это был тот, кто шарил экран — убираем видео

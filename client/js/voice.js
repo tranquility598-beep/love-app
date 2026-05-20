@@ -625,12 +625,18 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
     }
 
     window.voiceManager = new VoiceManager();
+    // Set currentVoiceChannel BEFORE the socket emit happens inside joinChannel,
+    // otherwise voice:members_update can arrive before this assignment and the
+    // self user will be dropped by updateVoicePanelMembers' channel-id guard.
+    window.currentVoiceChannel = channelId;
     const success = await window.voiceManager.joinChannel(channelId);
 
     if (success) {
-      window.currentVoiceChannel = channelId;
       showVoicePanel(channelName, serverName);
       showNotification('success', `Вы подключились к каналу "${channelName}"`);
+    } else {
+      // Roll back so subsequent updates aren't routed to a non-joined channel
+      window.currentVoiceChannel = null;
     }
   } finally {
     // Снимаем блокировку через небольшую задержку чтобы предотвратить мгновенный повтор

@@ -552,11 +552,11 @@ module.exports = (io) => {
         // Проверяем, есть ли уже этот пользователь в канале
         const existingMemberIndex = channelMembers.findIndex(m => m.userId === userId);
         if (existingMemberIndex > -1) {
-          // Пользователь уже в канале — обновляем socketId и выходим
+          // Пользователь уже в канале — обновляем socketId и переотправляем состояние
           channelMembers[existingMemberIndex].socketId = socket.id;
           socket.join(`voice:${channelId}`);
           console.log(`⚠️ ${socket.user.username} already in voice channel ${channelId}, updated socketId`);
-          // Отправляем ему существующих участников заново
+          // Отправляем ему существующих участников (без него) для WebRTC
           const existingMembers = channelMembers.filter(m => m.userId !== userId).map(m => ({
             userId: m.userId,
             socketId: m.socketId,
@@ -564,6 +564,16 @@ module.exports = (io) => {
             avatar: m.avatar
           }));
           socket.emit('voice:existing_members', { channelId, members: existingMembers });
+          // ВАЖНО: re-emit полного списка участников, чтобы UI после реконнекта
+          // мог отрисовать свою карточку и список (иначе панель остаётся пустой)
+          const reemitter = io.to(`voice:${channelId}`);
+          if (channel && channel.server) {
+            reemitter.to(`server:${channel.server}`);
+          }
+          reemitter.emit('voice:members_update', {
+            channelId,
+            members: channelMembers
+          });
           return;
         }
         
@@ -628,14 +638,19 @@ module.exports = (io) => {
           avatar: socket.user.avatar
         });
         
-        // Уведомляем сервер об изменении участников голосового канала
+        // Уведомляем участников канала и сервер об изменении состава
+        // voice:${channelId} room: гарантирует, что joining socket получит апдейт
+        //   с собой в списке (фикс race condition + поддержка DM-звонков)
+        // server:${channel.server} room: для sidebar других пользователей сервера
+        const emitter = io.to(`voice:${channelId}`);
         if (channel && channel.server) {
-          io.to(`server:${channel.server}`).emit('voice:members_update', {
-            channelId,
-            members: channelMembers
-          });
+          emitter.to(`server:${channel.server}`);
         }
-        
+        emitter.emit('voice:members_update', {
+          channelId,
+          members: channelMembers
+        });
+
         console.log(`🎤 ${socket.user.username} joined voice channel ${channelId}`);
         
       } catch (error) {

@@ -530,7 +530,7 @@ if (!gotTheLock) {
             "img-src 'self' data: blob: http://localhost:* https:;" +
             "connect-src 'self' http://localhost:* ws://localhost:* https: wss:;" +
             "font-src 'self' data:;" +
-            "media-src 'self' blob: data:;"
+            "media-src 'self' blob: data: https:;"
           ]
         }
       });

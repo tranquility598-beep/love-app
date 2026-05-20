@@ -221,6 +221,14 @@ class VoiceManager {
         });
       }
 
+      if (pc.signalingState !== 'stable') {
+        try {
+          await pc.setLocalDescription({ type: 'rollback' });
+        } catch (rollbackError) {
+          console.warn('WebRTC rollback before remote offer failed:', rollbackError);
+        }
+      }
+
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
       // Создаем answer

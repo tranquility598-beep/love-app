@@ -947,6 +947,7 @@ module.exports = (io) => {
     async function leaveVoiceChannel(socket, channelId) {
       const channelMembers = voiceChannels.get(channelId);
       if (!channelMembers) return;
+      const isDMCall = channelId.startsWith('dm_call:');
       
       // Удаляем ВСЕ записи этого пользователя (защита от дубликатов)
       const initialLength = channelMembers.length;
@@ -966,10 +967,13 @@ module.exports = (io) => {
       
       socket.leave(`voice:${channelId}`);
       
-      // Обновляем в БД
-      await Channel.findByIdAndUpdate(channelId, {
-        $pull: { voiceMembers: { user: userId } }
-      });
+      // Обновляем в БД только для реальных voice channels. DM calls are
+      // virtual rooms with ids like dm_call:<conversationId>, not ObjectIds.
+      if (!isDMCall) {
+        await Channel.findByIdAndUpdate(channelId, {
+          $pull: { voiceMembers: { user: userId } }
+        });
+      }
       
       // Уведомляем остальных
       io.to(`voice:${channelId}`).emit('voice:user_left', {
@@ -979,12 +983,14 @@ module.exports = (io) => {
       });
       
       // Уведомляем сервер
-      const channel = await Channel.findById(channelId);
-      if (channel && channel.server) {
-        io.to(`server:${channel.server}`).emit('voice:members_update', {
-          channelId,
-          members: filtered
-        });
+      if (!isDMCall) {
+        const channel = await Channel.findById(channelId);
+        if (channel && channel.server) {
+          io.to(`server:${channel.server}`).emit('voice:members_update', {
+            channelId,
+            members: filtered
+          });
+        }
       }
       
       // Уведомляем клиента что он вышел

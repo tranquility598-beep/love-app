@@ -216,6 +216,10 @@ async function initSocket() {
 
   socket.on('voice:left', (data) => {
     const { channelId } = data;
+    if (window.currentVoiceChannel && window.currentVoiceChannel !== channelId) {
+      console.warn('Ignored stale voice:left for inactive channel:', channelId);
+      return;
+    }
     if (window.voiceManager) {
       window.voiceManager.cleanup();
       window.voiceManager = null;

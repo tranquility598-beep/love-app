@@ -76,6 +76,16 @@ function renderMessages(messages, isDM) {
   });
 }
 
+function resolveAttachmentUrl(url) {
+  if (!url) return '';
+  const value = String(url);
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) {
+    return value;
+  }
+  const baseUrl = window.BASE_URL || 'http://localhost:5555';
+  return `${baseUrl}${value}`;
+}
+
 /**
  * Отрендерить одно сообщение
  */
@@ -123,16 +133,14 @@ function renderMessage(msg, isGrouped) {
         (att.mimetype && att.mimetype.startsWith('audio/')) ||
         (att.url && String(att.url).includes('/audio/'));
       if (att.mimetype?.startsWith('image/') || att.type === 'image') {
-        const baseUrl = window.BASE_URL || 'http://localhost:5555';
         const fn = att.filename || att.originalName || 'image';
-        attachmentsHtml += `<img class="message-image" src="${baseUrl}${att.url}" alt="${fn}" loading="lazy">`;
+        attachmentsHtml += `<img class="message-image" src="${resolveAttachmentUrl(att.url)}" alt="${fn}" loading="lazy">`;
       } else if (isAudio && typeof renderVoiceMessage === 'function') {
         attachmentsHtml += renderVoiceMessage(att, isOwn);
       } else {
-        const baseUrl = window.BASE_URL || 'http://localhost:5555';
         const fn = att.filename || att.originalName || 'file';
         attachmentsHtml += `
-          <div class="message-file" onclick="window.open('${baseUrl}${att.url}')">
+          <div class="message-file" onclick="window.open('${resolveAttachmentUrl(att.url)}')">
             <span class="message-file-icon">${getFileIcon(att.mimetype)}</span>
             <div class="message-file-info">
               <div class="message-file-name">${fn}</div>

@@ -417,6 +417,20 @@ function playVoiceMessageFromButton(button) {
   playVoiceMessage(url, button);
 }
 
+function _resolveWebmDuration(audio) {
+  // WebM blobs from MediaRecorder often lack a valid duration in their
+  // metadata. The cross-browser fix: seek past the end and wait for
+  // durationchange, then rewind to 0.
+  if (audio._durationResolved) return;
+  audio._durationResolved = true;
+  try {
+    audio.currentTime = 1e6;
+  } catch (_) {
+    // Some browsers throw before metadata; retry on next loadedmetadata.
+    audio._durationResolved = false;
+  }
+}
+
 function ensureVoiceMessageMetadata(button) {
   if (!button || button._voiceAudio) return;
   const url = button.dataset?.voiceUrl;
@@ -426,7 +440,21 @@ function ensureVoiceMessageMetadata(button) {
   button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
   if (player) player._voiceAudio = audio;
-  audio.addEventListener('loadedmetadata', () => updateVoicePlayerProgress(player, audio));
+
+  audio.addEventListener('loadedmetadata', () => {
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+      _resolveWebmDuration(audio);
+    } else {
+      updateVoicePlayerProgress(player, audio);
+    }
+  });
+  audio.addEventListener('durationchange', () => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime > audio.duration) {
+      // Rewind back to start after the seek-to-end trick.
+      try { audio.currentTime = 0; } catch (_) {}
+    }
+    updateVoicePlayerProgress(player, audio);
+  });
   audio.addEventListener('error', () => {
     console.error('Voice message metadata load error:', audio.error, url);
   });

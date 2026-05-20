@@ -390,11 +390,11 @@ function renderVoiceMessage(attachment, isOwn) {
   const baseUrl = window.BASE_URL || 'http://localhost:5555';
   const raw = attachment.url || '';
   const url = raw.startsWith('http') ? raw : `${baseUrl}${raw}`;
-  const safeUrl = JSON.stringify(url);
+  const safeUrl = escapeHtml(url);
   const ownClass = isOwn ? ' voice-message-own' : '';
   return `
     <div class="voice-message-player${ownClass}">
-      <button type="button" class="voice-play-btn" onclick="playVoiceMessage(${safeUrl}, this)">
+      <button type="button" class="voice-play-btn" data-voice-url="${safeUrl}" onclick="playVoiceMessageFromButton(this)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z"/>
         </svg>
@@ -409,6 +409,12 @@ function renderVoiceMessage(attachment, isOwn) {
       </div>
     </div>
   `;
+}
+
+function playVoiceMessageFromButton(button) {
+  const url = button?.dataset?.voiceUrl;
+  if (!url) return;
+  playVoiceMessage(url, button);
 }
 
 function updateVoicePlayerProgress(player, audio) {
@@ -501,22 +507,17 @@ function seekVoiceMessage(event, waveform) {
   const button = player.querySelector('.voice-play-btn');
   let audio = player._voiceAudio || button?._voiceAudio;
   if (!audio && button) {
-    const onclick = button.getAttribute('onclick') || '';
-    const match = onclick.match(/playVoiceMessage\((\".*?\"|'.*?'),/);
-    if (match) {
-      try {
-        audio = new Audio(JSON.parse(match[1]));
-        audio.preload = 'metadata';
-        player._voiceAudio = audio;
-        button._voiceAudio = audio;
-        audio.addEventListener('loadedmetadata', () => {
-          seekVoiceMessage(event, waveform);
-          updateVoicePlayerProgress(player, audio);
-        });
-        audio.load();
-      } catch (e) {
-        console.error('Failed to init voice audio for seek:', e);
-      }
+    const url = button.dataset.voiceUrl;
+    if (url) {
+      audio = new Audio(url);
+      audio.preload = 'metadata';
+      player._voiceAudio = audio;
+      button._voiceAudio = audio;
+      audio.addEventListener('loadedmetadata', () => {
+        seekVoiceMessage(event, waveform);
+        updateVoicePlayerProgress(player, audio);
+      });
+      audio.load();
     }
     return;
   }

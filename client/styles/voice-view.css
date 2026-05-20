@@ -60,7 +60,7 @@
 }
 
 .voice-card.speaking {
-  border-color: #43b581;
+  border-color: var(--green);
   box-shadow: 0 0 16px rgba(67, 181, 129, 0.4);
 }
 
@@ -142,17 +142,17 @@
 
 .voice-view-btn.muted,
 .voice-view-btn.deafened {
-  background: #ed4245;
+  background: var(--red);
   color: #fff;
 }
 
 .voice-view-btn.active {
-  background: #43b581;
+  background: var(--green);
   color: #fff;
 }
 
 .voice-view-btn.leave-voice-btn {
-  background: #ed4245;
+  background: var(--red);
   color: #fff;
   width: 64px;
   border-radius: 16px;

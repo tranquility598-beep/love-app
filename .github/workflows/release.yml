@@ -30,6 +30,58 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Create Release Notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cat > release-notes.md <<EOF
+          # Love ${VERSION}
+
+          Стабильное обновление с исправлениями для звонков в личных сообщениях, голосовых сообщений, вложений, typing indicator и общего UX чата.
+
+          ## Что нового
+
+          ### Звонки в личных сообщениях
+          - Исправлены входящие звонки в ЛС.
+          - Кнопки “Принять” и “Отклонить” теперь корректно отправляют ответ в приложение.
+          - Обе стороны звонка подключаются к одной DM call room.
+          - Улучшена синхронизация состояния voice room для DM-звонков.
+          - Добавлена попытка ICE restart при временном WebRTC failure.
+
+          ### Голосовые сообщения
+          - Исправлено воспроизведение голосовых сообщений.
+          - Добавлена перемотка через progress bar.
+          - Исправлено отображение длительности WebM-записей.
+          - Play/pause, progress и reset после окончания теперь синхронизируются корректно.
+
+          ### Чат и вложения
+          - Исправлена загрузка и отображение вложений с Cloudinary.
+          - Улучшен просмотр изображений: zoom, drag/pan, wheel zoom и reset масштаба.
+          - При удалении сообщения очищаются вложения.
+          - Typing indicator теперь показывается только при реальном вводе текста и не уходит под UI.
+
+          ### UI и Design System
+          - Добавлена основа Phase 1 Design System.
+          - Начата миграция UI на semantic tokens.
+          - Улучшена согласованность voice/chat UI.
+
+          ## Стабильность
+
+          - Исправлена CSP-политика для Cloudinary audio/video.
+          - Исправлены edge cases с WebM metadata.
+          - Исправлены realtime state edge cases для voice/calls/chat.
+
+          **Version:** \`${VERSION}\`
+          EOF
+
+      - name: Publish Release Description
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Love ${{ github.ref_name }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+
       - name: Build and Publish
         run: npm run build:server && npx electron-builder build --publish always
         env:

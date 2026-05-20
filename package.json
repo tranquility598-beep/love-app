@@ -53,7 +53,8 @@
       {
         "provider": "github",
         "owner": "tranquility598-beep",
-        "repo": "love-app"
+        "repo": "love-app",
+        "releaseType": "release"
       }
     ],
     "mac": {
@@ -75,7 +76,7 @@
         }
       ],
       "icon": "client/assets/icon.png",
-      "artifactName": "2. ${productName}-v${version}.${ext}"
+      "artifactName": "2. ${productName}-v${version}-${arch}.${ext}"
     },
     "protocols": [
       {

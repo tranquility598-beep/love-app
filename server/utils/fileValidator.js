@@ -122,45 +122,51 @@ function isAllowedMimeType(mimetype, isImage) {
  */
 async function validateFile(file, isImage = false) {
   const errors = [];
-  
+
   if (!file || !file.data) {
     errors.push('Файл не предоставлен');
     return { valid: false, errors, sanitizedName: '' };
   }
-  
-  // Проверка расширения
-  if (!isAllowedExtension(file.name, isImage)) {
-    errors.push('Недопустимый тип файла');
-  }
-  
+
   // Проверка MIME type
-  if (!isAllowedMimeType(file.mimetype, isImage)) {
+  const mimeOk = isAllowedMimeType(file.mimetype, isImage);
+  if (!mimeOk) {
     errors.push('Недопустимый MIME тип файла');
   }
-  
+
   // Проверка magic bytes
   const buffer = file.data;
-  if (buffer && buffer.length > 0) {
-    if (!checkMagicBytes(buffer, file.mimetype)) {
-      errors.push('Содержимое файла не соответствует заявленному типу');
-    }
+  const magicOk = (buffer && buffer.length > 0)
+    ? checkMagicBytes(buffer, file.mimetype)
+    : true;
+  if (!magicOk) {
+    errors.push('Содержимое файла не соответствует заявленному типу');
   }
-  
+
+  // Проверка расширения. Скриншоты из буфера обмена и временные файлы
+  // часто приходят без расширения (например, `tmp-2-...`). В таких случаях
+  // MIME-тип и magic bytes — более сильные проверки и достаточны сами по
+  // себе. Поэтому отсутствие/неподходящее расширение считаем ошибкой
+  // только если MIME или magic bytes уже не валидны.
+  if (!isAllowedExtension(file.name, isImage) && (!mimeOk || !magicOk)) {
+    errors.push('Недопустимый тип файла');
+  }
+
   // Проверка размера
   const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
   if (file.size > maxSize) {
     const maxSizeMB = maxSize / (1024 * 1024);
     errors.push(`Размер файла превышает ${maxSizeMB}MB`);
   }
-  
+
   // Проверка минимального размера (защита от пустых файлов)
   if (file.size < 1) {
     errors.push('Файл пустой');
   }
-  
+
   // Санитизация имени
   const sanitizedName = sanitizeFilename(file.name);
-  
+
   return {
     valid: errors.length === 0,
     errors,

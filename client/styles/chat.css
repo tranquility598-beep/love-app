@@ -695,6 +695,7 @@ body.hide-avatars .message-with-avatar {
 }
 
 .emoji-btn,
+.voice-record-btn,
 .send-btn {
   width: 36px;
   height: 36px;

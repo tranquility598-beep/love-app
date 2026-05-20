@@ -7,6 +7,8 @@ let audioChunks = [];
 let recordingStartTime = null;
 let recordingInterval = null;
 let isRecording = false;
+let currentVoicePreviewUrl = null;
+let currentVoicePreviewAudio = null;
 
 /**
  * Безопасное форматирование длительности в "M:SS".
@@ -54,6 +56,7 @@ async function startVoiceRecording() {
       stream.getTracks().forEach(track => track.stop());
       
       // Создаем blob из записанных данных
+      if (audioChunks.length === 0) return;
       const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
       showVoicePreview(audioBlob);
     };
@@ -224,46 +227,85 @@ function showVoicePreview(audioBlob) {
   
   // Создаем URL для аудио
   const audioUrl = URL.createObjectURL(audioBlob);
+  currentVoicePreviewUrl = audioUrl;
   
-  // Получаем длительность
-  const audio = new Audio(audioUrl);
-  audio.addEventListener('loadedmetadata', () => {
-    // Защита от Infinity/NaN: WebM blob часто не имеет валидной duration
-    // до первого seek. Если длительность неизвестна — показываем "--:--".
-    const durationText = formatDuration(audio.duration);
-    
-    // Создаем превью
-    const preview = document.createElement('div');
-    preview.id = 'voice-preview';
-    preview.className = 'voice-recording-preview';
-    preview.innerHTML = `
-      <div class="voice-message-info">
-        <div class="voice-recording-time">${durationText}</div>
-        <div class="voice-message-waveform">
-          <div class="voice-message-progress" style="width: 0%"></div>
-        </div>
+  const durationText = recordingStartTime ? formatDuration((Date.now() - recordingStartTime) / 1000) : '--:--';
+  const preview = document.createElement('div');
+  preview.id = 'voice-preview';
+  preview.className = 'voice-recording-preview voice-preview-ready';
+  preview.innerHTML = `
+    <button type="button" class="voice-play-btn" onclick="toggleVoicePreviewPlayback(this)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+    </button>
+    <div class="voice-message-info">
+      <div class="voice-message-duration">Предпросмотр · <span class="voice-preview-current">0:00</span> / <span>${durationText}</span></div>
+      <div class="voice-message-waveform">
+        <div class="voice-message-progress" style="width: 0%"></div>
       </div>
-      <button type="button" class="voice-play-btn" onclick="playVoicePreview('${audioUrl}')">
+    </div>
+    <div class="voice-recording-actions">
+      <button class="voice-cancel-btn" onclick="cancelVoiceRecording()">Отмена</button>
+      <button class="voice-send-btn" onclick="sendVoiceMessage()">Отправить</button>
+    </div>
+  `;
+  
+  // Сохраняем blob для отправки
+  preview.dataset.audioBlob = audioUrl;
+  window.currentVoiceBlob = audioBlob;
+  
+  // Вставляем перед полем ввода
+  const inputWrapper = inputArea.querySelector('.message-input-wrapper');
+  if (inputWrapper) {
+    inputArea.insertBefore(preview, inputWrapper);
+  }
+}
+
+function setVoiceButtonIcon(button, playing) {
+  button.innerHTML = playing
+    ? `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
+      </svg>
+    `
+    : `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z"/>
         </svg>
-      </button>
-      <div class="voice-recording-actions">
-        <button class="voice-cancel-btn" onclick="cancelVoiceRecording()">Отмена</button>
-        <button class="voice-send-btn" onclick="sendVoiceMessage()">Отправить</button>
-      </div>
-    `;
-    
-    // Сохраняем blob для отправки
-    preview.dataset.audioBlob = audioUrl;
-    window.currentVoiceBlob = audioBlob;
-    
-    // Вставляем перед полем ввода
-    const inputWrapper = inputArea.querySelector('.message-input-wrapper');
-    if (inputWrapper) {
-      inputArea.insertBefore(preview, inputWrapper);
-    }
-  });
+      `;
+}
+
+function toggleVoicePreviewPlayback(button) {
+  if (!currentVoicePreviewUrl) return;
+  const preview = document.getElementById('voice-preview');
+  const progress = preview?.querySelector('.voice-message-progress');
+  const current = preview?.querySelector('.voice-preview-current');
+
+  if (!currentVoicePreviewAudio) {
+    currentVoicePreviewAudio = new Audio(currentVoicePreviewUrl);
+    currentVoicePreviewAudio.addEventListener('timeupdate', () => {
+      const audio = currentVoicePreviewAudio;
+      if (!audio) return;
+      if (current) current.textContent = formatDuration(audio.currentTime);
+      if (progress && Number.isFinite(audio.duration) && audio.duration > 0) {
+        progress.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+      }
+    });
+    currentVoicePreviewAudio.addEventListener('ended', () => {
+      setVoiceButtonIcon(button, false);
+      if (progress) progress.style.width = '0%';
+      if (current) current.textContent = '0:00';
+    });
+  }
+
+  if (currentVoicePreviewAudio.paused) {
+    currentVoicePreviewAudio.play();
+    setVoiceButtonIcon(button, true);
+  } else {
+    currentVoicePreviewAudio.pause();
+    setVoiceButtonIcon(button, false);
+  }
 }
 
 /**
@@ -279,6 +321,11 @@ function hideVoicePreview() {
     }
     preview.remove();
   }
+  if (currentVoicePreviewAudio) {
+    currentVoicePreviewAudio.pause();
+    currentVoicePreviewAudio = null;
+  }
+  currentVoicePreviewUrl = null;
   window.currentVoiceBlob = null;
 }
 
@@ -286,8 +333,8 @@ function hideVoicePreview() {
  * Воспроизвести превью
  */
 function playVoicePreview(audioUrl) {
-  const audio = new Audio(audioUrl);
-  audio.play();
+  currentVoicePreviewUrl = audioUrl;
+  toggleVoicePreviewPlayback(document.querySelector('#voice-preview .voice-play-btn'));
 }
 
 /**
@@ -346,7 +393,7 @@ function renderVoiceMessage(attachment, isOwn) {
   return `
     <div class="voice-message-player${ownClass}">
       <div class="voice-message-info">
-        <div class="voice-message-duration">Голосовое сообщение</div>
+        <div class="voice-message-duration">Голосовое сообщение · <span class="voice-current-time">0:00</span></div>
         <div class="voice-message-waveform">
           <div class="voice-message-progress" style="width: 0%"></div>
         </div>
@@ -364,16 +411,25 @@ function renderVoiceMessage(attachment, isOwn) {
  * Воспроизвести голосовое сообщение
  */
 function playVoiceMessage(url, button) {
+  if (button._voiceAudio) {
+    const existing = button._voiceAudio;
+    if (existing.paused) {
+      existing.play();
+      setVoiceButtonIcon(button, true);
+    } else {
+      existing.pause();
+      setVoiceButtonIcon(button, false);
+    }
+    return;
+  }
   const audio = new Audio(url);
+  button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
   const progress = player ? player.querySelector('.voice-message-progress') : null;
+  const current = player ? player.querySelector('.voice-current-time') : null;
   
   // Меняем иконку на паузу
-  button.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
-    </svg>
-  `;
+  setVoiceButtonIcon(button, true);
   
   // Обновляем прогресс. Если duration ещё неизвестна (Infinity/NaN),
   // не пишем NaN% в DOM.
@@ -383,38 +439,16 @@ function playVoiceMessage(url, button) {
     if (!Number.isFinite(dur) || dur <= 0) return;
     const percent = (audio.currentTime / dur) * 100;
     progress.style.width = percent + '%';
+    if (current) current.textContent = formatDuration(audio.currentTime);
   });
   
   // Когда закончится
   audio.addEventListener('ended', () => {
-    button.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M8 5v14l11-7z"/>
-      </svg>
-    `;
+    setVoiceButtonIcon(button, false);
     if (progress) {
       progress.style.width = '0%';
     }
   });
   
   audio.play();
-  
-  // Обработка клика для паузы
-  button.onclick = () => {
-    if (audio.paused) {
-      audio.play();
-      button.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M6 4h4v16H6zM14 4h4v16h-4z"/>
-        </svg>
-      `;
-    } else {
-      audio.pause();
-      button.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-      `;
-    }
-  };
 }

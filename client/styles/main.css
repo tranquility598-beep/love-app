@@ -3872,6 +3872,11 @@ body.space-theme .role-actions {
   border-radius: 4px;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
+}
+
+.voice-message-waveform:hover {
+  background: var(--bg-hover);
 }
 
 .voice-message-progress {
@@ -4232,4 +4237,3 @@ body.space-theme .role-actions {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-

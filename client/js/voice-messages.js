@@ -9,6 +9,8 @@ let recordingInterval = null;
 let isRecording = false;
 let currentVoicePreviewUrl = null;
 let currentVoicePreviewAudio = null;
+let activeVoiceMessageAudio = null;
+let activeVoiceMessageButton = null;
 
 /**
  * Безопасное форматирование длительности в "M:SS".
@@ -392,19 +394,45 @@ function renderVoiceMessage(attachment, isOwn) {
   const ownClass = isOwn ? ' voice-message-own' : '';
   return `
     <div class="voice-message-player${ownClass}">
-      <div class="voice-message-info">
-        <div class="voice-message-duration">Голосовое сообщение · <span class="voice-current-time">0:00</span></div>
-        <div class="voice-message-waveform">
-          <div class="voice-message-progress" style="width: 0%"></div>
-        </div>
-      </div>
       <button type="button" class="voice-play-btn" onclick="playVoiceMessage(${safeUrl}, this)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z"/>
         </svg>
       </button>
+      <div class="voice-message-info">
+        <div class="voice-message-duration">
+          ГС · <span class="voice-current-time">0:00</span> / <span class="voice-total-time">--:--</span>
+        </div>
+        <div class="voice-message-waveform" onclick="seekVoiceMessage(event, this)">
+          <div class="voice-message-progress" style="width: 0%"></div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+function updateVoicePlayerProgress(player, audio) {
+  if (!player || !audio) return;
+  const progress = player.querySelector('.voice-message-progress');
+  const current = player.querySelector('.voice-current-time');
+  const total = player.querySelector('.voice-total-time');
+
+  if (current) current.textContent = formatDuration(audio.currentTime);
+  if (total && Number.isFinite(audio.duration) && audio.duration > 0) {
+    total.textContent = formatDuration(audio.duration);
+  }
+  if (progress && Number.isFinite(audio.duration) && audio.duration > 0) {
+    progress.style.width = `${Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100))}%`;
+  }
+}
+
+function resetVoicePlayer(player, button) {
+  if (button) setVoiceButtonIcon(button, false);
+  if (!player) return;
+  const progress = player.querySelector('.voice-message-progress');
+  const current = player.querySelector('.voice-current-time');
+  if (progress) progress.style.width = '0%';
+  if (current) current.textContent = '0:00';
 }
 
 /**
@@ -414,8 +442,14 @@ function playVoiceMessage(url, button) {
   if (button._voiceAudio) {
     const existing = button._voiceAudio;
     if (existing.paused) {
+      if (activeVoiceMessageAudio && activeVoiceMessageAudio !== existing) {
+        activeVoiceMessageAudio.pause();
+        setVoiceButtonIcon(activeVoiceMessageButton, false);
+      }
       existing.play();
       setVoiceButtonIcon(button, true);
+      activeVoiceMessageAudio = existing;
+      activeVoiceMessageButton = button;
     } else {
       existing.pause();
       setVoiceButtonIcon(button, false);
@@ -423,32 +457,73 @@ function playVoiceMessage(url, button) {
     return;
   }
   const audio = new Audio(url);
+  audio.preload = 'metadata';
   button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
-  const progress = player ? player.querySelector('.voice-message-progress') : null;
-  const current = player ? player.querySelector('.voice-current-time') : null;
+  if (player) player._voiceAudio = audio;
   
-  // Меняем иконку на паузу
-  setVoiceButtonIcon(button, true);
+  if (activeVoiceMessageAudio && activeVoiceMessageAudio !== audio) {
+    activeVoiceMessageAudio.pause();
+    setVoiceButtonIcon(activeVoiceMessageButton, false);
+  }
   
-  // Обновляем прогресс. Если duration ещё неизвестна (Infinity/NaN),
-  // не пишем NaN% в DOM.
+  audio.addEventListener('loadedmetadata', () => updateVoicePlayerProgress(player, audio));
   audio.addEventListener('timeupdate', () => {
-    if (!progress) return;
-    const dur = audio.duration;
-    if (!Number.isFinite(dur) || dur <= 0) return;
-    const percent = (audio.currentTime / dur) * 100;
-    progress.style.width = percent + '%';
-    if (current) current.textContent = formatDuration(audio.currentTime);
+    updateVoicePlayerProgress(player, audio);
   });
-  
-  // Когда закончится
   audio.addEventListener('ended', () => {
-    setVoiceButtonIcon(button, false);
-    if (progress) {
-      progress.style.width = '0%';
+    resetVoicePlayer(player, button);
+    if (activeVoiceMessageAudio === audio) {
+      activeVoiceMessageAudio = null;
+      activeVoiceMessageButton = null;
     }
   });
-  
-  audio.play();
+  audio.addEventListener('error', () => {
+    console.error('Voice message playback error:', audio.error, url);
+    setVoiceButtonIcon(button, false);
+  });
+
+  audio.play()
+    .then(() => {
+      setVoiceButtonIcon(button, true);
+      activeVoiceMessageAudio = audio;
+      activeVoiceMessageButton = button;
+    })
+    .catch((error) => {
+      console.error('Voice message play() failed:', error, url);
+      setVoiceButtonIcon(button, false);
+    });
+}
+
+function seekVoiceMessage(event, waveform) {
+  const player = waveform.closest('.voice-message-player');
+  if (!player) return;
+  const button = player.querySelector('.voice-play-btn');
+  let audio = player._voiceAudio || button?._voiceAudio;
+  if (!audio && button) {
+    const onclick = button.getAttribute('onclick') || '';
+    const match = onclick.match(/playVoiceMessage\((\".*?\"|'.*?'),/);
+    if (match) {
+      try {
+        audio = new Audio(JSON.parse(match[1]));
+        audio.preload = 'metadata';
+        player._voiceAudio = audio;
+        button._voiceAudio = audio;
+        audio.addEventListener('loadedmetadata', () => {
+          seekVoiceMessage(event, waveform);
+          updateVoicePlayerProgress(player, audio);
+        });
+        audio.load();
+      } catch (e) {
+        console.error('Failed to init voice audio for seek:', e);
+      }
+    }
+    return;
+  }
+  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+
+  const rect = waveform.getBoundingClientRect();
+  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+  audio.currentTime = ratio * audio.duration;
+  updateVoicePlayerProgress(player, audio);
 }

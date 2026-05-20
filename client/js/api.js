@@ -136,6 +136,7 @@ async function apiFetch(endpoint, options = {}) {
       });
 
       if (!result.ok) {
+        console.error('Upload failed:', result.status, result.data);
         if (result.status === 401 && !isAuthEntryEndpoint(endpoint)) {
           // Авторизованный запрос с протухшим токеном — чистим и
           // мягко выкидываем на экран логина. БЕЗ reload, чтобы не было

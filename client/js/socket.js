@@ -96,7 +96,9 @@ async function initSocket() {
     const msgCh = channelId?.toString();
     if (currentCh && currentCh === msgCh) {
       // Не дублируем свои сообщения — они уже были мгновенно показаны
-      if (message.author?._id !== window.currentUser?._id) {
+      const isOwn = message.author?._id === window.currentUser?._id;
+      const alreadyRendered = message._id && document.querySelector(`[data-message-id="${message._id}"]`);
+      if (!isOwn || !alreadyRendered) {
         appendMessage(message);
         scrollToBottom();
       }

@@ -218,7 +218,10 @@ async function initSocket() {
     const { channelId } = data;
     if (window.voiceManager) {
       window.voiceManager.cleanup();
+      window.voiceManager = null;
     }
+    if (window.currentVoiceChannel === channelId) window.currentVoiceChannel = null;
+    window.pendingDMCall = null;
     hideVoicePanel();
   });
 
@@ -246,21 +249,21 @@ async function initSocket() {
 
   socket.on('webrtc:offer', (data) => {
     const { offer, fromSocketId, fromUserId, channelId } = data;
-    if (window.voiceManager) {
+    if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
       window.voiceManager.handleOffer(offer, fromSocketId, fromUserId);
     }
   });
 
   socket.on('webrtc:answer', (data) => {
-    const { answer, fromSocketId } = data;
-    if (window.voiceManager) {
+    const { answer, fromSocketId, channelId } = data;
+    if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
       window.voiceManager.handleAnswer(answer, fromSocketId);
     }
   });
 
   socket.on('webrtc:ice_candidate', (data) => {
-    const { candidate, fromSocketId } = data;
-    if (window.voiceManager) {
+    const { candidate, fromSocketId, channelId } = data;
+    if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
       window.voiceManager.handleIceCandidate(candidate, fromSocketId);
     }
   });

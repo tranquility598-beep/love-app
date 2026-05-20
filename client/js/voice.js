@@ -179,6 +179,21 @@ class VoiceManager {
     }
   }
 
+  async restartConnection(socketId) {
+    const pc = this.peerConnections.get(socketId);
+    if (!pc || pc.signalingState === 'closed') return;
+
+    try {
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      socketSendOffer(socketId, offer, this.channelId);
+      console.log('🔁 Restarted WebRTC ICE with:', socketId);
+    } catch (error) {
+      console.error('Error restarting WebRTC connection:', error);
+      this.removeConnection(socketId);
+    }
+  }
+
   /**
    * Обработать входящий offer
    */
@@ -296,7 +311,12 @@ class VoiceManager {
     pc.onconnectionstatechange = () => {
       console.log(`WebRTC connection state (${socketId}):`, pc.connectionState);
       if (pc.connectionState === 'failed') {
-        this.removeConnection(socketId);
+        if (this.channelId?.startsWith('dm_call:') && !pc._iceRestartAttempted) {
+          pc._iceRestartAttempted = true;
+          this.restartConnection(socketId);
+        } else {
+          this.removeConnection(socketId);
+        }
       }
     };
 
@@ -1223,6 +1243,7 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || responderId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
+  window.currentVoiceChannel = callRoomId;
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
 }
@@ -1269,6 +1290,7 @@ async function startWebRTCCall(callerId, meta = {}) {
 
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || callerId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
+  window.currentVoiceChannel = callRoomId;
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
   playSound('join');

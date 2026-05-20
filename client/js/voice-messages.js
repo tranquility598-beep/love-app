@@ -417,6 +417,46 @@ function playVoiceMessageFromButton(button) {
   playVoiceMessage(url, button);
 }
 
+function ensureVoiceMessageMetadata(button) {
+  if (!button || button._voiceAudio) return;
+  const url = button.dataset?.voiceUrl;
+  if (!url) return;
+  const audio = new Audio(url);
+  audio.preload = 'metadata';
+  button._voiceAudio = audio;
+  const player = button.closest('.voice-message-player');
+  if (player) player._voiceAudio = audio;
+  audio.addEventListener('loadedmetadata', () => updateVoicePlayerProgress(player, audio));
+  audio.addEventListener('error', () => {
+    console.error('Voice message metadata load error:', audio.error, url);
+  });
+  audio.load();
+}
+
+function _initVoiceMessagePreload() {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((m) => {
+      m.addedNodes.forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        const buttons = node.matches?.('.voice-message-player .voice-play-btn[data-voice-url]')
+          ? [node]
+          : Array.from(node.querySelectorAll?.('.voice-message-player .voice-play-btn[data-voice-url]') || []);
+        buttons.forEach(ensureVoiceMessageMetadata);
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Initial pass for already-rendered messages
+  document.querySelectorAll('.voice-message-player .voice-play-btn[data-voice-url]').forEach(ensureVoiceMessageMetadata);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _initVoiceMessagePreload);
+} else {
+  _initVoiceMessagePreload();
+}
+
 function updateVoicePlayerProgress(player, audio) {
   if (!player || !audio) return;
   const progress = player.querySelector('.voice-message-progress');

@@ -3867,16 +3867,17 @@ body.space-theme .role-actions {
 
 .voice-message-waveform {
   width: 100%;
-  height: 30px;
-  background: var(--bg-modifier-accent);
-  border-radius: 4px;
+  height: 6px;
+  background: var(--surface-alpha-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   position: relative;
   overflow: hidden;
   cursor: pointer;
 }
 
 .voice-message-waveform:hover {
-  background: var(--bg-hover);
+  background: var(--surface-alpha-4);
 }
 
 .voice-message-progress {
@@ -3884,9 +3885,9 @@ body.space-theme .role-actions {
   top: 0;
   left: 0;
   height: 100%;
-  background: var(--accent-primary);
-  opacity: 0.3;
-  transition: width 0.1s;
+  background: var(--text-primary);
+  opacity: 0.85;
+  transition: width 0.08s linear;
 }
 
 /* ===== CONTEXT MENU ===== */

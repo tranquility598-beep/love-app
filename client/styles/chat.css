@@ -172,7 +172,7 @@ body.hide-avatars .message-with-avatar {
 }
 
 .message-group:hover {
-  background: rgba(255,255,255,0.03);
+  background: var(--surface-alpha-1);
 }
 
 .message-with-avatar {
@@ -405,8 +405,8 @@ body.hide-avatars .message-with-avatar {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--surface-alpha-3);
+  border: 1px solid var(--accent-dim);
   border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
@@ -415,13 +415,13 @@ body.hide-avatars .message-with-avatar {
 }
 
 .reaction-btn:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.2);
+  background: var(--accent-dim);
+  border-color: var(--border-hover);
 }
 
 .reaction-btn.reacted {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.3);
+  background: var(--accent-dim);
+  border-color: var(--state-focus-ring);
   color: var(--text-primary);
 }
 
@@ -470,8 +470,8 @@ body.hide-avatars .message-with-avatar {
 }
 
 .message-action-btn.danger:hover {
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.6);
+  background: var(--surface-alpha-3);
+  color: var(--text-muted);
 }
 
 /* Edit input */
@@ -714,12 +714,12 @@ body.hide-avatars .message-with-avatar {
 }
 
 .send-btn {
-  background: rgba(255,255,255,0.08);
+  background: var(--surface-alpha-4);
   color: var(--text-secondary);
 }
 
 .send-btn:hover {
-  background: rgba(255,255,255,0.15);
+  background: var(--surface-alpha-6);
   color: var(--text-primary);
 }
 
@@ -729,14 +729,14 @@ body.hide-avatars .message-with-avatar {
 .send-btn:disabled,
 .send-btn.is-cooldown {
   cursor: not-allowed;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-alpha-2);
 }
 .send-btn.is-cooldown svg { opacity: 0.25; }
 .send-btn-cooldown {
   position: absolute;
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
   pointer-events: none;
   line-height: 1;
 }
@@ -748,7 +748,7 @@ body.hide-avatars .message-with-avatar {
   position: absolute;
   bottom: 80px;
   right: 16px;
-  z-index: 100;
+  z-index: var(--z-sticky);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow);
@@ -760,11 +760,11 @@ emoji-picker {
   --border-color: var(--border);
   --category-emoji-size: 1.125rem;
   --emoji-size: 1.375rem;
-  --indicator-color: rgba(255,255,255,0.5);
+  --indicator-color: var(--text-muted);
   --input-border-color: var(--border);
   --input-font-color: var(--text-primary);
   --input-placeholder-color: var(--text-muted);
-  --outline-color: rgba(255,255,255,0.2);
+  --outline-color: var(--border-hover);
   --skintone-border-radius: 50%;
   --num-columns: 8;
   width: 320px;
@@ -778,7 +778,7 @@ emoji-picker {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px;
-  z-index: 1000;
+  z-index: var(--z-modal);
   min-width: 180px;
   box-shadow: var(--shadow);
   animation: menuAppear 0.1s ease;
@@ -807,12 +807,12 @@ emoji-picker {
 }
 
 .context-menu-item.danger {
-  color: rgba(255,255,255,0.5);
+  color: var(--text-muted);
 }
 
 .context-menu-item.danger:hover {
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.8);
+  background: var(--surface-alpha-3);
+  color: var(--text-secondary);
 }
 
 .context-menu-item.emoji-reactions {
@@ -885,7 +885,7 @@ emoji-picker {
 }
 
 .image-viewer-close:hover {
-  background: rgba(255,255,255,0.1);
+  background: var(--accent-dim);
 }
 
 /* Prevent Enter key from creating newlines in message input */

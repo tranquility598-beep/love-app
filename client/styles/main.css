@@ -47,6 +47,12 @@
   --surface-raised: var(--bg-secondary);
   --surface-overlay: var(--bg-tertiary);
   --surface-sunken: var(--bg-quaternary);
+  --surface-alpha-1: rgba(255, 255, 255, 0.03);
+  --surface-alpha-2: rgba(255, 255, 255, 0.04);
+  --surface-alpha-3: rgba(255, 255, 255, 0.05);
+  --surface-alpha-4: rgba(255, 255, 255, 0.08);
+  --surface-alpha-5: rgba(255, 255, 255, 0.10);
+  --surface-alpha-6: rgba(255, 255, 255, 0.15);
 
   /* Interactive states */
   --state-hover: var(--bg-hover);
@@ -4226,6 +4232,5 @@ body.space-theme .role-actions {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 

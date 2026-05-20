@@ -14,11 +14,15 @@ ringingSound.volume = 0.3;
 ringingSound.loop = true;
 
 let currentCallerId = null;
+let currentConversationId = null;
+let currentChannelId = null;
 
 // Получаем данные о звонящем
 window.electronAPI.onIncomingCallData((data) => {
   const { caller } = data;
   currentCallerId = caller._id;
+  currentConversationId = data.conversationId || caller.conversationId || null;
+  currentChannelId = data.channelId || caller.channelId || null;
   
   callerName.textContent = caller.username;
   callerAvatar.src = getAvatarUrl(caller.avatar);
@@ -30,7 +34,12 @@ window.electronAPI.onIncomingCallData((data) => {
 // Кнопка Принять
 btnAccept.onclick = () => {
   stopSounds();
-  window.electronAPI.sendCallAction({ accepted: true, callerId: currentCallerId });
+  window.electronAPI.sendCallAction({
+    accepted: true,
+    callerId: currentCallerId,
+    conversationId: currentConversationId,
+    channelId: currentChannelId
+  });
 };
 
 // Кнопка Отклонить
@@ -47,7 +56,12 @@ btnDecline.onclick = () => {
   
   // Закрываем окно через небольшую задержку после анимации
   setTimeout(() => {
-    window.electronAPI.sendCallAction({ accepted: false, callerId: currentCallerId });
+    window.electronAPI.sendCallAction({
+      accepted: false,
+      callerId: currentCallerId,
+      conversationId: currentConversationId,
+      channelId: currentChannelId
+    });
   }, 600);
 };
 

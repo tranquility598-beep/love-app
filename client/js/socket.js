@@ -296,18 +296,19 @@ async function initSocket() {
 
   // Входящий звонок: показываем Electron окно
   socket.on('call:incoming', (data) => {
-    const { from } = data;
+    const { from, conversationId, channelId } = data;
     console.log('📞 Incoming call from:', from.username);
+    window.pendingDMCall = { from, conversationId, channelId };
     if (window.electronAPI && window.electronAPI.showIncomingCall) {
-      window.electronAPI.showIncomingCall(from);
+      window.electronAPI.showIncomingCall({ ...from, conversationId, channelId });
     }
   });
 
   // Ответ на наш звонок
   socket.on('call:response', (data) => {
-    const { accepted, responderId } = data;
+    const { accepted, responderId, conversationId, channelId } = data;
     if (window.handleDMCallResponse) {
-      window.handleDMCallResponse(accepted, responderId);
+      window.handleDMCallResponse(accepted, responderId, { conversationId, channelId });
     }
   });
 
@@ -623,9 +624,14 @@ function socketRequestCall(targetUserId) {
   }
 }
 
-function socketSendCallResponse(callerId, accepted) {
+function socketSendCallResponse(callerId, accepted, meta = {}) {
   if (socket && callerId) {
-    socket.emit('call:response', { callerId: callerId.toString(), accepted });
+    socket.emit('call:response', {
+      callerId: callerId.toString(),
+      accepted,
+      conversationId: meta.conversationId,
+      channelId: meta.channelId
+    });
   }
 }
 
@@ -638,14 +644,17 @@ function socketEndCall(targetUserId) {
 // Обработка ответа из Electron-попапа (для получателя)
 if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
   window.electronAPI.onCallResponseFromPopup((data) => {
-    const { accepted, callerId } = data;
-    socketSendCallResponse(callerId, accepted);
+    const { accepted, callerId, conversationId, channelId } = data;
+    socketSendCallResponse(callerId, accepted, { conversationId, channelId });
     
     if (accepted) {
       // Если приняли - инициируем WebRTC
       if (window.startWebRTCCall) {
-        window.startWebRTCCall(callerId);
+        window.startWebRTCCall(callerId, { conversationId, channelId });
       }
+    }
+    if (!accepted && window.pendingDMCall?.from?._id === callerId) {
+      window.pendingDMCall = null;
     }
   });
 }

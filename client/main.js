@@ -462,6 +462,16 @@ ipcMain.on('show-incoming-call', (event, { caller }) => {
   });
 });
 
+ipcMain.on('call-action', (event, data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('call-response-from-popup', data);
+  }
+
+  if (incomingCallWindow && !incomingCallWindow.isDestroyed()) {
+    incomingCallWindow.close();
+  }
+});
+
 ipcMain.on('close-incoming-call', () => {
   if (incomingCallWindow) {
     incomingCallWindow.close();

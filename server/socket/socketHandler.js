@@ -844,7 +844,7 @@ module.exports = (io) => {
     /**
      * Запрос на звонок (от звонящего к получателю)
      */
-    socket.on('call:request', (data) => {
+    socket.on('call:request', async (data) => {
       const { targetUserId } = data;
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
       const targetSocketId = connectedUsers.get(targetIdStr);
@@ -852,7 +852,18 @@ module.exports = (io) => {
       console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found socket: ${targetSocketId ? 'YES' : 'NO'}`);
 
       if (targetSocketId) {
+        const conversation = await DirectMessage.findOne({
+          participants: { $all: [userId, targetIdStr] }
+        }).select('_id channel participants');
+
+        if (!conversation) {
+          socket.emit('call:error', { message: 'Диалог не найден. Откройте личные сообщения перед звонком.' });
+          return;
+        }
+
         io.to(targetSocketId).emit('call:incoming', {
+          conversationId: conversation._id.toString(),
+          channelId: conversation.channel.toString(),
           from: {
             _id: userId,
             username: socket.user.username,
@@ -868,13 +879,15 @@ module.exports = (io) => {
      * Ответ на звонок (Принять / Отклонить)
      */
     socket.on('call:response', (data) => {
-      const { callerId, accepted } = data;
+      const { callerId, accepted, conversationId, channelId } = data;
       const callerIdStr = callerId ? callerId.toString() : null;
       const callerSocketId = connectedUsers.get(callerIdStr);
 
       if (callerSocketId) {
         io.to(callerSocketId).emit('call:response', {
           accepted,
+          conversationId,
+          channelId,
           responderId: userId
         });
         console.log(`📞 Call response from ${socket.user.username}: ${accepted ? 'ACCEPTED' : 'DECLINED'}`);

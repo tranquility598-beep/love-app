@@ -654,6 +654,7 @@ async function leaveVoiceChannel() {
     window.voiceManager.leaveChannel();
     window.voiceManager = null;
   }
+  window.pendingDMCall = null;
   window.currentVoiceChannel = null;
   hideVoicePanel();
 
@@ -1186,7 +1187,7 @@ function showDMCallOverlay(peer) {
 /**
  * Обработка ответа на наш звонок
  */
-async function handleDMCallResponse(accepted, responderId) {
+async function handleDMCallResponse(accepted, responderId, meta = {}) {
   const overlay = document.getElementById('dm-call-overlay');
   const status = document.getElementById('call-overlay-status');
   const peerContainer = document.getElementById('caller-mini-peer');
@@ -1220,12 +1221,10 @@ async function handleDMCallResponse(accepted, responderId) {
   peerContainer.classList.remove('peer-ringing');
   playSound('join');
   
-  if (!window.voiceManager) {
-    window.voiceManager = new VoiceManager();
-    const callRoomId = `dm_call:${window.currentDMConversationId}`;
-    window.voiceManager.channelId = callRoomId;
-    await window.voiceManager.joinChannel(callRoomId);
-  }
+  const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || responderId}`;
+  if (!window.voiceManager) window.voiceManager = new VoiceManager();
+  window.voiceManager.channelId = callRoomId;
+  await window.voiceManager.joinChannel(callRoomId);
 }
 
 window.handleDMCallResponse = handleDMCallResponse;
@@ -1254,17 +1253,24 @@ window.handleDMCallEnd = handleDMCallEnd;
 /**
  * Функция для получателя: войти в WebRTC после нажатия "Принять"
  */
-async function startWebRTCCall(callerId) {
+async function startWebRTCCall(callerId, meta = {}) {
   // Останавливаем все звуки вызова (если были)
   sounds.calling.pause();
   sounds.ringing.pause();
 
-  if (!window.voiceManager) {
-    window.voiceManager = new VoiceManager();
-    const callRoomId = `dm_call:${window.currentDMConversationId || 'direct'}`;
-    window.voiceManager.channelId = callRoomId;
-    await window.voiceManager.joinChannel(callRoomId);
+  const caller = window.pendingDMCall?.from;
+  if (caller) {
+    showDMCallOverlay(caller);
+    const status = document.getElementById('call-overlay-status');
+    const peerContainer = document.getElementById('caller-mini-peer');
+    if (status) status.textContent = 'В ЭФИРЕ';
+    if (peerContainer) peerContainer.classList.remove('peer-ringing');
   }
+
+  const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || callerId}`;
+  if (!window.voiceManager) window.voiceManager = new VoiceManager();
+  window.voiceManager.channelId = callRoomId;
+  await window.voiceManager.joinChannel(callRoomId);
   playSound('join');
 }
 
@@ -1306,6 +1312,3 @@ window.toggleCallOverlay = () => {
   const overlay = document.getElementById('dm-call-overlay');
   if (overlay) overlay.classList.toggle('minimized');
 };
-
-
-

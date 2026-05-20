@@ -19,6 +19,8 @@ class SettingsManager {
       'notif-preview': true,
       
       // Голос и видео
+      'voice-input-device': 'default',
+      'voice-output-device': 'default',
       'input-volume': 100,
       'output-volume': 100,
       'noise-suppression': true,
@@ -130,6 +132,11 @@ class SettingsManager {
       case 'output-volume':
         this.applyOutputVolume(value);
         break;
+      case 'voice-output-device':
+        document.querySelectorAll('audio[data-voice-output="true"], #remote-audio-container audio').forEach(audio => {
+          if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
+        });
+        break;
     }
   }
 
@@ -203,7 +210,7 @@ class SettingsManager {
 
   // Громкость выхода
   applyOutputVolume(volume) {
-    document.querySelectorAll('#remote-audio-container audio').forEach(audio => {
+    document.querySelectorAll('audio[data-voice-output="true"], #remote-audio-container audio').forEach(audio => {
       audio.volume = volume / 100;
     });
   }
@@ -250,7 +257,7 @@ function initializeSettingsUI() {
   });
 
   // Селекты
-  const selects = ['font-size', 'default-screen-quality', 'app-language', 'time-format', 'date-format', 'app-timezone'];
+  const selects = ['voice-input-device', 'voice-output-device', 'font-size', 'default-screen-quality', 'app-language', 'time-format', 'date-format', 'app-timezone'];
   selects.forEach(id => {
     const select = document.getElementById(id);
     if (select) {
@@ -260,6 +267,7 @@ function initializeSettingsUI() {
       });
     }
   });
+  initializeAudioDeviceSelectors();
 }
 
 // Инициализация слайдера
@@ -279,3 +287,64 @@ function initSlider(sliderId, valueId) {
     });
   }
 }
+
+async function initializeAudioDeviceSelectors() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    populateAudioDeviceSelect('voice-input-device', devices.filter(d => d.kind === 'audioinput'), 'Микрофон по умолчанию');
+    populateAudioDeviceSelect('voice-output-device', devices.filter(d => d.kind === 'audiooutput'), 'Вывод по умолчанию');
+  } catch (error) {
+    console.warn('Failed to enumerate audio devices:', error);
+  }
+}
+
+function populateAudioDeviceSelect(selectId, devices, defaultLabel) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  const saved = window.settingsManager.get(selectId) || 'default';
+  select.innerHTML = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = 'default';
+  defaultOption.textContent = defaultLabel;
+  select.appendChild(defaultOption);
+  devices.forEach((device, index) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || `${defaultLabel.replace(' по умолчанию', '')} ${index + 1}`;
+    select.appendChild(option);
+  });
+  select.value = Array.from(select.options).some(option => option.value === saved) ? saved : 'default';
+  window.settingsManager.saveSetting(selectId, select.value);
+}
+
+function getVoiceAudioConstraints() {
+  const inputDevice = window.settingsManager?.get('voice-input-device') || 'default';
+  const constraints = {
+    echoCancellation: window.settingsManager?.get('echo-cancellation') !== false,
+    noiseSuppression: window.settingsManager?.get('noise-suppression') !== false,
+    autoGainControl: window.settingsManager?.get('auto-gain-control') !== false
+  };
+  if (inputDevice && inputDevice !== 'default') {
+    constraints.deviceId = { exact: inputDevice };
+  }
+  return constraints;
+}
+
+async function applyAudioOutputDevice(audio) {
+  if (!audio) return;
+  const outputDevice = window.settingsManager?.get('voice-output-device') || 'default';
+  audio.dataset.voiceOutput = 'true';
+  audio.volume = (Number(window.settingsManager?.get('output-volume')) || 100) / 100;
+  if (typeof audio.setSinkId === 'function' && outputDevice && outputDevice !== 'default') {
+    try {
+      await audio.setSinkId(outputDevice);
+    } catch (error) {
+      console.warn('Failed to set audio output device:', error);
+    }
+  }
+}
+
+window.initializeAudioDeviceSelectors = initializeAudioDeviceSelectors;
+window.getVoiceAudioConstraints = getVoiceAudioConstraints;
+window.applyAudioOutputDevice = applyAudioOutputDevice;

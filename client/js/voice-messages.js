@@ -43,7 +43,10 @@ async function toggleVoiceRecording() {
 async function startVoiceRecording() {
   try {
     // Запрашиваем доступ к микрофону
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: typeof getVoiceAudioConstraints === 'function' ? getVoiceAudioConstraints() : true
+    });
+    if (typeof initializeAudioDeviceSelectors === 'function') initializeAudioDeviceSelectors();
     
     // Создаем MediaRecorder
     mediaRecorder = new MediaRecorder(stream);
@@ -286,6 +289,7 @@ function toggleVoicePreviewPlayback(button) {
 
   if (!currentVoicePreviewAudio) {
     currentVoicePreviewAudio = new Audio(currentVoicePreviewUrl);
+    if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(currentVoicePreviewAudio);
     currentVoicePreviewAudio.addEventListener('timeupdate', () => {
       const audio = currentVoicePreviewAudio;
       if (!audio) return;
@@ -419,6 +423,7 @@ function playVoiceMessageFromButton(button) {
 
 function bindVoicePlayerAudio(player, button, audio, url) {
   if (!player || !button || !audio || audio._voicePlayerBound) return;
+  if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
   audio._voicePlayerBound = true;
   audio.addEventListener('loadedmetadata', () => {
     if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
@@ -478,6 +483,7 @@ function ensureVoiceMessageMetadata(button) {
   if (!url) return;
   const audio = new Audio(url);
   audio.preload = 'metadata';
+  if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
   button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
   if (player) player._voiceAudio = audio;
@@ -540,6 +546,7 @@ function playVoiceMessage(url, button) {
   const player = button.closest('.voice-message-player');
   if (button._voiceAudio) {
     const existing = button._voiceAudio;
+    if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(existing);
     if (player) player._voiceAudio = existing;
     bindVoicePlayerAudio(player, button, existing, url);
     if (existing.paused) {
@@ -590,6 +597,7 @@ function seekVoiceMessage(event, waveform) {
     if (url) {
       audio = new Audio(url);
       audio.preload = 'metadata';
+      if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
       player._voiceAudio = audio;
       button._voiceAudio = audio;
       audio.addEventListener('loadedmetadata', () => {

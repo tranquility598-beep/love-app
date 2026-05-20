@@ -54,13 +54,10 @@ class VoiceManager {
 
       // Запрашиваем доступ к микрофону
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        },
+        audio: typeof getVoiceAudioConstraints === 'function' ? getVoiceAudioConstraints() : true,
         video: false
       });
+      if (typeof initializeAudioDeviceSelectors === 'function') initializeAudioDeviceSelectors();
       console.log('🎙️ Local audio tracks:', this.localStream.getAudioTracks().map(track => ({
         id: track.id,
         label: track.label,
@@ -422,12 +419,16 @@ class VoiceManager {
       this.audioElements.set(socketId, audio);
     }
 
+    if (typeof applyAudioOutputDevice === 'function') {
+      applyAudioOutputDevice(audio);
+    }
+
     if (audio.srcObject !== stream) {
       audio.srcObject = stream;
     }
 
     audio.muted = this.isDeafened;
-    audio.volume = this.isDeafened ? 0 : 1;
+    audio.volume = this.isDeafened ? 0 : ((Number(window.settingsManager?.get('output-volume')) || 100) / 100);
     
     // Принудительный запуск (некоторые браузеры блокируют autoplay без .play())
     const playPromise = audio.play();

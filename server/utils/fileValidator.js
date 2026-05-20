@@ -27,6 +27,23 @@ const ALLOWED_FILE_EXTENSIONS = [
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+const MIME_EXTENSION_MAP = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'application/pdf': '.pdf',
+  'text/plain': '.txt',
+  'audio/mpeg': '.mp3',
+  'audio/wav': '.wav',
+  'audio/ogg': '.ogg',
+  'audio/webm': '.webm',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/x-msvideo': '.avi',
+  'video/webm': '.webm'
+};
+
 /**
  * Проверка magic bytes файла
  */
@@ -177,9 +194,9 @@ async function validateFile(file, isImage = false) {
 /**
  * Генерация безопасного имени файла
  */
-function generateSafeFilename(originalName) {
+function generateSafeFilename(originalName, mimetype) {
   const sanitized = sanitizeFilename(originalName);
-  const ext = path.extname(sanitized);
+  const ext = path.extname(sanitized) || MIME_EXTENSION_MAP[mimetype] || '';
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 10);
   

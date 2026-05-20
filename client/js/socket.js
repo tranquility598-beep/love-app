@@ -152,7 +152,7 @@ async function initSocket() {
   socket.on('typing:start', (data) => {
     const { channelId, userId, username } = data;
     if (window.currentChannelId?.toString() === channelId?.toString() && userId !== window.currentUser?._id) {
-      showTypingIndicator(username);
+      showTypingIndicator(userId, username);
     }
   });
 

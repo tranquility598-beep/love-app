@@ -947,12 +947,27 @@ function handleMessageInput(e) {
   const input = e.target;
   const channelId = window.currentChannelId;
   if (!channelId) return;
+  const hasText = input.value.trim().length > 0;
   
   // Обработка автодополнения упоминаний
   handleMentionAutocomplete(input);
+
+  if (!hasText) {
+    if (isTyping) {
+      socketStopTyping(channelId);
+      isTyping = false;
+    }
+    clearTimeout(typingDebounce);
+    return;
+  }
   
   // Проверяем настройку индикатора печати
   if (window.settingsManager && !window.settingsManager.get('privacy-typing-indicator')) {
+    if (isTyping) {
+      socketStopTyping(channelId);
+      isTyping = false;
+      clearTimeout(typingDebounce);
+    }
     return; // Не отправляем индикатор если настройка выключена
   }
   
@@ -1248,13 +1263,19 @@ function confirmDeleteMessage(messageId) {
  * Показать индикатор печати
  */
 const typingUsers = new Map();
-function showTypingIndicator(username) {
-  typingUsers.set(username, Date.now());
+function showTypingIndicator(userId, username) {
+  if (!userId || !username) return;
+  const lastSeen = Date.now();
+  typingUsers.set(userId, { username, lastSeen });
+  setTimeout(() => {
+    if (typingUsers.get(userId)?.lastSeen === lastSeen) {
+      hideTypingIndicator(userId);
+    }
+  }, 5000);
   updateTypingIndicator();
 }
 
 function hideTypingIndicator(userId) {
-  // Удаляем по userId
   typingUsers.delete(userId);
   updateTypingIndicator();
 }
@@ -1263,7 +1284,12 @@ function updateTypingIndicator() {
   const indicator = document.getElementById('typing-indicator');
   if (!indicator) return;
 
-  const users = Array.from(typingUsers.keys());
+  const now = Date.now();
+  typingUsers.forEach((value, userId) => {
+    if (now - value.lastSeen > 5000) typingUsers.delete(userId);
+  });
+
+  const users = Array.from(typingUsers.values()).map((value) => value.username);
   if (users.length === 0) {
     indicator.classList.add('hidden');
     return;

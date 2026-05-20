@@ -506,8 +506,14 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 16px 8px;
+  padding: 6px 16px 8px;
   min-height: 24px;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: linear-gradient(to top, var(--bg-primary) 70%, transparent);
+  pointer-events: none;
 }
 
 .typing-dots {

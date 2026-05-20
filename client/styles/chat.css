@@ -199,13 +199,13 @@ body.hide-avatars .message-with-avatar {
   cursor: pointer;
   border: 2px solid var(--border);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--elevation-soft-1);
 }
 
 .message-avatar:hover {
   border-color: var(--accent);
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--elevation-soft-3);
 }
 
 .message-content-wrapper {
@@ -340,12 +340,12 @@ body.hide-avatars .message-with-avatar {
   object-fit: contain;
   border: 1px solid var(--border);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--elevation-soft-2);
 }
 
 .message-image:hover {
   transform: scale(1.02);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--elevation-soft-4);
   border-color: var(--accent);
 }
   transition: border-color 0.15s;
@@ -870,7 +870,7 @@ emoji-picker {
   position: absolute;
   top: -40px;
   right: 0;
-  background: rgba(0,0,0,0.8);
+  background: var(--overlay-scrim);
   border: 1px solid var(--border);
   border-radius: 50%;
   width: 32px;

@@ -1261,6 +1261,63 @@ function playSound(name) {
   }
 }
 
+function stopCallSounds() {
+  sounds.calling.pause();
+  sounds.calling.currentTime = 0;
+  sounds.ringing.pause();
+  sounds.ringing.currentTime = 0;
+}
+
+function showIncomingDMCallOverlay(call) {
+  const overlay = document.getElementById('incoming-call-overlay');
+  if (!overlay || !call?.from) return;
+  const avatar = document.getElementById('incoming-call-avatar');
+  const name = document.getElementById('incoming-call-name');
+  window.pendingDMCall = call;
+  if (avatar) avatar.src = getAvatarUrl(call.from.avatar);
+  if (name) name.textContent = call.from.username || 'Входящий звонок';
+  overlay.classList.remove('hidden');
+  sounds.ringing.play().catch(() => {});
+}
+
+function hideIncomingDMCallOverlay() {
+  const overlay = document.getElementById('incoming-call-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  sounds.ringing.pause();
+  sounds.ringing.currentTime = 0;
+}
+
+async function acceptIncomingDMCall() {
+  const call = window.pendingDMCall;
+  if (!call?.from?._id) return;
+  hideIncomingDMCallOverlay();
+  socketSendCallResponse(call.from._id, true, {
+    conversationId: call.conversationId,
+    channelId: call.channelId
+  });
+  await startWebRTCCall(call.from._id, {
+    conversationId: call.conversationId,
+    channelId: call.channelId
+  });
+}
+
+function declineIncomingDMCall() {
+  const call = window.pendingDMCall;
+  hideIncomingDMCallOverlay();
+  if (call?.from?._id) {
+    socketSendCallResponse(call.from._id, false, {
+      conversationId: call.conversationId,
+      channelId: call.channelId
+    });
+  }
+  window.pendingDMCall = null;
+}
+
+window.showIncomingDMCallOverlay = showIncomingDMCallOverlay;
+window.hideIncomingDMCallOverlay = hideIncomingDMCallOverlay;
+window.acceptIncomingDMCall = acceptIncomingDMCall;
+window.declineIncomingDMCall = declineIncomingDMCall;
+
 /**
  * Начать звонок в ЛС (как звонящий)
  */
@@ -1317,8 +1374,7 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   const peerContainer = document.getElementById('caller-mini-peer');
 
   // Всегда останавливаем гудок
-  sounds.calling.pause();
-  sounds.calling.currentTime = 0;
+  stopCallSounds();
 
   if (!accepted) {
     status.textContent = 'ВЫЗОВ ОТКЛОНЕН';
@@ -1361,8 +1417,8 @@ function handleDMCallEnd() {
   const overlay = document.getElementById('dm-call-overlay');
   if (overlay) overlay.classList.add('hidden');
   
-  sounds.calling.pause();
-  sounds.calling.currentTime = 0;
+  hideIncomingDMCallOverlay();
+  stopCallSounds();
   playSound('disconnect');
 
   if (window.voiceManager) {

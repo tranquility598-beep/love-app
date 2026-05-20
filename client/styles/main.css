@@ -2044,6 +2044,127 @@ body.space-theme #starfield-canvas {
   opacity: 0.5;
 }
 
+/* ===== IN-APP INCOMING CALL OVERLAY ===== */
+.incoming-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(10px);
+  animation: fadeIn 0.18s ease-out;
+}
+
+.incoming-call-card {
+  width: min(360px, calc(100vw - 40px));
+  padding: 34px 26px 28px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.1), transparent 34%),
+    rgba(22, 22, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  text-align: center;
+  animation: callCardIn 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.18);
+}
+
+.incoming-call-ring {
+  width: 136px;
+  height: 136px;
+  margin: 0 auto 22px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.incoming-call-avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  object-fit: cover;
+  position: relative;
+  z-index: 2;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
+}
+
+.incoming-call-wave {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  animation: incomingCallWave 1.65s ease-out infinite;
+}
+
+.incoming-call-wave.delay {
+  animation-delay: 0.75s;
+}
+
+.incoming-call-title {
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incoming-call-subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.incoming-call-actions {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 28px;
+}
+
+.incoming-call-btn {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: none;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
+}
+
+.incoming-call-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+  filter: brightness(1.08);
+}
+
+.incoming-call-btn.decline {
+  background: var(--red);
+  box-shadow: 0 16px 36px rgba(231, 76, 60, 0.32);
+}
+
+.incoming-call-btn.accept {
+  background: var(--green);
+  box-shadow: 0 16px 36px rgba(46, 204, 113, 0.32);
+}
+
+@keyframes callCardIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes incomingCallWave {
+  0% { opacity: 0.55; transform: scale(0.98); }
+  100% { opacity: 0; transform: scale(1.72); }
+}
+
 /* Визуальный эффект Бульк */
 .bulk-ripple {
   position: absolute;

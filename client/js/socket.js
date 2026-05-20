@@ -301,13 +301,13 @@ async function initSocket() {
 
   // ===== ЗВОНКИ (DM Calls) =====
 
-  // Входящий звонок: показываем Electron окно
+  // Входящий звонок: показываем in-app окно поверх приложения
   socket.on('call:incoming', (data) => {
     const { from, conversationId, channelId } = data;
     console.log('📞 Incoming call from:', from.username);
     window.pendingDMCall = { from, conversationId, channelId };
-    if (window.electronAPI && window.electronAPI.showIncomingCall) {
-      window.electronAPI.showIncomingCall({ ...from, conversationId, channelId });
+    if (window.showIncomingDMCallOverlay) {
+      window.showIncomingDMCallOverlay({ from, conversationId, channelId });
     }
   });
 

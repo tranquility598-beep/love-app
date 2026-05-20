@@ -1044,6 +1044,27 @@
   </div><!-- end app-layout -->
 </div><!-- end app -->
 
+<!-- In-app Incoming Call Overlay -->
+<div class="incoming-call-overlay hidden" id="incoming-call-overlay">
+  <div class="incoming-call-card">
+    <div class="incoming-call-ring">
+      <img src="" alt="" class="incoming-call-avatar" id="incoming-call-avatar">
+      <div class="incoming-call-wave"></div>
+      <div class="incoming-call-wave delay"></div>
+    </div>
+    <div class="incoming-call-title" id="incoming-call-name">Входящий звонок</div>
+    <div class="incoming-call-subtitle">звонит вам в личных сообщениях</div>
+    <div class="incoming-call-actions">
+      <button type="button" class="incoming-call-btn decline" onclick="declineIncomingDMCall()" title="Отклонить">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 2.6 3.41"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+      </button>
+      <button type="button" class="incoming-call-btn accept" onclick="acceptIncomingDMCall()" title="Принять">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODALS ===== -->
 
 <!--

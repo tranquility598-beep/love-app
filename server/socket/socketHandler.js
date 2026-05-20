@@ -566,9 +566,9 @@ module.exports = (io) => {
           socket.emit('voice:existing_members', { channelId, members: existingMembers });
           // ВАЖНО: re-emit полного списка участников, чтобы UI после реконнекта
           // мог отрисовать свою карточку и список (иначе панель остаётся пустой)
-          const reemitter = io.to(`voice:${channelId}`);
+          let reemitter = io.to(`voice:${channelId}`);
           if (channel && channel.server) {
-            reemitter.to(`server:${channel.server}`);
+            reemitter = reemitter.to(`server:${channel.server}`);
           }
           reemitter.emit('voice:members_update', {
             channelId,
@@ -642,9 +642,10 @@ module.exports = (io) => {
         // voice:${channelId} room: гарантирует, что joining socket получит апдейт
         //   с собой в списке (фикс race condition + поддержка DM-звонков)
         // server:${channel.server} room: для sidebar других пользователей сервера
-        const emitter = io.to(`voice:${channelId}`);
+        // socket.io v4: .to(...) возвращает НОВЫЙ BroadcastOperator, не мутирует
+        let emitter = io.to(`voice:${channelId}`);
         if (channel && channel.server) {
-          emitter.to(`server:${channel.server}`);
+          emitter = emitter.to(`server:${channel.server}`);
         }
         emitter.emit('voice:members_update', {
           channelId,

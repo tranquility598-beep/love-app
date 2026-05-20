@@ -377,6 +377,7 @@ function updateTempMessageInDOM(tempId, msg) {
 function removeMessageFromDOM(messageId) {
   const el = document.querySelector(`[data-message-id="${messageId}"]`);
   if (el) {
+    el.querySelectorAll('.message-attachments, .message-reactions, .message-reply').forEach(node => node.remove());
     const textEl = el.querySelector('.message-text');
     if (textEl) {
       textEl.className = 'message-text deleted';

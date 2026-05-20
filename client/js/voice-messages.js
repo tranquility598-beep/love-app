@@ -417,17 +417,58 @@ function playVoiceMessageFromButton(button) {
   playVoiceMessage(url, button);
 }
 
+function bindVoicePlayerAudio(player, button, audio, url) {
+  if (!player || !button || !audio || audio._voicePlayerBound) return;
+  audio._voicePlayerBound = true;
+  audio.addEventListener('loadedmetadata', () => {
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+      _resolveWebmDuration(audio);
+    } else {
+      updateVoicePlayerProgress(player, audio);
+    }
+  });
+  audio.addEventListener('durationchange', () => {
+    if (audio._resolvingDuration && Number.isFinite(audio.duration) && audio.duration > 0) {
+      audio._resolvingDuration = false;
+      try { audio.currentTime = 0; } catch (_) {}
+    }
+    updateVoicePlayerProgress(player, audio);
+  });
+  audio.addEventListener('timeupdate', () => {
+    updateVoicePlayerProgress(player, audio);
+  });
+  audio.addEventListener('play', () => {
+    setVoiceButtonIcon(button, true);
+  });
+  audio.addEventListener('pause', () => {
+    if (!audio.ended) setVoiceButtonIcon(button, false);
+  });
+  audio.addEventListener('ended', () => {
+    resetVoicePlayer(player, button);
+    if (activeVoiceMessageAudio === audio) {
+      activeVoiceMessageAudio = null;
+      activeVoiceMessageButton = null;
+    }
+  });
+  audio.addEventListener('error', () => {
+    console.error('Voice message playback error:', audio.error, url);
+    setVoiceButtonIcon(button, false);
+  });
+}
+
 function _resolveWebmDuration(audio) {
   // WebM blobs from MediaRecorder often lack a valid duration in their
   // metadata. The cross-browser fix: seek past the end and wait for
   // durationchange, then rewind to 0.
   if (audio._durationResolved) return;
   audio._durationResolved = true;
+  audio._resolvingDuration = true;
   try {
     audio.currentTime = 1e6;
   } catch (_) {
     // Some browsers throw before metadata; retry on next loadedmetadata.
     audio._durationResolved = false;
+    audio._resolvingDuration = false;
   }
 }
 
@@ -440,24 +481,7 @@ function ensureVoiceMessageMetadata(button) {
   button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
   if (player) player._voiceAudio = audio;
-
-  audio.addEventListener('loadedmetadata', () => {
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
-      _resolveWebmDuration(audio);
-    } else {
-      updateVoicePlayerProgress(player, audio);
-    }
-  });
-  audio.addEventListener('durationchange', () => {
-    if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime > audio.duration) {
-      // Rewind back to start after the seek-to-end trick.
-      try { audio.currentTime = 0; } catch (_) {}
-    }
-    updateVoicePlayerProgress(player, audio);
-  });
-  audio.addEventListener('error', () => {
-    console.error('Voice message metadata load error:', audio.error, url);
-  });
+  bindVoicePlayerAudio(player, button, audio, url);
   audio.load();
 }
 
@@ -513,53 +537,40 @@ function resetVoicePlayer(player, button) {
  * Воспроизвести голосовое сообщение
  */
 function playVoiceMessage(url, button) {
+  const player = button.closest('.voice-message-player');
   if (button._voiceAudio) {
     const existing = button._voiceAudio;
+    if (player) player._voiceAudio = existing;
+    bindVoicePlayerAudio(player, button, existing, url);
     if (existing.paused) {
       if (activeVoiceMessageAudio && activeVoiceMessageAudio !== existing) {
         activeVoiceMessageAudio.pause();
         setVoiceButtonIcon(activeVoiceMessageButton, false);
       }
+      if (existing.ended || (Number.isFinite(existing.duration) && existing.currentTime >= existing.duration)) {
+        existing.currentTime = 0;
+      }
       existing.play();
-      setVoiceButtonIcon(button, true);
       activeVoiceMessageAudio = existing;
       activeVoiceMessageButton = button;
     } else {
       existing.pause();
-      setVoiceButtonIcon(button, false);
     }
     return;
   }
   const audio = new Audio(url);
   audio.preload = 'metadata';
   button._voiceAudio = audio;
-  const player = button.closest('.voice-message-player');
   if (player) player._voiceAudio = audio;
+  bindVoicePlayerAudio(player, button, audio, url);
   
   if (activeVoiceMessageAudio && activeVoiceMessageAudio !== audio) {
     activeVoiceMessageAudio.pause();
     setVoiceButtonIcon(activeVoiceMessageButton, false);
   }
-  
-  audio.addEventListener('loadedmetadata', () => updateVoicePlayerProgress(player, audio));
-  audio.addEventListener('timeupdate', () => {
-    updateVoicePlayerProgress(player, audio);
-  });
-  audio.addEventListener('ended', () => {
-    resetVoicePlayer(player, button);
-    if (activeVoiceMessageAudio === audio) {
-      activeVoiceMessageAudio = null;
-      activeVoiceMessageButton = null;
-    }
-  });
-  audio.addEventListener('error', () => {
-    console.error('Voice message playback error:', audio.error, url);
-    setVoiceButtonIcon(button, false);
-  });
 
   audio.play()
     .then(() => {
-      setVoiceButtonIcon(button, true);
       activeVoiceMessageAudio = audio;
       activeVoiceMessageButton = button;
     })

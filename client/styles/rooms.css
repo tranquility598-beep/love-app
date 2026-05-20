@@ -39,6 +39,14 @@ body.room-mode #voice-panel {
   display: none !important;
 }
 
+/* В room-режиме friends-view не должна "просвечивать" снизу.
+   Bug: showFriendsView() из других веток (logout DM, voice leave fallback)
+   мог снять .hidden, и панель Друзей появлялась на странице комнаты.
+   Жёсткое скрытие через body.room-mode гарантирует чистый room-view. */
+body.room-mode #friends-view {
+  display: none !important;
+}
+
 /* ============================================================
  * Room chrome: header + tabs (фиксированная верхняя часть)
  * ============================================================ */

@@ -280,7 +280,9 @@ function initAudioDeviceSelect(id) {
   if (!select) return;
   select.value = window.settingsManager.get(id) || 'default';
   select.addEventListener('change', (e) => {
+    const selected = e.target.selectedOptions?.[0];
     window.settingsManager.saveSetting(id, e.target.value || 'default');
+    localStorage.setItem(`${id}-label`, selected?.dataset.deviceLabel || selected?.textContent || '');
   });
 }
 
@@ -306,34 +308,44 @@ async function initializeAudioDeviceSelectors() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    populateAudioDeviceSelect('voice-input-device', devices.filter(d => d.kind === 'audioinput'), 'Микрофон по умолчанию');
-    populateAudioDeviceSelect('voice-output-device', devices.filter(d => d.kind === 'audiooutput'), 'Вывод по умолчанию');
+    populateAudioDeviceSelect('voice-input-device', devices.filter(d => d.kind === 'audioinput'), 'Default', 'Микрофон');
+    populateAudioDeviceSelect('voice-output-device', devices.filter(d => d.kind === 'audiooutput'), 'Default', 'Вывод');
   } catch (error) {
     console.warn('Failed to enumerate audio devices:', error);
   }
 }
 
-function populateAudioDeviceSelect(selectId, devices, defaultLabel) {
+function populateAudioDeviceSelect(selectId, devices, defaultLabel, fallbackLabel) {
   const select = document.getElementById(selectId);
   if (!select) return;
   const saved = window.settingsManager.get(selectId) || 'default';
+  const savedLabel = localStorage.getItem(`${selectId}-label`) || '';
   select.innerHTML = '';
   const defaultOption = document.createElement('option');
   defaultOption.value = 'default';
   defaultOption.textContent = defaultLabel;
+  defaultOption.dataset.deviceLabel = defaultLabel;
   select.appendChild(defaultOption);
   devices.forEach((device, index) => {
     const option = document.createElement('option');
     option.value = device.deviceId;
-    option.textContent = device.label || `${defaultLabel.replace(' по умолчанию', '')} ${index + 1}`;
+    option.dataset.deviceLabel = device.label || '';
+    option.textContent = device.label || `${fallbackLabel} ${index + 1}`;
     select.appendChild(option);
   });
-  if (Array.from(select.options).some(option => option.value === saved)) {
-    select.value = saved;
+  const options = Array.from(select.options);
+  const matchedById = options.find(option => option.value === saved);
+  const matchedByLabel = saved !== 'default' && savedLabel ? options.find(option => option.dataset.deviceLabel === savedLabel) : null;
+  if (matchedById) {
+    select.value = matchedById.value;
+  } else if (matchedByLabel) {
+    select.value = matchedByLabel.value;
+    window.settingsManager.saveSetting(selectId, matchedByLabel.value);
   } else {
     const savedOption = document.createElement('option');
     savedOption.value = saved;
-    savedOption.textContent = 'Сохранённое устройство';
+    savedOption.textContent = savedLabel || 'Сохранённое устройство';
+    savedOption.dataset.deviceLabel = savedLabel;
     savedOption.hidden = true;
     select.appendChild(savedOption);
     select.value = saved;

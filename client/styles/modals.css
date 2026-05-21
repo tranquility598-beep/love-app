@@ -187,47 +187,77 @@
 }
 
 .modal-btn {
-  padding: 12px 24px;
-  border-radius: 8px;
-  border: none;
-  font-size: 14px;
-  font-weight: 600;
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x-lg);
+  border-radius: var(--btn-radius);
+  border: 1px solid transparent;
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
   letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  outline: none;
 }
 
+.modal-btn,
 .modal-btn.primary {
-  background: var(--accent);
-  color: var(--bg-primary);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
 }
 
+.modal-btn:not(:disabled):hover,
 .modal-btn.primary:hover {
-  background: var(--accent-hover);
-  box-shadow: 0 4px 16px var(--accent-dim);
+  background: var(--btn-primary-hover-bg);
+  box-shadow: var(--accent-glow);
   transform: translateY(-1px);
 }
 
+.modal-btn:active,
 .modal-btn.primary:active {
   transform: translateY(0);
 }
 
 .modal-btn.secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 2px solid var(--border);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-fg);
+  border-color: var(--btn-secondary-border);
 }
 
 .modal-btn.secondary:hover {
-  background: var(--bg-hover);
+  background: var(--btn-secondary-hover-bg);
   border-color: var(--border-hover);
-  color: var(--text-primary);
+  color: var(--btn-secondary-hover-fg);
 }
 
-.modal-btn.secondary:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border-hover);
+.modal-btn.danger-btn,
+.modal-btn.danger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-fg);
+  border-color: var(--btn-danger-border);
+}
+
+.modal-btn.danger-btn:hover,
+.modal-btn.danger:hover {
+  background: rgba(237, 66, 69, 0.18);
+  color: #fff;
+  border-color: rgba(237, 66, 69, 0.55);
+}
+
+.modal-btn:focus-visible,
+.settings-save-btn:focus-visible,
+.security-action-btn:focus-visible {
+  box-shadow: var(--btn-focus-ring);
+}
+
+.modal-btn:disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ===== SERVER ICON UPLOAD ===== */
@@ -519,24 +549,30 @@
 }
 
 .settings-save-btn {
-  padding: 10px 24px;
-  background: #5865F2;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x-lg);
+  background: var(--btn-primary-bg);
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  color: var(--btn-primary-fg);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: var(--btn-transition);
   position: relative;
   overflow: hidden;
   margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  outline: none;
 }
 
 .settings-save-btn:not(:disabled):hover {
-  box-shadow: 0 4px 18px rgba(88, 101, 242, 0.4);
+  background: var(--btn-primary-hover-bg);
+  box-shadow: var(--accent-glow);
   transform: translateY(-1px);
-  filter: brightness(1.1);
 }
 
 .settings-save-btn:disabled {
@@ -546,6 +582,48 @@
   box-shadow: none;
   transform: none;
   opacity: 0.6;
+}
+
+.settings-save-btn.danger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-fg);
+  border-color: var(--btn-danger-border);
+}
+
+.settings-save-btn.danger:not(:disabled):hover {
+  background: rgba(237, 66, 69, 0.18);
+  color: #fff;
+  border-color: rgba(237, 66, 69, 0.55);
+  box-shadow: none;
+}
+
+.settings-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.settings-inline-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.settings-inline-actions-main {
+  flex: 1;
+}
+
+.settings-action-row .settings-save-btn,
+.settings-inline-actions .settings-save-btn {
+  margin: 0;
+  width: auto;
+}
+
+.inline-add-btn {
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x);
 }
 
 .security-card {
@@ -576,21 +654,28 @@
 
 .security-action-btn {
   margin-top: 12px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: #fff;
-  color: #050505;
-  font-weight: 800;
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x-lg);
+  border-radius: var(--btn-radius);
+  border: 1px solid transparent;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition: var(--btn-transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  outline: none;
 }
 
 .security-action-btn:hover {
   transform: translateY(-1px);
-  background: #050505;
-  color: #fff;
-  border-color: rgba(255,255,255,0.45);
+  background: var(--btn-primary-hover-bg);
+  color: var(--btn-primary-fg);
+  box-shadow: var(--accent-glow);
 }
 
 .security-panel {

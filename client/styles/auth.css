@@ -201,23 +201,25 @@
 /* ===== AUTH BUTTON ===== */
 .auth-btn {
   width: 100%;
-  padding: 13px;
-  background: rgba(255,255,255,0.9);
-  border: none;
-  border-radius: 8px;
-  color: #000000;
-  font-size: 15px;
-  font-weight: 700;
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x-lg);
+  background: var(--btn-primary-bg);
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  color: var(--btn-primary-fg);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--btn-transition);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--btn-gap);
   letter-spacing: 0.5px;
   margin-bottom: 20px;
   position: relative;
   overflow: hidden;
+  outline: none;
 }
 
 .auth-btn::before {
@@ -230,9 +232,9 @@
 }
 
 .auth-btn:hover {
-  background: #ffffff;
+  background: var(--btn-primary-hover-bg);
   transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(255,255,255,0.2);
+  box-shadow: var(--accent-glow);
 }
 
 .auth-btn:hover::before {
@@ -244,22 +246,26 @@
 }
 
 .auth-btn:disabled {
-  opacity: 0.5;
+  opacity: var(--state-disabled-opacity);
   cursor: not-allowed;
   transform: none;
 }
 
+.auth-btn:focus-visible {
+  box-shadow: var(--btn-focus-ring);
+}
+
 /* Google Button Specific */
 .google-btn {
-  background: #ffffff !important;
-  color: #000000 !important;
+  background: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-fg) !important;
   margin-top: -10px; /* Reducing gap after login btn */
   margin-bottom: 24px;
 }
 
 .google-btn:hover {
-  background: #f0f0f0 !important;
-  box-shadow: 0 8px 30px rgba(255,255,255,0.15);
+  background: var(--btn-primary-hover-bg) !important;
+  box-shadow: var(--accent-glow);
 }
 
 .google-btn svg {

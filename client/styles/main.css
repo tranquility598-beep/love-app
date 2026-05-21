@@ -103,6 +103,26 @@
   --btn-h: var(--control-h-md);
   --btn-h-sm: var(--control-h-sm);
   --btn-h-lg: var(--control-h-lg);
+  --btn-radius: var(--radius-lg);
+  --btn-gap: var(--space-2);
+  --btn-padding-x: var(--space-4);
+  --btn-padding-x-sm: var(--space-3);
+  --btn-padding-x-lg: var(--space-5);
+  --btn-font-size: var(--font-size-md);
+  --btn-font-weight: var(--font-weight-bold);
+  --btn-transition: transform var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  --btn-focus-ring: 0 0 0 3px var(--state-focus-ring);
+  --btn-primary-bg: var(--accent);
+  --btn-primary-fg: var(--text-on-accent);
+  --btn-primary-hover-bg: var(--accent-hover);
+  --btn-secondary-bg: transparent;
+  --btn-secondary-fg: var(--text-secondary);
+  --btn-secondary-border: var(--border);
+  --btn-secondary-hover-bg: var(--state-hover);
+  --btn-secondary-hover-fg: var(--text-primary);
+  --btn-danger-bg: rgba(237, 66, 69, 0.12);
+  --btn-danger-fg: var(--status-danger);
+  --btn-danger-border: rgba(237, 66, 69, 0.35);
   --input-h: var(--control-h-md);
 
   /* Typography */
@@ -1238,18 +1258,29 @@ body.space-theme #starfield-canvas {
 
 .empty-state-btn {
   margin-top: 18px;
-  padding: 9px 20px;
-  border: none;
-  border-radius: 8px;
-  background: #5865f2;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
+  min-height: var(--btn-h-lg);
+  padding: 0 var(--btn-padding-x-lg);
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: var(--btn-transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  outline: none;
 }
-.empty-state-btn:hover { background: #4752c4; }
+.empty-state-btn:hover {
+  background: var(--btn-primary-hover-bg);
+  box-shadow: var(--accent-glow);
+  transform: translateY(-1px);
+}
+.empty-state-btn:focus-visible { box-shadow: var(--btn-focus-ring); }
 
 /* Состояния сообщения результата при добавлении друга — управляются
    из friends.js через is-success/is-error, без inline style. */
@@ -2579,12 +2610,15 @@ body.space-theme #starfield-canvas {
 }
 
 .danger-btn {
-  background: var(--red) !important;
-  color: white !important;
+  background: var(--btn-danger-bg) !important;
+  color: var(--btn-danger-fg) !important;
+  border: 1px solid var(--btn-danger-border) !important;
 }
 
 .danger-btn:hover {
-  background: #c0392b !important;
+  background: rgba(237, 66, 69, 0.18) !important;
+  color: #fff !important;
+  border-color: rgba(237, 66, 69, 0.55) !important;
   box-shadow: 0 4px 12px rgba(237, 66, 69, 0.3);
 }
 

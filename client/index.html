@@ -1770,9 +1770,9 @@
           <label class="settings-label">Описание</label>
           <textarea id="server-settings-desc" class="settings-textarea" rows="3"></textarea>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
-          <button class="settings-save-btn danger" style="margin: 0; width: auto; background: rgba(237, 66, 69, 0.1); color: var(--status-dnd); border: 1px solid var(--status-dnd);" onclick="deleteServer()">Удалить сервер</button>
-          <button class="settings-save-btn" style="margin: 0; width: auto;" onclick="saveServerSettings()">Сохранить</button>
+        <div class="settings-action-row">
+          <button class="settings-save-btn danger" onclick="deleteServer()">Удалить сервер</button>
+          <button class="settings-save-btn" onclick="saveServerSettings()">Сохранить</button>
         </div>
       </div>
 
@@ -1788,16 +1788,16 @@
         
         <div class="settings-field">
           <label class="settings-label">Добавить эмодзи</label>
-          <div style="display: flex; gap: 10px; align-items: flex-end;">
-            <div style="flex: 1;">
+          <div class="settings-inline-actions">
+            <div class="settings-inline-actions-main">
               <input type="text" id="emoji-name-input" class="settings-input" placeholder="Название эмодзи (например: smile)">
             </div>
             <div>
               <input type="file" id="emoji-file-input" accept="image/png,image/jpg,image/jpeg,image/gif,image/webp" style="display: none;" onchange="handleEmojiFileSelect(event)">
-              <button class="settings-save-btn" style="margin: 0;" onclick="document.getElementById('emoji-file-input').click()">Выбрать файл</button>
+              <button class="settings-save-btn" onclick="document.getElementById('emoji-file-input').click()">Выбрать файл</button>
             </div>
             <div>
-              <button class="settings-save-btn" style="margin: 0;" onclick="uploadEmoji()">Загрузить</button>
+              <button class="settings-save-btn" onclick="uploadEmoji()">Загрузить</button>
             </div>
           </div>
           <div id="emoji-file-name" style="color: var(--text-muted); font-size: 12px; margin-top: 5px;"></div>
@@ -1823,7 +1823,7 @@
           <label class="settings-label">Добавить категорию</label>
           <div class="premium-input-wrapper">
             <input type="text" id="new-category-name" class="premium-input" placeholder="Название новой категории">
-            <button class="modal-btn primary" onclick="addServerCategory()" style="margin-left:8px; padding:6px 12px">Добавить</button>
+            <button class="modal-btn primary inline-add-btn" onclick="addServerCategory()">Добавить</button>
           </div>
         </div>
         <div class="server-categories-list" id="server-categories-list" style="margin-top:20px">

@@ -27,6 +27,7 @@ passport.use(new GoogleStrategy({
         // Связываем существующий аккаунт с Google
         user.googleId = profile.id;
         if (!user.avatar) user.avatar = profile.photos[0].value;
+        if (user.password) user.googleOnboardingComplete = true;
         await user.save();
         return done(null, user);
       }
@@ -37,6 +38,7 @@ passport.use(new GoogleStrategy({
         email: userEmail.toLowerCase(),
         googleId: profile.id,
         avatar: profile.photos[0].value,
+        googleOnboardingComplete: false,
         status: 'online',
         role: 'user'
       });

@@ -22,6 +22,12 @@ function showRegister() {
 function showOtpScreen(email, type = 'verification') {
   hideAllAuthScreens();
   document.getElementById('otp-screen').classList.remove('hidden');
+  const title = document.querySelector('#otp-screen .auth-title');
+  const subtitle = document.querySelector('#otp-screen .auth-subtitle');
+  if (title) title.textContent = type === 'login' ? 'Код входа' : 'Подтвердите почту';
+  if (subtitle) subtitle.innerHTML = type === 'login'
+    ? `Мы отправили код входа на <br><strong id="otp-email-display">${email}</strong>`
+    : `Мы отправили 6-значный код на <br><strong id="otp-email-display">${email}</strong>`;
   document.getElementById('otp-email-display').textContent = email;
   window.lastAuthEmail = email;
   window.otpType = type;
@@ -141,6 +147,7 @@ window.addEventListener('message', async (event) => {
       localStorage.setItem('user', JSON.stringify(data.user));
       window.currentUser = data.user;
       await initApp();
+      maybeShowGoogleOnboarding();
     } catch (error) {
       showAuthError('login-error', 'Ошибка получения данных пользователя');
     }
@@ -156,10 +163,40 @@ if (window.electronAPI && window.electronAPI.onGoogleAuthSuccess) {
       localStorage.setItem('user', JSON.stringify(data.user));
       window.currentUser = data.user;
       await initApp();
+      maybeShowGoogleOnboarding();
     } catch (error) {
       showAuthError('login-error', 'Ошибка получения данных пользователя через Google');
     }
   });
+}
+
+function maybeShowGoogleOnboarding() {
+  if (!window.currentUser?.hasGoogle || window.currentUser?.googleOnboardingComplete) return;
+  const modal = document.getElementById('google-onboarding-modal');
+  const input = document.getElementById('google-onboarding-username');
+  if (input) input.value = window.currentUser?.username || '';
+  if (modal) modal.classList.remove('hidden');
+}
+
+window.completeGoogleOnboarding = completeGoogleOnboarding;
+
+async function completeGoogleOnboarding(keepCurrent) {
+  const input = document.getElementById('google-onboarding-username');
+  const error = document.getElementById('google-onboarding-error');
+  try {
+    const data = await AuthAPI.completeGoogleOnboarding({
+      keepCurrent,
+      username: input?.value.trim()
+    });
+    window.currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(data.user));
+    closeModal('google-onboarding-modal');
+  } catch (e) {
+    if (error) {
+      error.textContent = e.message || 'Не удалось сохранить имя';
+      error.classList.remove('hidden');
+    }
+  }
 }
 
 // Обработка входа
@@ -178,6 +215,11 @@ async function handleLogin() {
 
   try {
     const data = await AuthAPI.login(email, password);
+    if (data.requireTwoFactor) {
+      window.pendingTwoFactorToken = data.pendingToken;
+      showOtpScreen(data.email || email, 'login');
+      return;
+    }
     await storeAuthToken(data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     window.currentUser = data.user;
@@ -236,7 +278,10 @@ async function handleVerifyOtp() {
   btn.disabled = true;
   
   try {
-    const data = await AuthAPI.verifyOtp(window.lastAuthEmail, code);
+    const data = window.otpType === 'login'
+      ? await AuthAPI.verifyTwoFactor(window.pendingTwoFactorToken, code)
+      : await AuthAPI.verifyOtp(window.lastAuthEmail, code);
+    window.pendingTwoFactorToken = null;
     await storeAuthToken(data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     window.currentUser = data.user;
@@ -254,6 +299,10 @@ async function handleVerifyOtp() {
 // Переотправка OTP
 async function handleResendOtp() {
   try {
+    if (window.otpType === 'login') {
+      showAuthError('otp-error', 'Для нового кода повторите вход');
+      return;
+    }
     await AuthAPI.resendOtp(window.lastAuthEmail);
     startResendTimer();
   } catch (error) {

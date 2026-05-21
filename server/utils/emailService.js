@@ -25,8 +25,9 @@ const generateOTP = () => {
  */
 const getOTPTemplate = (code, type = 'verification') => {
   const isReset = type === 'reset';
-  const title = isReset ? 'Сброс пароля' : 'Подтверждение регистрации';
-  const subTitle = isReset ? 'Используйте этот код для сброса вашего пароля.' : 'Добро пожаловать в LOVE! Используйте этот код для подтверждения вашего аккаунта.';
+  const isLogin = type === 'login';
+  const title = isReset ? 'Сброс пароля' : (isLogin ? 'Код входа' : 'Подтверждение регистрации');
+  const subTitle = isReset ? 'Используйте этот код для сброса вашего пароля.' : (isLogin ? 'Введите этот код в LOVE, чтобы завершить вход.' : 'Добро пожаловать в LOVE! Используйте этот код для подтверждения вашего аккаунта.');
   
   return `
     <!DOCTYPE html>
@@ -151,7 +152,7 @@ const sendEmail = async (to, subject, html) => {
 module.exports = {
   generateOTP,
   sendOTPEmail: async (email, code, type = 'verification') => {
-    const subject = type === 'reset' ? 'Код восстановления пароля — LOVE' : 'Код подтверждения регистрации — LOVE';
+    const subject = type === 'reset' ? 'Код восстановления пароля — LOVE' : (type === 'login' ? 'Код входа — LOVE' : 'Код подтверждения регистрации — LOVE');
     const html = getOTPTemplate(code, type);
     return await sendEmail(email, subject, html);
   }

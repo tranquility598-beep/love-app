@@ -41,6 +41,23 @@
   <div class="loading-status" id="loading-status"></div>
 </div>
 
+<div class="modal-overlay hidden" id="google-onboarding-modal">
+  <div class="modal confirm-dialog">
+    <div class="modal-header">
+      <h2>Настройте имя</h2>
+    </div>
+    <div class="modal-body">
+      <p class="modal-description">Вы вошли через Google. Можно оставить имя из почты/Google или выбрать свое.</p>
+      <input type="text" id="google-onboarding-username" class="settings-input" placeholder="Имя пользователя">
+      <div id="google-onboarding-error" class="auth-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="completeGoogleOnboarding(true)">Оставить как есть</button>
+      <button class="modal-btn" onclick="completeGoogleOnboarding(false)">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== LOGIN SCREEN ===== -->
 <div class="auth-screen hidden" id="login-screen">
   <div class="auth-bg">
@@ -1253,7 +1270,7 @@
       <div class="settings-nav-item" onclick="showSettingsTab('voice', this)">Голос и видео</div>
       <div class="settings-nav-item" onclick="showSettingsTab('privacy', this)">Конфиденциальность</div>
       <div class="settings-nav-item" onclick="showSettingsTab('language', this)">Язык и регион</div>
-      <div class="settings-nav-item" onclick="showSettingsTab('security', this)">Безопасность</div>
+      <div class="settings-nav-item" id="settings-security-nav" onclick="showSettingsTab('security', this)">Безопасность</div>
       <div class="settings-divider"></div>
       <div class="settings-nav-item danger" onclick="handleLogout()">Выйти</div>
     </div>
@@ -1677,25 +1694,44 @@
         <h2 class="settings-title">Безопасность</h2>
         <p class="settings-description">История входов в ваш аккаунт. Если вы видите незнакомый IP или устройство, рекомендуется сменить пароль.</p>
 
-        <div class="settings-field">
-          <label class="settings-label">Сменить имя пользователя</label>
-          <input type="text" id="security-username-input" class="settings-input" placeholder="Новое имя пользователя">
-          <div class="settings-hint" id="security-username-hint">Имя пользователя можно менять один раз в 7 дней.</div>
-          <button class="settings-save-btn" onclick="changeSecurityUsername()">Сохранить имя</button>
+        <div class="security-panel hidden" id="security-password-alert">
+          <div>
+            <div class="security-panel-title">Добавьте пароль</div>
+            <div class="settings-hint">Вы вошли через Google. Добавьте пароль, чтобы входить по email и защитить аккаунт дополнительным способом.</div>
+          </div>
         </div>
 
-        <div class="settings-field">
+        <div class="settings-field security-card">
+          <div class="security-card-head">
+            <div>
+              <label class="settings-label">Имя пользователя</label>
+              <div class="settings-hint" id="security-username-hint">Имя пользователя можно менять один раз в 7 дней.</div>
+            </div>
+          </div>
+          <input type="text" id="security-username-input" class="settings-input" placeholder="Новое имя пользователя">
+          <input type="password" id="security-username-password" class="settings-input" placeholder="Текущий пароль для подтверждения">
+          <button class="security-action-btn" onclick="changeSecurityUsername()">Изменить имя пользователя</button>
+        </div>
+
+        <div class="settings-field security-card">
           <label class="settings-label">Сменить пароль</label>
           <input type="password" id="security-current-password" class="settings-input" placeholder="Текущий пароль">
           <input type="password" id="security-new-password" class="settings-input" placeholder="Новый пароль">
           <input type="password" id="security-confirm-password" class="settings-input" placeholder="Повторите новый пароль">
-          <button class="settings-save-btn" onclick="changeSecurityPassword()">Сменить пароль</button>
+          <button class="security-action-btn" onclick="changeSecurityPassword()">Изменить пароль</button>
         </div>
 
-        <div class="settings-field">
-          <label class="settings-label">Двухфакторная аутентификация</label>
-          <div class="settings-hint">2FA пока не включена. Безопасный вариант — TOTP-коды из Authenticator-приложения с backup-кодами; лучше добавить отдельным релизом, чтобы не сломать вход.</div>
-          <button class="settings-save-btn" disabled>Скоро</button>
+        <div class="settings-field security-card">
+          <div class="security-card-head">
+            <div>
+              <label class="settings-label">Двухфакторная аутентификация</label>
+              <div class="settings-hint">При входе по email и паролю мы будем отправлять одноразовый код на вашу почту.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="security-2fa-toggle" onchange="toggleEmailTwoFactor(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
         
         <div class="login-logs-list" id="login-logs-list">

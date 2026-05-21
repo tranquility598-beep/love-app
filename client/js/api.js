@@ -289,6 +289,9 @@ const AuthAPI = {
     
   verifyOtp: (email, code) =>
     apiFetch('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, code }) }),
+
+  verifyTwoFactor: (pendingToken, code) =>
+    apiFetch('/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }),
     
   resendOtp: (email) =>
     apiFetch('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
@@ -301,6 +304,12 @@ const AuthAPI = {
 
   changePassword: (currentPassword, newPassword) =>
     apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+
+  toggleTwoFactor: (enabled) =>
+    apiFetch('/auth/security/2fa', { method: 'POST', body: JSON.stringify({ enabled }) }),
+
+  completeGoogleOnboarding: (data) =>
+    apiFetch('/auth/google-onboarding', { method: 'POST', body: JSON.stringify(data) }),
 
   logout: () =>
     apiFetch('/auth/logout', { method: 'POST' }),

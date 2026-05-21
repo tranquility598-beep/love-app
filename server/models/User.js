@@ -181,6 +181,22 @@ const userSchema = new mongoose.Schema({
   usernameChangedAt: {
     type: Date,
     default: null
+  },
+  googleOnboardingComplete: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorCode: {
+    type: String,
+    default: null
+  },
+  twoFactorExpires: {
+    type: Date,
+    default: null
   }
 });
 
@@ -216,7 +232,10 @@ userSchema.methods.toPublicJSON = function() {
     profileColor: this.profileColor,
     connectedAccounts: this.connectedAccounts,
     hasPassword: Boolean(this.password),
+    hasGoogle: Boolean(this.googleId),
     usernameChangedAt: this.usernameChangedAt,
+    googleOnboardingComplete: this.googleOnboardingComplete,
+    twoFactorEnabled: this.twoFactorEnabled,
     status: this.status,
     customStatus: this.customStatus,
     createdAt: this.createdAt,

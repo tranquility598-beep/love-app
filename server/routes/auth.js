@@ -14,6 +14,7 @@ const { validateEmail, validateUsername, validatePassword, sanitizeBody } = requ
 
 const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
+const TWO_FACTOR_TOKEN_EXPIRES = '10m';
 
 const { generateOTP, sendOTPEmail } = require('../utils/emailService');
 const LoginLog = require('../models/LoginLog');
@@ -328,6 +329,31 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       });
     }
     
+    if (user.twoFactorEnabled) {
+      const code = generateOTP();
+      user.twoFactorCode = code;
+      user.twoFactorExpires = new Date(Date.now() + 10 * 60 * 1000);
+      await user.save();
+
+      const emailSent = await sendOTPEmail(user.email, code, 'login');
+      if (!emailSent) {
+        return res.status(500).json({ message: 'Не удалось отправить код входа' });
+      }
+
+      const pendingToken = jwt.sign(
+        { userId: user._id, purpose: '2fa-login' },
+        JWT_SECRET,
+        { expiresIn: TWO_FACTOR_TOKEN_EXPIRES }
+      );
+
+      return res.json({
+        requireTwoFactor: true,
+        pendingToken,
+        email: user.email,
+        message: 'Код входа отправлен на почту'
+      });
+    }
+
     user.status = 'online';
     user.lastSeen = new Date();
     await user.save();
@@ -359,6 +385,61 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Ошибка сервера при входе' });
+  }
+});
+
+router.post('/verify-2fa', otpLimiter, async (req, res) => {
+  try {
+    const { pendingToken, code } = req.body;
+    if (!pendingToken || !code) {
+      return res.status(400).json({ message: 'Код обязателен' });
+    }
+
+    const decoded = jwt.verify(pendingToken, JWT_SECRET);
+    if (decoded.purpose !== '2fa-login') {
+      return res.status(401).json({ message: 'Недействительный токен подтверждения' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user || user.twoFactorCode !== code || !user.twoFactorExpires || user.twoFactorExpires < Date.now()) {
+      return res.status(400).json({ message: 'Неверный или истекший код' });
+    }
+
+    user.twoFactorCode = null;
+    user.twoFactorExpires = null;
+    user.status = 'online';
+    user.lastSeen = new Date();
+    await user.save();
+
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const { ip, location } = await getLoginNetworkInfo(req);
+    const log = await LoginLog.create({
+      userId: user._id,
+      email: user.email,
+      ip,
+      userAgent,
+      location,
+      loginMethod: 'password',
+      status: 'success'
+    });
+
+    const token = jwt.sign(
+      { userId: user._id, sid: log._id },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES }
+    );
+
+    res.json({
+      message: 'Вход подтвержден',
+      token,
+      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Код входа истек. Войдите заново.' });
+    }
+    console.error('Verify 2FA error:', error);
+    res.status(500).json({ message: 'Ошибка проверки 2FA' });
   }
 });
 
@@ -467,6 +548,49 @@ router.post('/change-password', authMiddleware, sanitizeBody, validatePassword, 
   }
 });
 
+router.post('/security/2fa', authMiddleware, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
+    if (enabled && !user.password) {
+      return res.status(400).json({ message: 'Сначала добавьте пароль для аккаунта' });
+    }
+    user.twoFactorEnabled = Boolean(enabled);
+    user.twoFactorCode = null;
+    user.twoFactorExpires = null;
+    await user.save();
+    res.json({ user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }, message: user.twoFactorEnabled ? '2FA включена' : '2FA выключена' });
+  } catch (error) {
+    console.error('Toggle 2FA error:', error);
+    res.status(500).json({ message: 'Ошибка настройки 2FA' });
+  }
+});
+
+router.post('/google-onboarding', authMiddleware, sanitizeBody, validateUsername, async (req, res) => {
+  try {
+    const { username, keepCurrent } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
+    if (!user.googleId) return res.status(400).json({ message: 'Аккаунт не привязан к Google' });
+
+    if (!keepCurrent && username && username !== user.username) {
+      const nextUsername = String(username).trim();
+      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: user._id } });
+      if (existingUser) return res.status(400).json({ message: 'Имя пользователя уже занято' });
+      user.username = nextUsername;
+      user.usernameChangedAt = new Date();
+    }
+
+    user.googleOnboardingComplete = true;
+    await user.save();
+    res.json({ user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }, message: 'Настройка завершена' });
+  } catch (error) {
+    console.error('Google onboarding error:', error);
+    res.status(500).json({ message: 'Ошибка настройки аккаунта' });
+  }
+});
+
 /**
  * POST /api/auth/logout
  * Выход из аккаунта
@@ -524,10 +648,9 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
       .populate('servers', 'name icon')
-      .populate('friends', 'username avatar status role')
-      .select('-password');
+      .populate('friends', 'username avatar status role');
 
-    const userObj = user.toObject ? user.toObject() : { ...user };
+    const userObj = { ...user.toPublicJSON(), email: user.email, servers: user.servers, friends: user.friends };
     userObj.isFounder = isFounderUser(user);
 
     res.json({ user: userObj });

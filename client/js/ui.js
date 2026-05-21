@@ -1778,6 +1778,21 @@ function syncSecurityAccountFields() {
     usernameInput.value = window.currentUser.username;
   }
 
+  const usernamePassword = document.getElementById('security-username-password');
+  if (usernamePassword) usernamePassword.classList.toggle('hidden', !window.currentUser?.hasPassword);
+
+  const passwordAlert = document.getElementById('security-password-alert');
+  if (passwordAlert) passwordAlert.classList.toggle('hidden', Boolean(window.currentUser?.hasPassword));
+
+  const securityNav = document.getElementById('settings-security-nav');
+  if (securityNav) securityNav.classList.toggle('security-attention', !window.currentUser?.hasPassword || !window.currentUser?.twoFactorEnabled);
+
+  const twoFactorToggle = document.getElementById('security-2fa-toggle');
+  if (twoFactorToggle) {
+    twoFactorToggle.checked = Boolean(window.currentUser?.twoFactorEnabled);
+    twoFactorToggle.disabled = !window.currentUser?.hasPassword;
+  }
+
   const hint = document.getElementById('security-username-hint');
   if (!hint) return;
 
@@ -1799,13 +1814,28 @@ async function changeSecurityUsername() {
   if (!username) return;
 
   try {
-    const data = await UsersAPI.updateProfile({ username });
+    const currentPassword = document.getElementById('security-username-password')?.value || '';
+    const data = await UsersAPI.updateProfile({ username, currentPassword });
     window.currentUser = data.user;
     localStorage.setItem('user', JSON.stringify(data.user));
     syncSecurityAccountFields();
     if (typeof showNotification === 'function') showNotification('success', 'Имя пользователя изменено');
   } catch (error) {
     if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить имя');
+  }
+}
+
+async function toggleEmailTwoFactor(enabled) {
+  const toggle = document.getElementById('security-2fa-toggle');
+  try {
+    const data = await AuthAPI.toggleTwoFactor(enabled);
+    window.currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(data.user));
+    syncSecurityAccountFields();
+    if (typeof showNotification === 'function') showNotification('success', data.message || 'Настройки 2FA обновлены');
+  } catch (error) {
+    if (toggle) toggle.checked = !enabled;
+    if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось обновить 2FA');
   }
 }
 
@@ -1875,3 +1905,4 @@ window.loadLoginLogs = loadLoginLogs;
 window.deleteLoginLogRecord = deleteLoginLogRecord;
 window.changeSecurityUsername = changeSecurityUsername;
 window.changeSecurityPassword = changeSecurityPassword;
+window.toggleEmailTwoFactor = toggleEmailTwoFactor;

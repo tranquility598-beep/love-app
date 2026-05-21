@@ -69,7 +69,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
  */
 router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (req, res) => {
   try {
-    const { username, bio, customStatus, profileColor } = req.body;
+    const { username, bio, customStatus, profileColor, currentPassword } = req.body;
     
     const updateData = {};
     
@@ -85,6 +85,14 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
           message: `Имя пользователя можно менять раз в 7 дней. Следующая смена доступна ${availableAt.toLocaleString('ru-RU')}`,
           availableAt
         });
+      }
+
+      const currentUser = await User.findById(req.user._id);
+      if (currentUser.password) {
+        const isPasswordValid = await currentUser.comparePassword(currentPassword);
+        if (!isPasswordValid) {
+          return res.status(400).json({ message: 'Введите текущий пароль для смены имени' });
+        }
       }
       
       // Проверяем уникальность имени
@@ -118,9 +126,9 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
       req.user._id,
       updateData,
       { new: true }
-    ).select('-password');
+    );
     
-    res.json({ user, message: 'Профиль обновлен' });
+    res.json({ user: user.toPublicJSON(), message: 'Профиль обновлен' });
     
   } catch (error) {
     console.error('Update profile error:', error);

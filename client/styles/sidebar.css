@@ -35,16 +35,16 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--bg-tertiary);
-  border: 2px solid var(--border);
+  background: var(--surface-overlay);
+  border: 2px solid var(--nav-item-border);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--nav-item-transition);
   position: relative;
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--nav-item-fg);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
@@ -59,9 +59,9 @@
 
 .server-icon:hover {
   border-radius: 16px;
-  background: var(--bg-hover);
-  border-color: var(--accent);
-  color: var(--text-primary);
+  background: var(--nav-item-hover-bg);
+  border-color: var(--nav-item-hover-border);
+  color: var(--nav-item-hover-fg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
@@ -72,9 +72,9 @@
 
 .server-icon.active {
   border-radius: 16px;
-  background: var(--bg-active);
-  border-color: var(--accent);
-  color: var(--text-primary);
+  background: var(--nav-item-active-bg);
+  border-color: var(--nav-item-active-border);
+  color: var(--nav-item-active-fg);
   box-shadow: 0 0 0 3px var(--accent-dim), 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
@@ -84,28 +84,28 @@
 
 /* DM icon special style */
 .server-icon.dm-icon {
-  background: var(--bg-tertiary);
+  background: var(--surface-overlay);
 }
 
 .server-icon.dm-icon.active,
 .server-icon.dm-icon:hover {
-  background: var(--bg-hover);
+  background: var(--nav-item-hover-bg);
 }
 
 /* Add server button */
 .server-icon.add-server,
 .server-icon.join-server {
-  background: var(--bg-tertiary);
+  background: var(--surface-overlay);
   border-style: dashed;
-  border-color: var(--border-hover);
+  border-color: var(--nav-item-hover-border);
 }
 
 .server-icon.add-server:hover,
 .server-icon.join-server:hover {
-  background: var(--bg-hover);
+  background: var(--nav-item-hover-bg);
   border-style: solid;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--nav-item-active-border);
+  color: var(--nav-item-active-fg);
   transform: scale(1.05);
 }
 
@@ -180,7 +180,7 @@
 }
 
 .channels-header:hover {
-  background: var(--bg-hover);
+  background: var(--nav-item-hover-bg);
 }
 
 #channels-header-title {
@@ -223,24 +223,24 @@
 .find-friends-btn {
   width: 100%;
   padding: 10px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-overlay);
+  border: 1px solid var(--nav-item-border);
   border-radius: 8px;
-  color: var(--text-muted);
+  color: var(--nav-item-fg);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--nav-item-transition);
   text-align: left;
 }
 
 .find-friends-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--accent);
+  background: var(--nav-item-hover-bg);
+  color: var(--nav-item-hover-fg);
+  border-color: var(--nav-item-hover-border);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -270,21 +270,40 @@
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--nav-item-radius);
+  color: var(--nav-item-fg);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--nav-item-transition);
   position: relative;
   animation: slideInLeft 0.3s ease-out;
 }
 
+.dm-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--nav-item-indicator);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
 .dm-item:hover {
-  background: var(--bg-hover);
+  background: var(--nav-item-hover-bg);
+  color: var(--nav-item-hover-fg);
   transform: translateX(2px);
 }
 
 .dm-item.active {
-  background: var(--bg-active);
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--nav-item-active-bg);
+  color: var(--nav-item-active-fg);
+}
+
+.dm-item.active::before {
+  opacity: 1;
 }
 
 .dm-avatar {
@@ -297,13 +316,17 @@
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid var(--border);
+  border: 2px solid var(--nav-item-border);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dm-item:hover .dm-avatar img {
-  border-color: var(--accent);
+  border-color: var(--nav-item-hover-border);
   transform: scale(1.05);
+}
+
+.dm-item.active .dm-avatar img {
+  border-color: var(--nav-item-active-border);
 }
 
 .dm-info {

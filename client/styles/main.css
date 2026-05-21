@@ -123,6 +123,20 @@
   --btn-danger-bg: rgba(237, 66, 69, 0.12);
   --btn-danger-fg: var(--status-danger);
   --btn-danger-border: rgba(237, 66, 69, 0.35);
+
+  /* Navigation states */
+  --nav-item-bg: transparent;
+  --nav-item-hover-bg: var(--state-hover);
+  --nav-item-active-bg: var(--state-active);
+  --nav-item-fg: var(--text-muted);
+  --nav-item-hover-fg: var(--text-primary);
+  --nav-item-active-fg: var(--text-primary);
+  --nav-item-border: var(--border);
+  --nav-item-hover-border: var(--border-hover);
+  --nav-item-active-border: var(--accent);
+  --nav-item-indicator: var(--accent);
+  --nav-item-radius: var(--radius-lg);
+  --nav-item-transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), border-radius var(--dur-base) var(--ease-out);
   --input-h: var(--control-h-md);
 
   /* Typography */

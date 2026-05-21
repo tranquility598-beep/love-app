@@ -48,12 +48,15 @@
     </div>
     <div class="modal-body">
       <p class="modal-description">Вы вошли через Google. Можно оставить имя из почты/Google или выбрать свое.</p>
-      <input type="text" id="google-onboarding-username" class="settings-input" placeholder="Имя пользователя">
-      <div id="google-onboarding-error" class="auth-error hidden"></div>
+      <div class="modal-field">
+        <label class="modal-label" for="google-onboarding-username">Имя пользователя</label>
+        <input type="text" id="google-onboarding-username" class="modal-input" placeholder="Имя пользователя">
+      </div>
+      <div id="google-onboarding-error" class="modal-error hidden"></div>
     </div>
     <div class="modal-footer">
       <button class="modal-btn secondary" onclick="completeGoogleOnboarding(true)">Оставить как есть</button>
-      <button class="modal-btn" onclick="completeGoogleOnboarding(false)">Сохранить</button>
+      <button class="modal-btn primary" onclick="completeGoogleOnboarding(false)">Сохранить</button>
     </div>
   </div>
 </div>
@@ -1177,7 +1180,7 @@
       <p class="modal-description">Введи код приглашения чтобы присоединиться к серверу.</p>
       <div class="modal-field">
         <label class="modal-label">Код приглашения</label>
-        <input type="text" id="invite-code-input" class="modal-input" placeholder="XXXXXX" maxlength="20" style="text-transform:uppercase;letter-spacing:3px;font-weight:700;font-size:18px;">
+        <input type="text" id="invite-code-input" class="modal-input modal-input--code" placeholder="XXXXXX" maxlength="20">
       </div>
       <div id="join-server-error" class="modal-error hidden"></div>
     </div>
@@ -1254,7 +1257,7 @@
     </div>
     <div class="modal-footer">
       <button class="modal-btn secondary" onclick="closeModal('confirm-modal')" id="confirm-cancel">Отмена</button>
-      <button class="modal-btn" id="confirm-ok">Продолжить</button>
+      <button class="modal-btn primary" id="confirm-ok">Продолжить</button>
     </div>
   </div>
 </div>
@@ -1860,9 +1863,9 @@
         <div class="developer-item">Backend <span>unknown</span></div>
         <div class="developer-item">Frontend <span>unknown</span></div>
       </div>
-      <p style="margin-top: 40px; font-size: 10px; color: #444; letter-spacing: 1px;">MADE WITH PASSION</p>
+      <p class="developer-modal-signature">MADE WITH PASSION</p>
     </div>
-    <div class="modal-footer" style="background: transparent; border: none; justify-content: center;">
+    <div class="modal-footer modal-footer--center">
       <button class="modal-close" onclick="closeModal('developer-modal-egg')">✕</button>
     </div>
   </div>
@@ -2134,7 +2137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <p class="profile-bio" id="profile-bio">Биография не указана</p>
         
         <!-- Контейнер для соцсетей -->
-        <div class="profile-social-links" id="profile-social-links" style="display: flex; gap: 8px; margin-top: 10px;">
+        <div class="profile-social-links" id="profile-social-links">
         </div>
         
         <p class="profile-member-since" id="profile-member-since">Участник с: </p>
@@ -2143,7 +2146,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="profile-actions">
         <button class="modal-btn secondary" id="profile-message-btn">Написать</button>
         <button class="modal-btn danger-btn" id="profile-block-btn">Заблокировать</button>
-        <button class="modal-btn" id="profile-edit-btn" style="display: none; background: transparent; border: 1px solid var(--text-muted); color: var(--text-normal);">Редактировать профиль</button>
+        <button class="modal-btn ghost" id="profile-edit-btn" style="display: none;">Редактировать профиль</button>
       </div>
     </div>
     
@@ -2157,7 +2160,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <h3>Закрепленные сообщения</h3>
       <button class="modal-close" onclick="closePinnedModal()">&times;</button>
     </div>
-    <div class="pinned-messages-list" id="pinned-messages-list">
+    <div class="modal-body pinned-messages-list" id="pinned-messages-list">
       <div class="loading-spinner">Загрузка...</div>
     </div>
   </div>
@@ -2165,20 +2168,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Модальное окно управления ролями -->
 <div id="roles-modal" class="modal-overlay hidden">
-  <div class="roles-modal-content">
+  <div class="modal roles-modal-content">
     <div class="modal-header">
       <h3>Роли сервера</h3>
       <button class="modal-close" onclick="closeRolesModal()">&times;</button>
     </div>
-    <div class="roles-container">
+    <div class="modal-body roles-container">
       <div class="roles-sidebar">
         <div class="roles-list" id="roles-list">
-          <div style="text-align: center; padding: 40px;">
-            <div class="loading-spinner" style="margin: 0 auto 10px;"></div>
-            <div style="color: var(--text-muted);">Загрузка...</div>
+          <div class="roles-loading-state">
+            <div class="loading-spinner roles-loading-spinner"></div>
+            <div class="roles-loading-text">Загрузка...</div>
           </div>
         </div>
-        <button class="btn-primary" onclick="createNewRole()" style="margin: 10px;">+ Создать роль</button>
+        <button class="modal-btn primary roles-create-btn" onclick="createNewRole()">+ Создать роль</button>
       </div>
       <div class="role-editor" id="role-editor">
         <div class="role-editor-placeholder">Выберите роль для редактирования</div>
@@ -2194,7 +2197,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <h3>Управление ролями</h3>
       <button class="modal-close" onclick="closeMemberRolesModal()">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body member-roles-body">
       <div id="member-roles-list"></div>
     </div>
   </div>

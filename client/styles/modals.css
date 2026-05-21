@@ -145,6 +145,104 @@
   color: var(--text-muted);
 }
 
+.modal-input--code {
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 700;
+  font-size: 18px;
+  text-align: center;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.9);
+  overflow: hidden;
+}
+
+.modal-content .modal-body {
+  padding: 20px 24px;
+}
+
+.profile-modal-content,
+.pinned-modal-content {
+  max-width: 600px;
+}
+
+.roles-modal-content {
+  max-width: 900px;
+  max-height: 85vh;
+  height: 600px;
+}
+
+#roles-modal .roles-container {
+  padding: 0;
+  flex: 1;
+}
+
+.roles-create-btn {
+  margin: 10px;
+}
+
+.roles-loading-state {
+  text-align: center;
+  padding: 40px;
+}
+
+.roles-loading-spinner {
+  margin: 0 auto 10px;
+}
+
+.roles-loading-text {
+  color: var(--text-muted);
+}
+
+.profile-social-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.developer-modal-signature {
+  margin-top: 40px;
+  font-size: 10px;
+  color: #444;
+  letter-spacing: 1px;
+}
+
+.member-roles-body {
+  padding: 20px 24px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.modal-footer.modal-footer--center {
+  justify-content: center;
+  background: transparent;
+  border-top: none;
+}
+
+.modal-btn.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-muted);
+}
+
+.modal-btn.ghost:hover {
+  background: var(--state-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 .modal-textarea {
   width: 100%;
   padding: 12px 16px;

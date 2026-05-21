@@ -308,23 +308,25 @@ async function initializeAudioDeviceSelectors() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    populateAudioDeviceSelect('voice-input-device', devices.filter(d => d.kind === 'audioinput'), 'Default', 'Микрофон');
-    populateAudioDeviceSelect('voice-output-device', devices.filter(d => d.kind === 'audiooutput'), 'Default', 'Вывод');
+    populateAudioDeviceSelect('voice-input-device', devices.filter(d => d.kind === 'audioinput'), 'Микрофон');
+    populateAudioDeviceSelect('voice-output-device', devices.filter(d => d.kind === 'audiooutput'), 'Вывод');
   } catch (error) {
     console.warn('Failed to enumerate audio devices:', error);
   }
 }
 
-function populateAudioDeviceSelect(selectId, devices, defaultLabel, fallbackLabel) {
+function populateAudioDeviceSelect(selectId, devices, fallbackLabel) {
   const select = document.getElementById(selectId);
   if (!select) return;
   const saved = window.settingsManager.get(selectId) || 'default';
   const savedLabel = localStorage.getItem(`${selectId}-label`) || '';
   select.innerHTML = '';
+  const defaultDevice = devices.find(device => device.deviceId === 'default');
+  const defaultDeviceLabel = formatDefaultAudioDeviceLabel(defaultDevice?.label);
   const defaultOption = document.createElement('option');
   defaultOption.value = 'default';
-  defaultOption.textContent = defaultLabel;
-  defaultOption.dataset.deviceLabel = defaultLabel;
+  defaultOption.textContent = defaultDeviceLabel;
+  defaultOption.dataset.deviceLabel = defaultDevice?.label || defaultDeviceLabel;
   select.appendChild(defaultOption);
   devices.forEach((device, index) => {
     const option = document.createElement('option');
@@ -350,6 +352,12 @@ function populateAudioDeviceSelect(selectId, devices, defaultLabel, fallbackLabe
     select.appendChild(savedOption);
     select.value = saved;
   }
+}
+
+function formatDefaultAudioDeviceLabel(label) {
+  if (!label) return 'Default';
+  const match = label.match(/^Default\s*-\s*(.+)$/i);
+  return `Default — ${match ? match[1] : label}`;
 }
 
 function getVoiceAudioConstraints() {

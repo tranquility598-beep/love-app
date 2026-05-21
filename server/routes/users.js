@@ -15,6 +15,14 @@ const streamifier = require('streamifier');
 
 const USERNAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
+function buildPublicUser(user) {
+  return {
+    ...user.toPublicJSON(),
+    hasPassword: Boolean(user.password),
+    hasGoogle: Boolean(user.googleId)
+  };
+}
+
 /**
  * GET /api/users/search
  * Поиск пользователей по имени
@@ -128,7 +136,7 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
       { new: true }
     ).select('+password');
     
-    res.json({ user: user.toPublicJSON(), message: 'Профиль обновлен' });
+    res.json({ user: buildPublicUser(user), message: 'Профиль обновлен' });
     
   } catch (error) {
     console.error('Update profile error:', error);

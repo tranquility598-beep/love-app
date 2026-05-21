@@ -374,6 +374,7 @@
   color: var(--text-muted);
   transition: all 0.15s;
   margin: 1px 0;
+  position: relative;
 }
 
 .settings-nav-item:hover {
@@ -613,12 +614,17 @@
 
 .settings-nav-item.security-attention::after {
   content: '';
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
   width: 8px;
   height: 8px;
+  display: block;
+  flex: none;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
-  margin-left: auto;
 }
 
 .settings-color-input {

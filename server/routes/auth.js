@@ -48,6 +48,17 @@ function getClientIp(req) {
   return forwarded.find(ip => ip && !isLocalIp(ip)) || forwarded[0] || 'unknown';
 }
 
+function buildAuthUser(user, extra = {}) {
+  return {
+    ...user.toPublicJSON(),
+    ...extra,
+    email: user.email,
+    hasPassword: Boolean(user.password),
+    hasGoogle: Boolean(user.googleId),
+    isFounder: isFounderUser(user)
+  };
+}
+
 async function getPublicNetworkInfo() {
   try {
     const response = await axios.get('http://ip-api.com/json/?fields=status,query,country,city');
@@ -212,7 +223,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     res.json({
       message: 'Почта подтверждена',
       token,
-      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }
+      user: buildAuthUser(user)
     });
     
   } catch (error) {
@@ -379,7 +390,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     res.json({
       message: 'Вход выполнен успешно',
       token,
-      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }
+      user: buildAuthUser(user)
     });
     
   } catch (error) {
@@ -432,7 +443,7 @@ router.post('/verify-2fa', otpLimiter, async (req, res) => {
     res.json({
       message: 'Вход подтвержден',
       token,
-      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }
+      user: buildAuthUser(user)
     });
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
@@ -542,7 +553,7 @@ router.post('/change-password', authMiddleware, sanitizeBody, validatePassword, 
     await user.save();
 
     res.json({
-      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) },
+      user: buildAuthUser(user),
       message: 'Пароль изменен'
     });
   } catch (error) {
@@ -563,7 +574,7 @@ router.post('/security/2fa', authMiddleware, async (req, res) => {
     user.twoFactorCode = null;
     user.twoFactorExpires = null;
     await user.save();
-    res.json({ user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }, message: user.twoFactorEnabled ? '2FA включена' : '2FA выключена' });
+    res.json({ user: buildAuthUser(user), message: user.twoFactorEnabled ? '2FA включена' : '2FA выключена' });
   } catch (error) {
     console.error('Toggle 2FA error:', error);
     res.status(500).json({ message: 'Ошибка настройки 2FA' });
@@ -587,7 +598,7 @@ router.post('/google-onboarding', authMiddleware, sanitizeBody, validateUsername
 
     user.googleOnboardingComplete = true;
     await user.save();
-    res.json({ user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) }, message: 'Настройка завершена' });
+    res.json({ user: buildAuthUser(user), message: 'Настройка завершена' });
   } catch (error) {
     console.error('Google onboarding error:', error);
     res.status(500).json({ message: 'Ошибка настройки аккаунта' });
@@ -649,12 +660,11 @@ router.post('/socket-token', authMiddleware, async (req, res) => {
  */
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
+    const user = await User.findById(req.user._id).select('+password')
       .populate('servers', 'name icon')
       .populate('friends', 'username avatar status role');
 
-    const userObj = { ...user.toPublicJSON(), email: user.email, servers: user.servers, friends: user.friends };
-    userObj.isFounder = isFounderUser(user);
+    const userObj = buildAuthUser(user, { servers: user.servers, friends: user.friends });
 
     res.json({ user: userObj });
     

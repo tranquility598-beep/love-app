@@ -1798,7 +1798,7 @@ function syncSecurityAccountFields() {
   if (passwordAlert) passwordAlert.classList.toggle('hidden', Boolean(window.currentUser?.hasPassword));
 
   const securityNav = document.getElementById('settings-security-nav');
-  if (securityNav) securityNav.classList.toggle('security-attention', !window.currentUser?.hasPassword || !window.currentUser?.twoFactorEnabled);
+  if (securityNav) securityNav.classList.toggle('security-attention', !window.currentUser?.hasPassword);
 
   const twoFactorToggle = document.getElementById('security-2fa-toggle');
   if (twoFactorToggle) {

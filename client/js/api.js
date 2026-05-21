@@ -121,6 +121,15 @@ function isAuthEntryEndpoint(endpoint) {
   );
 }
 
+function normalizeApiErrorMessage(message, status) {
+  if (typeof message !== 'string') return 'Ошибка запроса';
+  if (message.includes('<!DOCTYPE html>') || message.includes('Cannot POST') || message.includes('Cannot GET')) {
+    if (status === 404) return 'Сервер еще не обновлен. Обновите backend и попробуйте снова.';
+    return 'Сервер вернул некорректный ответ. Попробуйте позже.';
+  }
+  return message;
+}
+
 // Базовый fetch с авторизацией через IPC proxy
 async function apiFetch(endpoint, options = {}) {
   await window.apiReady;
@@ -147,7 +156,7 @@ async function apiFetch(endpoint, options = {}) {
             try { showAuthScreen(); } catch (_) {}
           }
         }
-        const error = new Error(result.data?.message || 'Ошибка запроса');
+        const error = new Error(normalizeApiErrorMessage(result.data?.message, result.status));
         error.status = result.status;
         error.data = result.data;
         throw error;
@@ -207,7 +216,7 @@ async function apiFetch(endpoint, options = {}) {
         try { showAuthScreen(); } catch (_) {}
       }
     }
-    const error = new Error(data.message || 'Ошибка запроса');
+    const error = new Error(normalizeApiErrorMessage(data.message, response.status));
     error.status = response.status;
     error.data = data;
     throw error;

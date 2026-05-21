@@ -22,12 +22,52 @@ const { isFounderUser } = require('../utils/founder');
 // Регулярка для пароля: минимум 8 символов, 1 буква и 1 цифра
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
 
+function normalizeIp(ip) {
+  if (!ip || typeof ip !== 'string') return 'unknown';
+  const value = ip.split(',')[0].trim().replace(/^::ffff:/, '');
+  if (value.includes(':') && value.lastIndexOf(':') > value.indexOf(':') && !value.includes('::')) {
+    return value.slice(0, value.lastIndexOf(':'));
+  }
+  return value;
+}
+
+function isLocalIp(ip) {
+  return ['::1', '127.0.0.1', 'localhost', 'unknown'].includes(ip) || ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
+}
+
+function getClientIp(req) {
+  const forwarded = [
+    req.headers['cf-connecting-ip'],
+    req.headers['x-real-ip'],
+    req.headers['x-forwarded-for'],
+    req.ip,
+    req.socket?.remoteAddress
+  ].filter(Boolean).flatMap(value => String(value).split(',').map(normalizeIp));
+
+  return forwarded.find(ip => ip && !isLocalIp(ip)) || forwarded[0] || 'unknown';
+}
+
+async function getPublicNetworkInfo() {
+  try {
+    const response = await axios.get('http://ip-api.com/json/?fields=status,query,country,city');
+    if (response.data.status === 'success') {
+      return {
+        ip: response.data.query || 'unknown',
+        location: [response.data.city, response.data.country].filter(Boolean).join(', ') || 'Неизвестно'
+      };
+    }
+  } catch (error) {
+    console.error('Public IP Error:', error.message);
+  }
+  return { ip: 'unknown', location: 'Неизвестно' };
+}
+
 /**
  * Получение местоположения по IP
  */
 async function getGeoLocation(ip) {
   try {
-    if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1') return 'Локальная сеть (Local)';
+    if (isLocalIp(normalizeIp(ip))) return 'Локальная сеть (Local)';
     
     const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,message,country,city`);
     if (response.data.status === 'success') {
@@ -38,6 +78,12 @@ async function getGeoLocation(ip) {
     console.error('GeoIP Error:', error.message);
     return 'Неизвестно';
   }
+}
+
+async function getLoginNetworkInfo(req) {
+  const ip = getClientIp(req);
+  if (isLocalIp(ip)) return getPublicNetworkInfo();
+  return { ip, location: await getGeoLocation(ip) };
 }
 
 /**
@@ -143,8 +189,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     
     // Логируем успешный вход (после верификации)
     const userAgent = req.headers['user-agent'] || 'unknown';
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    const location = await getGeoLocation(ip);
+    const { ip, location } = await getLoginNetworkInfo(req);
     
     const log = await LoginLog.create({
       userId: user._id,
@@ -230,7 +275,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     const isPasswordValid = await user.comparePassword(password);
     
     const userAgent = req.headers['user-agent'] || 'unknown';
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const { ip, location } = await getLoginNetworkInfo(req);
 
     if (!isPasswordValid) {
       // Увеличиваем счетчик ошибок
@@ -252,6 +297,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
         email: user.email,
         ip,
         userAgent,
+        location,
         status: 'failed'
       });
 
@@ -271,7 +317,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       await sendOTPEmail(user.email, otp, 'verification');
       
       // Логируем попытку входа (но еще не полноценный вход)
-      await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, status: 'success' });
+      await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, location, status: 'success' });
 
       return res.status(403).json({ 
         message: 'Почта не подтверждена. Новый код отправлен.',
@@ -283,8 +329,6 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     user.status = 'online';
     user.lastSeen = new Date();
     await user.save();
-
-    const location = await getGeoLocation(ip);
 
     // Логируем успешный вход
     const log = await LoginLog.create({
@@ -541,8 +585,7 @@ router.get('/google/callback',
     // Успешная авторизация
     const user = req.user;
     const userAgent = req.headers['user-agent'] || 'unknown';
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-    const location = await getGeoLocation(ip);
+    const { ip, location } = await getLoginNetworkInfo(req);
     
     // Создаем запись в истории входов
     const log = await LoginLog.create({

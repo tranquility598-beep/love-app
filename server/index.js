@@ -21,6 +21,8 @@ const app = express();
 const server = http.createServer(app);
 const passport = require('./config/passport');
 
+app.set('trust proxy', true);
+
 // Инициализация Passport
 app.use(passport.initialize());
 

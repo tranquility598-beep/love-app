@@ -257,7 +257,7 @@ function initializeSettingsUI() {
   });
 
   // Селекты
-  const selects = ['voice-input-device', 'voice-output-device', 'font-size', 'default-screen-quality', 'app-language', 'time-format', 'date-format', 'app-timezone'];
+  const selects = ['font-size', 'default-screen-quality', 'app-language', 'time-format', 'date-format', 'app-timezone'];
   selects.forEach(id => {
     const select = document.getElementById(id);
     if (select) {
@@ -267,7 +267,21 @@ function initializeSettingsUI() {
       });
     }
   });
+  initAudioDeviceSelect('voice-input-device');
+  initAudioDeviceSelect('voice-output-device');
   initializeAudioDeviceSelectors();
+  if (navigator.mediaDevices?.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', initializeAudioDeviceSelectors);
+  }
+}
+
+function initAudioDeviceSelect(id) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  select.value = window.settingsManager.get(id) || 'default';
+  select.addEventListener('change', (e) => {
+    window.settingsManager.saveSetting(id, e.target.value || 'default');
+  });
 }
 
 // Инициализация слайдера
@@ -314,8 +328,16 @@ function populateAudioDeviceSelect(selectId, devices, defaultLabel) {
     option.textContent = device.label || `${defaultLabel.replace(' по умолчанию', '')} ${index + 1}`;
     select.appendChild(option);
   });
-  select.value = Array.from(select.options).some(option => option.value === saved) ? saved : 'default';
-  window.settingsManager.saveSetting(selectId, select.value);
+  if (Array.from(select.options).some(option => option.value === saved)) {
+    select.value = saved;
+  } else {
+    const savedOption = document.createElement('option');
+    savedOption.value = saved;
+    savedOption.textContent = 'Сохранённое устройство';
+    savedOption.hidden = true;
+    select.appendChild(savedOption);
+    select.value = saved;
+  }
 }
 
 function getVoiceAudioConstraints() {

@@ -1709,7 +1709,7 @@ async function loadLoginLogs() {
       title.className = 'log-category-title';
       title.textContent = 'Текущий сеанс';
       list.appendChild(title);
-      renderLogItem(currentSession, list, true);
+      renderLogItem(currentSession, list, true, currentSid);
     }
 
     if (otherSessions.length > 0) {
@@ -1717,7 +1717,7 @@ async function loadLoginLogs() {
       title.className = 'log-category-title';
       title.textContent = 'Другие входы';
       list.appendChild(title);
-      otherSessions.forEach(log => renderLogItem(log, list, false));
+      otherSessions.forEach(log => renderLogItem(log, list, false, currentSid));
     }
     
   } catch (error) {
@@ -1729,7 +1729,7 @@ async function loadLoginLogs() {
 /**
  * Вспомогательная функция для отрисовки элемента лога
  */
-function renderLogItem(log, container, isCurrent) {
+function renderLogItem(log, container, isCurrent, currentSid) {
   const item = document.createElement('div');
   item.className = 'login-log-item';
   item.id = `log-${log._id}`;
@@ -1761,7 +1761,7 @@ function renderLogItem(log, container, isCurrent) {
       <div class="log-device">${device}</div>
       <div class="log-time">${date}</div>
     </div>
-    <button class="log-delete-btn" onclick="deleteLoginLogRecord('${log._id}')" title="${isCurrent ? 'Завершить этот сеанс' : 'Удалить запись'}">
+    <button class="log-delete-btn" onclick="deleteLoginLogRecord('${log._id}', ${JSON.stringify(log._id === currentSid)})" title="${isCurrent ? 'Завершить этот сеанс' : 'Удалить запись'}">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
     </button>
   `;
@@ -1772,12 +1772,28 @@ function renderLogItem(log, container, isCurrent) {
 /**
  * Удаление записи лога
  */
-async function deleteLoginLogRecord(logId) {
+async function deleteLoginLogRecord(logId, isCurrentSession = false) {
   try {
     const item = document.getElementById(`log-${logId}`);
     if (item) item.style.opacity = '0.5';
     
     await AuthAPI.deleteLoginLog(logId);
+
+    if (isCurrentSession) {
+      await clearAuthToken();
+      localStorage.removeItem('user');
+      window.currentUser = null;
+      if (typeof disconnectSocket === 'function') disconnectSocket();
+      if (typeof closeModal === 'function') closeModal('settings-modal');
+      if (typeof showAuthScreen === 'function') {
+        showAuthScreen();
+      } else {
+        document.getElementById('app')?.classList.add('hidden');
+        document.getElementById('login-screen')?.classList.remove('hidden');
+        document.getElementById('register-screen')?.classList.add('hidden');
+      }
+      return;
+    }
     
     if (item) {
       item.style.transform = 'translateX(20px)';

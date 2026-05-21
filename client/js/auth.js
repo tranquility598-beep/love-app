@@ -171,7 +171,7 @@ if (window.electronAPI && window.electronAPI.onGoogleAuthSuccess) {
 }
 
 function maybeShowGoogleOnboarding() {
-  if (!window.currentUser?.hasGoogle || window.currentUser?.googleOnboardingComplete) return;
+  if (!window.currentUser?.hasGoogle || window.currentUser?.hasPassword || window.currentUser?.googleOnboardingComplete) return;
   const modal = document.getElementById('google-onboarding-modal');
   const input = document.getElementById('google-onboarding-username');
   if (input) input.value = window.currentUser?.username || '';

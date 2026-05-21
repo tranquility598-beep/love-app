@@ -1676,6 +1676,27 @@
       <div class="settings-tab hidden" id="settings-security">
         <h2 class="settings-title">Безопасность</h2>
         <p class="settings-description">История входов в ваш аккаунт. Если вы видите незнакомый IP или устройство, рекомендуется сменить пароль.</p>
+
+        <div class="settings-field">
+          <label class="settings-label">Сменить имя пользователя</label>
+          <input type="text" id="security-username-input" class="settings-input" placeholder="Новое имя пользователя">
+          <div class="settings-hint" id="security-username-hint">Имя пользователя можно менять один раз в 7 дней.</div>
+          <button class="settings-save-btn" onclick="changeSecurityUsername()">Сохранить имя</button>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label">Сменить пароль</label>
+          <input type="password" id="security-current-password" class="settings-input" placeholder="Текущий пароль">
+          <input type="password" id="security-new-password" class="settings-input" placeholder="Новый пароль">
+          <input type="password" id="security-confirm-password" class="settings-input" placeholder="Повторите новый пароль">
+          <button class="settings-save-btn" onclick="changeSecurityPassword()">Сменить пароль</button>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label">Двухфакторная аутентификация</label>
+          <div class="settings-hint">2FA пока не включена. Безопасный вариант — TOTP-коды из Authenticator-приложения с backup-кодами; лучше добавить отдельным релизом, чтобы не сломать вход.</div>
+          <button class="settings-save-btn" disabled>Скоро</button>
+        </div>
         
         <div class="login-logs-list" id="login-logs-list">
           <div class="logs-loading">Загрузка данных...</div>

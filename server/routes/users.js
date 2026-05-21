@@ -13,6 +13,8 @@ const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 
+const USERNAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * GET /api/users/search
  * Поиск пользователей по имени
@@ -65,24 +67,34 @@ router.get('/:id', authMiddleware, async (req, res) => {
  * PUT /api/users/profile
  * Обновить профиль пользователя
  */
-router.put('/profile', authMiddleware, async (req, res) => {
+router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (req, res) => {
   try {
     const { username, bio, customStatus, profileColor } = req.body;
     
     const updateData = {};
     
-    if (username) {
-      if (username.length < 2 || username.length > 32) {
+    if (username && username !== req.user.username) {
+      const nextUsername = String(username).trim();
+      if (nextUsername.length < 2 || nextUsername.length > 32) {
         return res.status(400).json({ message: 'Имя пользователя должно быть от 2 до 32 символов' });
+      }
+
+      if (req.user.usernameChangedAt && Date.now() - new Date(req.user.usernameChangedAt).getTime() < USERNAME_CHANGE_COOLDOWN_MS) {
+        const availableAt = new Date(new Date(req.user.usernameChangedAt).getTime() + USERNAME_CHANGE_COOLDOWN_MS);
+        return res.status(429).json({
+          message: `Имя пользователя можно менять раз в 7 дней. Следующая смена доступна ${availableAt.toLocaleString('ru-RU')}`,
+          availableAt
+        });
       }
       
       // Проверяем уникальность имени
-      const existingUser = await User.findOne({ username, _id: { $ne: req.user._id } });
+      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: req.user._id } });
       if (existingUser) {
         return res.status(400).json({ message: 'Имя пользователя уже занято' });
       }
       
-      updateData.username = username;
+      updateData.username = nextUsername;
+      updateData.usernameChangedAt = new Date();
     }
     
     if (bio !== undefined) updateData.bio = bio;

@@ -299,6 +299,9 @@ const AuthAPI = {
   resetPassword: (email, code, newPassword) =>
     apiFetch('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, code, newPassword }) }),
 
+  changePassword: (currentPassword, newPassword) =>
+    apiFetch('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+
   logout: () =>
     apiFetch('/auth/logout', { method: 'POST' }),
 

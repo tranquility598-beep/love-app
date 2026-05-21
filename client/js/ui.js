@@ -1682,6 +1682,7 @@ function autoResizeTextarea(textarea) {
 async function loadLoginLogs() {
   const list = document.getElementById('login-logs-list');
   if (!list) return;
+  syncSecurityAccountFields();
   
   try {
     list.innerHTML = '<div class="logs-loading">Загрузка данных...</div>';
@@ -1749,6 +1750,7 @@ function renderLogItem(log, container, isCurrent, currentSid) {
   else if (ua.includes('Mobile')) device = 'Моб. устройство';
   
   const statusText = { success: 'Успешно', failed: 'Ошибка', locked: 'Блок' };
+  const methodText = { password: 'Email и пароль', google: 'Google' };
   
   item.innerHTML = `
     <div class="log-info">
@@ -1759,6 +1761,7 @@ function renderLogItem(log, container, isCurrent, currentSid) {
       </div>
       <div class="log-location">${log.location || 'Местоположение неизвестно'}</div>
       <div class="log-device">${device}</div>
+      <div class="log-device">Способ входа: ${methodText[log.loginMethod] || 'Неизвестно'}</div>
       <div class="log-time">${date}</div>
     </div>
     <button class="log-delete-btn" onclick="deleteLoginLogRecord('${log._id}', ${JSON.stringify(log._id === currentSid)})" title="${isCurrent ? 'Завершить этот сеанс' : 'Удалить запись'}">
@@ -1767,6 +1770,65 @@ function renderLogItem(log, container, isCurrent, currentSid) {
   `;
   
   container.appendChild(item);
+}
+
+function syncSecurityAccountFields() {
+  const usernameInput = document.getElementById('security-username-input');
+  if (usernameInput && window.currentUser?.username) {
+    usernameInput.value = window.currentUser.username;
+  }
+
+  const hint = document.getElementById('security-username-hint');
+  if (!hint) return;
+
+  const changedAt = window.currentUser?.usernameChangedAt ? new Date(window.currentUser.usernameChangedAt) : null;
+  if (!changedAt) {
+    hint.textContent = 'Имя пользователя можно менять один раз в 7 дней.';
+    return;
+  }
+
+  const availableAt = new Date(changedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+  hint.textContent = Date.now() < availableAt.getTime()
+    ? `Следующая смена имени доступна ${availableAt.toLocaleString('ru-RU')}.`
+    : 'Имя пользователя можно менять один раз в 7 дней.';
+}
+
+async function changeSecurityUsername() {
+  const input = document.getElementById('security-username-input');
+  const username = input?.value.trim();
+  if (!username) return;
+
+  try {
+    const data = await UsersAPI.updateProfile({ username });
+    window.currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(data.user));
+    syncSecurityAccountFields();
+    if (typeof showNotification === 'function') showNotification('success', 'Имя пользователя изменено');
+  } catch (error) {
+    if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить имя');
+  }
+}
+
+async function changeSecurityPassword() {
+  const currentPassword = document.getElementById('security-current-password')?.value || '';
+  const newPassword = document.getElementById('security-new-password')?.value || '';
+  const confirmPassword = document.getElementById('security-confirm-password')?.value || '';
+
+  if (!newPassword || newPassword !== confirmPassword) {
+    if (typeof showNotification === 'function') showNotification('error', 'Новые пароли не совпадают');
+    return;
+  }
+
+  try {
+    await AuthAPI.changePassword(currentPassword, newPassword);
+    ['security-current-password', 'security-new-password', 'security-confirm-password'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    if (typeof showNotification === 'function') showNotification('success', 'Пароль изменен');
+  } catch (error) {
+    if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить пароль');
+  }
 }
 
 /**
@@ -1811,3 +1873,5 @@ async function deleteLoginLogRecord(logId, isCurrentSession = false) {
 // Экспортируем функции в глобальную область
 window.loadLoginLogs = loadLoginLogs;
 window.deleteLoginLogRecord = deleteLoginLogRecord;
+window.changeSecurityUsername = changeSecurityUsername;
+window.changeSecurityPassword = changeSecurityPassword;

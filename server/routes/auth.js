@@ -197,6 +197,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
       ip,
       userAgent,
       location,
+      loginMethod: 'password',
       status: 'success'
     });
     
@@ -298,6 +299,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
         ip,
         userAgent,
         location,
+        loginMethod: 'password',
         status: 'failed'
       });
 
@@ -317,7 +319,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       await sendOTPEmail(user.email, otp, 'verification');
       
       // Логируем попытку входа (но еще не полноценный вход)
-      await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, location, status: 'success' });
+      await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, location, loginMethod: 'password', status: 'success' });
 
       return res.status(403).json({ 
         message: 'Почта не подтверждена. Новый код отправлен.',
@@ -337,6 +339,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       ip,
       userAgent,
       location,
+      loginMethod: 'password',
       status: 'success'
     });
     
@@ -425,6 +428,42 @@ router.post('/reset-password', otpLimiter, sanitizeBody, validateEmail, validate
     
   } catch (error) {
     res.status(500).json({ message: 'Ошибка сервера при сбросе пароля' });
+  }
+});
+
+router.post('/change-password', authMiddleware, sanitizeBody, validatePassword, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({ message: 'Новый пароль обязателен' });
+    }
+
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        message: 'Пароль должен быть не менее 8 символов и содержать хотя бы одну букву и одну цифру'
+      });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    if (user.password) {
+      const isPasswordValid = await user.comparePassword(currentPassword);
+      if (!isPasswordValid) {
+        return res.status(400).json({ message: 'Текущий пароль указан неверно' });
+      }
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Пароль изменен' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Ошибка смены пароля' });
   }
 });
 
@@ -594,6 +633,7 @@ router.get('/google/callback',
       ip,
       userAgent,
       location,
+      loginMethod: 'google',
       status: 'success'
     });
     

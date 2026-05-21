@@ -30,6 +30,11 @@ const loginLogSchema = new mongoose.Schema({
     type: String,
     default: 'Неизвестно'
   },
+  loginMethod: {
+    type: String,
+    enum: ['password', 'google'],
+    default: 'password'
+  },
   status: {
     type: String,
     enum: ['success', 'failed', 'locked'],

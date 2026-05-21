@@ -177,6 +177,10 @@ const userSchema = new mongoose.Schema({
   lockUntil: {
     type: Date,
     default: null
+  },
+  usernameChangedAt: {
+    type: Date,
+    default: null
   }
 });
 
@@ -211,6 +215,8 @@ userSchema.methods.toPublicJSON = function() {
     badges: this.badges,
     profileColor: this.profileColor,
     connectedAccounts: this.connectedAccounts,
+    hasPassword: Boolean(this.password),
+    usernameChangedAt: this.usernameChangedAt,
     status: this.status,
     customStatus: this.customStatus,
     createdAt: this.createdAt,

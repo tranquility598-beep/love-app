@@ -586,6 +586,33 @@
   margin-bottom: 20px;
 }
 
+.settings-field--spaced {
+  margin-top: 24px;
+}
+
+.settings-range-value {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.settings-file-name {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.settings-empty-inline {
+  color: var(--text-muted);
+  padding: 20px;
+  text-align: center;
+}
+
+.settings-list-spaced {
+  margin-top: 20px;
+}
+
 .settings-label {
   display: block;
   font-size: 11px;

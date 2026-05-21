@@ -2622,6 +2622,11 @@ body.space-theme #starfield-canvas {
   box-shadow: 0 4px 12px rgba(237, 66, 69, 0.3);
 }
 
+.beta-badge-icon {
+  margin-right: 6px;
+  opacity: 0.4;
+}
+
 /* ===== CATEGORY STYLES ===== */
 .channel-category {
   margin-top: 18px;

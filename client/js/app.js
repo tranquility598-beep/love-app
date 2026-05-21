@@ -10,7 +10,46 @@ window.currentChannel = null;
 window.currentChannelId = null;
 window.currentVoiceChannel = null;
 window.currentDMConversation = null;
-window.currentView = 'welcome'; // 'welcome' | 'chat' | 'friends' | 'dm'
+window.currentView = 'welcome'; // 'welcome' | 'server' | 'dm'
+window.navigationState = {
+  currentView: 'welcome',
+  activeServerId: null,
+  activeDMId: null
+};
+
+function setNavigationState(nextState = {}) {
+  const currentView = nextState.currentView || window.navigationState.currentView || 'welcome';
+
+  window.navigationState = {
+    currentView,
+    activeServerId: Object.prototype.hasOwnProperty.call(nextState, 'activeServerId')
+      ? nextState.activeServerId
+      : window.navigationState.activeServerId,
+    activeDMId: Object.prototype.hasOwnProperty.call(nextState, 'activeDMId')
+      ? nextState.activeDMId
+      : window.navigationState.activeDMId
+  };
+
+  window.currentView = window.navigationState.currentView;
+  applyNavigationState();
+}
+
+function applyNavigationState() {
+  const { currentView, activeServerId, activeDMId } = window.navigationState;
+
+  document.querySelectorAll('.server-icon[data-server-id]').forEach(el => {
+    el.classList.toggle('active', currentView === 'server' && el.dataset.serverId === activeServerId);
+  });
+
+  document.getElementById('dm-btn')?.classList.toggle('active', currentView === 'dm');
+
+  document.querySelectorAll('.dm-item').forEach(el => {
+    el.classList.toggle('active', currentView === 'dm' && el.dataset.convId === activeDMId);
+  });
+}
+
+window.setNavigationState = setNavigationState;
+window.applyNavigationState = applyNavigationState;
 
 // Ручное тестирование warmup UI без ожидания реального холодного старта.
 // Вызов из DevTools: testWarmupUI()
@@ -378,7 +417,7 @@ function renderServersList(servers) {
   
   servers.forEach(server => {
     const iconDiv = document.createElement('div');
-    iconDiv.className = `server-icon ${window.currentServer?._id === server._id ? 'active' : ''}`;
+    iconDiv.className = `server-icon ${window.navigationState?.currentView === 'server' && window.navigationState?.activeServerId === server._id ? 'active' : ''}`;
     iconDiv.dataset.serverId = server._id;
     iconDiv.title = server.name; // Защита браузера: title экранируется автоматически
     iconDiv.onclick = () => selectServer(server._id); // Это безопасно, так как мы назначаем функцию, а не строку
@@ -422,13 +461,11 @@ async function selectServer(serverId) {
       }
     }
 
-    // Обновляем активный сервер в UI
-    document.querySelectorAll('.server-icon').forEach(el => {
-      el.classList.toggle('active', el.dataset.serverId === serverId);
+    setNavigationState({
+      currentView: 'server',
+      activeServerId: serverId,
+      activeDMId: null
     });
-
-    // Обновляем кнопку DM
-    document.getElementById('dm-btn')?.classList.remove('active');
 
     // Показываем каналы сервера
     showServerChannels(data.server);
@@ -713,9 +750,10 @@ async function selectChannel(channelId, channelName, channelType) {
 function showDMView() {
   window.currentServer = null;
 
-  // Обновляем UI
-  document.querySelectorAll('.server-icon').forEach(el => el.classList.remove('active'));
-  document.getElementById('dm-btn')?.classList.add('active');
+  setNavigationState({
+    currentView: 'dm',
+    activeServerId: null
+  });
 
   const header = document.getElementById('channels-header-title');
   const headerBtn = document.getElementById('channels-header-btn');
@@ -776,7 +814,11 @@ function showFriendsView() {
   const voiceView = document.getElementById('voice-view');
   if (voiceView) voiceView.classList.add('hidden');
   document.getElementById('friends-view').classList.remove('hidden');
-  window.currentView = 'friends';
+  setNavigationState({
+    currentView: 'dm',
+    activeServerId: null,
+    activeDMId: null
+  });
   loadFriends();
 }
 
@@ -1075,7 +1117,7 @@ function renderDMConversations(conversations) {
 
     // Создаем элементы через DOM API (безопасно)
     const dmItem = document.createElement('div');
-    dmItem.className = `dm-item ${window.currentDMConversation?._id === conv._id ? 'active' : ''}`;
+    dmItem.className = `dm-item ${window.navigationState?.currentView === 'dm' && window.navigationState?.activeDMId === conv._id ? 'active' : ''}`;
     dmItem.dataset.convId = conv._id;
     dmItem.addEventListener('click', () => openDMConversation(conv));
 
@@ -1145,9 +1187,10 @@ async function openDMConversation(conversation) {
   const other = conversation.participants?.find(p => p._id !== window.currentUser?._id);
   if (!other) return;
 
-  // Обновляем активный DM
-  document.querySelectorAll('.dm-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.convId === conversation._id);
+  setNavigationState({
+    currentView: 'dm',
+    activeServerId: null,
+    activeDMId: conversation._id
   });
 
   // Обновляем заголовок

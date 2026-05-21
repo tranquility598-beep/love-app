@@ -87,7 +87,7 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
         });
       }
 
-      const currentUser = await User.findById(req.user._id);
+      const currentUser = await User.findById(req.user._id).select('+password');
       if (currentUser.password) {
         const isPasswordValid = await currentUser.comparePassword(currentPassword);
         if (!isPasswordValid) {
@@ -126,7 +126,7 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
       req.user._id,
       updateData,
       { new: true }
-    );
+    ).select('+password');
     
     res.json({ user: user.toPublicJSON(), message: 'Профиль обновлен' });
     

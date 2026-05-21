@@ -1682,6 +1682,7 @@ function autoResizeTextarea(textarea) {
 async function loadLoginLogs() {
   const list = document.getElementById('login-logs-list');
   if (!list) return;
+  await refreshSecurityUserState();
   syncSecurityAccountFields();
   
   try {
@@ -1724,6 +1725,18 @@ async function loadLoginLogs() {
   } catch (error) {
     console.error('Failed to load logs:', error);
     list.innerHTML = '<div class="logs-empty">Ошибка загрузки истории</div>';
+  }
+}
+
+async function refreshSecurityUserState() {
+  try {
+    const data = await AuthAPI.getMe();
+    if (data.user) {
+      window.currentUser = data.user;
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+  } catch (error) {
+    console.error('Failed to refresh security user state:', error);
   }
 }
 
@@ -1851,10 +1864,16 @@ async function changeSecurityPassword() {
 
   try {
     await AuthAPI.changePassword(currentPassword, newPassword);
+    const data = await AuthAPI.getMe();
+    if (data.user) {
+      window.currentUser = data.user;
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
     ['security-current-password', 'security-new-password', 'security-confirm-password'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
+    syncSecurityAccountFields();
     if (typeof showNotification === 'function') showNotification('success', 'Пароль изменен');
   } catch (error) {
     if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить пароль');

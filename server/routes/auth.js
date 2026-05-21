@@ -541,7 +541,10 @@ router.post('/change-password', authMiddleware, sanitizeBody, validatePassword, 
     user.password = newPassword;
     await user.save();
 
-    res.json({ message: 'Пароль изменен' });
+    res.json({
+      user: { ...user.toPublicJSON(), email: user.email, isFounder: isFounderUser(user) },
+      message: 'Пароль изменен'
+    });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ message: 'Ошибка смены пароля' });
@@ -551,7 +554,7 @@ router.post('/change-password', authMiddleware, sanitizeBody, validatePassword, 
 router.post('/security/2fa', authMiddleware, async (req, res) => {
   try {
     const { enabled } = req.body;
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select('+password');
     if (!user) return res.status(404).json({ message: 'Пользователь не найден' });
     if (enabled && !user.password) {
       return res.status(400).json({ message: 'Сначала добавьте пароль для аккаунта' });

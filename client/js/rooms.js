@@ -28,6 +28,71 @@
 
   let _activeMode = null; // 'chat' | 'voice' | 'media' | null
 
+  // === Listener storage ==================================================
+
+  const roomListeners = {
+    // Navigation scroll
+    navWheel: null,
+    navScroll: null,
+    windowResize: null,
+    navPrev: null,
+    navNext: null,
+    
+    // Settings modal
+    settingsClose: null,
+    settingsCancel: null,
+    settingsBackdrop: null,
+    settingsNavItems: [], // multiple
+    settingsVibePresets: [], // multiple
+    settingsSave: null,
+    settingsAppearanceSave: null,
+    settingsInviteCreate: null,
+    settingsInviteCopy: null,
+    settingsInviteShortcut: null,
+    
+    // File inputs
+    iconButton: null,
+    iconFile: null,
+    iconClear: null,
+    bannerButton: null,
+    bannerFile: null,
+    bannerClear: null,
+    
+    // Color
+    colorInput: null,
+    
+    // Danger zone
+    leaveButton: null,
+    deleteButton: null,
+    
+    // Global
+    documentEscape: null,
+    
+    // Create room modal
+    createButton: null,
+    createSubmit: null,
+    createClose: null,
+    createCancel: null,
+    
+    // Room tabs
+    tabChat: null,
+    tabVoice: null,
+    tabMedia: null,
+    
+    // Voice controls
+    voiceConnect: null,
+    voiceMic: null,
+    voiceSound: null,
+    voiceScreen: null,
+    voiceLeave: null,
+    
+    // Settings button
+    settingsButton: null,
+    
+    // Registration flag
+    _registered: false
+  };
+
   // === Управление режимом ================================================
 
   function enterRoomMode() {
@@ -37,6 +102,7 @@
   function exitRoomMode() {
     document.body.classList.remove('room-mode');
     detachLiveHandlers();
+    destroyRoomListeners();
     hideRoomView();
     hideAllRoomPanels();
     _activeMode = null;
@@ -348,6 +414,505 @@
       if (liveHandlers.onVoiceLeft) s.off('voice:left', liveHandlers.onVoiceLeft);
     }
     Object.keys(liveHandlers).forEach(k => { liveHandlers[k] = null; });
+  }
+
+  // === Register/Destroy Room Listeners ===================================
+
+  function registerRoomListeners() {
+    // Prevent double registration
+    if (roomListeners._registered) {
+      console.warn('[rooms] Listeners already registered');
+      return;
+    }
+    
+    // GROUP A: Navigation scroll
+    const nav = document.querySelector('.room-settings-nav');
+    if (nav) {
+      roomListeners.navWheel = (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        if (nav.scrollWidth <= nav.clientWidth + 1) return;
+        e.preventDefault();
+        let delta = e.deltaY;
+        if (e.deltaMode === 1) delta *= 16;
+        else if (e.deltaMode === 2) delta *= nav.clientWidth;
+        nav.scrollLeft += delta * 0.55;
+        updateNavScrollEdges();
+      };
+      nav.addEventListener('wheel', roomListeners.navWheel, { passive: false });
+      
+      roomListeners.navScroll = updateNavScrollEdges;
+      nav.addEventListener('scroll', roomListeners.navScroll, { passive: true });
+      
+      roomListeners.windowResize = updateNavScrollEdges;
+      window.addEventListener('resize', roomListeners.windowResize);
+      
+      const scrollByStep = (direction) => {
+        const step = Math.max(120, Math.round(nav.clientWidth * 0.6));
+        nav.scrollBy({ left: direction * step, behavior: 'smooth' });
+      };
+      
+      const prev = document.getElementById('room-settings-nav-prev');
+      const next = document.getElementById('room-settings-nav-next');
+      
+      if (prev) {
+        roomListeners.navPrev = () => scrollByStep(-1);
+        prev.addEventListener('click', roomListeners.navPrev);
+      }
+      
+      if (next) {
+        roomListeners.navNext = () => scrollByStep(1);
+        next.addEventListener('click', roomListeners.navNext);
+      }
+      
+      const wrap = document.querySelector('.room-settings-nav-wrap');
+      if (wrap) nav.__wrapEl = wrap;
+    }
+    
+    // GROUP B: Settings modal
+    const close = document.getElementById('room-settings-close');
+    if (close) {
+      roomListeners.settingsClose = closeRoomSettings;
+      close.addEventListener('click', roomListeners.settingsClose);
+    }
+    
+    const cancel = document.getElementById('room-settings-cancel');
+    if (cancel) {
+      roomListeners.settingsCancel = closeRoomSettings;
+      cancel.addEventListener('click', roomListeners.settingsCancel);
+    }
+    
+    const backdrop = document.getElementById('room-settings-backdrop');
+    if (backdrop) {
+      roomListeners.settingsBackdrop = closeRoomSettings;
+      backdrop.addEventListener('click', roomListeners.settingsBackdrop);
+    }
+    
+    document.querySelectorAll('.room-settings-nav-item').forEach(btn => {
+      const handler = () => {
+        const name = btn.getAttribute('data-rs-section');
+        if (name) setActiveSection(name);
+      };
+      roomListeners.settingsNavItems.push({ element: btn, handler });
+      btn.addEventListener('click', handler);
+    });
+    
+    document.querySelectorAll('.room-settings-vibe-preset').forEach(btn => {
+      const handler = () => {
+        const v = btn.getAttribute('data-vibe') || '';
+        const input = document.getElementById('room-settings-vibe');
+        if (input) input.value = v;
+      };
+      roomListeners.settingsVibePresets.push({ element: btn, handler });
+      btn.addEventListener('click', handler);
+    });
+    
+    const save = document.getElementById('room-settings-save');
+    if (save) {
+      roomListeners.settingsSave = handleSaveGeneral;
+      save.addEventListener('click', roomListeners.settingsSave);
+    }
+    
+    const apprSave = document.getElementById('room-settings-appearance-save');
+    if (apprSave) {
+      roomListeners.settingsAppearanceSave = handleSaveAppearance;
+      apprSave.addEventListener('click', roomListeners.settingsAppearanceSave);
+    }
+    
+    const inviteCreate = document.getElementById('room-settings-invite-create');
+    if (inviteCreate) {
+      roomListeners.settingsInviteCreate = handleCreateInvite;
+      inviteCreate.addEventListener('click', roomListeners.settingsInviteCreate);
+    }
+    
+    const inviteCopy = document.getElementById('room-settings-invite-copy');
+    if (inviteCopy) {
+      roomListeners.settingsInviteCopy = handleCopyInvite;
+      inviteCopy.addEventListener('click', roomListeners.settingsInviteCopy);
+    }
+    
+    const inviteShortcut = document.getElementById('room-settings-invite-shortcut');
+    if (inviteShortcut) {
+      roomListeners.settingsInviteShortcut = () => setActiveSection('invite');
+      inviteShortcut.addEventListener('click', roomListeners.settingsInviteShortcut);
+    }
+    
+    // GROUP C: File inputs
+    const iconBtn = document.getElementById('room-settings-icon-btn');
+    const iconFile = document.getElementById('room-settings-icon-file');
+    if (iconBtn && iconFile) {
+      roomListeners.iconButton = () => iconFile.click();
+      iconBtn.addEventListener('click', roomListeners.iconButton);
+    }
+    
+    if (iconFile) {
+      roomListeners.iconFile = handleIconSelected;
+      iconFile.addEventListener('change', roomListeners.iconFile);
+    }
+    
+    const iconClear = document.getElementById('room-settings-icon-clear');
+    if (iconClear) {
+      roomListeners.iconClear = handleIconClear;
+      iconClear.addEventListener('click', roomListeners.iconClear);
+    }
+    
+    const bannerBtn = document.getElementById('room-settings-banner-btn');
+    const bannerFile = document.getElementById('room-settings-banner-file');
+    if (bannerBtn && bannerFile) {
+      roomListeners.bannerButton = () => bannerFile.click();
+      bannerBtn.addEventListener('click', roomListeners.bannerButton);
+    }
+    
+    if (bannerFile) {
+      roomListeners.bannerFile = handleBannerSelected;
+      bannerFile.addEventListener('change', roomListeners.bannerFile);
+    }
+    
+    const bannerClear = document.getElementById('room-settings-banner-clear');
+    if (bannerClear) {
+      roomListeners.bannerClear = handleBannerClear;
+      bannerClear.addEventListener('click', roomListeners.bannerClear);
+    }
+    
+    // GROUP D: Color picker
+    const colorEl = document.getElementById('room-settings-color');
+    if (colorEl) {
+      roomListeners.colorInput = (e) => applyRoomColor(e.target.value);
+      colorEl.addEventListener('input', roomListeners.colorInput);
+    }
+    
+    // GROUP E: Danger zone
+    const leaveBtn = document.getElementById('room-settings-leave');
+    if (leaveBtn) {
+      roomListeners.leaveButton = handleLeaveRoom;
+      leaveBtn.addEventListener('click', roomListeners.leaveButton);
+    }
+    
+    const deleteBtn = document.getElementById('room-settings-delete');
+    if (deleteBtn) {
+      roomListeners.deleteButton = handleDeleteRoom;
+      deleteBtn.addEventListener('click', roomListeners.deleteButton);
+    }
+    
+    // GROUP F: Global escape key for room settings panel
+    // Note: Room settings panel is NOT a modal, it's a slide-out panel
+    // ModalManager handles modals, but panel needs separate ESC handling
+    roomListeners.documentEscape = (e) => {
+      if (e.key !== 'Escape') return;
+      const panel = document.getElementById('room-settings-panel');
+      if (!panel || panel.classList.contains('hidden')) return;
+      // Only close panel if no modal is open on top of it
+      if (window.ModalManager && window.ModalManager.stack.length > 0) return;
+      closeRoomSettings();
+    };
+    document.addEventListener('keydown', roomListeners.documentEscape);
+    
+    // GROUP G: Create room modal
+    const createBtn = document.getElementById('create-room-btn');
+    if (createBtn) {
+      roomListeners.createButton = showCreateRoomModal;
+      createBtn.addEventListener('click', roomListeners.createButton);
+    }
+    
+    const submit = document.getElementById('create-room-submit');
+    if (submit) {
+      roomListeners.createSubmit = createRoom;
+      submit.addEventListener('click', roomListeners.createSubmit);
+    }
+    
+    const createClose = document.getElementById('create-room-close');
+    if (createClose) {
+      roomListeners.createClose = () => {
+        if (typeof closeModal === 'function') closeModal('create-room-modal');
+      };
+      createClose.addEventListener('click', roomListeners.createClose);
+    }
+    
+    const createCancel = document.getElementById('create-room-cancel');
+    if (createCancel) {
+      roomListeners.createCancel = () => {
+        if (typeof closeModal === 'function') closeModal('create-room-modal');
+      };
+      createCancel.addEventListener('click', roomListeners.createCancel);
+    }
+    
+    // GROUP H: Room tabs
+    const tabChat = document.getElementById('room-tab-chat');
+    if (tabChat) {
+      roomListeners.tabChat = openRoomChat;
+      tabChat.addEventListener('click', roomListeners.tabChat);
+    }
+    
+    const tabVoice = document.getElementById('room-tab-voice');
+    if (tabVoice) {
+      roomListeners.tabVoice = openRoomVoice;
+      tabVoice.addEventListener('click', roomListeners.tabVoice);
+    }
+    
+    const tabMedia = document.getElementById('room-tab-media');
+    if (tabMedia) {
+      roomListeners.tabMedia = openRoomMedia;
+      tabMedia.addEventListener('click', roomListeners.tabMedia);
+    }
+    
+    // GROUP I: Voice controls
+    const connect = document.getElementById('room-voice-connect-btn');
+    if (connect) {
+      roomListeners.voiceConnect = handleRoomVoiceConnect;
+      connect.addEventListener('click', roomListeners.voiceConnect);
+    }
+    
+    const mic = document.getElementById('room-voice-mic-btn');
+    if (mic) {
+      roomListeners.voiceMic = handleRoomVoiceMicToggle;
+      mic.addEventListener('click', roomListeners.voiceMic);
+    }
+    
+    const sound = document.getElementById('room-voice-sound-btn');
+    if (sound) {
+      roomListeners.voiceSound = handleRoomVoiceSoundToggle;
+      sound.addEventListener('click', roomListeners.voiceSound);
+    }
+    
+    const screen = document.getElementById('room-voice-screen-btn');
+    if (screen) {
+      roomListeners.voiceScreen = handleRoomVoiceScreenToggle;
+      screen.addEventListener('click', roomListeners.voiceScreen);
+    }
+    
+    const voiceLeave = document.getElementById('room-voice-leave-btn');
+    if (voiceLeave) {
+      roomListeners.voiceLeave = handleRoomVoiceLeave;
+      voiceLeave.addEventListener('click', roomListeners.voiceLeave);
+    }
+    
+    // GROUP J: Settings button
+    const settingsBtn = document.getElementById('room-settings-btn');
+    if (settingsBtn) {
+      roomListeners.settingsButton = openRoomSettings;
+      settingsBtn.addEventListener('click', roomListeners.settingsButton);
+    }
+    
+    roomListeners._registered = true;
+    console.log('[rooms] Listeners registered');
+  }
+
+  function destroyRoomListeners() {
+    if (!roomListeners._registered) {
+      return;
+    }
+    
+    // GROUP A: Navigation scroll
+    const nav = document.querySelector('.room-settings-nav');
+    if (nav) {
+      if (roomListeners.navWheel) {
+        nav.removeEventListener('wheel', roomListeners.navWheel);
+      }
+      if (roomListeners.navScroll) {
+        nav.removeEventListener('scroll', roomListeners.navScroll);
+      }
+      nav.__wrapEl = null;
+    }
+    
+    if (roomListeners.windowResize) {
+      window.removeEventListener('resize', roomListeners.windowResize);
+    }
+    
+    const prev = document.getElementById('room-settings-nav-prev');
+    if (prev && roomListeners.navPrev) {
+      prev.removeEventListener('click', roomListeners.navPrev);
+    }
+    
+    const next = document.getElementById('room-settings-nav-next');
+    if (next && roomListeners.navNext) {
+      next.removeEventListener('click', roomListeners.navNext);
+    }
+    
+    // GROUP B: Settings modal
+    const close = document.getElementById('room-settings-close');
+    if (close && roomListeners.settingsClose) {
+      close.removeEventListener('click', roomListeners.settingsClose);
+    }
+    
+    const cancel = document.getElementById('room-settings-cancel');
+    if (cancel && roomListeners.settingsCancel) {
+      cancel.removeEventListener('click', roomListeners.settingsCancel);
+    }
+    
+    const backdrop = document.getElementById('room-settings-backdrop');
+    if (backdrop && roomListeners.settingsBackdrop) {
+      backdrop.removeEventListener('click', roomListeners.settingsBackdrop);
+    }
+    
+    roomListeners.settingsNavItems.forEach(({ element, handler }) => {
+      element.removeEventListener('click', handler);
+    });
+    roomListeners.settingsNavItems = [];
+    
+    roomListeners.settingsVibePresets.forEach(({ element, handler }) => {
+      element.removeEventListener('click', handler);
+    });
+    roomListeners.settingsVibePresets = [];
+    
+    const save = document.getElementById('room-settings-save');
+    if (save && roomListeners.settingsSave) {
+      save.removeEventListener('click', roomListeners.settingsSave);
+    }
+    
+    const apprSave = document.getElementById('room-settings-appearance-save');
+    if (apprSave && roomListeners.settingsAppearanceSave) {
+      apprSave.removeEventListener('click', roomListeners.settingsAppearanceSave);
+    }
+    
+    const inviteCreate = document.getElementById('room-settings-invite-create');
+    if (inviteCreate && roomListeners.settingsInviteCreate) {
+      inviteCreate.removeEventListener('click', roomListeners.settingsInviteCreate);
+    }
+    
+    const inviteCopy = document.getElementById('room-settings-invite-copy');
+    if (inviteCopy && roomListeners.settingsInviteCopy) {
+      inviteCopy.removeEventListener('click', roomListeners.settingsInviteCopy);
+    }
+    
+    const inviteShortcut = document.getElementById('room-settings-invite-shortcut');
+    if (inviteShortcut && roomListeners.settingsInviteShortcut) {
+      inviteShortcut.removeEventListener('click', roomListeners.settingsInviteShortcut);
+    }
+    
+    // GROUP C: File inputs
+    const iconBtn = document.getElementById('room-settings-icon-btn');
+    if (iconBtn && roomListeners.iconButton) {
+      iconBtn.removeEventListener('click', roomListeners.iconButton);
+    }
+    
+    const iconFile = document.getElementById('room-settings-icon-file');
+    if (iconFile && roomListeners.iconFile) {
+      iconFile.removeEventListener('change', roomListeners.iconFile);
+    }
+    
+    const iconClear = document.getElementById('room-settings-icon-clear');
+    if (iconClear && roomListeners.iconClear) {
+      iconClear.removeEventListener('click', roomListeners.iconClear);
+    }
+    
+    const bannerBtn = document.getElementById('room-settings-banner-btn');
+    if (bannerBtn && roomListeners.bannerButton) {
+      bannerBtn.removeEventListener('click', roomListeners.bannerButton);
+    }
+    
+    const bannerFile = document.getElementById('room-settings-banner-file');
+    if (bannerFile && roomListeners.bannerFile) {
+      bannerFile.removeEventListener('change', roomListeners.bannerFile);
+    }
+    
+    const bannerClear = document.getElementById('room-settings-banner-clear');
+    if (bannerClear && roomListeners.bannerClear) {
+      bannerClear.removeEventListener('click', roomListeners.bannerClear);
+    }
+    
+    // GROUP D: Color picker
+    const colorEl = document.getElementById('room-settings-color');
+    if (colorEl && roomListeners.colorInput) {
+      colorEl.removeEventListener('input', roomListeners.colorInput);
+    }
+    
+    // GROUP E: Danger zone
+    const leaveBtn = document.getElementById('room-settings-leave');
+    if (leaveBtn && roomListeners.leaveButton) {
+      leaveBtn.removeEventListener('click', roomListeners.leaveButton);
+    }
+    
+    const deleteBtn = document.getElementById('room-settings-delete');
+    if (deleteBtn && roomListeners.deleteButton) {
+      deleteBtn.removeEventListener('click', roomListeners.deleteButton);
+    }
+    
+    // GROUP F: Global escape key
+    if (roomListeners.documentEscape) {
+      document.removeEventListener('keydown', roomListeners.documentEscape);
+    }
+    
+    // GROUP G: Create room modal
+    const createBtn = document.getElementById('create-room-btn');
+    if (createBtn && roomListeners.createButton) {
+      createBtn.removeEventListener('click', roomListeners.createButton);
+    }
+    
+    const submit = document.getElementById('create-room-submit');
+    if (submit && roomListeners.createSubmit) {
+      submit.removeEventListener('click', roomListeners.createSubmit);
+    }
+    
+    const createClose = document.getElementById('create-room-close');
+    if (createClose && roomListeners.createClose) {
+      createClose.removeEventListener('click', roomListeners.createClose);
+    }
+    
+    const createCancel = document.getElementById('create-room-cancel');
+    if (createCancel && roomListeners.createCancel) {
+      createCancel.removeEventListener('click', roomListeners.createCancel);
+    }
+    
+    // GROUP H: Room tabs
+    const tabChat = document.getElementById('room-tab-chat');
+    if (tabChat && roomListeners.tabChat) {
+      tabChat.removeEventListener('click', roomListeners.tabChat);
+    }
+    
+    const tabVoice = document.getElementById('room-tab-voice');
+    if (tabVoice && roomListeners.tabVoice) {
+      tabVoice.removeEventListener('click', roomListeners.tabVoice);
+    }
+    
+    const tabMedia = document.getElementById('room-tab-media');
+    if (tabMedia && roomListeners.tabMedia) {
+      tabMedia.removeEventListener('click', roomListeners.tabMedia);
+    }
+    
+    // GROUP I: Voice controls
+    const connect = document.getElementById('room-voice-connect-btn');
+    if (connect && roomListeners.voiceConnect) {
+      connect.removeEventListener('click', roomListeners.voiceConnect);
+    }
+    
+    const mic = document.getElementById('room-voice-mic-btn');
+    if (mic && roomListeners.voiceMic) {
+      mic.removeEventListener('click', roomListeners.voiceMic);
+    }
+    
+    const sound = document.getElementById('room-voice-sound-btn');
+    if (sound && roomListeners.voiceSound) {
+      sound.removeEventListener('click', roomListeners.voiceSound);
+    }
+    
+    const screen = document.getElementById('room-voice-screen-btn');
+    if (screen && roomListeners.voiceScreen) {
+      screen.removeEventListener('click', roomListeners.voiceScreen);
+    }
+    
+    const voiceLeave = document.getElementById('room-voice-leave-btn');
+    if (voiceLeave && roomListeners.voiceLeave) {
+      voiceLeave.removeEventListener('click', roomListeners.voiceLeave);
+    }
+    
+    // GROUP J: Settings button
+    const settingsBtn = document.getElementById('room-settings-btn');
+    if (settingsBtn && roomListeners.settingsButton) {
+      settingsBtn.removeEventListener('click', roomListeners.settingsButton);
+    }
+    
+    // Clear all references
+    Object.keys(roomListeners).forEach(key => {
+      if (key !== '_registered') {
+        if (Array.isArray(roomListeners[key])) {
+          roomListeners[key] = [];
+        } else {
+          roomListeners[key] = null;
+        }
+      }
+    });
+    
+    roomListeners._registered = false;
+    console.log('[rooms] Listeners destroyed');
   }
 
   // === Создание комнаты ==================================================
@@ -775,43 +1340,6 @@
    * стилизовать disabled-вид и возможное скрытие через CSS.
    * Никаких inline onclick / inline style на самих кнопках.
    */
-  function bindNavWheelScroll() {
-    const wrap = document.querySelector('.room-settings-nav-wrap');
-    const nav = document.querySelector('.room-settings-nav');
-    if (!nav || nav.__wheelBound) return;
-    nav.__wheelBound = true;
-
-    nav.addEventListener('wheel', (e) => {
-      // Тачпадный горизонтальный жест — не вмешиваемся.
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      if (nav.scrollWidth <= nav.clientWidth + 1) return;
-      e.preventDefault();
-      let delta = e.deltaY;
-      if (e.deltaMode === 1) delta *= 16;
-      else if (e.deltaMode === 2) delta *= nav.clientWidth;
-      nav.scrollLeft += delta * 0.55;
-      updateNavScrollEdges();
-    }, { passive: false });
-
-    nav.addEventListener('scroll', updateNavScrollEdges, { passive: true });
-    window.addEventListener('resize', updateNavScrollEdges);
-
-    // Стрелки: на каждый клик прокручиваем на ~60% видимой ширины nav,
-    // smooth — браузер сам анимирует. Ширина шага достаточная, чтобы
-    // увидеть следующую вкладку, и не слишком большая, чтобы пропустить.
-    const scrollByStep = (direction) => {
-      const step = Math.max(120, Math.round(nav.clientWidth * 0.6));
-      nav.scrollBy({ left: direction * step, behavior: 'smooth' });
-    };
-    const prev = document.getElementById('room-settings-nav-prev');
-    const next = document.getElementById('room-settings-nav-next');
-    if (prev) prev.addEventListener('click', () => scrollByStep(-1));
-    if (next) next.addEventListener('click', () => scrollByStep(1));
-
-    // Сохраняем ссылку на wrap для updateNavScrollEdges
-    if (wrap) nav.__wrapEl = wrap;
-  }
-
   function updateNavScrollEdges() {
     const nav = document.querySelector('.room-settings-nav');
     if (!nav) return;
@@ -1320,12 +1848,12 @@
     window.currentChannelId = null;
     window.currentVoiceChannel = null;
 
-    // 4. Убрать активное состояние у удалённой комнаты в списке слева
-    //    и физически очистить legacy channel sidebar (имя/каналы).
-    document.querySelectorAll('.server-icon.active').forEach(el => el.classList.remove('active'));
-    if (goneId) {
-      document.querySelectorAll(`.server-icon[data-server-id="${CSS.escape(String(goneId))}"]`)
-        .forEach(el => el.classList.remove('active'));
+    // 4. Убрать активное состояние у удалённой комнаты через единый
+    //    navigation state и физически очистить legacy channel sidebar (имя/каналы).
+    if (typeof setNavigationState === 'function') {
+      setNavigationState({ currentView: 'dm', activeServerId: null, activeDMId: null });
+    } else if (typeof applyNavigationState === 'function') {
+      applyNavigationState();
     }
     const channelsList = document.getElementById('server-channels-list');
     if (channelsList) channelsList.innerHTML = '';
@@ -1413,142 +1941,6 @@
     }
   }
 
-  function bindRoomSettingsPanel() {
-    const close = document.getElementById('room-settings-close');
-    if (close) close.addEventListener('click', closeRoomSettings);
-
-    const cancel = document.getElementById('room-settings-cancel');
-    if (cancel) cancel.addEventListener('click', closeRoomSettings);
-
-    const backdrop = document.getElementById('room-settings-backdrop');
-    if (backdrop) backdrop.addEventListener('click', closeRoomSettings);
-
-    document.querySelectorAll('.room-settings-nav-item').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const name = btn.getAttribute('data-rs-section');
-        if (name) setActiveSection(name);
-      });
-    });
-
-    document.querySelectorAll('.room-settings-vibe-preset').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const v = btn.getAttribute('data-vibe') || '';
-        const input = document.getElementById('room-settings-vibe');
-        if (input) input.value = v;
-      });
-    });
-
-    const save = document.getElementById('room-settings-save');
-    if (save) save.addEventListener('click', handleSaveGeneral);
-
-    const apprSave = document.getElementById('room-settings-appearance-save');
-    if (apprSave) apprSave.addEventListener('click', handleSaveAppearance);
-
-    const inviteCreate = document.getElementById('room-settings-invite-create');
-    if (inviteCreate) inviteCreate.addEventListener('click', handleCreateInvite);
-
-    const inviteCopy = document.getElementById('room-settings-invite-copy');
-    if (inviteCopy) inviteCopy.addEventListener('click', handleCopyInvite);
-
-    const inviteShortcut = document.getElementById('room-settings-invite-shortcut');
-    if (inviteShortcut) inviteShortcut.addEventListener('click', () => setActiveSection('invite'));
-
-    // Иконка / баннер
-    const iconBtn = document.getElementById('room-settings-icon-btn');
-    const iconFile = document.getElementById('room-settings-icon-file');
-    if (iconBtn && iconFile) iconBtn.addEventListener('click', () => iconFile.click());
-    if (iconFile) iconFile.addEventListener('change', handleIconSelected);
-
-    const iconClear = document.getElementById('room-settings-icon-clear');
-    if (iconClear) iconClear.addEventListener('click', handleIconClear);
-
-    const bannerBtn = document.getElementById('room-settings-banner-btn');
-    const bannerFile = document.getElementById('room-settings-banner-file');
-    if (bannerBtn && bannerFile) bannerBtn.addEventListener('click', () => bannerFile.click());
-    if (bannerFile) bannerFile.addEventListener('change', handleBannerSelected);
-
-    const bannerClear = document.getElementById('room-settings-banner-clear');
-    if (bannerClear) bannerClear.addEventListener('click', handleBannerClear);
-
-    // Live preview цвета пока пользователь крутит color picker.
-    // Сохранение всё равно по кнопке "Сохранить цвет".
-    const colorEl = document.getElementById('room-settings-color');
-    if (colorEl) colorEl.addEventListener('input', (e) => applyRoomColor(e.target.value));
-
-    // Опасная зона
-    const leaveBtn = document.getElementById('room-settings-leave');
-    if (leaveBtn) leaveBtn.addEventListener('click', handleLeaveRoom);
-
-    const deleteBtn = document.getElementById('room-settings-delete');
-    if (deleteBtn) deleteBtn.addEventListener('click', handleDeleteRoom);
-
-    // (поле подтверждения именем удалено: для удаления используется
-    // только confirm modal)
-
-    // Esc закрывает панель, но только если поверх неё нет другого
-    // активного modal-overlay (например, confirm-modal удаления).
-    // Иначе пусть Esc сначала закроет верхний слой (его обрабатывает ui.js).
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      const panel = document.getElementById('room-settings-panel');
-      if (!panel || panel.classList.contains('hidden')) return;
-      const topModalOpen = document.querySelector('.modal-overlay:not(.hidden)');
-      if (topModalOpen) return;
-      closeRoomSettings();
-    });
-  }
-
-  // === Биндинг обработчиков (без inline) =================================
-
-  function bindCreateRoomButton() {
-    const btn = document.getElementById('create-room-btn');
-    if (btn) btn.addEventListener('click', showCreateRoomModal);
-
-    const submit = document.getElementById('create-room-submit');
-    if (submit) submit.addEventListener('click', createRoom);
-
-    const close = (id) => {
-      const el = document.getElementById(id);
-      if (el && typeof closeModal === 'function') {
-        el.addEventListener('click', () => closeModal('create-room-modal'));
-      }
-    };
-    close('create-room-close');
-    close('create-room-cancel');
-  }
-
-  function bindRoomTabs() {
-    const tab = (id, handler) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('click', handler);
-    };
-    tab('room-tab-chat', openRoomChat);
-    tab('room-tab-voice', openRoomVoice);
-    tab('room-tab-media', openRoomMedia);
-  }
-
-  function bindRoomVoiceControls() {
-    const connect = document.getElementById('room-voice-connect-btn');
-    if (connect) connect.addEventListener('click', handleRoomVoiceConnect);
-
-    const mic = document.getElementById('room-voice-mic-btn');
-    if (mic) mic.addEventListener('click', handleRoomVoiceMicToggle);
-
-    const sound = document.getElementById('room-voice-sound-btn');
-    if (sound) sound.addEventListener('click', handleRoomVoiceSoundToggle);
-
-    const screen = document.getElementById('room-voice-screen-btn');
-    if (screen) screen.addEventListener('click', handleRoomVoiceScreenToggle);
-
-    const leave = document.getElementById('room-voice-leave-btn');
-    if (leave) leave.addEventListener('click', handleRoomVoiceLeave);
-  }
-
-  function bindRoomSettings() {
-    const btn = document.getElementById('room-settings-btn');
-    if (btn) btn.addEventListener('click', openRoomSettings);
-  }
-
   function wrapNavigation() {
     if (typeof window.selectServer === 'function' && !window.selectServer.__wrappedForRooms) {
       const original = window.selectServer;
@@ -1578,17 +1970,12 @@
   // === Init ===============================================================
 
   function init() {
-    bindCreateRoomButton();
-    bindRoomTabs();
-    bindRoomVoiceControls();
-    bindRoomSettings();
-    bindRoomSettingsPanel();
-    bindNavWheelScroll();
+    registerRoomListeners();
     wrapNavigation();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
   }

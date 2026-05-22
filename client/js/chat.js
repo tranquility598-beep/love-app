@@ -682,7 +682,7 @@ function _showAntispamModal(channelId, { title, text }) {
   _modalShownForChannelId = channelId;
 
   if (overlay.classList.contains('hidden')) {
-    overlay.classList.remove('hidden');
+    openModal('antispam-modal', { allowEscape: true, allowClickOutside: true });
     overlay.setAttribute('aria-hidden', 'false');
   }
   _updateAntispamCountdown(channelId);
@@ -701,7 +701,7 @@ function _updateAntispamCountdown(channelId) {
 function hideAntispamModal() {
   const overlay = document.getElementById('antispam-modal');
   if (!overlay) return;
-  overlay.classList.add('hidden');
+  closeModal('antispam-modal');
   overlay.setAttribute('aria-hidden', 'true');
   _modalShownForChannelId = null;
 }
@@ -718,25 +718,11 @@ function _ensureAntispamModalBindings() {
   const okBtn = document.getElementById('antispam-modal-ok');
   if (!overlay || !okBtn) return;
   okBtn.addEventListener('click', hideAntispamModal);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) hideAntispamModal();
-  });
-  // Глобальный keydown в фазе capture — чтобы перехватить Enter ДО того,
-  // как handleMessageKeydown в textarea вызовет sendMessage.
-  // Поведение:
-  //   - если modal открыт и Enter (без Shift) → закрыть modal как "Понял";
-  //     cooldown продолжается, sendMessage НЕ вызывается;
-  //   - если modal открыт и Escape → закрыть modal;
-  //   - если modal закрыт → ничего не трогаем (обычный chat-флоу).
+  
+  // Note: Click-outside and ESC are now handled by ModalManager
+  // Keep custom Enter key handling for "OK" action
   document.addEventListener('keydown', (e) => {
     if (overlay.classList.contains('hidden')) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      hideAntispamModal();
-      return;
-    }
     if (e.key === 'Enter' && !e.shiftKey) {
       // stopImmediatePropagation — чтобы Enter ГАРАНТИРОВАННО не дошёл
       // до handleMessageKeydown на textarea (который тоже навешен в

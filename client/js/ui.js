@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Если окно уже открыто, не открываем заново
         const modal = document.getElementById('developer-modal-egg');
         if (modal && modal.classList.contains('hidden')) {
-          openModal('developer-modal-egg');
+          openModal('developer-modal-egg', { allowEscape: false, allowClickOutside: false });
         }
         logoClickCount = 0;
       }
@@ -229,26 +229,259 @@ function showMessageNotification(message) {
   showNotification('info', message.content?.substring(0, 80) || 'Новое сообщение', message.author?.username);
 }
 
-// ===== МОДАЛЬНЫЕ ОКНА =====
-function openModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) modal.classList.remove('hidden');
+// ===== МОДАЛЬНЫЕ ОКНА — UNIFIED ARCHITECTURE =====
+
+/**
+ * Modal Stack Manager
+ * Tracks open modals, manages z-index, focus, and scroll locking
+ */
+const ModalManager = {
+  stack: [], // Array of { id, element, previousFocus, allowEscape, allowClickOutside }
+  baseZIndex: 1000,
+  scrollLockCount: 0,
+
+  /**
+   * Opens a modal and adds it to the stack
+   * @param {string} id - Modal overlay element ID
+   * @param {Object} options - { allowEscape: true, allowClickOutside: true, initialFocus: null }
+   */
+  open(id, options = {}) {
+    const modal = document.getElementById(id);
+    if (!modal) {
+      console.warn(`[ModalManager] Modal not found: ${id}`);
+      return;
+    }
+
+    // Check if already open
+    if (this.stack.find(m => m.id === id)) {
+      console.warn(`[ModalManager] Modal already open: ${id}`);
+      return;
+    }
+
+    // Store currently focused element
+    const previousFocus = document.activeElement;
+
+    // Default options
+    const config = {
+      allowEscape: options.allowEscape !== false, // Default true
+      allowClickOutside: options.allowClickOutside !== false, // Default true
+      initialFocus: options.initialFocus || null,
+      ...options
+    };
+
+    // Add to stack
+    this.stack.push({
+      id,
+      element: modal,
+      previousFocus,
+      ...config
+    });
+
+    // Set z-index based on stack position
+    modal.style.zIndex = this.baseZIndex + this.stack.length * 10;
+
+    // Show modal
+    modal.classList.remove('hidden');
+
+    // Enable scroll lock
+    this.enableScrollLock();
+
+    // Set initial focus
+    this.setInitialFocus(modal, config.initialFocus);
+
+    // Setup focus trap
+    this.setupFocusTrap(modal);
+
+    console.log(`[ModalManager] Opened: ${id}, stack depth: ${this.stack.length}`);
+  },
+
+  /**
+   * Closes a modal and removes it from the stack
+   * @param {string} id - Modal overlay element ID
+   */
+  close(id) {
+    const index = this.stack.findIndex(m => m.id === id);
+    if (index === -1) {
+      console.warn(`[ModalManager] Modal not in stack: ${id}`);
+      return;
+    }
+
+    const modalData = this.stack[index];
+    const modal = modalData.element;
+
+    // Hide modal
+    modal.classList.add('hidden');
+
+    // Remove from stack
+    this.stack.splice(index, 1);
+
+    // Disable scroll lock if no modals remain
+    if (this.stack.length === 0) {
+      this.disableScrollLock();
+    }
+
+    // Return focus to previous element
+    if (modalData.previousFocus && typeof modalData.previousFocus.focus === 'function') {
+      try {
+        modalData.previousFocus.focus();
+      } catch (e) {
+        console.warn('[ModalManager] Could not return focus:', e);
+      }
+    }
+
+    console.log(`[ModalManager] Closed: ${id}, stack depth: ${this.stack.length}`);
+  },
+
+  /**
+   * Closes the topmost modal in the stack
+   */
+  closeTop() {
+    if (this.stack.length === 0) return;
+    const topModal = this.stack[this.stack.length - 1];
+    if (topModal.allowEscape) {
+      this.close(topModal.id);
+    }
+  },
+
+  /**
+   * Closes all modals
+   */
+  closeAll() {
+    while (this.stack.length > 0) {
+      const topModal = this.stack[this.stack.length - 1];
+      this.close(topModal.id);
+    }
+  },
+
+  /**
+   * Enables scroll locking on body
+   */
+  enableScrollLock() {
+    this.scrollLockCount++;
+    if (this.scrollLockCount === 1) {
+      document.body.style.overflow = 'hidden';
+    }
+  },
+
+  /**
+   * Disables scroll locking on body
+   */
+  disableScrollLock() {
+    this.scrollLockCount = Math.max(0, this.scrollLockCount - 1);
+    if (this.scrollLockCount === 0) {
+      document.body.style.overflow = '';
+    }
+  },
+
+  /**
+   * Sets initial focus inside modal
+   */
+  setInitialFocus(modal, initialFocusSelector) {
+    setTimeout(() => {
+      let focusTarget = null;
+
+      // Try custom selector first
+      if (initialFocusSelector) {
+        focusTarget = modal.querySelector(initialFocusSelector);
+      }
+
+      // Fallback: first input or button
+      if (!focusTarget) {
+        focusTarget = modal.querySelector('input:not([type="hidden"]), textarea, select, button');
+      }
+
+      // Fallback: modal itself
+      if (!focusTarget) {
+        focusTarget = modal.querySelector('.modal, .modal-content, .settings-modal');
+      }
+
+      if (focusTarget && typeof focusTarget.focus === 'function') {
+        try {
+          focusTarget.focus();
+        } catch (e) {
+          console.warn('[ModalManager] Could not set initial focus:', e);
+        }
+      }
+    }, 100); // Delay to allow modal animation
+  },
+
+  /**
+   * Sets up focus trap inside modal
+   */
+  setupFocusTrap(modal) {
+    const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    
+    const handleTab = (e) => {
+      if (e.key !== 'Tab') return;
+
+      const focusableElements = Array.from(modal.querySelectorAll(focusableSelector));
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      // Shift + Tab on first element -> focus last
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement.focus();
+      }
+      // Tab on last element -> focus first
+      else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    // Store handler for cleanup
+    if (!modal._focusTrapHandler) {
+      modal._focusTrapHandler = handleTab;
+      modal.addEventListener('keydown', handleTab);
+    }
+  },
+
+  /**
+   * Checks if a modal is currently open
+   */
+  isOpen(id) {
+    return this.stack.some(m => m.id === id);
+  },
+
+  /**
+   * Gets the topmost modal ID
+   */
+  getTopModalId() {
+    if (this.stack.length === 0) return null;
+    return this.stack[this.stack.length - 1].id;
+  }
+};
+
+// Legacy functions for backward compatibility
+function openModal(id, options) {
+  ModalManager.open(id, options);
 }
 
 function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) modal.classList.add('hidden');
+  ModalManager.close(id);
 }
 
+// Global click-outside handler
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.add('hidden');
+    const modalId = e.target.id;
+    const modalData = ModalManager.stack.find(m => m.id === modalId);
+    if (modalData && modalData.allowClickOutside) {
+      ModalManager.close(modalId);
+    }
   }
 });
 
+// Global ESC key handler - only closes topmost modal
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    // Close topmost modal if allowed
+    ModalManager.closeTop();
+    
+    // Also close context menu and emoji picker (not modals)
     hideContextMenu();
     const emojiPicker = document.getElementById('emoji-picker-container');
     if (emojiPicker) emojiPicker.classList.add('hidden');

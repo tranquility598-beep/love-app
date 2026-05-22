@@ -175,7 +175,9 @@ function maybeShowGoogleOnboarding() {
   const modal = document.getElementById('google-onboarding-modal');
   const input = document.getElementById('google-onboarding-username');
   if (input) input.value = window.currentUser?.username || '';
-  if (modal) modal.classList.remove('hidden');
+  if (modal) {
+    openModal('google-onboarding-modal', { allowEscape: false, allowClickOutside: false });
+  }
 }
 
 window.completeGoogleOnboarding = completeGoogleOnboarding;

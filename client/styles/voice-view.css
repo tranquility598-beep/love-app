@@ -118,9 +118,9 @@
 }
 
 .voice-view-btn {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: var(--btn-h-xl);
+  height: var(--btn-h-xl);
+  border-radius: var(--btn-radius-full);
   border: none;
   background: var(--bg-tertiary);
   color: var(--text-primary);
@@ -128,7 +128,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--btn-transition);
 }
 
 .voice-view-btn:hover {
@@ -154,8 +154,8 @@
 .voice-view-btn.leave-voice-btn {
   background: var(--red);
   color: #fff;
-  width: 64px;
-  border-radius: 16px;
+  width: var(--btn-h-xl);
+  border-radius: var(--btn-radius-xl);
 }
 
 .voice-view-btn.leave-voice-btn:hover {
@@ -185,7 +185,7 @@
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--btn-radius);
   width: 36px;
   height: 36px;
   color: white;
@@ -194,7 +194,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: var(--btn-transition);
   opacity: 0;
 }
 
@@ -204,5 +204,5 @@
 
 .fullscreen-btn:hover {
   background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
+  transform: var(--btn-hover-scale);
 }

@@ -194,9 +194,9 @@
 }
 
 .channels-header-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: var(--btn-h-sm);
+  height: var(--btn-h-sm);
+  border-radius: var(--btn-radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -204,14 +204,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
   flex-shrink: 0;
 }
 
 .channels-header-btn:hover {
   background: var(--bg-hover);
   color: var(--accent);
-  transform: scale(1.1);
+  transform: var(--btn-hover-scale);
 }
 
 /* DM search section */
@@ -361,7 +361,7 @@
   display: none;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -370,7 +370,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
 }
 
 .dm-item:hover .dm-close-btn {
@@ -380,7 +380,7 @@
 .dm-close-btn:hover {
   background: var(--red);
   color: white;
-  transform: scale(1.1);
+  transform: var(--btn-hover-scale);
 }
 
 /* ===== SERVER CHANNELS LIST ===== */
@@ -501,7 +501,7 @@
 .channel-action-btn {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -509,7 +509,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
   padding: 0;
 }
 
@@ -581,7 +581,7 @@
 .user-control-btn {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.65);
@@ -589,7 +589,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
   position: relative;
 }
 
@@ -712,8 +712,8 @@ body.room-mode .server-rail-account {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.65);
-  border-radius: 10px;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  border-radius: var(--radius-lg);
+  transition: background var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
 }
 
 .account-settings-btn:hover {
@@ -742,15 +742,15 @@ body.room-mode .server-rail-account {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
   text-align: left;
 }
 

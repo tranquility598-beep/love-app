@@ -100,18 +100,44 @@
   --control-h-sm: 28px;
   --control-h-md: 32px;
   --control-h-lg: 40px;
-  --btn-h: var(--control-h-md);
-  --btn-h-sm: var(--control-h-sm);
-  --btn-h-lg: var(--control-h-lg);
-  --btn-radius: var(--radius-lg);
+  --control-h-xl: 48px;
+
+  /* ===== Button System — Phase 1 Unified Tokens ===== */
+  /* Base button heights */
+  --btn-h-sm: var(--control-h-sm);    /* 28px - small action buttons */
+  --btn-h-md: var(--control-h-md);    /* 32px - default icon buttons */
+  --btn-h: var(--control-h-md);       /* 32px - alias for md */
+  --btn-h-lg: var(--control-h-lg);    /* 40px - standard action buttons */
+  --btn-h-xl: var(--control-h-xl);    /* 48px - large primary actions */
+
+  /* Button border radius (strict system with override capability) */
+  --btn-radius-sm: var(--radius-md);  /* 6px - secondary UI controls (icons, chat actions) */
+  --btn-radius: var(--radius-lg);     /* 8px - standard buttons (default) */
+  --btn-radius-lg: var(--radius-xl);  /* 12px - primary actions (rooms, voice main controls) */
+  --btn-radius-xl: var(--radius-2xl); /* 16px - override for primary voice actions only */
+  --btn-radius-full: var(--radius-full); /* 50% - circular buttons */
+
+  /* Button spacing */
   --btn-gap: var(--space-2);
   --btn-padding-x: var(--space-4);
   --btn-padding-x-sm: var(--space-3);
   --btn-padding-x-lg: var(--space-5);
+
+  /* Button typography */
   --btn-font-size: var(--font-size-md);
   --btn-font-weight: var(--font-weight-bold);
+
+  /* Button transitions (single standard system) */
   --btn-transition: transform var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+
+  /* Button hover transforms */
+  --btn-hover-lift: translateY(-1px);  /* Default for rectangular buttons */
+  --btn-hover-scale: scale(1.05);      /* For circular buttons only */
+
+  /* Button focus */
   --btn-focus-ring: 0 0 0 3px var(--state-focus-ring);
+
+  /* Button colors */
   --btn-primary-bg: var(--accent);
   --btn-primary-fg: var(--text-on-accent);
   --btn-primary-hover-bg: var(--accent-hover);
@@ -1061,16 +1087,16 @@ body.space-theme #starfield-canvas {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px var(--space-3);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: var(--btn-radius);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: var(--btn-transition);
 }
 .friends-add-btn:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -1158,7 +1184,7 @@ body.space-theme #starfield-canvas {
 .friend-action-btn {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: var(--btn-radius-full);
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
   color: var(--text-muted);
@@ -1166,13 +1192,14 @@ body.space-theme #starfield-canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
 }
 
 .friend-action-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-hover);
+  transform: var(--btn-hover-scale);
 }
 
 .friend-action-btn.accept:hover { color: #ffffff; }
@@ -1226,15 +1253,15 @@ body.space-theme #starfield-canvas {
 .add-friend-input::placeholder { color: var(--text-muted); }
 
 .add-friend-btn {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   background: rgba(255,255,255,0.1);
   border: 1px solid var(--border-hover);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
   white-space: nowrap;
 }
 
@@ -1575,9 +1602,9 @@ body.space-theme #starfield-canvas {
 }
 
 .voice-control-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: var(--btn-h-md);
+  height: var(--btn-h-md);
+  border-radius: var(--btn-radius);
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -1585,7 +1612,7 @@ body.space-theme #starfield-canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
 }
 
 .voice-control-btn:hover {
@@ -1801,11 +1828,11 @@ body.space-theme #starfield-canvas {
   border: 1px solid var(--border-hover);
   color: #ffffff;
   padding: 6px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--btn-transition);
 }
 
 .update-btn:hover:not(:disabled) {

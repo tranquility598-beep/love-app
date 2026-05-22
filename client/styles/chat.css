@@ -104,9 +104,9 @@ body.hide-avatars .message-with-avatar {
 }
 
 .chat-header-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: var(--btn-h-md);
+  height: var(--btn-h-md);
+  border-radius: var(--btn-radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -114,7 +114,7 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
 }
 
 .chat-header-btn:hover,
@@ -404,13 +404,13 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-2);
   background: var(--surface-alpha-3);
   border: 1px solid var(--accent-dim);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
   color: var(--text-secondary);
 }
 
@@ -450,9 +450,9 @@ body.hide-avatars .message-with-avatar {
 }
 
 .message-action-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: var(--btn-h-sm);
+  height: var(--btn-h-sm);
+  border-radius: var(--btn-radius-sm);
   border: none;
   background: transparent;
   cursor: pointer;
@@ -460,7 +460,7 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: var(--btn-transition);
   color: var(--text-muted);
 }
 
@@ -645,9 +645,9 @@ body.hide-avatars .message-with-avatar {
 }
 
 .attach-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
+  width: var(--btn-h-md);
+  height: var(--btn-h-md);
+  border-radius: var(--btn-radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -655,7 +655,7 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
   flex-shrink: 0;
 }
 
@@ -703,9 +703,9 @@ body.hide-avatars .message-with-avatar {
 .emoji-btn,
 .voice-record-btn,
 .send-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
+  width: var(--btn-h-md);
+  height: var(--btn-h-md);
+  border-radius: var(--btn-radius-sm);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -713,7 +713,7 @@ body.hide-avatars .message-with-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
 }
 
 .emoji-btn:hover {

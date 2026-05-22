@@ -225,17 +225,17 @@ body.room-mode #friends-view {
 
 .room-header-settings-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: var(--btn-h-md);
+  height: var(--btn-h-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
+  border-radius: var(--btn-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: var(--btn-transition);
 }
 
 .room-header-settings-btn svg {
@@ -278,18 +278,18 @@ body.room-mode #friends-view {
   padding: 14px 18px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border-radius: var(--btn-radius-lg);
   color: rgba(255, 255, 255, 0.95);
   cursor: pointer;
   text-align: left;
   font: inherit;
-  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: var(--btn-transition);
 }
 
 .room-tab:hover {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(255, 255, 255, 0.16);
-  transform: translateY(-1px);
+  transform: var(--btn-hover-lift);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
 
@@ -608,17 +608,17 @@ body.room-mode #chat-view .channel-start-desc {
   background: #3ba55d;
   color: #fff;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--btn-radius-lg);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  transition: var(--btn-transition);
 }
 
 .room-voice-connect-btn:hover {
   background: #339950;
-  transform: translateY(-1px);
+  transform: var(--btn-hover-lift);
   box-shadow: 0 8px 22px rgba(59, 165, 93, 0.35);
 }
 
@@ -653,7 +653,7 @@ body.room-mode #chat-view .channel-start-desc {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 10px;
+  border-radius: var(--btn-radius);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.92);
@@ -661,7 +661,7 @@ body.room-mode #chat-view .channel-start-desc {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+  transition: var(--btn-transition);
 }
 
 .room-voice-ctrl-btn svg {
@@ -1021,7 +1021,7 @@ body.room-mode #chat-view .channel-start-desc {
    accent (см. .room-settings-btn-primary ниже). */
 .room-settings-btn {
   border: none;
-  border-radius: 8px;
+  border-radius: var(--btn-radius);
   padding: 9px 16px;
   min-height: 36px;
   font-size: 13px;
@@ -1032,7 +1032,7 @@ body.room-mode #chat-view .channel-start-desc {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: var(--btn-transition);
 }
 .room-settings-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .room-settings-btn-primary {

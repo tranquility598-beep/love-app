@@ -42,7 +42,7 @@
 .modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   width: 100%;
   max-width: 480px;
   box-shadow: 0 24px 80px rgba(0,0,0,0.9);
@@ -65,7 +65,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px 24px 0;
+  padding: var(--space-6) var(--space-6) 0;
 }
 
 .modal-header h2 {
@@ -87,7 +87,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--btn-transition);
 }
 
 .modal-close:hover {
@@ -98,7 +98,7 @@
 }
 
 .modal-body {
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
 }
 
 .modal-description {
@@ -279,7 +279,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 20px 24px;
+  padding: var(--space-5) var(--space-6);
   border-top: 1px solid var(--border);
   background: var(--bg-tertiary);
 }
@@ -1106,12 +1106,12 @@
   padding: 6px 14px;
   background: rgba(255,255,255,0.1);
   border: 1px solid var(--border-hover);
-  border-radius: 6px;
+  border-radius: var(--btn-radius-sm);
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: var(--btn-transition);
 }
 
 .copy-btn:hover {
@@ -1540,4 +1540,9 @@
 .modal.antispam-modal .modal-btn.primary:hover {
   background: #fff;
   border-color: #fff;
+}
+
+/* Защита system-level UI: antispam modal-close должен оставаться быстрым */
+.modal.antispam-modal .modal-close {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }

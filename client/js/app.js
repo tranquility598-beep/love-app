@@ -116,20 +116,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const isFirstSession = sessionStorage.getItem('hasPlayedSplash') !== 'true';
 
   const logo = document.querySelector('.loading-logo');
-  if (isFirstSession) {
-    if (window.SoundManager) window.SoundManager.play('app_splash');
-    if (logo) logo.classList.add('animate-heart');
-  } else {
-    if (logo) logo.classList.add('animate-heart');
-  }
+  if (logo) logo.classList.add('animate-heart');
 
   const hideSplashScreen = (callback) => {
     const elapsed = Date.now() - splashStartTime;
     const remaining = isFirstSession ? Math.max(0, MIN_SPLASH_TIME - elapsed) : 0;
     
     setTimeout(() => {
-      if (window.SoundManager) window.SoundManager.stop('app_splash');
-
       const loadingScreen = document.getElementById('loading-screen');
       if (loadingScreen) {
         loadingScreen.style.transition = 'opacity 0.4s ease';
@@ -706,6 +699,10 @@ function renderChannelItem(channel, server) {
  * Выбрать текстовый канал
  */
 async function __legacyNavigateToChannel(channelId, channelName, channelType, options = {}) {
+  window.unreadCount = 0;
+  if (window.electronAPI?.setBadgeCount) {
+    window.electronAPI.setBadgeCount(0);
+  }
   const isStale = typeof options.isStale === 'function' ? options.isStale : () => false;
 
   const globalSeq = ++window._globalNavigationSeq;
@@ -714,7 +711,8 @@ async function __legacyNavigateToChannel(channelId, channelName, channelType, op
   if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
     window.NavigationController._commitState({
       currentChannelId: channelId,
-      currentChannel: { _id: channelId, name: channelName, type: channelType }
+      currentChannel: { _id: channelId, name: channelName, type: channelType },
+      currentDMConversation: null
     }, '__legacyNavigateToChannel');
   }
 
@@ -956,7 +954,7 @@ function createMemberElement(member) {
   memberAvatar.className = 'member-avatar';
   
   const avatarImg = document.createElement('img');
-  avatarImg.src = getAvatarUrl(user.avatar);
+  avatarImg.src = getAvatarUrl(user.avatar, user.username, user._id);
   avatarImg.alt = escapeHtml(user.username);
   
   const statusDot = document.createElement('div');
@@ -1167,7 +1165,7 @@ function renderDMConversations(conversations) {
     dmAvatar.className = 'dm-avatar';
     
     const avatarImg = document.createElement('img');
-    avatarImg.src = getAvatarUrl(other.avatar);
+    avatarImg.src = getAvatarUrl(other.avatar, other.username, other._id);
     avatarImg.alt = escapeHtml(other.username);
     
     const statusDot = document.createElement('div');
@@ -1252,7 +1250,8 @@ async function loadDMMessages(conversationId, options = {}) {
     if (data.channelId) {
       if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
         window.NavigationController._commitState({
-          currentChannelId: data.channelId.toString()
+          currentChannelId: data.channelId.toString(),
+          currentChannel: { _id: data.channelId.toString(), name: 'DM', type: 'text' }
         }, 'loadDMMessages');
       }
       console.log('📬 DM channel ID set to:', window.currentChannelId);

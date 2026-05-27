@@ -227,8 +227,8 @@ function buildAddFriendSection() {
   section.appendChild(wrapper);
 
   const result = document.createElement('div');
-  result.id = 'add-friend-result';
-  result.className = 'add-friend-result';
+  result.id = 'friend-request-status';
+  result.className = 'friend-request-status';
   section.appendChild(result);
 
   return section;
@@ -259,7 +259,7 @@ function buildFriendItem(friend, showActions) {
   friendAvatar.className = 'friend-avatar';
   
   const avatarImg = document.createElement('img');
-  avatarImg.src = getAvatarUrl(friend.avatar);
+  avatarImg.src = getAvatarUrl(friend.avatar, friend.username, friend._id);
   avatarImg.alt = escapeHtml(friend.username);
   
   friendAvatar.appendChild(avatarImg);
@@ -335,7 +335,7 @@ function buildPendingItem(user, type) {
   friendAvatar.className = 'friend-avatar';
   
   const avatarImg = document.createElement('img');
-  avatarImg.src = getAvatarUrl(user.avatar);
+  avatarImg.src = getAvatarUrl(user.avatar, user.username, user._id);
   avatarImg.alt = escapeHtml(user.username);
   
   friendAvatar.appendChild(avatarImg);
@@ -452,18 +452,24 @@ if (document.readyState === 'loading') {
  */
 async function sendFriendRequest() {
   const input = document.getElementById('add-friend-input');
-  const resultEl = document.getElementById('add-friend-result');
+  const resultEl = document.getElementById('friend-request-status');
   const username = input?.value.trim();
 
   if (!username) return;
 
   // Утилита: задать сообщение результата с правильным состоянием
-  // через CSS класс — без inline style.
   const setResult = (text, kind) => {
     if (!resultEl) return;
     resultEl.textContent = text;
-    resultEl.classList.remove('is-success', 'is-error');
-    if (kind) resultEl.classList.add(kind === 'success' ? 'is-success' : 'is-error');
+    resultEl.className = 'friend-request-status';
+    if (kind) resultEl.classList.add(kind);
+    
+    setTimeout(() => {
+      if (resultEl.textContent === text) {
+        resultEl.textContent = '';
+        resultEl.className = 'friend-request-status';
+      }
+    }, 4000);
   };
 
   try {
@@ -472,14 +478,14 @@ async function sendFriendRequest() {
     const users = searchData.users || [];
 
     if (users.length === 0) {
-      setResult(window.i18n.t('friends_err_not_found'), 'error');
+      setResult('Пользователь не найден', 'error');
       return;
     }
 
     const targetUser = users.find(u => u.username.toLowerCase() === username.toLowerCase()) || users[0];
 
     if (targetUser._id === window.currentUser?._id) {
-      setResult(window.i18n.t('friends_err_self'), 'error');
+      setResult('Вы не можете добавить себя в друзья', 'error');
       return;
     }
 
@@ -487,18 +493,20 @@ async function sendFriendRequest() {
 
     // Проверяем, был ли автоматически принят входящий запрос
     if (data.autoAccepted) {
-      showNotification('success', data.message);
-      setResult(data.message, 'success');
+      setResult('Этот пользователь уже в друзьях', 'warning');
     } else {
       socketNotifyFriendRequest(targetUser._id);
-      showNotification('success', `Запрос в друзья отправлен ${targetUser.username}`);
-      setResult(`Запрос отправлен пользователю ${targetUser.username}!`, 'success');
+      setResult('Заявка отправлена', 'success');
     }
 
     if (input) input.value = '';
     loadFriends();
   } catch (error) {
-    setResult(error.message, 'error');
+    if (error.message.includes('уже')) {
+      setResult('Этот пользователь уже в друзьях', 'warning');
+    } else {
+      setResult('Не удалось отправить заявку', 'error');
+    }
   }
 }
 
@@ -509,10 +517,9 @@ async function acceptFriendRequest(userId) {
   try {
     await FriendsAPI.accept(userId);
     socketNotifyFriendAccepted(userId);
-    showNotification('success', 'Запрос принят!');
     loadFriends();
   } catch (error) {
-    showNotification('error', error.message);
+    console.error(error.message);
   }
 }
 
@@ -522,10 +529,9 @@ async function acceptFriendRequest(userId) {
 async function declineFriendRequest(userId) {
   try {
     await FriendsAPI.decline(userId);
-    showNotification('info', 'Запрос отклонен');
     loadFriends();
   } catch (error) {
-    showNotification('error', error.message);
+    console.error(error.message);
   }
 }
 
@@ -535,10 +541,9 @@ async function declineFriendRequest(userId) {
 async function cancelFriendRequest(userId) {
   try {
     await FriendsAPI.cancelRequest(userId);
-    showNotification('info', 'Запрос отменен');
     loadFriends();
   } catch (error) {
-    showNotification('error', error.message);
+    console.error(error.message);
   }
 }
 
@@ -549,9 +554,8 @@ async function removeFriend(userId) {
   if (!confirm('Удалить этого пользователя из друзей?')) return;
   try {
     await FriendsAPI.remove(userId);
-    showNotification('info', 'Пользователь удален из друзей');
     loadFriends();
   } catch (error) {
-    showNotification('error', error.message);
+    console.error(error.message);
   }
 }

@@ -74,17 +74,14 @@ async function uploadEmoji() {
   const name = nameInput?.value.trim();
   
   if (!name) {
-    showNotification('error', 'Введите название эмодзи');
     return;
   }
   
   if (!selectedEmojiFile) {
-    showNotification('error', 'Выберите файл');
     return;
   }
   
   if (!window.currentServerId) {
-    showNotification('error', 'Выберите сервер');
     return;
   }
   
@@ -97,7 +94,7 @@ async function uploadEmoji() {
 
     await apiUpload(`/servers/${window.currentServerId}/emojis`, formData, 'POST');
 
-    showNotification('success', 'Эмодзи загружен');
+    // showNotification('success', 'Эмодзи загружен');
     
     // Очищаем форму
     nameInput.value = '';
@@ -115,7 +112,6 @@ async function uploadEmoji() {
     
   } catch (error) {
     console.error('Upload emoji error:', error);
-    showNotification('error', error.message || 'Ошибка загрузки эмодзи');
   }
 }
 
@@ -174,7 +170,6 @@ async function deleteEmoji(emojiId) {
   if (!confirm('Удалить этот эмодзи?')) return;
   
   if (!window.currentServerId) {
-    showNotification('error', 'Выберите сервер');
     return;
   }
   
@@ -184,7 +179,7 @@ async function deleteEmoji(emojiId) {
       method: 'DELETE'
     });
 
-    showNotification('success', 'Эмодзи удален');
+    // showNotification('success', 'Эмодзи удален');
     
     // Обновляем список эмодзи
     await loadServerEmojis();
@@ -196,7 +191,6 @@ async function deleteEmoji(emojiId) {
     
   } catch (error) {
     console.error('Delete emoji error:', error);
-    showNotification('error', error.message || 'Ошибка удаления эмодзи');
   }
 }
 

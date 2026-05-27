@@ -8,6 +8,8 @@ let replyingToMessage = null; // Полный объект сообщения д
 let editingMessageId = null;
 let pendingFiles = [];
 let isLoadingMessages = false;
+let isSending = false;
+let activeChatVideo = null;
 
 /**
  * Загрузить сообщения канала
@@ -93,6 +95,16 @@ function renderMessages(messages, isDM) {
   list.querySelectorAll('.message-image').forEach(img => {
     img.addEventListener('click', () => openImageViewer(img.src));
   });
+
+  // Инициализация кастомных видеоплееров
+  list.querySelectorAll('.custom-video-player').forEach(player => {
+    initVideoPlayer(player);
+  });
+
+  // Инициализация превью текстовых файлов
+  list.querySelectorAll('.txt-preview').forEach(preview => {
+    initTxtPreview(preview);
+  });
 }
 
 function resolveAttachmentUrl(url) {
@@ -112,7 +124,7 @@ function renderMessage(msg, isGrouped) {
   const author = msg.author || {};
   const authorId = author._id || author;
   const authorName = author.nickname || author.username || 'Неизвестный';
-  const authorAvatar = getAvatarUrl(author.avatar);
+  const authorAvatar = getAvatarUrl(author.avatar, author.username || author.nickname, authorId);
   const time = formatTime(msg.createdAt);
   const fullTime = formatDate(msg.createdAt);
   const isOwn = authorId === window.currentUser?._id;
@@ -139,7 +151,7 @@ function renderMessage(msg, isGrouped) {
   // Текст сообщения
   const content = msg.deleted
     ? '<span class="message-text deleted">Сообщение удалено</span>'
-    : `<span class="message-text">${formatMessageContent(msg.content || '')}</span>
+    : `<span class="message-text">${formatMessageContent(msg.content || '', msg)}</span>
        ${msg.edited ? '<span class="message-edited-tag">(изм.)</span>' : ''}`;
 
   // Вложения
@@ -151,13 +163,61 @@ function renderMessage(msg, isGrouped) {
         att.type === 'audio' ||
         (att.mimetype && att.mimetype.startsWith('audio/')) ||
         (att.url && String(att.url).includes('/audio/'));
+      const isVideo =
+        att.type === 'video' ||
+        (att.mimetype && att.mimetype.startsWith('video/')) ||
+        (att.url && String(att.url).includes('/video/') && !isAudio);
       if (att.mimetype?.startsWith('image/') || att.type === 'image') {
         const fn = att.filename || att.originalName || 'image';
         attachmentsHtml += `<img class="message-image" src="${resolveAttachmentUrl(att.url)}" alt="${fn}" loading="lazy">`;
       } else if (isAudio && typeof renderVoiceMessage === 'function') {
         attachmentsHtml += renderVoiceMessage(att, isOwn);
+      } else if (isVideo) {
+        const fn = att.filename || att.originalName || 'video';
+        const safeUrl = resolveAttachmentUrl(att.url);
+        attachmentsHtml += `
+          <div class="custom-video-player" data-src="${safeUrl}">
+              <video class="cvp-video" preload="metadata" src="${safeUrl}"></video>
+              <div class="cvp-overlay">
+                  <button class="cvp-play-btn">▶</button>
+              </div>
+              <div class="cvp-controls">
+                  <button class="cvp-play-pause">▶</button>
+                  <input type="range" class="cvp-progress" min="0" max="100" value="0" step="0.1">
+                  <span class="cvp-time">0:00 / 0:00</span>
+                  <div class="cvp-volume-wrap">
+                      <button class="cvp-mute-btn">🔊</button>
+                      <input type="range" class="cvp-volume" min="0" max="100" value="100">
+                  </div>
+                  <button class="cvp-fullscreen-btn">⛶</button>
+              </div>
+          </div>
+        `;
+      } else if (att.mimetype === 'text/plain') {
+        let displayName = att.originalName || att.filename || 'файл.txt';
+        try {
+          displayName = decodeURIComponent(displayName);
+        } catch (e) {}
+        const fn = escapeHtml(displayName);
+        const safeUrl = resolveAttachmentUrl(att.url);
+        attachmentsHtml += `
+          <div class="txt-preview" data-url="${safeUrl}">
+              <div class="txt-preview-header">
+                  <span>📄 ${fn}</span>
+                  <div class="txt-preview-actions">
+                      <button class="txt-expand-btn">Показать</button>
+                      <a href="${safeUrl}" download="${fn}">Скачать</a>
+                  </div>
+              </div>
+              <pre class="txt-preview-content hidden"></pre>
+          </div>
+        `;
       } else {
-        const fn = att.filename || att.originalName || 'file';
+        let rawFn = att.filename || att.originalName || 'file';
+        try {
+          rawFn = decodeURIComponent(rawFn);
+        } catch (e) {}
+        const fn = escapeHtml(rawFn);
         attachmentsHtml += `
           <div class="message-file" onclick="window.open('${resolveAttachmentUrl(att.url)}')">
             <span class="message-file-icon">${getFileIcon(att.mimetype)}</span>
@@ -233,9 +293,29 @@ function renderMessage(msg, isGrouped) {
 /**
  * Форматировать содержимое сообщения (эмодзи, ссылки)
  */
-function formatMessageContent(content) {
+function formatMessageContent(content, msg) {
   // Используем безопасную функцию из sanitize.js
-  return window.XSS.formatMarkdown(content);
+  let formatted = window.XSS.formatMarkdown(content);
+  // Highlight mentions
+  formatted = formatted.replace(/@(everyone|here|[A-Za-z0-9_.-]+)/g, (match, name) => {
+    if (name === 'everyone' || name === 'here') {
+      let isServerOwner = false;
+      if (window.currentServer && msg) {
+        const ownerId = String(window.currentServer.ownerId || window.currentServer.owner?._id || window.currentServer.owner || '');
+        const authorId = String(msg.authorId || (msg.author && (msg.author._id || msg.author)) || '');
+        if (ownerId && authorId && ownerId === authorId) {
+          isServerOwner = true;
+        }
+      }
+      if (isServerOwner) {
+        return `<span class="mention-highlight">@${name}</span>`;
+      } else {
+        return `@${name}`;
+      }
+    }
+    return `<span class="mention-highlight">@${name}</span>`;
+  });
+  return formatted;
 }
 
 /**
@@ -278,6 +358,12 @@ function appendMessage(msg) {
     el.querySelectorAll('.message-image').forEach(img => {
       img.addEventListener('click', () => openImageViewer(img.src));
     });
+    el.querySelectorAll('.custom-video-player').forEach(player => {
+      initVideoPlayer(player);
+    });
+    el.querySelectorAll('.txt-preview').forEach(preview => {
+      initTxtPreview(preview);
+    });
     list.appendChild(el);
   }
 }
@@ -291,7 +377,7 @@ function updateMessageInDOM(msg) {
 
   const textEl = el.querySelector('.message-text');
   if (textEl) {
-    textEl.innerHTML = formatMessageContent(msg.content || '');
+    textEl.innerHTML = formatMessageContent(msg.content || '', msg);
   }
 
   // Добавляем тег "изменено"
@@ -379,7 +465,7 @@ function updateTempMessageInDOM(tempId, msg) {
   // Обновляем содержимое если нужно
   const textEl = el.querySelector('.message-text');
   if (textEl && msg.content) {
-    textEl.innerHTML = formatMessageContent(msg.content);
+    textEl.innerHTML = formatMessageContent(msg.content, msg);
   }
 
   // Обновляем время
@@ -447,7 +533,7 @@ function scrollToMessage(messageId) {
   
   const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
   if (!msgEl) {
-    showNotification('warning', 'Сообщение не найдено');
+    console.warn('Сообщение не найдено');
     return;
   }
   
@@ -720,7 +806,15 @@ function _updateAntispamCountdown(channelId) {
 function hideAntispamModal() {
   const overlay = document.getElementById('antispam-modal');
   if (!overlay) return;
-  closeModal('antispam-modal');
+  // Guard: only call closeModal if the modal is actually open in the stack.
+  // Without this check, repeated calls (e.g. from the cooldown timer after
+  // user already clicked "OK") trigger "[ModalManager] Modal not in stack".
+  const isInStack = window.ModalManager &&
+    window.ModalManager.stack.some(m => m.id === 'antispam-modal');
+  if (isInStack) {
+    closeModal('antispam-modal');
+  }
+  overlay.classList.add('hidden');
   overlay.setAttribute('aria-hidden', 'true');
   _modalShownForChannelId = null;
 }
@@ -776,11 +870,20 @@ async function sendMessage() {
   const input = document.getElementById('message-input');
   if (!input) return;
 
+  if (isSending) return;
+
   const content = input.value.trim();
-  const channelId = window.currentChannelId;
+  let channelId = window.currentChannelId;
+
+  const isDM = window.NavigationController?.state?.currentView === 'dm' && window.currentDMConversation;
+  if (!channelId && isDM) {
+    channelId = window.currentDMConversation.channelId || window.currentDMConversation.channel?._id;
+  }
 
   if (!channelId) {
-    showNotification('warning', 'Выберите канал для отправки сообщения');
+    if (!isDM) {
+      console.warn('Выберите канал для отправки сообщения');
+    }
     return;
   }
 
@@ -810,9 +913,25 @@ async function sendMessage() {
     if (window.triggerHeartBurst) window.triggerHeartBurst();
   }
 
-  // Очищаем поле ввода
-  input.value = '';
-  input.style.height = 'auto';
+  isSending = true;
+  const sendButton = document.getElementById('send-btn');
+  if (sendButton) {
+    sendButton.disabled = true;
+    sendButton.style.opacity = '0.5';
+  }
+
+  const filesLoading = pendingFiles.length > 0;
+  const originalPlaceholder = input.placeholder;
+  if (filesLoading) {
+    input.disabled = true;
+    input.placeholder = 'Загрузка файла...';
+    input.value = 'Загрузка файла...';
+  } else {
+    // Очищаем поле ввода сразу
+    input.value = '';
+    input.style.height = 'auto';
+  }
+
   const currentReplyTo = replyingTo;
   const currentReplyToMessage = replyingToMessage;
   cancelReply();
@@ -912,8 +1031,22 @@ async function sendMessage() {
     }
     // Обычная ошибка загрузки.
     const reason = (error && error.message) ? error.message : '';
-    showNotification('error', reason ? `Не удалось отправить файл: ${reason}` : 'Не удалось отправить сообщение');
+    console.error(reason ? `Не удалось отправить файл: ${reason}` : 'Не удалось отправить сообщение');
     input.value = content;
+  } finally {
+    isSending = false;
+    if (sendButton) {
+      sendButton.disabled = false;
+      sendButton.style.opacity = '1';
+    }
+    if (input.value === 'Загрузка файла...' || input.disabled) {
+      input.value = '';
+    }
+    input.disabled = false;
+    input.placeholder = originalPlaceholder;
+    if (!input.value && !filesLoading) {
+      input.style.height = 'auto';
+    }
   }
 }
 
@@ -1060,7 +1193,7 @@ function handleMentionAutocomplete(input) {
         } else {
           const avatarImg = document.createElement('img');
           avatarImg.className = 'mention-autocomplete-avatar';
-          avatarImg.src = getAvatarUrl(item.user.avatar);
+          avatarImg.src = getAvatarUrl(item.user.avatar, item.user.username, item.user._id);
           avatarImg.alt = escapeHtml(item.user.username);
           
           const nameSpan = document.createElement('span');
@@ -1233,7 +1366,7 @@ async function saveEditMessage(messageId) {
     socketEditMessage(messageId, newContent);
     cancelEditMessage();
   } catch (error) {
-    showNotification('error', 'Не удалось отредактировать сообщение');
+    console.error('Не удалось отредактировать сообщение', error);
   }
 }
 
@@ -1397,3 +1530,316 @@ function toggleEmojiPickerForReaction(messageId) {
     picker.addEventListener('emoji-click', handler);
   }
 }
+
+function formatTime(seconds) {
+  if (isNaN(seconds) || seconds === Infinity) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+function initVideoPlayer(container) {
+  const video = container.querySelector('.cvp-video');
+  const overlay = container.querySelector('.cvp-overlay');
+  const playPauseBtn = container.querySelector('.cvp-play-pause');
+  const progressInput = container.querySelector('.cvp-progress');
+  const timeDisplay = container.querySelector('.cvp-time');
+  const muteBtn = container.querySelector('.cvp-mute-btn');
+  const volumeSlider = container.querySelector('.cvp-volume');
+  const fullscreenBtn = container.querySelector('.cvp-fullscreen-btn');
+
+  function updateTimeDisplay() {
+    timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration || 0)}`;
+  }
+
+  function togglePlay() {
+    if (video.paused) {
+      video.play().catch(err => console.log('Video play error:', err));
+      overlay.style.display = 'none';
+      playPauseBtn.textContent = '⏸';
+    } else {
+      video.pause();
+      overlay.style.display = 'flex';
+      playPauseBtn.textContent = '▶';
+    }
+  }
+
+  overlay.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePlay();
+  });
+  playPauseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePlay();
+  });
+  video.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePlay();
+  });
+
+  video.addEventListener('play', () => {
+    overlay.style.display = 'none';
+    playPauseBtn.textContent = '⏸';
+  });
+  video.addEventListener('pause', () => {
+    overlay.style.display = 'flex';
+    playPauseBtn.textContent = '▶';
+  });
+
+  video.addEventListener('timeupdate', () => {
+    if (video.duration && progressInput && !progressInput.matches(':active')) {
+      const pct = (video.currentTime / video.duration) * 100;
+      progressInput.value = pct;
+      progressInput.style.setProperty('--progress', pct + '%');
+    }
+    updateTimeDisplay();
+  });
+
+  video.addEventListener('loadedmetadata', () => {
+    if (progressInput) {
+      const pct = (video.currentTime / (video.duration || 1)) * 100;
+      progressInput.value = pct;
+      progressInput.style.setProperty('--progress', pct + '%');
+    }
+    updateTimeDisplay();
+  });
+
+  if (progressInput) {
+    progressInput.addEventListener('input', (e) => {
+      e.stopPropagation();
+      if (video.duration) {
+        video.currentTime = (progressInput.value / 100) * video.duration;
+        progressInput.style.setProperty('--progress', progressInput.value + '%');
+      }
+    });
+  }
+
+  volumeSlider.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const vol = volumeSlider.value / 100;
+    video.volume = vol;
+    video.muted = (vol === 0);
+    updateVolumeIcon(vol, video.muted);
+  });
+
+  muteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    video.muted = !video.muted;
+    updateVolumeIcon(video.volume, video.muted);
+  });
+
+  function updateVolumeIcon(vol, isMuted) {
+    if (isMuted || vol === 0) {
+      muteBtn.textContent = '🔇';
+      volumeSlider.value = 0;
+    } else {
+      muteBtn.textContent = '🔊';
+      volumeSlider.value = vol * 100;
+    }
+  }
+
+  fullscreenBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const overlay = document.getElementById('video-fullscreen-overlay');
+    const fsVideo = document.getElementById('video-fs-player');
+    if (overlay && fsVideo) {
+      activeChatVideo = video;
+      const wasPlaying = !video.paused;
+      fsVideo.src = video.src;
+      fsVideo.currentTime = video.currentTime;
+      overlay.classList.remove('hidden');
+      if (wasPlaying) {
+        fsVideo.play().catch(err => console.log('Fullscreen video play error:', err));
+      }
+      video.pause();
+    }
+  });
+
+  // Остановка при выходе из viewport
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) {
+        video.pause();
+      }
+    });
+  }, { threshold: 0.2 });
+  observer.observe(container);
+
+  // Остановка при смене канала/навигации
+  const navHandler = () => {
+    if (!document.body.contains(container)) {
+      document.removeEventListener('navigation:changed', navHandler);
+      return;
+    }
+    video.pause();
+  };
+  document.addEventListener('navigation:changed', navHandler);
+}
+
+function initTxtPreview(container) {
+  const expandBtn = container.querySelector('.txt-expand-btn');
+  const pre = container.querySelector('.txt-preview-content');
+  const url = container.dataset.url;
+  
+  if (!expandBtn || !pre || !url) return;
+  
+  expandBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (pre.classList.contains('hidden')) {
+      try {
+        expandBtn.disabled = true;
+        expandBtn.textContent = 'Загрузка...';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Ошибка загрузки');
+        const text = await res.text();
+        
+        const lines = text.split('\n');
+        if (lines.length > 100) {
+          const displayedText = lines.slice(0, 100).join('\n');
+          pre.textContent = displayedText;
+          
+          const showAllBtn = document.createElement('span');
+          showAllBtn.className = 'txt-preview-more';
+          showAllBtn.textContent = '\n\n... [показать полностью]';
+          showAllBtn.style.cursor = 'pointer';
+          showAllBtn.style.color = 'var(--accent, #5865f2)';
+          showAllBtn.style.display = 'inline-block';
+          showAllBtn.addEventListener('click', (eInner) => {
+            eInner.stopPropagation();
+            pre.textContent = text;
+          });
+          pre.appendChild(showAllBtn);
+        } else {
+          pre.textContent = text;
+        }
+        
+        pre.classList.remove('hidden');
+        expandBtn.textContent = 'Скрыть';
+        expandBtn.disabled = false;
+      } catch (err) {
+        console.error('Text preview load error:', err);
+        pre.textContent = 'Не удалось загрузить содержимое файла';
+        pre.classList.remove('hidden');
+        expandBtn.textContent = 'Скрыть';
+        expandBtn.disabled = false;
+      }
+    } else {
+      pre.classList.add('hidden');
+      expandBtn.textContent = 'Показать';
+    }
+  });
+}
+
+function closeFullscreen() {
+  const overlay = document.getElementById('video-fullscreen-overlay');
+  const fsVideo = document.getElementById('video-fs-player');
+  if (!overlay || !fsVideo) return;
+
+  const wasPlaying = !fsVideo.paused;
+  
+  if (activeChatVideo) {
+    activeChatVideo.currentTime = fsVideo.currentTime;
+  }
+  
+  fsVideo.pause();
+  fsVideo.src = '';
+  overlay.classList.add('hidden');
+  
+  if (wasPlaying && activeChatVideo) {
+    activeChatVideo.play().catch(err => console.log('Chat video play error:', err));
+  }
+  
+  // Reset fullscreen progress indicators
+  const fsProgress = document.querySelector('.video-fs-progress');
+  if (fsProgress) {
+    fsProgress.value = 0;
+    fsProgress.style.setProperty('--progress', '0%');
+  }
+  
+  activeChatVideo = null;
+}
+
+function initFullscreenOverlayListeners() {
+  const backdrop = document.querySelector('.video-fs-backdrop');
+  if (backdrop) backdrop.addEventListener('click', closeFullscreen);
+
+  const closeBtn = document.querySelector('.video-fs-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeFullscreen);
+
+  const fsVideo = document.getElementById('video-fs-player');
+  const fsPlayPause = document.querySelector('.video-fs-play-pause');
+  const fsProgress = document.querySelector('.video-fs-progress');
+  const fsTime = document.querySelector('.video-fs-time');
+  const fsMuteBtn = document.querySelector('.video-fs-mute-btn');
+  const fsVolume = document.querySelector('.video-fs-volume');
+
+  if (!fsVideo) return;
+
+  // Play/pause
+  if (fsPlayPause) {
+    fsPlayPause.addEventListener('click', () => {
+      if (fsVideo.paused) {
+        fsVideo.play().catch(err => console.log('fs play error:', err));
+        fsPlayPause.textContent = '⏸';
+      } else {
+        fsVideo.pause();
+        fsPlayPause.textContent = '▶';
+      }
+    });
+  }
+
+  // Прогресс
+  fsVideo.addEventListener('timeupdate', () => {
+    if (fsProgress && !fsProgress.matches(':active')) {
+      const pct = (fsVideo.currentTime / fsVideo.duration) * 100 || 0;
+      fsProgress.value = pct;
+      fsProgress.style.setProperty('--progress', pct + '%');
+    }
+    if (fsTime) fsTime.textContent = formatTime(fsVideo.currentTime) + ' / ' + formatTime(fsVideo.duration);
+  });
+
+  // Перемотка при перетаскивании
+  if (fsProgress) {
+    fsProgress.addEventListener('input', () => {
+      fsVideo.currentTime = (fsProgress.value / 100) * fsVideo.duration;
+      fsProgress.style.setProperty('--progress', fsProgress.value + '%');
+    });
+  }
+
+  // Громкость
+  if (fsVolume) {
+    fsVolume.addEventListener('input', () => {
+      fsVideo.volume = fsVolume.value / 100;
+      if (fsMuteBtn) fsMuteBtn.textContent = fsVolume.value == 0 ? '🔇' : '🔊';
+    });
+  }
+
+  // Мут
+  if (fsMuteBtn) {
+    fsMuteBtn.addEventListener('click', () => {
+      fsVideo.muted = !fsVideo.muted;
+      fsMuteBtn.textContent = fsVideo.muted ? '🔇' : '🔊';
+    });
+  }
+
+  // Обновить кнопку при старте/паузе
+  fsVideo.addEventListener('play', () => {
+    if (fsPlayPause) fsPlayPause.textContent = '⏸';
+  });
+  fsVideo.addEventListener('pause', () => {
+    if (fsPlayPause) fsPlayPause.textContent = '▶';
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initFullscreenOverlayListeners);
+} else {
+  initFullscreenOverlayListeners();
+}
+
+// Перехват нативного fullscreen
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  }
+});

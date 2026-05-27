@@ -24,13 +24,24 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
     }
     
     const file = req.files.file;
+    if (file && file.name) {
+      try {
+        file.name = Buffer.from(file.name, 'latin1').toString('utf8');
+      } catch (e) {}
+    }
     
     const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const audioTypes = ['audio/webm', 'audio/ogg', 'audio/mp3', 'audio/wav'];
     const isImage = imageTypes.includes(file.mimetype);
     const isAudio = audioTypes.includes(file.mimetype);
+    const isVideo = file.mimetype.startsWith('video/');
     
-    const validation = await validateFile(file, isImage);
+    let fileCategory = 'document';
+    if (isImage) fileCategory = 'image';
+    else if (isAudio) fileCategory = 'audio';
+    else if (isVideo) fileCategory = 'video';
+    
+    const validation = await validateFile(file, isImage, fileCategory);
     if (!validation.valid) {
       return res.status(400).json({ 
         message: 'Ошибка валидации файла', 
@@ -49,16 +60,42 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       filePath = file.data;
     }
     
-    const resourceType = isAudio ? 'video' : 'image';
-    const uploadResult = await cloudinary.uploader.upload(filePath, {
+    let resourceType = 'raw';
+    if (file.mimetype.startsWith('image/')) {
+      resourceType = 'image';
+    } else if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
+      resourceType = 'video';
+    }
+        
+    let transformation = [];
+    if (resourceType === 'image') {
+      transformation.push({ quality: 'auto:good', fetch_format: 'auto', width: 2048, crop: 'limit' });
+    } else if (resourceType === 'video' && isVideo) {
+      transformation.push({ quality: 'auto:good', height: 1080, crop: 'limit', audio_codec: 'aac', audio_frequency: 44100 });
+    }
+    
+    const uploadOptions = {
       folder: folder,
       resource_type: resourceType,
       use_filename: true,
       unique_filename: true
-    });
+    };
+    if (transformation.length > 0) {
+      uploadOptions.transformation = transformation;
+    }
+    
+    const uploadResult = await cloudinary.uploader.upload(filePath, uploadOptions);
+    
+    let fileUrl = uploadResult.secure_url;
+    if (resourceType === 'raw') {
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext && !fileUrl.endsWith(ext)) {
+        fileUrl = fileUrl + ext;
+      }
+    }
     
     res.json({
-      url: uploadResult.secure_url,
+      url: fileUrl,
       filename: path.basename(uploadResult.public_id),
       originalName: validation.sanitizedName,
       size: file.size,
@@ -83,11 +120,23 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
     }
     
     const file = req.files.file;
+    if (file && file.name) {
+      try {
+        file.name = Buffer.from(file.name, 'latin1').toString('utf8');
+      } catch (e) {}
+    }
     
     const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const isImage = imageTypes.includes(file.mimetype);
+    const isAudio = file.mimetype.startsWith('audio/');
+    const isVideo = file.mimetype.startsWith('video/');
     
-    const validation = await validateFile(file, isImage);
+    let fileCategory = 'document';
+    if (isImage) fileCategory = 'image';
+    else if (isAudio) fileCategory = 'audio';
+    else if (isVideo) fileCategory = 'video';
+    
+    const validation = await validateFile(file, isImage, fileCategory);
     if (!validation.valid) {
       return res.status(400).json({ 
         message: 'Ошибка валидации файла', 
@@ -104,15 +153,42 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
       filePath = file.data;
     }
     
-    const uploadResult = await cloudinary.uploader.upload(filePath, {
+    let resourceType = 'raw';
+    if (file.mimetype.startsWith('image/')) {
+      resourceType = 'image';
+    } else if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('audio/')) {
+      resourceType = 'video';
+    }
+        
+    let transformation = [];
+    if (resourceType === 'image') {
+      transformation.push({ quality: 'auto:good', fetch_format: 'auto', width: 2048, crop: 'limit' });
+    } else if (resourceType === 'video' && isVideo) {
+      transformation.push({ quality: 'auto:good', height: 1080, crop: 'limit', audio_codec: 'aac', audio_frequency: 44100 });
+    }
+    
+    const uploadOptions = {
       folder: folder,
-      resource_type: 'image',
+      resource_type: resourceType,
       use_filename: true,
       unique_filename: true
-    });
+    };
+    if (transformation.length > 0) {
+      uploadOptions.transformation = transformation;
+    }
+    
+    const uploadResult = await cloudinary.uploader.upload(filePath, uploadOptions);
+    
+    let fileUrl = uploadResult.secure_url;
+    if (resourceType === 'raw') {
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext && !fileUrl.endsWith(ext)) {
+        fileUrl = fileUrl + ext;
+      }
+    }
     
     res.json({
-      url: uploadResult.secure_url,
+      url: fileUrl,
       filename: path.basename(uploadResult.public_id),
       originalName: validation.sanitizedName,
       size: file.size,
@@ -137,6 +213,11 @@ router.post('/avatar', authMiddleware, uploadLimiter, async (req, res) => {
     }
     
     const avatarFile = req.files.avatar;
+    if (avatarFile && avatarFile.name) {
+      try {
+        avatarFile.name = Buffer.from(avatarFile.name, 'latin1').toString('utf8');
+      } catch (e) {}
+    }
     
     const validation = await validateFile(avatarFile, true);
     if (!validation.valid) {

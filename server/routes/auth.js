@@ -204,6 +204,8 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     
     // Верифицируем пользователя
     user.isVerified = true;
+    user.status = 'online';
+    user.statusPreference = 'online';
     user.otpCode = null;
     user.otpExpires = null;
     await user.save();
@@ -408,7 +410,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       });
     }
 
-    user.status = 'online';
+    user.status = user.statusPreference || 'online';
     user.lastSeen = new Date();
     await user.save();
 
@@ -461,7 +463,7 @@ router.post('/verify-2fa', otpLimiter, async (req, res) => {
 
     user.twoFactorCode = null;
     user.twoFactorExpires = null;
-    user.status = 'online';
+    user.status = user.statusPreference || 'online';
     user.lastSeen = new Date();
     await user.save();
 
@@ -766,7 +768,10 @@ router.put('/update-status', authMiddleware, async (req, res) => {
     }
     
     const updateData = {};
-    if (status) updateData.status = status;
+    if (status) {
+      updateData.status = status;
+      updateData.statusPreference = status;
+    }
     if (customStatus !== undefined) updateData.customStatus = customStatus;
     
     const user = await User.findByIdAndUpdate(
@@ -774,6 +779,19 @@ router.put('/update-status', authMiddleware, async (req, res) => {
       updateData,
       { new: true }
     ).select('-password');
+    
+    // Broadcast status change if io is available
+    try {
+      const { io } = require('../index');
+      if (io && status) {
+        io.emit('user:status', {
+          userId: req.user._id.toString(),
+          status: status
+        });
+      }
+    } catch (ioErr) {
+      console.error('Error broadcasting status change:', ioErr);
+    }
     
     res.json({ user });
     
@@ -837,6 +855,10 @@ router.get('/google/callback',
   async (req, res) => {
     // Успешная авторизация
     const user = req.user;
+    user.status = user.statusPreference || 'online';
+    user.lastSeen = new Date();
+    await user.save();
+    
     const userAgent = req.headers['user-agent'] || 'unknown';
     const { ip, location } = await getLoginNetworkInfo(req);
     

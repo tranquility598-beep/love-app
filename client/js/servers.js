@@ -71,7 +71,7 @@ async function createServer() {
     // Присоединяемся к комнате сервера через сокет сразу
     socketJoinServer(server._id);
     
-    showNotification('success', `Сервер "${name}" создан!`);
+    // showNotification('success', `Сервер "${name}" создан!`);
   } catch (error) {
     showNotification('error', error.message);
   }
@@ -107,7 +107,7 @@ async function joinServer() {
     // Присоединяемся к комнате сервера через сокет сразу
     socketJoinServer(data.server._id);
     
-    showNotification('success', `Вы присоединились к серверу "${data.server.name}"!`);
+    // showNotification('success', `Вы присоединились к серверу "${data.server.name}"!`);
   } catch (error) {
     if (errorEl) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); }
   }

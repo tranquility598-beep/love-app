@@ -147,7 +147,7 @@
 }
 
 .voice-view-btn.active {
-  background: var(--green);
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
 
@@ -205,4 +205,40 @@
 .fullscreen-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: var(--btn-hover-scale);
+}
+
+/* Voice volume slider inside full-screen voice view cards */
+.voice-card .voice-volume-slider {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 70px;
+  height: 4px;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  outline: none;
+  z-index: 10;
+  opacity: 0.5;
+  transition: opacity 0.2s, width 0.2s;
+}
+
+.voice-card:hover .voice-volume-slider {
+  opacity: 1;
+  width: 90px;
+}
+
+.voice-card .voice-volume-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.voice-card .voice-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  margin-top: -3px;
 }

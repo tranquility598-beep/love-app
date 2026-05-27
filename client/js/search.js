@@ -28,7 +28,20 @@ function toggleSearch() {
 /**
  * Выполнить поиск
  */
-function performSearch(query) {
+async function searchMessages(query, channelId) {
+  try {
+    const data = await apiFetch(`/messages/search?q=${encodeURIComponent(query)}&channelId=${channelId}`);
+    return data;
+  } catch (error) {
+    console.error('Search error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Выполнить поиск
+ */
+async function performSearch(query) {
   if (!query || query.trim().length === 0) {
     showSearchPlaceholder();
     return;
@@ -39,20 +52,15 @@ function performSearch(query) {
     return;
   }
   
-  if (!window.socket) {
-    showSearchError('Нет подключения к серверу');
-    return;
-  }
-  
   // Показываем индикатор загрузки
   showSearchLoading();
   
-  // Отправляем запрос на поиск
-  window.socket.emit('message:search', {
-    channelId: currentSearchChannelId,
-    query: query.trim(),
-    limit: 50
-  });
+  try {
+    const data = await searchMessages(query.trim(), currentSearchChannelId);
+    displaySearchResults({ results: data.results, query: query.trim() });
+  } catch (error) {
+    showSearchError('Произошла ошибка при поиске');
+  }
 }
 
 /**
@@ -115,8 +123,8 @@ function createSearchResultElement(msg, query) {
   div.dataset.messageId = msg._id;
   
   const author = msg.author || {};
-  const authorName = author.username || 'Неизвестный';
-  const authorAvatar = author.avatar || `https://via.placeholder.com/24?text=${authorName[0]}`;
+  const authorName = author.username || author.nickname || 'Unknown';
+  const authorAvatar = (typeof getAvatarUrl === 'function') ? getAvatarUrl(author.avatar, authorName, author._id || author.id) : (author.avatar || `assets/images/default-avatar.png`);
   
   const date = new Date(msg.createdAt);
   const time = date.toLocaleString('ru-RU', {
@@ -205,17 +213,16 @@ if (typeof jumpToMessage === 'undefined') {
     if (messageEl) {
       messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
-      // Подсветка сообщения
-      messageEl.style.background = 'var(--accent-primary)';
-      messageEl.style.opacity = '0.3';
+      // Подсветка сообщения (белый свет)
+      messageEl.style.transition = 'background-color 0.2s ease';
+      messageEl.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
       setTimeout(() => {
-        messageEl.style.transition = 'all 0.5s';
-        messageEl.style.background = '';
-        messageEl.style.opacity = '';
-      }, 100);
+        messageEl.style.transition = 'background-color 1.5s ease';
+        messageEl.style.backgroundColor = '';
+      }, 1000);
       setTimeout(() => {
         messageEl.style.transition = '';
-      }, 600);
+      }, 2500);
     }
   }
 }

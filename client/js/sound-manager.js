@@ -29,10 +29,7 @@ class SoundManager {
             
             // Presence (lazy)
             user_join: { category: 'presence', path: 'assets/sounds/presence/user_join.mp3', preload: false, cooldown: 200 },
-            user_leave: { category: 'presence', path: 'assets/sounds/presence/user_leave.mp3', preload: false, cooldown: 200 },
-            
-            // App (lazy, splash only once)
-            app_splash: { category: 'app', path: 'assets/sounds/app/app_splash.mp3', preload: false, oncePerSession: true }
+            user_leave: { category: 'presence', path: 'assets/sounds/presence/user_leave.mp3', preload: false, cooldown: 200 }
         };
 
         this.audioInstances = {};
@@ -70,6 +67,13 @@ class SoundManager {
         }
     }
 
+    setVolume(volume) {
+        const volVal = volume / 100;
+        for (const audio of Object.values(this.audioInstances)) {
+            audio.volume = volVal;
+        }
+    }
+
     setCategoryEnabled(category, enabled) {
         if (this.categories.hasOwnProperty(category)) {
             this.categories[category] = enabled;
@@ -95,12 +99,7 @@ class SoundManager {
 
         if (!this.categories[config.category]) return;
 
-        // Session constraint logic
-        if (config.oncePerSession) {
-            if (eventName === 'app_splash' && this.hasPlayedSplash) {
-                return;
-            }
-        }
+
 
         // Cooldown logic
         const now = Date.now();
@@ -113,22 +112,20 @@ class SoundManager {
         this.lastPlayed[eventName] = now;
 
         const audio = this._instantiateAudio(eventName, config);
+        const volumeSetting = window.settingsManager ? window.settingsManager.get('output-volume') : 100;
+        audio.volume = (Number(volumeSetting) ?? 100) / 100;
         
         // Overlap prevention: reset time to start before playing again
         if (!audio.paused && !config.loop) {
             audio.currentTime = 0;
         }
 
-        // Special handling for app_splash (internally timed to stop after roughly 3 seconds to avoid indefinite play if it's long)
-        if (eventName === 'app_splash') {
-            sessionStorage.setItem('hasPlayedSplash', 'true');
-            this.hasPlayedSplash = true;
-            
-            // We can add a fade-out logic or just rely on the clip being short
-            audio.play().catch(e => console.warn('[SoundManager] Play failed:', e));
-            return;
-        }
 
+
+        const VOICE_SKIP_SOUNDS = ['voice_mute', 'voice_deafen'];
+        if (VOICE_SKIP_SOUNDS.includes(eventName)) {
+            audio.currentTime = 0.3;
+        }
         audio.play().catch(e => console.warn('[SoundManager] Play failed:', e));
     }
 

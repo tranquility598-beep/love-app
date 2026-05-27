@@ -528,6 +528,41 @@ body.room-mode #chat-view .channel-start-desc {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
+.room-voice-panel-cards .screen-share-card {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 9;
+  max-height: 55vh;
+  min-height: 120px;
+  padding: 0;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.room-voice-panel-cards .screen-share-card .voice-card-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.room-voice-panel-cards .screen-share-card .voice-card-name-tag {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  z-index: 5;
+}
+
 @keyframes roomSpeakingPulse {
   0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.20); }
   50%      { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.35); }
@@ -606,9 +641,9 @@ body.room-mode #chat-view .channel-start-desc {
   align-items: center;
   gap: 10px;
   padding: 12px 28px;
-  background: #3ba55d;
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--btn-radius-lg);
   font-size: 15px;
   font-weight: 600;
@@ -618,9 +653,9 @@ body.room-mode #chat-view .channel-start-desc {
 }
 
 .room-voice-connect-btn:hover {
-  background: #339950;
+  background: rgba(255, 255, 255, 0.25);
   transform: var(--btn-hover-lift);
-  box-shadow: 0 8px 22px rgba(59, 165, 93, 0.35);
+  box-shadow: 0 8px 22px rgba(255, 255, 255, 0.15);
 }
 
 .room-voice-connect-btn:disabled {
@@ -708,9 +743,9 @@ body.room-mode #chat-view .channel-start-desc {
 
 /* Screen share: подсветка при активной демонстрации */
 .room-voice-ctrl-btn[data-active="true"] {
-  background: rgba(88, 101, 242, 0.18);
-  border-color: rgba(88, 101, 242, 0.55);
-  color: #aab3ff;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
 }
 
 /* Кнопка "Выйти" — красная */
@@ -1397,4 +1432,22 @@ body.room-mode .room-header.has-banner > * {
 }
 .message-input-area {
   flex-shrink: 0;
+}
+
+/* Custom theater mode for screenshare overlay */
+.room-voice-panel-cards .screen-share-card.theater-mode,
+.voice-grid .screen-share-card.theater-mode,
+#screen-share-container .screen-share-card.theater-mode {
+  position: fixed;
+  top: 5vh;
+  left: 5vw;
+  width: 90vw;
+  height: 90vh;
+  max-height: 90vh;
+  z-index: 10000;
+  border: none;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  margin: 0;
 }

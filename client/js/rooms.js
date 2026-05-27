@@ -151,7 +151,7 @@
   function hideAllRoomPanels() {
     setHidden('room-chat-strip', true);
     setHidden('room-voice-panel', true);
-    setHidden('room-media-empty', true);
+    setHidden('room-media-panel', true);
     // chat-view скрываем legacy-способом
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
@@ -196,7 +196,7 @@
   function makeAvatar(node, user, fallbackName, klass) {
     node.className = klass;
     const username = user?.nickname || user?.username || fallbackName || '?';
-    const avatarUrl = (typeof getAvatarUrl === 'function' && user?.avatar) ? getAvatarUrl(user.avatar) : null;
+    const avatarUrl = (typeof getAvatarUrl === 'function' && user?.avatar) ? getAvatarUrl(user.avatar, username, user._id) : null;
     if (avatarUrl) {
       const img = document.createElement('img');
       img.src = avatarUrl;
@@ -321,12 +321,17 @@
   function renderVoicePanelCards(members) {
     const wrap = document.getElementById('room-voice-panel-cards');
     if (!wrap) return;
+    
+    // Detach active screenshare cards to keep video players active
+    const activeScreenCards = Array.from(wrap.querySelectorAll('.screen-share-card'));
+    activeScreenCards.forEach(card => card.remove());
+
     wrap.innerHTML = '';
     members.forEach(m => {
       const user = m?.user || m;
       const card = document.createElement('div');
       card.className = 'room-voice-card';
-      card.dataset.userId = String(user?._id || '');
+      card.dataset.userId = String(user?.userId || user?._id || m?.userId || m?._id || '');
       card.dataset.speaking = 'false';
       card.setAttribute('role', 'listitem');
 
@@ -339,15 +344,29 @@
       name.textContent = user?.nickname || user?.username || 'Гость';
       card.appendChild(name);
 
-      if (m?.muted) {
-        const mute = document.createElement('span');
-        mute.className = 'room-voice-card-mute';
-        mute.textContent = '🔇';
-        mute.title = 'Микрофон выключен';
-        card.appendChild(mute);
-      }
+      const statusIcons = document.createElement('div');
+      statusIcons.className = 'room-voice-card-status-icons';
+      statusIcons.style.cssText = 'display: flex; gap: 6px; align-items: center; justify-content: center; height: 16px; margin-top: -4px;';
+      
+      const isMuted = !!m?.muted;
+      const isDeafened = !!m?.deafened;
+      
+      statusIcons.innerHTML = `
+        ${isMuted ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+        ${isDeafened ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+      `;
+      card.appendChild(statusIcons);
 
       wrap.appendChild(card);
+    });
+
+    // Re-append active screenshare cards and resume playback
+    activeScreenCards.forEach(card => {
+      wrap.appendChild(card);
+      const v = card.querySelector('video');
+      if (v) {
+        v.play().catch(e => console.error('[ScreenShare] Room video play failed on re-append:', e));
+      }
     });
   }
 
@@ -358,20 +377,30 @@
     if (card) card.dataset.speaking = String(!!speaking);
   }
 
-  function setCardMuted(userId, muted) {
+  function updateRoomCardVoiceState(userId, muted, deafened) {
     const wrap = document.getElementById('room-voice-panel-cards');
     if (!wrap) return;
     const card = wrap.querySelector(`.room-voice-card[data-user-id="${CSS.escape(String(userId))}"]`);
     if (!card) return;
-    const existing = card.querySelector('.room-voice-card-mute');
-    if (muted && !existing) {
-      const mute = document.createElement('span');
-      mute.className = 'room-voice-card-mute';
-      mute.textContent = '🔇';
-      card.appendChild(mute);
-    } else if (!muted && existing) {
-      existing.remove();
+    
+    if (muted !== undefined) card.dataset.muted = String(!!muted);
+    if (deafened !== undefined) card.dataset.deafened = String(!!deafened);
+    
+    const isMuted = card.dataset.muted === 'true';
+    const isDeafened = card.dataset.deafened === 'true';
+    
+    let statusIcons = card.querySelector('.room-voice-card-status-icons');
+    if (!statusIcons) {
+      statusIcons = document.createElement('div');
+      statusIcons.className = 'room-voice-card-status-icons';
+      statusIcons.style.cssText = 'display: flex; gap: 6px; align-items: center; justify-content: center; height: 16px; margin-top: -4px;';
+      card.appendChild(statusIcons);
     }
+    
+    statusIcons.innerHTML = `
+      ${isMuted ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+      ${isDeafened ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+    `;
   }
 
   // === Live socket подписки ==============================================
@@ -413,9 +442,14 @@
     s.on('voice:user_speaking', liveHandlers.onVoiceUserSpeaking);
 
     liveHandlers.onVoiceUserMuted = (data) => {
-      if (data?.userId) setCardMuted(data.userId, !!data.muted);
+      if (data?.userId) updateRoomCardVoiceState(data.userId, !!data.muted, undefined);
     };
     s.on('voice:user_muted', liveHandlers.onVoiceUserMuted);
+
+    liveHandlers.onVoiceUserDeafened = (data) => {
+      if (data?.userId) updateRoomCardVoiceState(data.userId, undefined, !!data.deafened);
+    };
+    s.on('voice:user_deafened', liveHandlers.onVoiceUserDeafened);
 
     // Когда мы сами выходим — обновляем UI control-панели
     liveHandlers.onVoiceLeft = () => {
@@ -432,6 +466,7 @@
       if (liveHandlers.onVoiceMembers) s.off('voice:members_update', liveHandlers.onVoiceMembers);
       if (liveHandlers.onVoiceUserSpeaking) s.off('voice:user_speaking', liveHandlers.onVoiceUserSpeaking);
       if (liveHandlers.onVoiceUserMuted) s.off('voice:user_muted', liveHandlers.onVoiceUserMuted);
+      if (liveHandlers.onVoiceUserDeafened) s.off('voice:user_deafened', liveHandlers.onVoiceUserDeafened);
       if (liveHandlers.onVoiceLeft) s.off('voice:left', liveHandlers.onVoiceLeft);
     }
     Object.keys(liveHandlers).forEach(k => { liveHandlers[k] = null; });
@@ -627,34 +662,7 @@
     };
     document.addEventListener('keydown', roomListeners.documentEscape);
     
-    // GROUP G: Create room modal
-    const createBtn = document.getElementById('create-room-btn');
-    if (createBtn) {
-      roomListeners.createButton = showCreateRoomModal;
-      createBtn.addEventListener('click', roomListeners.createButton);
-    }
-    
-    const submit = document.getElementById('create-room-submit');
-    if (submit) {
-      roomListeners.createSubmit = createRoom;
-      submit.addEventListener('click', roomListeners.createSubmit);
-    }
-    
-    const createClose = document.getElementById('create-room-close');
-    if (createClose) {
-      roomListeners.createClose = () => {
-        if (typeof closeModal === 'function') closeModal('create-room-modal');
-      };
-      createClose.addEventListener('click', roomListeners.createClose);
-    }
-    
-    const createCancel = document.getElementById('create-room-cancel');
-    if (createCancel) {
-      roomListeners.createCancel = () => {
-        if (typeof closeModal === 'function') closeModal('create-room-modal');
-      };
-      createCancel.addEventListener('click', roomListeners.createCancel);
-    }
+    // (Create room modal listeners were moved to global init)
     
     // GROUP H: Room tabs
     const tabChat = document.getElementById('room-tab-chat');
@@ -852,26 +860,7 @@
       document.removeEventListener('keydown', roomListeners.documentEscape);
     }
     
-    // GROUP G: Create room modal
-    const createBtn = document.getElementById('create-room-btn');
-    if (createBtn && roomListeners.createButton) {
-      createBtn.removeEventListener('click', roomListeners.createButton);
-    }
-    
-    const submit = document.getElementById('create-room-submit');
-    if (submit && roomListeners.createSubmit) {
-      submit.removeEventListener('click', roomListeners.createSubmit);
-    }
-    
-    const createClose = document.getElementById('create-room-close');
-    if (createClose && roomListeners.createClose) {
-      createClose.removeEventListener('click', roomListeners.createClose);
-    }
-    
-    const createCancel = document.getElementById('create-room-cancel');
-    if (createCancel && roomListeners.createCancel) {
-      createCancel.removeEventListener('click', roomListeners.createCancel);
-    }
+    // (Create room modal listeners were moved to global init)
     
     // GROUP H: Room tabs
     const tabChat = document.getElementById('room-tab-chat');
@@ -973,9 +962,9 @@
         textChannelId: data.textChannelId,
         voiceChannelId: data.voiceChannelId
       });
-      if (typeof showNotification === 'function') {
-        showNotification('success', `Комната "${name}" создана`);
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', `Комната "${name}" создана`);
+      // }
     } catch (error) {
       if (errEl) {
         errEl.textContent = error.message || 'Ошибка при создании комнаты';
@@ -1048,9 +1037,7 @@
   function openRoomChat() {
     const room = window.currentRoom;
     if (!room || !room.textChannelId) {
-      if (typeof showNotification === 'function') {
-        showNotification('warning', 'Текстовый канал комнаты не найден');
-      }
+      console.warn('Текстовый канал комнаты не найден');
       return;
     }
     if (typeof selectChannel !== 'function') return;
@@ -1058,7 +1045,7 @@
     setActiveTab('chat');
     // Прячем альтернативные панели
     setHidden('room-voice-panel', true);
-    setHidden('room-media-empty', true);
+    setHidden('room-media-panel', true);
     // Показываем strip и инициируем chat-view
     setHidden('room-chat-strip', false);
     selectChannel(room.textChannelId, 'Чат', 'text');
@@ -1071,29 +1058,151 @@
   function openRoomVoice() {
     const room = window.currentRoom;
     if (!room || !room.voiceChannelId) {
-      if (typeof showNotification === 'function') {
-        showNotification('warning', 'Голосовой канал комнаты не найден');
-      }
+      console.warn('Голосовой канал комнаты не найден');
       return;
     }
     setActiveTab('voice');
     setHidden('room-chat-strip', true);
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
-    setHidden('room-media-empty', true);
+    setHidden('room-media-panel', true);
     setHidden('room-voice-panel', false);
     refreshVoiceMeta(room);
     renderVoicePanelMode();
   }
 
-  // Медиа: пустое состояние.
-  function openRoomMedia() {
+  // Медиа: динамически загружаем контент.
+  async function openRoomMedia() {
     setActiveTab('media');
     setHidden('room-chat-strip', true);
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
     setHidden('room-voice-panel', true);
-    setHidden('room-media-empty', false);
+    setHidden('room-media-panel', false);
+
+    const emptyState = document.getElementById('room-media-empty');
+    const gallery = document.getElementById('room-media-gallery');
+    if (!emptyState || !gallery) return;
+
+    // Сбрасываем и показываем состояние загрузки
+    gallery.classList.add('hidden');
+    emptyState.classList.remove('hidden');
+    const titleEl = emptyState.querySelector('.room-media-empty-title');
+    const hintEl = emptyState.querySelector('.room-media-empty-hint');
+    
+    const originalTitle = 'Медиа появятся здесь';
+    const originalHint = 'Когда участники начнут делиться файлами, изображениями, видео и голосовыми — всё это окажется на этой вкладке.';
+    
+    if (titleEl) titleEl.textContent = 'Загрузка медиа...';
+    if (hintEl) hintEl.textContent = 'Мы собираем все отправленные файлы...';
+
+    const room = window.currentRoom;
+    if (!room || !room.textChannelId) {
+      if (titleEl) titleEl.textContent = 'Канал не найден';
+      if (hintEl) hintEl.textContent = 'Не удалось найти текстовый канал для этой комнаты.';
+      return;
+    }
+
+    try {
+      let messages = [];
+      if (typeof MessagesAPI !== 'undefined' && typeof MessagesAPI.getMessages === 'function') {
+        messages = await MessagesAPI.getMessages(room.textChannelId, null, 100);
+      } else {
+        const baseUrl = window.BASE_URL || 'http://localhost:5555';
+        const response = await fetch(`${baseUrl}/api/messages/${room.textChannelId}?limit=100`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        });
+        if (response.ok) {
+          messages = await response.json();
+        }
+      }
+
+      // Собираем вложения
+      const mediaItems = [];
+      messages.forEach(msg => {
+        if (msg.attachments && msg.attachments.length > 0) {
+          msg.attachments.forEach(att => {
+            mediaItems.push({
+              attachment: att,
+              author: msg.author,
+              createdAt: msg.createdAt,
+              messageId: msg._id
+            });
+          });
+        }
+      });
+
+      // Восстанавливаем оригинальный текст на случай, если медиа пустое
+      if (titleEl) titleEl.textContent = originalTitle;
+      if (hintEl) hintEl.textContent = originalHint;
+
+      if (mediaItems.length === 0) {
+        emptyState.classList.remove('hidden');
+        gallery.classList.add('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        gallery.classList.remove('hidden');
+
+        gallery.innerHTML = mediaItems.map(item => {
+          const att = item.attachment;
+          const authorName = item.author?.nickname || item.author?.username || 'Пользователь';
+          const authorAvatar = typeof getAvatarUrl === 'function' ? getAvatarUrl(item.author?.avatar, authorName, item.author?._id) : '';
+          const dateStr = typeof formatDate === 'function' ? formatDate(item.createdAt) : new Date(item.createdAt).toLocaleDateString();
+
+          const isImage = att.mimetype?.startsWith('image/') || att.type === 'image';
+          const isAudio = att.mimetype?.startsWith('audio/') || att.type === 'audio' || att.url?.includes('/audio/');
+          const isVideo = (att.mimetype?.startsWith('video/') || att.type === 'video' || att.url?.includes('/video/')) && !isAudio;
+
+          let previewHtml = '';
+          const safeUrl = typeof resolveAttachmentUrl === 'function' ? resolveAttachmentUrl(att.url) : att.url;
+
+          if (isImage) {
+            previewHtml = `
+              <div class="room-media-card-preview image-preview" style="background-image: url('${safeUrl}');" onclick="if (window.XSS && window.XSS.openImageModal) { window.XSS.openImageModal('${safeUrl}'); } else { window.open('${safeUrl}'); }"></div>
+            `;
+          } else if (isVideo) {
+            previewHtml = `
+              <div class="room-media-card-preview">
+                <video src="${safeUrl}" controls preload="metadata"></video>
+              </div>
+            `;
+          } else if (isAudio) {
+            previewHtml = `
+              <div class="room-media-card-preview audio-preview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="margin-bottom: 6px; color: var(--blue, #5865f2);"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <audio src="${safeUrl}" controls style="width: 100%; height: 28px;"></audio>
+              </div>
+            `;
+          } else {
+            const filename = att.filename || att.originalName || 'Файл';
+            previewHtml = `
+              <a href="${safeUrl}" target="_blank" class="room-media-card-preview file-preview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="margin-bottom: 6px; color: var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span class="file-name" style="font-size: 0.8em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;" title="${filename}">${filename}</span>
+              </a>
+            `;
+          }
+
+          return `
+            <div class="room-media-card">
+              ${previewHtml}
+              <div class="room-media-card-footer" style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px;">
+                <img src="${authorAvatar}" alt="${authorName}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
+                <div style="display: flex; flex-direction: column; overflow: hidden;">
+                  <span style="font-size: 0.8em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${authorName}">${authorName}</span>
+                  <span style="font-size: 0.7em; color: var(--text-muted);">${dateStr}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+    } catch (err) {
+      console.error('Error loading room media:', err);
+      if (titleEl) titleEl.textContent = 'Ошибка загрузки';
+      if (hintEl) hintEl.textContent = 'Не удалось загрузить медиафайлы. Пожалуйста, попробуйте еще раз.';
+    }
   }
 
   // === Voice connect / state ==============================================
@@ -1163,7 +1272,7 @@
       showRoomView();
       setHidden('room-voice-panel', false);
       setHidden('room-chat-strip', true);
-      setHidden('room-media-empty', true);
+      setHidden('room-media-panel', true);
       const chat = document.getElementById('chat-view');
       if (chat) chat.classList.add('hidden');
       setActiveTab('voice');
@@ -1190,7 +1299,7 @@
     showRoomView();
     setHidden('room-voice-panel', false);
     setHidden('room-chat-strip', true);
-    setHidden('room-media-empty', true);
+    setHidden('room-media-panel', true);
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
     setActiveTab('voice');
@@ -1457,9 +1566,9 @@
       if (typeof loadServers === 'function') loadServers();
 
       setStatus('room-settings-status', 'success', 'Сохранено');
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Настройки комнаты обновлены');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Настройки комнаты обновлены');
+      // }
     } catch (e) {
       setStatus('room-settings-status', 'error', e.message || 'Ошибка сохранения');
     } finally {
@@ -1541,12 +1650,12 @@
       }
       applyRoomColor(server.settings.color);
       setStatus('room-settings-status', 'success', 'Цвет сохранён');
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Цвет комнаты обновлён');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Цвет комнаты обновлён');
+      // }
     } catch (e) {
       if (typeof showNotification === 'function') {
-        showNotification('error', e.message || 'Ошибка сохранения цвета');
+        console.error();
       }
     } finally {
       if (btn) btn.disabled = false;
@@ -1628,7 +1737,7 @@
     if (!server) return;
     if (!isCurrentUserOwner(server)) {
       if (typeof showNotification === 'function') {
-        showNotification('error', 'Только владелец может удалить иконку');
+        console.error();
       }
       return;
     }
@@ -1644,12 +1753,12 @@
       updateMediaButtonsState(server);
       renderRoomHeader(server);
       if (typeof loadServers === 'function') loadServers();
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Иконка удалена');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Иконка удалена');
+      // }
     } catch (e) {
       if (typeof showNotification === 'function') {
-        showNotification('error', e.message || 'Не удалось удалить иконку');
+        console.error();
       }
     } finally {
       if (btn) btn.disabled = false;
@@ -1663,7 +1772,7 @@
     if (!file) return;
     const err = clientValidateImage(file, 8 * 1024 * 1024);
     if (err) {
-      if (typeof showNotification === 'function') showNotification('error', err);
+      console.error(err);
       e.target.value = '';
       return;
     }
@@ -1678,12 +1787,12 @@
         renderRoomHeader(server);
         if (typeof loadServers === 'function') loadServers();
       }
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Иконка обновлена');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Иконка обновлена');
+      // }
     } catch (err2) {
       if (typeof showNotification === 'function') {
-        showNotification('error', err2.message || 'Ошибка загрузки иконки');
+        console.error();
       }
     } finally {
       e.target.value = '';
@@ -1697,7 +1806,7 @@
     if (!file) return;
     const err = clientValidateImage(file, 12 * 1024 * 1024);
     if (err) {
-      if (typeof showNotification === 'function') showNotification('error', err);
+      console.error(err);
       e.target.value = '';
       return;
     }
@@ -1710,12 +1819,12 @@
         updateMediaButtonsState(server);
         applyRoomBanner(newBanner || '');
       }
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Баннер обновлён');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Баннер обновлён');
+      // }
     } catch (err2) {
       if (typeof showNotification === 'function') {
-        showNotification('error', err2.message || 'Ошибка загрузки баннера');
+        console.error();
       }
     } finally {
       e.target.value = '';
@@ -1734,7 +1843,7 @@
     if (!server) return;
     if (!isCurrentUserOwner(server)) {
       if (typeof showNotification === 'function') {
-        showNotification('error', 'Только владелец может удалить баннер');
+        console.error();
       }
       return;
     }
@@ -1753,12 +1862,12 @@
       setBannerPreview(server);
       updateMediaButtonsState(server);
       applyRoomBanner('');
-      if (typeof showNotification === 'function') {
-        showNotification('success', 'Баннер удалён');
-      }
+      // if (typeof showNotification === 'function') {
+      //   showNotification('success', 'Баннер удалён');
+      // }
     } catch (e) {
       if (typeof showNotification === 'function') {
-        showNotification('error', e.message || 'Не удалось удалить баннер');
+        console.error();
       }
     } finally {
       if (btn) btn.disabled = false;
@@ -1781,7 +1890,7 @@
     if (isCurrentUserOwner(server)) {
       // Защита на frontend (backend всё равно вернёт 400 для owner)
       if (typeof showNotification === 'function') {
-        showNotification('warning', 'Владелец не может покинуть комнату. Удалите её или передайте владение.');
+        console.warn();
       }
       return;
     }
@@ -1793,13 +1902,13 @@
       onConfirm: async () => {
         try {
           await RoomsAPI.leave(server._id);
-          if (typeof showNotification === 'function') {
-            showNotification('success', 'Вы покинули комнату');
-          }
+          // if (typeof showNotification === 'function') {
+          //   showNotification('success', 'Вы покинули комнату');
+          // }
           await afterRoomGone();
         } catch (e) {
           if (typeof showNotification === 'function') {
-            showNotification('error', e.message || 'Не удалось выйти из комнаты');
+            console.error();
           }
         }
       }
@@ -1811,7 +1920,7 @@
     if (!server) return;
     if (!isCurrentUserOwner(server)) {
       if (typeof showNotification === 'function') {
-        showNotification('error', 'Только владелец может удалить комнату');
+        console.error();
       }
       return;
     }
@@ -1823,13 +1932,13 @@
       onConfirm: async () => {
         try {
           await RoomsAPI.delete(server._id);
-          if (typeof showNotification === 'function') {
-            showNotification('success', 'Комната удалена');
-          }
+          // if (typeof showNotification === 'function') {
+          //   showNotification('success', 'Комната удалена');
+          // }
           await afterRoomGone();
         } catch (e) {
           if (typeof showNotification === 'function') {
-            showNotification('error', e.message || 'Не удалось удалить комнату');
+            console.error();
           }
         }
       }
@@ -1991,7 +2100,34 @@
 
   // === Init ===============================================================
 
+  function registerGlobalRoomListeners() {
+    const createBtn = document.getElementById('create-room-btn');
+    if (createBtn) {
+      createBtn.addEventListener('click', showCreateRoomModal);
+    }
+    
+    const submit = document.getElementById('create-room-submit');
+    if (submit) {
+      submit.addEventListener('click', createRoom);
+    }
+    
+    const createClose = document.getElementById('create-room-close');
+    if (createClose) {
+      createClose.addEventListener('click', () => {
+        if (typeof closeModal === 'function') closeModal('create-room-modal');
+      });
+    }
+    
+    const createCancel = document.getElementById('create-room-cancel');
+    if (createCancel) {
+      createCancel.addEventListener('click', () => {
+        if (typeof closeModal === 'function') closeModal('create-room-modal');
+      });
+    }
+  }
+
   function init() {
+    registerGlobalRoomListeners();
     registerRoomListeners();
     wrapNavigation();
   }
@@ -2011,6 +2147,7 @@
     openRoomMedia,
     handleRoomVoiceConnect,
     handleRoomVoiceLeave,
+    updateRoomCardVoiceState,
     // Используется legacy ui.js для закрытия панели после удаления через
     // legacy server-settings-modal (на случай если пользователь оказался там).
     closeSettingsPanel: closeRoomSettings,

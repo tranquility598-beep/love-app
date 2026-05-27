@@ -180,15 +180,7 @@ window.showGlobalAnnouncementBanner = showGlobalAnnouncementBanner;
  * and only triggered for communication events.
  */
 
-function showMessageNotification(message) {
-  if (document.hasFocus()) return;
-  showNotification('info', message.content?.substring(0, 80) || 'Новое сообщение', message.author?.username);
-  
-  // Only real communication events trigger sound
-  if (window.settingsManager && window.settingsManager.get('notif-sound')) {
-    if (window.SoundManager) window.SoundManager.play('notification');
-  }
-}
+
 
 // ===== МОДАЛЬНЫЕ ОКНА — UNIFIED ARCHITECTURE =====
 
@@ -516,8 +508,10 @@ function getAvatarUrl(avatar, fallbackUsername) {
 
 function generateDefaultAvatar(username) {
   const colors = ['#5865f2','#eb459e','#3ba55c','#faa61a','#ed4245','#00b0f4'];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  const letter = username ? username[0].toUpperCase() : '?';
+  const nameStr = username || '?';
+  const index = nameStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
+  const color = colors[index];
+  const letter = nameStr[0].toUpperCase();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" rx="20" fill="${color}"/><text x="20" y="26" text-anchor="middle" fill="white" font-size="18" font-family="Arial" font-weight="bold">${letter}</text></svg>`;
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
@@ -639,33 +633,44 @@ function updateUserStatus(userId, status) {
   const normalizedStatus = status || 'online';
 
   // 1. Cache the status state on currentUser if it matches
-  if (window.currentUser && window.currentUser._id === userId) {
+  if (window.currentUser && String(window.currentUser._id) === String(userId)) {
     window.currentUser.status = normalizedStatus;
   }
 
-  // 2. Update list and sidebar status dots (servers members and DM user list)
+  // 2. Update list and sidebar status dots and status texts (servers members, DM user list, and friends list)
   document.querySelectorAll(`[data-user-id="${userId}"] .status-dot`).forEach(dot => {
     dot.className = `status-dot ${normalizedStatus}`;
   });
+  document.querySelectorAll(`[data-user-id="${userId}"] .member-status`).forEach(statusText => {
+    statusText.textContent = getStatusText(normalizedStatus);
+  });
+  document.querySelectorAll(`[data-user-id="${userId}"] .friend-status`).forEach(statusText => {
+    statusText.textContent = getStatusText(normalizedStatus);
+  });
 
   // 3. Update current user specific panel indicators
-  if (window.currentUser && window.currentUser._id === userId) {
+  if (window.currentUser && String(window.currentUser._id) === String(userId)) {
     const userDot = document.getElementById('user-status-dot');
     if (userDot) userDot.className = `status-dot ${normalizedStatus}`;
     
     const railDot = document.getElementById('rail-account-dot');
     if (railDot) railDot.className = `rail-account-dot ${normalizedStatus}`;
+    
+    const statusDisplay = document.getElementById('settings-status-display');
+    if (statusDisplay) statusDisplay.textContent = getStatusText(normalizedStatus);
   }
 
-  // 4. Update active profile popover status dot
+  // 4. Update active profile popover status dot and text
   const activeUserId = window.activePopoverUserId || (window.currentUser && window.currentUser._id);
-  if (activeUserId === userId) {
+  if (String(activeUserId) === String(userId)) {
     const popoverDot = document.getElementById('popover-status-dot');
     if (popoverDot) popoverDot.className = `status-dot ${normalizedStatus}`;
+    const popoverStatusText = document.getElementById('popover-status-text');
+    if (popoverStatusText) popoverStatusText.textContent = getStatusText(normalizedStatus);
   }
 
   // 5. Update active profile modal status dot
-  if (window.currentProfileUserId === userId) {
+  if (window.currentProfileUserId && String(window.currentProfileUserId) === String(userId)) {
     const modalDot = document.getElementById('profile-status-dot');
     if (modalDot) modalDot.className = `status-dot ${normalizedStatus}`;
   }
@@ -756,6 +761,11 @@ function toggleMembersList() {
 // Переключить микрофон
 let globalMicMuted = false;
 function toggleMic() {
+  if (window.voiceManager && typeof window.toggleVoiceMute === 'function') {
+    window.toggleVoiceMute();
+    return;
+  }
+  
   globalMicMuted = !globalMicMuted;
   const btn = document.getElementById('mic-btn');
   if (btn) {
@@ -771,13 +781,6 @@ function toggleMic() {
     }
   }
   
-  if (window.voiceManager) {
-    window.voiceManager.isMuted = globalMicMuted;
-    if (window.voiceManager.localStream) {
-      window.voiceManager.localStream.getAudioTracks().forEach(function(t) { t.enabled = !globalMicMuted; });
-    }
-  }
-  
   // Play sound
   if (window.playVoiceSound) {
     window.playVoiceSound(globalMicMuted ? 'mute' : 'unmute');
@@ -787,6 +790,11 @@ function toggleMic() {
 // toggleDeafen - вызывается из HTML onclick="toggleDeafen()"
 let globalDeafened = false;
 function toggleDeafen() {
+  if (window.voiceManager && typeof window.toggleVoiceDeafen === 'function') {
+    window.toggleVoiceDeafen();
+    return;
+  }
+  
   globalDeafened = !globalDeafened;
   const btn = document.getElementById('headset-btn');
   if (btn) {
@@ -1077,7 +1085,7 @@ function closePopoverOnOutsideClick(e) {
 }
 
 function getStatusText(status) {
-  const map = { 'online': 'В сети', 'idle': 'Не активен', 'dnd': 'Не беспокоить', 'offline': 'Невидимый' };
+  const map = { 'online': 'В сети', 'idle': 'Отошёл', 'dnd': 'Не беспокоить', 'offline': 'Не в сети' };
   return map[status] || 'В сети';
 }
 
@@ -1177,7 +1185,7 @@ function showSettings() {
   const avatarEl = document.getElementById('settings-avatar');
   const nicknameEl = document.getElementById('settings-nickname');
   const bioEl = document.getElementById('settings-bio');
-  const statusEl = document.getElementById('settings-status');
+  const dndToggle = document.getElementById('settings-dnd-toggle');
   const usernameDisplay = document.getElementById('settings-username-display');
   const statusDisplay = document.getElementById('settings-status-display');
   const colorEl = document.getElementById('settings-profile-color');
@@ -1186,7 +1194,9 @@ function showSettings() {
   if (avatarEl) avatarEl.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
   if (nicknameEl) nicknameEl.value = user.nickname || user.username || '';
   if (bioEl) bioEl.value = user.bio || '';
-  if (statusEl) statusEl.value = user.status || 'online';
+  if (dndToggle) {
+    dndToggle.setAttribute('data-active', user.status === 'dnd' ? 'true' : 'false');
+  }
   if (colorEl) colorEl.value = user.profileColor || '#5865F2';
   if (usernameDisplay) {
     usernameDisplay.textContent = user.nickname || user.username || '';
@@ -1245,12 +1255,12 @@ function checkProfileChanges() {
 
   const nicknameEl = document.getElementById('settings-nickname');
   const bioEl = document.getElementById('settings-bio');
-  const statusEl = document.getElementById('settings-status');
+  const dndToggle = document.getElementById('settings-dnd-toggle');
   const colorEl = document.getElementById('settings-profile-color');
 
   const currentNickname = nicknameEl ? nicknameEl.value.trim() : '';
   const currentBio = bioEl ? bioEl.value : '';
-  const currentStatus = statusEl ? statusEl.value : 'online';
+  const currentStatus = dndToggle && dndToggle.getAttribute('data-active') === 'true' ? 'dnd' : 'online';
   const currentColor = colorEl ? colorEl.value : '#5865F2';
 
   const originalNickname = user.nickname || user.username || '';
@@ -1270,7 +1280,7 @@ function checkProfileChanges() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const fields = ['settings-nickname', 'settings-bio', 'settings-status', 'settings-profile-color'];
+  const fields = ['settings-nickname', 'settings-bio', 'settings-profile-color'];
   fields.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -1293,12 +1303,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const banner = document.getElementById('settings-profile-banner');
           applyBannerGlow(banner, e.target.value);
         }
-        
-        // Моментальное обновление статуса в превью
-        if (id === 'settings-status') {
-          const statusDisplay = document.getElementById('settings-status-display');
-          if (statusDisplay) statusDisplay.textContent = getStatusText(e.target.value);
-        }
       });
       el.addEventListener('change', (e) => {
         checkProfileChanges();
@@ -1306,19 +1310,33 @@ document.addEventListener('DOMContentLoaded', () => {
           const banner = document.getElementById('settings-profile-banner');
           applyBannerGlow(banner, e.target.value);
         }
-        if (id === 'settings-status') {
-          const statusDisplay = document.getElementById('settings-status-display');
-          if (statusDisplay) statusDisplay.textContent = getStatusText(e.target.value);
-        }
       });
     }
   });
+
+  // Обработчик кнопки "Не беспокоить" (DND)
+  const dndToggle = document.getElementById('settings-dnd-toggle');
+  if (dndToggle) {
+    dndToggle.addEventListener('click', () => {
+      const isActive = dndToggle.getAttribute('data-active') === 'true';
+      dndToggle.setAttribute('data-active', !isActive ? 'true' : 'false');
+      
+      // Моментальное обновление статуса в превью
+      const statusDisplay = document.getElementById('settings-status-display');
+      if (statusDisplay) {
+        statusDisplay.textContent = getStatusText(!isActive ? 'dnd' : 'online');
+      }
+      
+      checkProfileChanges();
+    });
+  }
 });
 
 async function saveProfile() {
   const nickname = document.getElementById('settings-nickname') ? document.getElementById('settings-nickname').value.trim() : '';
   const bio = document.getElementById('settings-bio') ? document.getElementById('settings-bio').value : '';
-  const status = document.getElementById('settings-status') ? document.getElementById('settings-status').value : 'online';
+  const dndToggle = document.getElementById('settings-dnd-toggle');
+  const status = dndToggle && dndToggle.getAttribute('data-active') === 'true' ? 'dnd' : 'online';
   const profileColor = document.getElementById('settings-profile-color') ? document.getElementById('settings-profile-color').value : '#5865F2';
 
   if (!nickname) {
@@ -2312,3 +2330,49 @@ window.logoutAllDevices = logoutAllDevices;
 window.ModalManager = ModalManager;
 window.openModal = openModal;
 window.closeModal = closeModal;
+
+// ===== AFK DETECTOR =====
+const APP_INIT_TIME = Date.now();
+let afkTimer = null;
+const AFK_TIMEOUT = 5 * 60 * 1000;
+
+function resetAfkTimer() {
+  const user = window.currentUser;
+  if (!user) return;
+  
+  if (afkTimer) clearTimeout(afkTimer);
+  
+  // Return from AFK
+  if (user.status === 'idle') {
+    if (window.socket && window.socket.connected) {
+      window.socket.emit('status:set', { status: 'online' });
+    }
+  }
+
+  afkTimer = setTimeout(() => {
+    const currentUser = window.currentUser;
+    if (currentUser && currentUser.status !== 'dnd') {
+      if (window.socket && window.socket.connected) {
+        window.socket.emit('status:set', { status: 'idle' });
+      }
+    }
+  }, AFK_TIMEOUT);
+}
+
+document.addEventListener('mousemove', resetAfkTimer);
+document.addEventListener('keydown', resetAfkTimer);
+document.addEventListener('click', resetAfkTimer);
+
+document.addEventListener('visibilitychange', () => {
+  const user = window.currentUser;
+  if (!user || user.status === 'dnd') return;
+  
+  if (document.hidden) {
+    if (Date.now() - APP_INIT_TIME < 5000) return;
+    if (window.socket && window.socket.connected) {
+      window.socket.emit('status:set', { status: 'idle' });
+    }
+  } else {
+    resetAfkTimer();
+  }
+});

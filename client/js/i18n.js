@@ -158,9 +158,9 @@ const TRANSLATIONS = {
     profile_bio_placeholder: 'Расскажи о себе...',
     profile_status: 'Статус',
     status_online: 'В сети',
-    status_idle: 'Не активен',
+    status_idle: 'Отошёл',
     status_dnd: 'Не беспокоить',
-    status_offline: 'Невидимый',
+    status_offline: 'Не в сети',
     btn_save: 'Сохранить изменения',
 
     // Внешний вид

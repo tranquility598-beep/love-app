@@ -279,7 +279,7 @@
 
   function checkDOMOverlays() {
     // Check: Stuck backdrops
-    const backdrops = document.querySelectorAll('[class*="backdrop"]:not(.hidden)');
+    const backdrops = document.querySelectorAll('[class*="backdrop"]:not(.hidden):not(.video-fs-backdrop)');
     const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
     
     if (backdrops.length > 0 && openModals.length === 0) {

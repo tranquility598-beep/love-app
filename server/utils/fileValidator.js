@@ -24,8 +24,10 @@ const ALLOWED_FILE_EXTENSIONS = [
 ];
 
 // Максимальные размеры
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024; // 5MB
 
 const MIME_EXTENSION_MAP = {
   'image/jpeg': '.jpg',
@@ -35,6 +37,7 @@ const MIME_EXTENSION_MAP = {
   'application/pdf': '.pdf',
   'text/plain': '.txt',
   'audio/mpeg': '.mp3',
+  'audio/mp3': '.mp3',
   'audio/wav': '.wav',
   'audio/ogg': '.ogg',
   'audio/webm': '.webm',
@@ -121,6 +124,7 @@ function isAllowedMimeType(mimetype, isImage) {
     'application/x-rar-compressed',
     'application/x-7z-compressed',
     'audio/mpeg',
+    'audio/mp3',
     'audio/wav',
     'audio/ogg',
     'audio/webm',
@@ -137,7 +141,7 @@ function isAllowedMimeType(mimetype, isImage) {
 /**
  * Полная валидация файла
  */
-async function validateFile(file, isImage = false) {
+async function validateFile(file, isImage = false, fileCategory = 'document') {
   const errors = [];
 
   if (!file || !file.data) {
@@ -170,7 +174,11 @@ async function validateFile(file, isImage = false) {
   }
 
   // Проверка размера
-  const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
+  let maxSize = MAX_DOCUMENT_SIZE;
+  if (fileCategory === 'image') maxSize = MAX_IMAGE_SIZE;
+  else if (fileCategory === 'audio') maxSize = MAX_AUDIO_SIZE;
+  else if (fileCategory === 'video') maxSize = MAX_VIDEO_SIZE;
+
   if (file.size > maxSize) {
     const maxSizeMB = maxSize / (1024 * 1024);
     errors.push(`Размер файла превышает ${maxSizeMB}MB`);
@@ -211,5 +219,7 @@ module.exports = {
   checkMagicBytes,
   generateSafeFilename,
   MAX_IMAGE_SIZE,
-  MAX_FILE_SIZE
+  MAX_AUDIO_SIZE,
+  MAX_VIDEO_SIZE,
+  MAX_DOCUMENT_SIZE
 };

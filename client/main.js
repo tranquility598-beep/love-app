@@ -3,7 +3,8 @@
  * Запускает Electron приложение и управляет окнами
  */
 
-const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session, nativeTheme, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Notification, desktopCapturer, session, nativeTheme, safeStorage, Menu, Tray, nativeImage } = require('electron');
+const { createCanvas } = require('canvas');
 
 // ПРИНУДИТЕЛЬНЫЙ DARK MODE И НОВЫЙ ДИЗАЙН GOOGLE
 app.commandLine.appendSwitch('force-dark-mode');
@@ -31,6 +32,12 @@ autoUpdater.logger.transports.file.level = 'info';
 let mainWindow;
 let incomingCallWindow; // Variable for the popup
 let serverProcess;
+let tray = null;
+let isQuitting = false;
+
+const appIcon = process.platform === 'win32'
+  ? path.join(__dirname, 'assets', 'icon.ico')
+  : path.join(__dirname, 'assets', 'icon.png');
 
 // Путь к серверу
 const serverPath = path.join(__dirname, '..', 'server', 'index.js');
@@ -80,7 +87,7 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     backgroundColor: '#000000',
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -126,11 +133,100 @@ function createWindow() {
     }
   });
 
-  // Обработчик закрытия окна
+  // Обработчик закрытия окна (сворачивание в трей вместо закрытия)
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
+
+function showMainWindow() {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    createWindow();
+  }
+}
+
+function createTray() {
+  let icon;
+  if (fs.existsSync(appIcon)) {
+    icon = nativeImage.createFromPath(appIcon);
+  } else {
+    icon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(icon);
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: 'Open Love', 
+      click: () => {
+        showMainWindow();
+      } 
+    },
+    { type: 'separator' },
+    { 
+      label: 'Check for Updates', 
+      click: () => {
+        autoUpdater.checkForUpdatesAndNotify();
+      } 
+    },
+    { type: 'separator' },
+    { 
+      label: 'Quit', 
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      } 
+    }
+  ]);
+
+  tray.setToolTip('Love');
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    showMainWindow();
+  });
+}
+
+function createBadgeImage(count) {
+  const size = 16;
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#E53935';
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(count > 9 ? '9+' : String(count), size/2, size/2 + 1);
+  return nativeImage.createFromBuffer(canvas.toBuffer('image/png'));
+}
+
+// IPC handler to set badge count on macOS/Windows taskbar
+ipcMain.on('set-badge-count', (event, count) => {
+  const n = parseInt(count, 10) || 0;
+  app.setBadgeCount(n);
+  if (process.platform === 'win32' && mainWindow) {
+    if (n === 0) {
+      mainWindow.setOverlayIcon(null, '');
+    } else {
+      const badgeImage = createBadgeImage(n);
+      mainWindow.setOverlayIcon(badgeImage, `${n} непрочитанных`);
+    }
+  }
+});
 
 // Обработчики IPC для управления окном
 ipcMain.on('window-minimize', () => {
@@ -139,7 +235,9 @@ ipcMain.on('window-minimize', () => {
 
 ipcMain.on('window-maximize', () => {
   if (mainWindow) {
-    if (mainWindow.isMaximized()) {
+    if (mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false);
+    } else if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
     } else {
       mainWindow.maximize();
@@ -377,6 +475,24 @@ ipcMain.handle('get-is-packaged', () => {
   return app.isPackaged;
 });
 
+ipcMain.handle('get-screen-sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['window', 'screen'],
+    thumbnailSize: { width: 320, height: 180 }
+  });
+  return sources.map(s => {
+    let name = s.name;
+    if (!name || !name.trim()) {
+      name = s.id.startsWith('screen') ? 'Весь экран' : 'Окно приложения';
+    }
+    return {
+      id: s.id,
+      name: name,
+      thumbnail: s.thumbnail.toDataURL()
+    };
+  });
+});
+
 // Синхронный обработчик
 ipcMain.on('get-is-packaged-sync', (event) => {
   event.returnValue = app.isPackaged;
@@ -590,9 +706,11 @@ if (!gotTheLock) {
       startServer();
       setTimeout(() => {
         createWindow();
+        createTray();
       }, 2000);
     } else {
       createWindow();
+      createTray();
       setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
       setInterval(() => {
         autoUpdater.checkForUpdatesAndNotify();
@@ -657,6 +775,7 @@ app.on('window-all-closed', () => {
 
 // Убиваем сервер при выходе
 app.on('before-quit', () => {
+  isQuitting = true;
   if (serverProcess) {
     serverProcess.kill();
   }

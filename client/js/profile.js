@@ -84,7 +84,7 @@ function displayProfile(profile) {
   }
   
   // Аватар
-  avatar.src = typeof getAvatarUrl === 'function' ? getAvatarUrl(profile.avatar, profile.username) : (profile.avatar || 'https://via.placeholder.com/100?text=' + (profile.username ? profile.username[0] : '?'));
+  avatar.src = typeof getAvatarUrl === 'function' ? getAvatarUrl(profile.avatar, profile.username, profile._id || profile.id) : (profile.avatar || 'assets/images/default-avatar.png');
   
   // Render status dot overlay
   const statusDot = document.getElementById('profile-status-dot');
@@ -223,14 +223,20 @@ function blockUser() {
 /**
  * Написать сообщение пользователю
  */
-function messageUser() {
+async function messageUser() {
   if (!currentProfileUserId) return;
   
-  // Закрываем профиль и открываем DM
-  closeProfileModal();
-  
-  // TODO: Открыть DM с пользователем
-  console.log('Opening DM with user:', currentProfileUserId);
+  try {
+    if (typeof DMAPI !== 'undefined' && typeof DMAPI.openConversation === 'function') {
+      const data = await DMAPI.openConversation(currentProfileUserId);
+      if (data && data.conversation && window.NavigationController) {
+        if (window.ModalManager) window.ModalManager.closeAll();
+        window.NavigationController.navigateToDM(data.conversation._id);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to open DM:', error);
+  }
 }
 
 // ==================== SOCKET ОБРАБОТЧИКИ ====================

@@ -37,6 +37,24 @@
     });
   }
   ```
+
+### Voice Rooms and Screen Share
+- Fixed screenshare rendering inside Room voice channels. The `showScreenShareVideo` and `hideScreenShareVideoForUser` functions now properly inject and clear the video stream cards into `#room-voice-panel-cards`.
+- Added CSS layout rules to display screenshare streams at the top/full-width inside the room voice panel (`aspect-ratio`, `max-height`, `contain`).
+- Refactored voice control UI to feature monochrome (black, white, and translucent glass) button active states instead of vivid green and blue colors, aligning with the dark, minimalist aesthetic. Red mute/deafened/leave buttons are retained as universally recognized warning colors.
+- **Theater Mode:** Replaced the rigid native OS `requestFullscreen` with a custom "Theater Mode" lightbox overlay. Clicking the enlarge button now floats the video in the center of the screen at 90% size with a cinematic dark backdrop that closes seamlessly when clicked outside.
+
+### Messaging and State Fixes
+- **Pinned Messages (Server & DM):** Fixed a server routing issue where `message:pin` events were only broadcast to server-bound channels, failing silently in DMs. Added fallback routing for `DirectMessage` participants.
+- **Pinned Messages (Client):** Fixed a scope mismatch in `pinned.js` where the modal was reading from a stale local array instead of the globally updated `window.currentChannelPinnedMessages` array.
+- **Search Highlighting:** Overhauled the visual feedback when jumping to a message. Messages now smoothly pulse with a white glass overlay (`rgba(255, 255, 255, 0.2)`) and fade out over 1.5 seconds instead of a jarring dimming effect.
+- **Avatar Image Fix:** Removed dead `via.placeholder.com` links and replaced them with the native `getAvatarUrl` local fallback logic, resolving `net::ERR_CONNECTION_CLOSED` errors across the search, pinned messages, and profile views.
+
+## Package and Release Support
+- Confirmed `package.json` natively configures macOS distribution targeting `dmg` builds for both Apple Silicon (`arm64`) and Intel (`x64`) architectures seamlessly.
+
+## Validation Results
+
 * **Результат**: 
   * Устранен MEDIUM warning в логах диагностики (`currentView="dm" but currentServer is still set`).
   * Полностью восстановлена мгновенная подсветка активного состояния комнаты в левой панели (метод `applyNavigationState` теперь корректно видит статус `'server'`).

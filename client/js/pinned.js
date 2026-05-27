@@ -97,7 +97,7 @@ function closePinnedBanner() {
  */
 function updatePinnedMessagesData() {
   // Обновляем баннер с количеством
-  showPinnedBanner(currentChannelPinnedMessages.length);
+  showPinnedBanner(window.currentChannelPinnedMessages.length);
   
   // Если модалка уже открыта, обновляем её содержимое
   const modal = document.getElementById('pinned-modal');
@@ -114,13 +114,13 @@ function renderPinnedMessagesList() {
   const list = document.getElementById('pinned-messages-list');
   if (!list) return;
   
-  if (currentChannelPinnedMessages.length === 0) {
+  if (window.currentChannelPinnedMessages.length === 0) {
     list.innerHTML = '<div class="loading-spinner">Нет закрепленных сообщений</div>';
     return;
   }
   
   list.innerHTML = '';
-  currentChannelPinnedMessages.forEach(msg => {
+  window.currentChannelPinnedMessages.forEach(msg => {
     const messageEl = createPinnedMessageElement(msg);
     list.appendChild(messageEl);
   });
@@ -161,8 +161,8 @@ function createPinnedMessageElement(msg) {
   div.dataset.messageId = msg._id;
   
   const author = msg.author || {};
-  const authorName = author.username || 'Неизвестный';
-  const authorAvatar = author.avatar || `https://via.placeholder.com/32?text=${authorName[0]}`;
+  const authorName = author.username || author.nickname || 'Unknown';
+  const authorAvatar = (typeof getAvatarUrl === 'function') ? getAvatarUrl(author.avatar, authorName, author._id || author.id) : (author.avatar || `assets/images/default-avatar.png`);
   
   const date = new Date(msg.createdAt);
   const time = date.toLocaleString('ru-RU', {
@@ -233,17 +233,16 @@ function jumpToMessage(messageId) {
   if (messageEl) {
     messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     
-    // Подсветка сообщения
-    messageEl.style.background = 'var(--accent-primary)';
-    messageEl.style.opacity = '0.3';
+    // Подсветка сообщения (белый свет)
+    messageEl.style.transition = 'background-color 0.2s ease';
+    messageEl.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
     setTimeout(() => {
-      messageEl.style.transition = 'all 0.5s';
-      messageEl.style.background = '';
-      messageEl.style.opacity = '';
-    }, 100);
+      messageEl.style.transition = 'background-color 1.5s ease';
+      messageEl.style.backgroundColor = '';
+    }, 1000);
     setTimeout(() => {
       messageEl.style.transition = '';
-    }, 600);
+    }, 2500);
   }
 }
 

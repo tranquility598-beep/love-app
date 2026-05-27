@@ -213,6 +213,12 @@ class SettingsManager {
     document.querySelectorAll('audio[data-voice-output="true"], #remote-audio-container audio').forEach(audio => {
       audio.volume = volume / 100;
     });
+    if (window.applyVolumeToVoiceMessages) {
+      window.applyVolumeToVoiceMessages(volume);
+    }
+    if (window.SoundManager && typeof window.SoundManager.setVolume === 'function') {
+      window.SoundManager.setVolume(volume);
+    }
   }
 
   // Получить настройку

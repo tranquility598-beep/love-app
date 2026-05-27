@@ -663,13 +663,20 @@
         </div>
       </section>
 
-      <!-- Media mode panel: красивое пустое состояние -->
-      <section class="room-media-empty hidden" id="room-media-empty" role="status" aria-live="polite">
-        <div class="room-media-empty-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <!-- Media mode panel -->
+      <section class="room-media-panel hidden" id="room-media-panel" role="status" aria-live="polite">
+        <!-- Empty State (hidden if there are media files) -->
+        <div class="room-media-empty" id="room-media-empty">
+          <div class="room-media-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="room-media-empty-title">Медиа появятся здесь</div>
+          <div class="room-media-empty-hint">Когда участники начнут делиться файлами, изображениями, видео и голосовыми — всё это окажется на этой вкладке.</div>
         </div>
-        <div class="room-media-empty-title">Медиа появятся здесь</div>
-        <div class="room-media-empty-hint">Когда участники начнут делиться файлами, изображениями, видео и голосовыми — всё это окажется на этой вкладке.</div>
+        <!-- Media Gallery (visible if there are media files) -->
+        <div class="room-media-gallery hidden" id="room-media-gallery">
+          <!-- Media items will be injected here -->
+        </div>
       </section>
 
       <!-- Правая выезжающая панель настроек комнаты.
@@ -977,10 +984,10 @@
           </div>
           
           <div class="messages-list" id="messages-list"></div>
-          <div class="typing-indicator hidden" id="typing-indicator"></div>
         </div>
 
         <div class="message-input-area" id="message-input-area">
+          <div class="typing-indicator hidden" id="typing-indicator"></div>
           <div class="reply-preview hidden" id="reply-preview">
             <div class="reply-preview-content">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
@@ -1332,12 +1339,15 @@
         </div>
         <div class="settings-field">
           <label class="settings-label">Статус</label>
-          <select id="settings-status" class="settings-select">
-            <option value="online">В сети</option>
-            <option value="idle">Не активен</option>
-            <option value="dnd">Не беспокоить</option>
-            <option value="offline">Невидимый</option>
-          </select>
+          <div class="dnd-toggle-row">
+            <div class="dnd-toggle-label">
+              <span class="dnd-toggle-title">Не беспокоить</span>
+              <span class="dnd-toggle-desc">Отключает все уведомления и звуки</span>
+            </div>
+            <button type="button" id="settings-dnd-toggle" class="dnd-toggle-btn" data-active="false">
+              <span class="dnd-toggle-thumb"></span>
+            </button>
+          </div>
         </div>
         <div class="settings-field">
           <label class="settings-label">Цвет профиля</label>
@@ -1918,29 +1928,27 @@
 </div>
 
 <!-- Screen Share Settings Modal -->
-<div class="modal-overlay hidden" id="screen-share-settings-modal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>Настройки демонстрации экрана</h2>
-      <button class="modal-close" onclick="closeModal('screen-share-settings-modal')">✕</button>
+<div class="modal-overlay hidden" id="screenshare-modal">
+  <div class="screenshare-modal-inner">
+    <div class="screenshare-modal-header">
+      <h2>Демонстрация экрана</h2>
+      <p>Выберите что хотите показать</p>
     </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Качество</label>
-        <select id="screen-quality" class="input">
-          <option value="low">Низкое (854x480, 10 FPS)</option>
-          <option value="medium" selected>Среднее (1280x720, 15 FPS)</option>
-          <option value="high">Высокое (1920x1080, 24 FPS)</option>
-          <option value="ultra">Ультра (1920x1080, 30 FPS)</option>
-        </select>
-        <small style="color: var(--text-muted); margin-top: 8px; display: block;">
-          Более высокое качество требует больше интернет-трафика
-        </small>
-      </div>
+    <div class="screenshare-quality-row">
+      <label>Качество</label>
+      <select id="screen-quality" class="input">
+        <option value="low">Низкое (480p, 10 FPS)</option>
+        <option value="medium" selected>Среднее (720p, 15 FPS)</option>
+        <option value="high">Высокое (1080p, 24 FPS)</option>
+        <option value="ultra">Ультра (1080p, 30 FPS)</option>
+      </select>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('screen-share-settings-modal')">Отмена</button>
-      <button class="btn btn-primary" onclick="confirmScreenShare()">Начать демонстрацию</button>
+    <div class="screenshare-sources" id="screenshare-sources">
+      <div class="screenshare-loading">Загрузка источников...</div>
+    </div>
+    <div class="screenshare-modal-footer">
+      <button class="btn btn-secondary" id="screenshare-cancel">Отмена</button>
+      <button class="btn btn-primary" id="screenshare-start" disabled>Начать трансляцию</button>
     </div>
   </div>
 </div>
@@ -1961,6 +1969,7 @@
 <script src="js/socket.js"></script>
 <script src="js/sound-manager.js"></script>
 <script src="js/voice.js"></script>
+<script src="js/screenshare.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/founder.js"></script>
@@ -2179,7 +2188,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       <div class="profile-actions">
         <button class="modal-btn secondary" id="profile-message-btn">Написать</button>
-        <button class="modal-btn danger-btn" id="profile-block-btn">Заблокировать</button>
+        <button class="modal-btn danger-btn hidden" id="profile-block-btn" style="display:none">Заблокировать</button>
         <button class="modal-btn ghost hidden" id="profile-edit-btn">Редактировать профиль</button>
       </div>
     </div>
@@ -2262,6 +2271,22 @@ document.addEventListener('DOMContentLoaded', () => {
       </button>
     </div>
   </div>
+</div>
+<div id="video-fullscreen-overlay" class="video-fs-overlay hidden">
+    <div class="video-fs-backdrop hidden"></div>
+    <div class="video-fs-container">
+        <video id="video-fs-player"></video>
+        <div class="video-fs-controls">
+            <button class="video-fs-play-pause">▶</button>
+            <input type="range" class="video-fs-progress" min="0" max="100" value="0" step="0.1">
+            <span class="video-fs-time">0:00 / 0:00</span>
+            <div class="video-fs-volume-wrap">
+                <button class="video-fs-mute-btn">🔊</button>
+                <input type="range" class="video-fs-volume" min="0" max="100" value="100">
+            </div>
+            <button class="video-fs-close">✕ Закрыть</button>
+        </div>
+    </div>
 </div>
 <script src="js/runtime-diagnostics.js"></script>
 </body>

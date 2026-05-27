@@ -19,6 +19,7 @@ class VoiceManager {
     this.speakingThreshold = 20;
     this.speakingCheckInterval = null;
     this.remoteAudioStatsIntervals = new Map();
+    this.channelMembers = [];
 
     // ICE серверы для WebRTC
     this.iceServers = {
@@ -57,7 +58,8 @@ class VoiceManager {
         audio: typeof getVoiceAudioConstraints === 'function' ? getVoiceAudioConstraints() : true,
         video: false
       });
-      if (typeof initializeAudioDeviceSelectors === 'function') initializeAudioDeviceSelectors();
+      if (typeof setupVoiceDeviceSelectors === 'function') setupVoiceDeviceSelectors();
+
       console.log('🎙️ Local audio tracks:', this.localStream.getAudioTracks().map(track => ({
         id: track.id,
         label: track.label,
@@ -497,6 +499,13 @@ class VoiceManager {
       });
     }
 
+    // Если замутились, сбрасываем статус говорения
+    if (this.isMuted && this.isSpeaking) {
+      this.isSpeaking = false;
+      socketSpeaking(this.channelId, false);
+      updateSpeakingIndicator(window.currentUser?._id, false);
+    }
+
     // Звук мута (Discord-style)
     if (window.playVoiceSound) {
       window.playVoiceSound(this.isMuted ? 'mute' : 'unmute');
@@ -616,6 +625,7 @@ class VoiceManager {
 
       // Обрабатываем остановку демонстрации через системный UI
       videoTrack.onended = () => {
+        console.warn('[Voice] videoTrack.onended fired in voice.js! readyState:', videoTrack.readyState);
         this.stopScreenShare();
       };
 
@@ -635,6 +645,7 @@ class VoiceManager {
    * Остановить демонстрацию экрана
    */
   stopScreenShare() {
+    console.log('[Voice] stopScreenShare called. isScreenSharing:', this.isScreenSharing, 'screenStream:', !!this.screenStream, 'Stack:', new Error().stack);
     if (!this.isScreenSharing || !this.screenStream) return;
 
     // Удаляем видеотрек из всех peer connections
@@ -656,6 +667,22 @@ class VoiceManager {
 
     // Убираем видео
     hideScreenShareVideo();
+
+    // Сбрасываем активные состояния кнопок в UI
+    const btn = document.getElementById('voice-screen-btn');
+    if (btn) {
+      btn.classList.remove('active');
+      btn.title = 'Демонстрация экрана';
+    }
+    const viewBtn = document.getElementById('voice-view-screen-btn');
+    if (viewBtn) {
+      viewBtn.classList.remove('active');
+      viewBtn.title = 'Демонстрация экрана';
+    }
+    const roomBtn = document.getElementById('room-voice-screen-btn');
+    if (roomBtn) {
+      roomBtn.setAttribute('data-active', 'false');
+    }
 
     // Уведомляем сервер
     if (socket) {
@@ -700,11 +727,13 @@ class VoiceManager {
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
       this.speakingCheckInterval = setInterval(() => {
-        if (!this.isMuted && this.analyser) {
-          this.analyser.getByteFrequencyData(dataArray);
-          const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-
-          const isSpeaking = average > this.speakingThreshold;
+        if (this.analyser) {
+          let isSpeaking = false;
+          if (!this.isMuted) {
+            this.analyser.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            isSpeaking = average > this.speakingThreshold;
+          }
 
           if (isSpeaking !== this.isSpeaking) {
             this.isSpeaking = isSpeaking;
@@ -839,6 +868,11 @@ function toggleVoiceMute() {
         }
       }
     }
+
+    // Обновляем визуальный статус
+    if (typeof updateUserVoiceState === 'function') {
+      updateUserVoiceState(window.currentUser?._id, muted, undefined);
+    }
   }
 }
 
@@ -898,6 +932,11 @@ function toggleVoiceDeafen() {
         }
       }
     }
+
+    // Обновляем визуальный статус
+    if (typeof updateUserVoiceState === 'function') {
+      updateUserVoiceState(window.currentUser?._id, deafened ? true : undefined, deafened);
+    }
   }
 }
 
@@ -936,50 +975,13 @@ async function toggleScreenShare() {
     return;
   }
 
-  // Показываем модалку с настройками
-  const modal = document.getElementById('screen-share-settings-modal');
-  if (modal) {
-    // Загружаем сохраненное качество по умолчанию
-    const qualitySelect = document.getElementById('screen-quality');
-    if (qualitySelect && window.settingsManager) {
-      const defaultQuality = window.settingsManager.get('default-screen-quality') || 'medium';
-      qualitySelect.value = defaultQuality;
-    }
-    if (typeof openModal === 'function') {
-      openModal('screen-share-settings-modal');
-    } else {
-      modal.classList.remove('hidden');
-    }
-  }
-}
-
-/**
- * Подтвердить начало демонстрации экрана с выбранными настройками
- */
-async function confirmScreenShare() {
-  const qualitySelect = document.getElementById('screen-quality');
-  let quality = qualitySelect ? qualitySelect.value : 'medium';
-  
-  // Если качество не выбрано, используем сохраненное по умолчанию
-  if (!quality && window.settingsManager) {
-    quality = window.settingsManager.get('default-screen-quality') || 'medium';
-  }
-  
-  // Закрываем модалку
-  closeModal('screen-share-settings-modal');
-  
-  // Начинаем демонстрацию
-  const sharing = await window.voiceManager.startScreenShare(quality);
-  const btn = document.getElementById('voice-screen-btn');
-  if (btn) {
-    btn.classList.toggle('active', sharing);
-    btn.title = sharing ? 'Остановить демонстрацию' : 'Демонстрация экрана';
-  }
-  
-  const viewBtn = document.getElementById('voice-view-screen-btn');
-  if (viewBtn) {
-    viewBtn.classList.toggle('active', sharing);
-    viewBtn.title = sharing ? 'Остановить демонстрацию' : 'Демонстрация экрана';
+  // Показываем новую модалку
+  if (typeof window.openScreenshareModal === 'function') {
+    await window.openScreenshareModal();
+  } else if (typeof openScreenshareModal === 'function') {
+    await openScreenshareModal();
+  } else {
+    console.warn('[Voice] openScreenshareModal function not found');
   }
 }
 
@@ -1018,51 +1020,156 @@ function hideVoicePanel() {
  * Показать видео демонстрации экрана
  */
 function showScreenShareVideo(stream, sourceId) {
-  let container = document.getElementById('screen-share-container'); // Старый контейнер, на всякий случай
-  const gridContainer = document.getElementById('voice-view-grid'); // Новый контейнер
+  const container = document.getElementById('screen-share-container'); // Container above chat
+  const gridContainer = document.getElementById('voice-view-grid'); // Fullscreen grid container
 
-  let video = document.getElementById('screen-share-video-' + sourceId);
-  const targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
-  const screenCardId = 'voice-screen-card-' + targetUserId;
-  let screenCard = document.getElementById(screenCardId);
-
-  if (!video) {
-    video = document.createElement('video');
-    video.id = 'screen-share-video-' + sourceId;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.className = 'voice-card-video screen-share-video';
-    if (sourceId === 'local') {
-      video.muted = true; // Свой экран без звука
+  // Find member in voiceManager.channelMembers to map socketId to userId
+  let targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
+  let memberInfo = null;
+  if (window.voiceManager && window.voiceManager.channelMembers) {
+    memberInfo = sourceId === 'local'
+      ? window.voiceManager.channelMembers.find(m => m.userId === window.currentUser?._id)
+      : window.voiceManager.channelMembers.find(m => m.socketId === sourceId);
+    if (memberInfo) {
+      targetUserId = memberInfo.userId;
     }
-    
-    if (!screenCard) {
-      screenCard = document.createElement('div');
-      screenCard.id = screenCardId;
-      screenCard.className = 'voice-card screen-share-card';
-      
-      const nameTag = sourceId === 'local' ? 'Вы' : 'Пользователь';
-      
-      screenCard.innerHTML = `
+  }
+
+  const nameTag = memberInfo ? (memberInfo.nickname || memberInfo.username) : (sourceId === 'local' ? 'Вы' : 'Пользователь');
+
+  // 1. Render in the fullscreen grid (voice-view-grid) if it exists
+  if (gridContainer) {
+    const cardId = 'voice-screen-card-' + targetUserId;
+    let card = document.getElementById(cardId);
+    let video = document.getElementById('screen-share-video-' + sourceId);
+
+    if (!card) {
+      card = document.createElement('div');
+      card.id = cardId;
+      card.className = 'voice-card screen-share-card';
+      card.setAttribute('data-socket-id', sourceId);
+      card.innerHTML = `
         <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
-        <button class="fullscreen-btn" title="На весь экран" onclick="const v = this.parentElement.querySelector('video'); if (v && v.requestFullscreen) v.requestFullscreen();">
+        <button class="fullscreen-btn" title="На весь экран" onclick="toggleTheaterMode(this)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
         </button>
       `;
-
-      if (gridContainer) {
-        gridContainer.appendChild(screenCard);
-      } else if (container) {
-        container.querySelector('.screen-share-videos')?.appendChild(screenCard);
-        container.classList.remove('hidden');
-      }
+      gridContainer.appendChild(card);
+    } else {
+      card.setAttribute('data-socket-id', sourceId);
+      const tag = card.querySelector('.voice-card-name-tag');
+      if (tag) tag.textContent = `📺 Экран: ${nameTag}`;
     }
-    screenCard.appendChild(video);
-  } else if (screenCard && video.parentElement !== screenCard) {
-    screenCard.appendChild(video);
+
+    if (!video) {
+      video = document.createElement('video');
+      video.id = 'screen-share-video-' + sourceId;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', 'true');
+      video.className = 'voice-card-video screen-share-video';
+      if (sourceId === 'local') {
+        video.muted = true;
+      }
+      card.appendChild(video);
+    }
+    
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+    video.play().catch(e => console.error('[ScreenShare] Grid video play failed:', e));
   }
 
-  video.srcObject = stream;
+  // 2. Render in the chat screen share container (screen-share-container) if it exists
+  if (container) {
+    const chatCardId = 'chat-screen-card-' + targetUserId;
+    let chatCard = document.getElementById(chatCardId);
+    let chatVideo = document.getElementById('chat-screen-share-video-' + sourceId);
+    const videoWrap = container.querySelector('.screen-share-videos');
+
+    if (videoWrap) {
+      if (!chatCard) {
+        chatCard = document.createElement('div');
+        chatCard.id = chatCardId;
+        chatCard.className = 'voice-card screen-share-card';
+        chatCard.setAttribute('data-socket-id', sourceId);
+        chatCard.innerHTML = `
+          <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
+          <button class="fullscreen-btn" title="На весь экран" onclick="toggleTheaterMode(this)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
+        `;
+        videoWrap.appendChild(chatCard);
+      } else {
+        chatCard.setAttribute('data-socket-id', sourceId);
+        const tag = chatCard.querySelector('.voice-card-name-tag');
+        if (tag) tag.textContent = `📺 Экран: ${nameTag}`;
+      }
+
+      if (!chatVideo) {
+        chatVideo = document.createElement('video');
+        chatVideo.id = 'chat-screen-share-video-' + sourceId;
+        chatVideo.autoplay = true;
+        chatVideo.playsInline = true;
+        chatVideo.setAttribute('playsinline', 'true');
+        chatVideo.className = 'voice-card-video screen-share-video';
+        if (sourceId === 'local') {
+          chatVideo.muted = true;
+        }
+        chatCard.appendChild(chatVideo);
+      }
+
+      if (chatVideo.srcObject !== stream) {
+        chatVideo.srcObject = stream;
+      }
+      chatVideo.play().catch(e => console.error('[ScreenShare] Chat video play failed:', e));
+    }
+    container.classList.remove('hidden');
+  }
+
+  // 3. Render in the room voice panel cards if they exist
+  const roomGridContainer = document.getElementById('room-voice-panel-cards');
+  if (roomGridContainer) {
+    const roomCardId = 'room-screen-card-' + targetUserId;
+    let roomCard = document.getElementById(roomCardId);
+    let roomVideo = document.getElementById('room-screen-share-video-' + sourceId);
+
+    if (!roomCard) {
+      roomCard = document.createElement('div');
+      roomCard.id = roomCardId;
+      roomCard.className = 'room-voice-card screen-share-card';
+      roomCard.setAttribute('data-socket-id', sourceId);
+      roomCard.innerHTML = `
+        <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
+        <button class="fullscreen-btn" title="На весь экран" onclick="toggleTheaterMode(this)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+      `;
+      roomGridContainer.appendChild(roomCard);
+    } else {
+      roomCard.setAttribute('data-socket-id', sourceId);
+      const tag = roomCard.querySelector('.voice-card-name-tag');
+      if (tag) tag.textContent = `📺 Экран: ${nameTag}`;
+    }
+
+    if (!roomVideo) {
+      roomVideo = document.createElement('video');
+      roomVideo.id = 'room-screen-share-video-' + sourceId;
+      roomVideo.autoplay = true;
+      roomVideo.playsInline = true;
+      roomVideo.setAttribute('playsinline', 'true');
+      roomVideo.className = 'voice-card-video screen-share-video';
+      if (sourceId === 'local') {
+        roomVideo.muted = true;
+      }
+      roomCard.appendChild(roomVideo);
+    }
+
+    if (roomVideo.srcObject !== stream) {
+      roomVideo.srcObject = stream;
+    }
+    roomVideo.play().catch(e => console.error('[ScreenShare] Room video play failed:', e));
+  }
 }
 
 /**
@@ -1097,6 +1204,31 @@ function hideScreenShareVideoForUser(socketId) {
       card.remove();
     }
     video.remove();
+  }
+  const chatVideo = document.getElementById('chat-screen-share-video-' + socketId);
+  if (chatVideo) {
+    chatVideo.srcObject = null;
+    const card = chatVideo.parentElement;
+    if (card && card.classList.contains('screen-share-card')) {
+      card.remove();
+    }
+    chatVideo.remove();
+  }
+  const roomVideo = document.getElementById('room-screen-share-video-' + socketId);
+  if (roomVideo) {
+    roomVideo.srcObject = null;
+    const card = roomVideo.parentElement;
+    if (card && card.classList.contains('screen-share-card')) {
+      card.remove();
+    }
+    roomVideo.remove();
+  }
+  const container = document.getElementById('screen-share-container');
+  if (container) {
+    const remaining = container.querySelectorAll('.screen-share-video');
+    if (remaining.length === 0) {
+      container.classList.add('hidden');
+    }
   }
 }
 
@@ -1148,15 +1280,21 @@ function updateVoiceChannelUI(channelId) {
  * Обновить список участников голосового канала
  */
 function updateVoiceChannelMembersUI(channelId, members) {
+  if (window.voiceManager && window.voiceManager.channelId === channelId) {
+    window.voiceManager.channelMembers = members;
+  }
   // Sidebar-блок есть не всегда (только когда соответствующий канал виден в списке).
   // Его отсутствие НЕ должно блокировать апдейт voice-panel и voice-view-grid.
   const membersContainer = document.querySelector(`.voice-channel-members[data-channel-id="${channelId}"]`);
   if (membersContainer) {
     membersContainer.innerHTML = members.map(member => `
-      <div class="voice-member-item" data-user-id="${member.userId}">
-        <img class="voice-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
+      <div class="voice-member-item" data-user-id="${member.userId}" data-muted="${!!member.muted}" data-deafened="${!!member.deafened}">
+        <img class="voice-member-avatar" src="${getAvatarUrl(member.avatar, member.nickname || member.username, member.userId)}" alt="${member.nickname || member.username}">
         <span class="voice-member-name">${member.nickname || member.username}${member.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
-        ${member.muted ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#ed4245"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>' : ''}
+        <span class="voice-member-status" style="display: inline-flex; gap: 4px; margin-left: auto; align-items: center;">
+          ${member.muted ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+          ${member.deafened ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+        </span>
       </div>
     `).join('');
   }
@@ -1176,10 +1314,13 @@ function updateVoicePanelMembers(channelId, members) {
   const panelMembers = document.getElementById('voice-panel-members');
   if (panelMembers) {
     panelMembers.innerHTML = members.map(member => `
-      <div class="voice-panel-member ${member.userId === window.currentUser?._id ? 'self' : ''}" data-user-id="${member.userId}">
-        <img class="voice-panel-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
+      <div class="voice-panel-member ${member.userId === window.currentUser?._id ? 'self' : ''}" data-user-id="${member.userId}" data-muted="${!!member.muted}" data-deafened="${!!member.deafened}">
+        <img class="voice-panel-member-avatar" src="${getAvatarUrl(member.avatar, member.nickname || member.username, member.userId)}" alt="${member.nickname || member.username}">
         <span class="voice-panel-member-name">${member.nickname || member.username}</span>
-        ${member.muted ? '<span class="voice-panel-member-muted">🔇</span>' : ''}
+        <span class="voice-panel-member-status" style="display: inline-flex; gap: 4px; margin-left: auto; align-items: center;">
+          ${member.muted ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+          ${member.deafened ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+        </span>
       </div>
     `).join('');
   }
@@ -1187,43 +1328,57 @@ function updateVoicePanelMembers(channelId, members) {
   // Обновляем полноэкранный Grid (Voice View)
   const gridContainer = document.getElementById('voice-view-grid');
   if (gridContainer) {
+    // 1. Находим и отсоединяем все активные карточки трансляции экрана, чтобы сохранить видео-элементы
+    const activeScreenCards = Array.from(gridContainer.querySelectorAll('.screen-share-card'));
+    activeScreenCards.forEach(card => card.remove());
+
     gridContainer.innerHTML = members.map(member => `
-      <div class="voice-card" id="voice-card-${member.userId}" data-user-id="${member.userId}">
+      <div class="voice-card" id="voice-card-${member.userId}" data-user-id="${member.userId}" data-muted="${!!member.muted}" data-deafened="${!!member.deafened}">
         <!-- Если у юзера есть видео (демонстрация экрана), оно будет вставлено сюда поверх аватарки -->
-        <img class="voice-card-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
-        <div class="voice-card-name-tag">
-          ${member.nickname || member.username} 
-          ${member.muted ? '🔇' : ''}
-          ${member.deafened ? '🎧' : ''}
+        <img class="voice-card-avatar" src="${getAvatarUrl(member.avatar, member.nickname || member.username, member.userId)}" alt="${member.nickname || member.username}">
+        <div class="voice-card-name-tag" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 8px;">
+          <span class="voice-card-nickname" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
+            ${member.nickname || member.username}
+          </span>
+          <div class="voice-card-status-icons" style="display: flex; gap: 4px; align-items: center; justify-content: flex-start;">
+            ${member.muted ? `<svg class="status-icon status-mute" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+            ${member.deafened ? `<svg class="status-icon status-deafen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+          </div>
         </div>
       </div>
     `).join('');
     
-    // Переразмещаем уже активные видео-элементы в отдельные новые карточки
-    // Это гарантирует, что демонстрация экрана всегда остается в сетке, даже когда зашел новый пользователь и сетка перерисовалась
-    const videos = document.querySelectorAll('.screen-share-video');
-    videos.forEach(v => {
-      const sourceId = v.id.replace('screen-share-video-', '');
-      const targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
-      
-      const memberInfo = members.find(m => m.userId === targetUserId);
-      const nameTag = memberInfo ? (memberInfo.nickname || memberInfo.username) : 'Пользователь';
+    // 2. Восстанавливаем карточки трансляции экрана и обновляем их
+    activeScreenCards.forEach(card => {
+      const v = card.querySelector('.screen-share-video');
+      if (v) {
+        const sourceId = v.id.replace('screen-share-video-', '');
+        
+        // Находим информацию об участнике по socketId или userId
+        const memberInfo = sourceId === 'local'
+          ? members.find(m => m.userId === window.currentUser?._id)
+          : members.find(m => m.socketId === sourceId);
+        
+        const targetUserId = memberInfo ? memberInfo.userId : (sourceId === 'local' ? window.currentUser?._id : sourceId);
+        const nameTag = memberInfo ? (memberInfo.nickname || memberInfo.username) : 'Пользователь';
 
-      let screenCardId = 'voice-screen-card-' + targetUserId;
-      let screenCard = document.getElementById(screenCardId);
-      if (!screenCard) {
-        screenCard = document.createElement('div');
-        screenCard.id = screenCardId;
-        screenCard.className = 'voice-card screen-share-card';
-        screenCard.innerHTML = `
-          <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
-          <button class="fullscreen-btn" title="На весь экран" onclick="const v = this.parentElement.querySelector('video'); if (v && v.requestFullscreen) v.requestFullscreen();">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-          </button>
-        `;
-        gridContainer.appendChild(screenCard);
+        // Обновляем ID карточки и имя пользователя (на случай если оно изменилось или загрузилось)
+        card.id = 'voice-screen-card-' + targetUserId;
+        card.setAttribute('data-socket-id', sourceId);
+        const nameTagEl = card.querySelector('.voice-card-name-tag');
+        if (nameTagEl) {
+          nameTagEl.textContent = `📺 Экран: ${nameTag}`;
+        }
+        
+        if (v.parentElement !== card) {
+          card.appendChild(v);
+        }
+        
+        gridContainer.appendChild(card);
+        
+        // Перезапускаем воспроизведение после перемещения в DOM
+        v.play().catch(e => console.error('[ScreenShare] play failed on re-append:', e));
       }
-      screenCard.appendChild(v);
     });
     
     const videoContainer = document.getElementById('screen-share-container');
@@ -1236,12 +1391,84 @@ function updateVoicePanelMembers(channelId, members) {
 /**
  * Обновить UI кнопки мута
  */
-function updateVoiceMuteUI(userId, muted) {
+function updateUserVoiceState(userId, muted, deafened) {
+  // 1. Update main voice view grid card
+  const voiceCardEl = document.getElementById(`voice-card-${userId}`);
+  if (voiceCardEl) {
+    if (muted !== undefined) voiceCardEl.dataset.muted = String(!!muted);
+    if (deafened !== undefined) voiceCardEl.dataset.deafened = String(!!deafened);
+    
+    const isMuted = voiceCardEl.dataset.muted === 'true';
+    const isDeafened = voiceCardEl.dataset.deafened === 'true';
+    
+    const iconsContainer = voiceCardEl.querySelector('.voice-card-status-icons');
+    if (iconsContainer) {
+      iconsContainer.innerHTML = `
+        ${isMuted ? `<svg class="status-icon status-mute" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+        ${isDeafened ? `<svg class="status-icon status-deafen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+      `;
+    }
+  }
+  
+  // 2. Update floating voice panel member list
+  const panelMemberEl = document.querySelector(`.voice-panel-member[data-user-id="${userId}"]`);
+  if (panelMemberEl) {
+    if (muted !== undefined) panelMemberEl.dataset.muted = String(!!muted);
+    if (deafened !== undefined) panelMemberEl.dataset.deafened = String(!!deafened);
+    
+    const isMuted = panelMemberEl.dataset.muted === 'true';
+    const isDeafened = panelMemberEl.dataset.deafened === 'true';
+    
+    let statusSpan = panelMemberEl.querySelector('.voice-panel-member-status');
+    if (!statusSpan) {
+      statusSpan = document.createElement('span');
+      statusSpan.className = 'voice-panel-member-status';
+      statusSpan.style.cssText = 'display: inline-flex; gap: 4px; margin-left: auto; align-items: center;';
+      panelMemberEl.appendChild(statusSpan);
+    }
+    
+    const legacyMuteText = panelMemberEl.querySelector('.voice-panel-member-muted');
+    if (legacyMuteText) legacyMuteText.remove();
+    
+    statusSpan.innerHTML = `
+      ${isMuted ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+      ${isDeafened ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+    `;
+  }
+  
+  // 3. Update sidebar voice list
   const voiceMemberEl = document.querySelector(`.voice-member-item[data-user-id="${userId}"]`);
   if (voiceMemberEl) {
-    voiceMemberEl.classList.toggle('voice-member-muted', muted);
+    if (muted !== undefined) voiceMemberEl.dataset.muted = String(!!muted);
+    if (deafened !== undefined) voiceMemberEl.dataset.deafened = String(!!deafened);
+    
+    const isMuted = voiceMemberEl.dataset.muted === 'true';
+    const isDeafened = voiceMemberEl.dataset.deafened === 'true';
+    
+    let statusContainer = voiceMemberEl.querySelector('.voice-member-status');
+    if (!statusContainer) {
+      statusContainer = document.createElement('span');
+      statusContainer.className = 'voice-member-status';
+      statusContainer.style.cssText = 'display: inline-flex; gap: 4px; margin-left: auto; align-items: center;';
+      
+      const legacySvgs = voiceMemberEl.querySelectorAll('svg');
+      legacySvgs.forEach(s => s.remove());
+      
+      voiceMemberEl.appendChild(statusContainer);
+    }
+    
+    statusContainer.innerHTML = `
+      ${isMuted ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
+      ${isDeafened ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
+    `;
+  }
+  
+  // 4. Update Rooms UI card if active
+  if (window.RoomsUI && typeof window.RoomsUI.updateRoomCardVoiceState === 'function') {
+    window.RoomsUI.updateRoomCardVoiceState(userId, muted, deafened);
   }
 }
+window.updateUserVoiceState = updateUserVoiceState;
 
 // ==================== DM VOICE CALLS LOGIC ====================
 
@@ -1253,7 +1480,7 @@ function showIncomingDMCallOverlay(call) {
   const avatar = document.getElementById('incoming-call-avatar');
   const name = document.getElementById('incoming-call-name');
   window.pendingDMCall = call;
-  if (avatar) avatar.src = getAvatarUrl(call.from.avatar);
+  if (avatar) avatar.src = getAvatarUrl(call.from.avatar, call.from.nickname || call.from.username, call.from._id);
   if (name) name.textContent = call.from.nickname || call.from.username || 'Входящий звонок';
   overlay.classList.remove('hidden');
   if (window.SoundManager) window.SoundManager.play('call_incoming');
@@ -1334,8 +1561,8 @@ function showDMCallOverlay(peer) {
 
   if (!overlay) return;
 
-  myImg.src = getAvatarUrl(window.currentUser?.avatar);
-  peerImg.src = getAvatarUrl(peer.avatar);
+  myImg.src = getAvatarUrl(window.currentUser?.avatar, window.currentUser?.username, window.currentUser?._id);
+  peerImg.src = getAvatarUrl(peer.avatar, peer.username || peer.nickname, peer._id || peer.id);
   peerName.textContent = peer.nickname || peer.username;
   status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
   
@@ -1474,8 +1701,8 @@ function showDMCallOverlay(peer) {
 
   if (!overlay) return;
 
-  myImg.src = getAvatarUrl(window.currentUser?.avatar);
-  peerImg.src = getAvatarUrl(peer.avatar);
+  myImg.src = getAvatarUrl(window.currentUser?.avatar, window.currentUser?.username, window.currentUser?._id);
+  peerImg.src = getAvatarUrl(peer.avatar, peer.username || peer.nickname, peer._id || peer.id);
   peerName.textContent = peer.nickname || peer.username;
   status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
   
@@ -1496,4 +1723,57 @@ window.endDMCall = endDMCall;
 window.toggleCallOverlay = () => {
   const overlay = document.getElementById('dm-call-overlay');
   if (overlay) overlay.classList.toggle('minimized');
+};
+// Make toggleTheaterMode globally available
+window.toggleTheaterMode = function(btn) {
+  const card = btn.closest('.screen-share-card');
+  if (!card) return;
+  
+  if (card.classList.contains('theater-mode')) {
+    card.classList.remove('theater-mode');
+    const placeholder = document.getElementById(card.id + '-placeholder');
+    if (placeholder && placeholder.parentNode) {
+      placeholder.parentNode.insertBefore(card, placeholder);
+      placeholder.remove();
+    }
+    const backdrop = document.getElementById('theater-backdrop');
+    if (backdrop) backdrop.remove();
+  } else {
+    card.classList.add('theater-mode');
+    
+    let placeholder = document.getElementById(card.id + '-placeholder');
+    if (!placeholder) {
+      placeholder = document.createElement('div');
+      placeholder.id = card.id + '-placeholder';
+      placeholder.style.display = 'none';
+      card.parentNode.insertBefore(placeholder, card);
+    }
+    
+    document.body.appendChild(card);
+    
+    let backdrop = document.getElementById('theater-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'theater-backdrop';
+      backdrop.style.position = 'fixed';
+      backdrop.style.top = '0';
+      backdrop.style.left = '0';
+      backdrop.style.width = '100vw';
+      backdrop.style.height = '100vh';
+      backdrop.style.background = 'rgba(0,0,0,0.85)';
+      backdrop.style.zIndex = '9999';
+      backdrop.style.cursor = 'zoom-out';
+      
+      backdrop.onclick = () => {
+        card.classList.remove('theater-mode');
+        if (placeholder && placeholder.parentNode) {
+          placeholder.parentNode.insertBefore(card, placeholder);
+          placeholder.remove();
+        }
+        backdrop.remove();
+      };
+      
+      document.body.appendChild(backdrop);
+    }
+  }
 };

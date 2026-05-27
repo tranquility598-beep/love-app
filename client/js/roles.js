@@ -409,7 +409,7 @@ function createNewRole() {
     }
   });
   
-  showNotification('Создание роли...', 'info');
+  // showNotification('Создание роли...', 'info');
 }
 
 /**

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Режим (разработка/продакшн)
   isPackaged: () => ipcRenderer.invoke('get-is-packaged'),
+  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
   isPackagedSync: () => ipcRenderer.sendSync('get-is-packaged-sync'),
   
   // Автообновления
@@ -33,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Голосовые звонки
   showIncomingCall: (caller) => ipcRenderer.send('show-incoming-call', { caller }),
   closeIncomingCall: () => ipcRenderer.send('close-incoming-call'),
+  setBadgeCount: (n) => ipcRenderer.send('set-badge-count', n),
   onIncomingCallData: (callback) => ipcRenderer.on('incoming-call-data', (_event, data) => callback(data)),
   sendCallAction: (data) => ipcRenderer.send('call-action', data),
   onCallResponseFromPopup: (callback) => ipcRenderer.on('call-response-from-popup', (_event, data) => callback(data)),

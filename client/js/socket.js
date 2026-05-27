@@ -1,4 +1,11 @@
 let socket = null;
+let unreadCount = 0;
+
+Object.defineProperty(window, 'unreadCount', {
+  get: () => unreadCount,
+  set: (val) => { unreadCount = val; },
+  configurable: true
+});
 
 // Кэш маппинга временных ID на реальные ID сообщений
 const tempIdMapping = new Map();
@@ -178,7 +185,7 @@ function handleFriendRequestReceived(data) {
 
 function handleFriendRequestAccepted(data) {
   const { by } = data;
-  showNotification('success', `${by.username} принял ваш запрос в друзья`);
+  // showNotification('success', `${by.username} принял ваш запрос в друзья`);
   if (window.loadFriends) window.loadFriends();
 }
 
@@ -213,6 +220,20 @@ function handleSocketError(data) {
   showNotification('error', data.message);
 }
 
+function getOwnerIdForServer(serverId) {
+  if (!serverId) return null;
+  if (window.currentServer && String(window.currentServer._id) === String(serverId)) {
+    return String(window.currentServer.ownerId || window.currentServer.owner?._id || window.currentServer.owner || '');
+  }
+  if (window.servers && Array.isArray(window.servers)) {
+    const server = window.servers.find(s => String(s._id) === String(serverId));
+    if (server) {
+      return String(server.ownerId || server.owner?._id || server.owner || '');
+    }
+  }
+  return null;
+}
+
 // ===== CONTEXT SCOPE HANDLERS =====
 
 function handleMessageNew(data) {
@@ -227,8 +248,34 @@ function handleMessageNew(data) {
       scrollToBottom();
     }
   }
+  
   if (!currentCh || currentCh !== msgCh) {
-    showMessageNotification(message);
+    let isEveryoneHereMention = false;
+    if (message.content?.includes('@everyone') || message.content?.includes('@here')) {
+      if (message.server) {
+        const ownerId = getOwnerIdForServer(message.server);
+        const authorId = String(message.authorId || (message.author && (message.author._id || message.author)) || '');
+        if (ownerId && authorId && ownerId === authorId) {
+          isEveryoneHereMention = true;
+        }
+      }
+    }
+    const isMention = message.content?.includes(`@${window.currentUser?.username}`) || isEveryoneHereMention;
+    if (isMention) {
+      showMessageNotification(message.author?.username, message.content, channelId);
+    }
+  }
+
+  // Счётчик непрочитанных при неактивном окне или другом канале
+  const isOwn = message.author?._id === window.currentUser?._id;
+  const isCurrentChannel = currentCh && currentCh === msgCh;
+  const isWindowFocused = document.hasFocus() && !document.hidden;
+
+  if (!isOwn && !(isCurrentChannel && isWindowFocused)) {
+    unreadCount++;
+    if (window.electronAPI?.setBadgeCount) {
+      window.electronAPI.setBadgeCount(unreadCount);
+    }
   }
 }
 
@@ -318,13 +365,25 @@ function handleDMNewMessage(data) {
   const { conversationId, message } = data;
   if (window.loadDMConversations) window.loadDMConversations();
   if (!window.currentDMConversation || window.currentDMConversationId !== conversationId) {
-    showNotification('info', `Новое сообщение от ${message.author?.username || 'Пользователь'}`);
+    showMessageNotification(message.author?.username, message.content, conversationId);
+  }
+
+  // Счётчик непрочитанных при неактивном окне или другом DM
+  const isOwn = message.author?._id === window.currentUser?._id;
+  const isCurrentChannel = window.currentDMConversation?._id === conversationId;
+  const isWindowFocused = document.hasFocus() && !document.hidden;
+
+  if (!isOwn && !(isCurrentChannel && isWindowFocused)) {
+    unreadCount++;
+    if (window.electronAPI?.setBadgeCount) {
+      window.electronAPI.setBadgeCount(unreadCount);
+    }
   }
 }
 
 function handleNotificationMention(data) {
-  const { from, content } = data;
-  showNotification('info', `${from} упомянул вас: ${content}`);
+  const { from, content, channelId } = data;
+  showMessageNotification(from, content, channelId);
 }
 
 // ===== VOICE SCOPE HANDLERS =====
@@ -343,7 +402,6 @@ function handleVoiceUserJoined(data) {
   if (window.voiceManager && window.currentVoiceChannel === channelId) {
     updateVoiceChannelUI(channelId);
   }
-  showNotification('info', `${username} присоединился к голосовому каналу`);
 }
 
 function handleVoiceUserLeft(data) {
@@ -366,7 +424,16 @@ function handleVoiceUserSpeaking(data) {
 
 function handleVoiceUserMuted(data) {
   const { channelId, userId, muted } = data;
-  updateVoiceMuteUI(userId, muted);
+  if (typeof updateUserVoiceState === 'function') {
+    updateUserVoiceState(userId, muted, undefined);
+  }
+}
+
+function handleVoiceUserDeafened(data) {
+  const { channelId, userId, deafened } = data;
+  if (typeof updateUserVoiceState === 'function') {
+    updateUserVoiceState(userId, undefined, deafened);
+  }
 }
 
 function handleVoiceLeft(data) {
@@ -390,8 +457,6 @@ function handleVoiceLeft(data) {
 
 function handleScreenStarted(data) {
   const { channelId, userId, username } = data;
-  showNotification('info', `${username} начал демонстрацию экрана`);
-  
   if (window.currentVoiceChannel === channelId) {
     const container = document.getElementById('screen-share-container');
     if (container) container.classList.remove('hidden');
@@ -400,7 +465,18 @@ function handleScreenStarted(data) {
 
 function handleScreenStopped(data) {
   const { channelId, userId } = data;
-  showNotification('info', 'Демонстрация экрана завершена');
+  if (window.voiceManager && typeof hideScreenShareVideoForUser === 'function') {
+    if (userId === window.currentUser?._id) {
+      hideScreenShareVideoForUser('local');
+    }
+    if (window.voiceManager.channelMembers) {
+      const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
+      if (member) {
+        hideScreenShareVideoForUser(member.socketId);
+      }
+    }
+    hideScreenShareVideoForUser(userId);
+  }
 }
 
 function handleWebRTCOffer(data) {
@@ -468,9 +544,9 @@ function handleProfileUpdateSuccess(profile) {
     window.displayProfile(profile);
   }
   
-  if (typeof showNotification === 'function') {
-    showNotification('success', 'Профиль успешно обновлен');
-  }
+  // if (typeof showNotification === 'function') {
+  //   showNotification('success', 'Профиль успешно обновлен');
+  // }
 }
 
 function handleProfileUpdated(data) {
@@ -480,15 +556,15 @@ function handleProfileUpdated(data) {
 }
 
 function handleUserBlocked(data) {
-  if (typeof showNotification === 'function') {
-    showNotification('success', 'Пользователь заблокирован');
-  }
+  // if (typeof showNotification === 'function') {
+  //   showNotification('success', 'Пользователь заблокирован');
+  // }
 }
 
 function handleUserUnblocked(data) {
-  if (typeof showNotification === 'function') {
-    showNotification('success', 'Пользователь разблокирован');
-  }
+  // if (typeof showNotification === 'function') {
+  //   showNotification('success', 'Пользователь разблокирован');
+  // }
 }
 
 // ===== ROLES SCOPE HANDLERS =====
@@ -618,9 +694,9 @@ function handleRoleAssigned(data) {
   }
   
   if (data.userId === window.currentUser?._id) {
-    if (typeof showNotification === 'function') {
-      showNotification('info', `Вам назначена роль: ${data.roleName || 'роль'}`);
-    }
+    // if (typeof showNotification === 'function') {
+    //   showNotification('info', `Вам назначена роль: ${data.roleName || 'роль'}`);
+    // }
   }
 }
 
@@ -655,9 +731,9 @@ function handleRoleRemoved(data) {
   }
   
   if (data.userId === window.currentUser?._id) {
-    if (typeof showNotification === 'function') {
-      showNotification('info', `С вас снята роль: ${data.roleName || 'роль'}`);
-    }
+    // if (typeof showNotification === 'function') {
+    //   showNotification('info', `С вас снята роль: ${data.roleName || 'роль'}`);
+    // }
   }
 }
 
@@ -671,7 +747,7 @@ function handleMessagePinned(data) {
   }
   
   if (typeof showNotification === 'function') {
-    showNotification('info', 'Сообщение закреплено');
+    // showNotification('info', 'Сообщение закреплено');
   }
 }
 
@@ -683,7 +759,7 @@ function handleMessageUnpinned(data) {
   }
   
   if (typeof showNotification === 'function') {
-    showNotification('info', 'Сообщение откреплено');
+    // showNotification('info', 'Сообщение откреплено');
   }
 }
 
@@ -714,6 +790,8 @@ function attachGlobalSocketListeners() {
     console.warn('[socket-lifecycle] Cannot attach global listeners: socket not initialized');
     return;
   }
+  
+  detachScope('global');
   
   // GLOBAL SCOPE
   attachListener('global', 'connect', handleConnect);
@@ -765,12 +843,14 @@ function attachAllSocketListeners() {
   attachListener('context', 'notification:mention', handleNotificationMention);
   
   // VOICE SCOPE
+  detachScope('voice');
   attachListener('voice', 'voice:existing_members', handleVoiceExistingMembers);
   attachListener('voice', 'voice:user_joined', handleVoiceUserJoined);
   attachListener('voice', 'voice:user_left', handleVoiceUserLeft);
   attachListener('voice', 'voice:members_update', handleVoiceMembersUpdate);
   attachListener('voice', 'voice:user_speaking', handleVoiceUserSpeaking);
   attachListener('voice', 'voice:user_muted', handleVoiceUserMuted);
+  attachListener('voice', 'voice:user_deafened', handleVoiceUserDeafened);
   attachListener('voice', 'voice:left', handleVoiceLeft);
   attachListener('voice', 'screen:started', handleScreenStarted);
   attachListener('voice', 'screen:stopped', handleScreenStopped);
@@ -779,6 +859,7 @@ function attachAllSocketListeners() {
   attachListener('voice', 'webrtc:ice_candidate', handleWebRTCIceCandidate);
   
   // CALL SCOPE
+  detachScope('call');
   attachListener('call', 'call:incoming', handleCallIncoming);
   attachListener('call', 'call:response', handleCallResponse);
   attachListener('call', 'call:terminated', handleCallTerminated);
@@ -1128,6 +1209,72 @@ if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
     }
   });
 }
+
+function navigateToChannel(targetChannelId) {
+  if (window.servers) {
+    for (let serverId in window.servers) {
+      const server = window.servers[serverId];
+      if (server.channels && server.channels.find(c => c._id === targetChannelId)) {
+        if (window.NavigationController) {
+          window.NavigationController.navigateToServer(serverId);
+          setTimeout(() => {
+            window.NavigationController.navigateToChannel(targetChannelId, '', 'text');
+          }, 100);
+        }
+        return;
+      }
+    }
+  }
+  if (window.NavigationController) {
+    window.NavigationController.navigateToDM(targetChannelId);
+  }
+}
+
+function showMessageNotification(username, text, targetChannelId) {
+  if (document.hasFocus()) return;
+  const container = document.getElementById('notifications-container') || (function() {
+    const c = document.createElement('div');
+    c.id = 'notifications-container';
+    c.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;';
+    document.body.appendChild(c);
+    return c;
+  })();
+  
+  const notif = document.createElement('div');
+  notif.className = 'notification-message';
+  notif.style.pointerEvents = 'auto';
+  
+  const escapeH = (str) => {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  };
+
+  notif.innerHTML = `
+    <div class="notif-name">${escapeH(username || 'Новое сообщение')}</div>
+    <div class="notif-text">${escapeH(text || '').substring(0, 80)}</div>
+  `;
+  
+  notif.onclick = () => {
+    navigateToChannel(targetChannelId);
+    notif.remove();
+  };
+  
+  container.appendChild(notif);
+  setTimeout(() => notif.remove(), 5000);
+  
+  if (window.settingsManager && window.settingsManager.get('notif-sound')) {
+    if (window.SoundManager) window.SoundManager.play('notification');
+  }
+}
+
+// Сброс badge при фокусе окна
+window.addEventListener('focus', () => {
+  unreadCount = 0;
+  if (window.electronAPI?.setBadgeCount) {
+    window.electronAPI.setBadgeCount(0);
+  }
+});
 
 // Экспортируем socket в глобальную область
 window.socket = socket;

@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const Channel = require('../models/Channel');
+const Server = require('../models/Server');
 const DirectMessage = require('../models/DirectMessage');
 const { isFounderUser } = require('../utils/founder');
 const { checkAndRecord: checkMessageAntiSpam } = require('../middleware/messageAntiSpam');
@@ -90,14 +91,35 @@ module.exports = (io) => {
     
     // Сохраняем соединение
     connectedUsers.set(userId, socket.id);
+    console.log(`🔍 CONNECTION SET: userId=${userId}, new socket=${socket.id}`);
     
-    // Обновляем статус пользователя на "online"
-    await User.findByIdAndUpdate(userId, { status: 'online', lastSeen: new Date() });
+    // Получаем предпочтительный статус пользователя
+    const userDb = await User.findById(userId);
+    let prefStatus = userDb?.statusPreference || 'online';
     
-    // Уведомляем всех о новом онлайн пользователе
+    // Fallback: 'offline' (invisible) is deprecated, treat as 'online'
+    if (prefStatus === 'offline') {
+      prefStatus = 'online';
+    }
+    
+    // Fallback: 'idle' is treated as 'online' on connection
+    if (prefStatus === 'idle') {
+      prefStatus = 'online';
+    }
+    
+    // Обновляем статус в БД на предпочтительный
+    await User.findByIdAndUpdate(userId, { status: prefStatus, lastSeen: new Date() });
+    
+    // Уведомляем всех о новом статусе пользователя
     socket.broadcast.emit('user:status', {
       userId,
-      status: 'online'
+      status: prefStatus
+    });
+    
+    // Отправляем статус самому пользователю после подключения
+    socket.emit('user:status', {
+      userId,
+      status: prefStatus
     });
     
     // Присоединяемся к комнатам серверов пользователя
@@ -111,6 +133,28 @@ module.exports = (io) => {
     // Присоединяемся к личной комнате
     socket.join(`user:${userId}`);
 
+    // ==================== СТАТУС ====================
+    socket.on('status:set', async ({ status }) => {
+      try {
+        const validStatuses = ['online', 'idle', 'dnd', 'offline'];
+        if (!validStatuses.includes(status)) return;
+        
+        const updateData = { status, lastSeen: new Date() };
+        if (status === 'dnd') updateData.statusPreference = 'dnd';
+        if (status === 'online') updateData.statusPreference = 'online';
+        // idle statusPreference remains unchanged
+        
+        await User.findByIdAndUpdate(userId, updateData);
+        
+        io.emit('user:status', {
+          userId,
+          status
+        });
+      } catch (error) {
+        console.error('Error setting status:', error);
+      }
+    });
+
     // ==================== СООБЩЕНИЯ ====================
     
     /**
@@ -118,7 +162,7 @@ module.exports = (io) => {
      */
     socket.on('message:send', async (data) => {
       try {
-        const { channelId, content, replyTo, attachments, tempId } = data;
+        let { channelId, content, replyTo, attachments, tempId } = data;
         const normalizedAttachments = normalizeMessageAttachments(attachments);
 
         if (!channelId || (!content && normalizedAttachments.length === 0)) {
@@ -147,6 +191,8 @@ module.exports = (io) => {
         if (!channel) {
           return socket.emit('error', { message: 'Канал не найден' });
         }
+
+
         
         // Проверяем что replyTo существует, если указан
         let validReplyTo = null;
@@ -187,13 +233,20 @@ module.exports = (io) => {
           // DM канал - отправляем участникам
           const dm = await DirectMessage.findOne({ channel: channelId });
           if (dm) {
+            const otherParticipant = dm.participants.find(p => p.toString() !== userId);
+            const recipientUser = otherParticipant ? await User.findById(otherParticipant).lean() : null;
+            const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
+
             // Отправляем сообщение обоим участникам
-            dm.participants.forEach(participantId => {
+            for (const participantId of dm.participants) {
+              if (participantId.toString() !== userId && !isFriend) {
+                continue;
+              }
               io.to(`user:${participantId}`).emit('message:new', {
                 channelId,
                 message: tempMessage
               });
-            });
+            }
           }
         }
         
@@ -242,9 +295,12 @@ module.exports = (io) => {
           } else {
             const dm = await DirectMessage.findOne({ channel: channelId });
             if (dm) {
-              // Обновляем счетчик непрочитанных для другого участника
               const otherParticipant = dm.participants.find(p => p.toString() !== userId);
-              if (otherParticipant) {
+              const recipientUser = otherParticipant ? await User.findById(otherParticipant).lean() : null;
+              const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
+
+              // Обновляем счетчик непрочитанных для другого участника
+              if (otherParticipant && isFriend) {
                 await DirectMessage.findByIdAndUpdate(dm._id, {
                   $inc: { 'unreadCount.$[elem].count': 1 },
                   lastMessage: message._id,
@@ -264,13 +320,16 @@ module.exports = (io) => {
               }
               
               // Отправляем обновление сообщения обоим участникам
-              dm.participants.forEach(participantId => {
+              for (const participantId of dm.participants) {
+                if (participantId.toString() !== userId && !isFriend) {
+                  continue;
+                }
                 io.to(`user:${participantId}`).emit('message:update', {
                   channelId,
                   tempId: tempMessage._id,
                   message
                 });
-              });
+              }
             }
           }
           
@@ -595,7 +654,9 @@ module.exports = (io) => {
           socketId: m.socketId,
           username: m.username,
           nickname: m.nickname,
-          avatar: m.avatar
+          avatar: m.avatar,
+          muted: !!m.muted,
+          deafened: !!m.deafened
         }));
         
         // Добавляем нового участника
@@ -604,7 +665,9 @@ module.exports = (io) => {
           socketId: socket.id,
           username: socket.user.username,
           nickname: socket.user.nickname,
-          avatar: socket.user.avatar
+          avatar: socket.user.avatar,
+          muted: false,
+          deafened: false
         });
         
         // Присоединяемся к комнате голосового канала
@@ -918,8 +981,15 @@ module.exports = (io) => {
     socket.on('disconnect', async () => {
       console.log(`❌ User disconnected: ${socket.user.username} (${socket.id})`);
       
-      // Удаляем из хранилища
-      connectedUsers.delete(userId);
+      console.log(`🔍 DISCONNECT CHECK: userId=${userId}, disconnecting socket=${socket.id}, active socket=${connectedUsers.get(userId)}`);
+      
+      // Проверяем, является ли отключающийся сокет актуальным для этого пользователя.
+      // Если connectedUsers.get(userId) не равен socket.id — значит пользователь уже переподключился с новым сокетом,
+      // и этот старый disconnect нужно просто проигнорировать, чтобы не сбросить статус в offline и не стереть новое соединение.
+      if (connectedUsers.get(userId) !== socket.id) {
+        console.log(`ℹ️ Ignore stale disconnect for ${socket.user.username} (newer socket ${connectedUsers.get(userId)} is active)`);
+        return;
+      }
       
       // Выходим из всех голосовых каналов (копируем entries чтобы избежать мутации при итерации)
       const voiceEntries = Array.from(voiceChannels.entries());
@@ -930,17 +1000,31 @@ module.exports = (io) => {
         }
       }
       
-      // Обновляем статус
-      await User.findByIdAndUpdate(userId, {
-        status: 'offline',
-        lastSeen: new Date()
-      });
-      
-      // Уведомляем всех об оффлайн статусе
-      socket.broadcast.emit('user:status', {
-        userId,
-        status: 'offline'
-      });
+      // Обернем обновление статуса в setTimeout с задержкой 2000 мс (грейс-период)
+      setTimeout(async () => {
+        // Проверяем еще раз, не подключился ли новый сокет за эти 2 секунды.
+        // Если connectedUsers.get(userId) не равен текущему socket.id — значит пользователь уже переподключился, игнорируем оффлайн.
+        if (connectedUsers.get(userId) !== socket.id) {
+          console.log(`ℹ️ Grace period check: User ${socket.user.username} has reconnected, keeping online.`);
+          return;
+        }
+        
+        // Удаляем из хранилища
+        connectedUsers.delete(userId);
+        
+        // Обновляем статус
+        await User.findByIdAndUpdate(userId, {
+          status: 'offline',
+          lastSeen: new Date()
+        });
+        
+        // Уведомляем всех об оффлайн статусе
+        socket.broadcast.emit('user:status', {
+          userId,
+          status: 'offline'
+        });
+        console.log(`💤 Grace period expired: User ${socket.user.username} is now offline.`);
+      }, 2000);
     });
     
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -1301,11 +1385,24 @@ module.exports = (io) => {
       }
       
       // Уведомляем всех в канале
-      io.to(`server:${channel.server}`).emit('message:pinned', {
-        messageId,
-        channelId,
-        pinnedBy: userId
-      });
+      if (channel.server) {
+        io.to(`server:${channel.server}`).emit('message:pinned', {
+          messageId,
+          channelId,
+          pinnedBy: userId
+        });
+      } else {
+        const dm = await DirectMessage.findOne({ channel: channelId });
+        if (dm) {
+          dm.participants.forEach(participantId => {
+            io.to(`user:${participantId}`).emit('message:pinned', {
+              messageId,
+              channelId,
+              pinnedBy: userId
+            });
+          });
+        }
+      }
       
       console.log(`📌 Message ${messageId} pinned in channel ${channelId}`);
       
@@ -1334,10 +1431,22 @@ module.exports = (io) => {
       await channel.save();
       
       // Уведомляем всех в канале
-      io.to(`server:${channel.server}`).emit('message:unpinned', {
-        messageId,
-        channelId
-      });
+      if (channel.server) {
+        io.to(`server:${channel.server}`).emit('message:unpinned', {
+          messageId,
+          channelId
+        });
+      } else {
+        const dm = await DirectMessage.findOne({ channel: channelId });
+        if (dm) {
+          dm.participants.forEach(participantId => {
+            io.to(`user:${participantId}`).emit('message:unpinned', {
+              messageId,
+              channelId
+            });
+          });
+        }
+      }
       
       console.log(`📌 Message ${messageId} unpinned from channel ${channelId}`);
       

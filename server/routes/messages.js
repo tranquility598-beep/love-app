@@ -14,6 +14,40 @@ const { messageAntiSpamMiddleware } = require('../middleware/messageAntiSpam');
 const { validateMessageContent, sanitizeBody } = require('../middleware/validation');
 
 /**
+ * GET /api/messages/search
+ * Поиск сообщений
+ */
+router.get('/search', authMiddleware, async (req, res) => {
+  try {
+    const { q, channelId } = req.query;
+    
+    if (!q || !channelId) {
+      return res.status(400).json({ message: 'Необходим запрос и ID канала' });
+    }
+    
+    // Check channel access
+    const channel = await Channel.findById(channelId);
+    if (!channel) {
+      return res.status(404).json({ message: 'Канал не найден' });
+    }
+    
+    const messages = await Message.find({
+      channel: channelId,
+      content: { $regex: q, $options: 'i' },
+      deleted: false
+    })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .populate('author', 'username nickname avatar discriminator role');
+    
+    res.json({ results: messages });
+  } catch (error) {
+    console.error('Ошибка при поиске сообщений:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
  * GET /api/messages/:channelId
  * Получить сообщения канала
  */

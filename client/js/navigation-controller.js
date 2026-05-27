@@ -144,7 +144,8 @@
             this._commitState({
               currentView: 'server',
               currentServer: server,
-              currentServerId: serverId
+              currentServerId: serverId,
+              currentDMConversation: null
             }, triggeredBy);
 
             if (typeof setNavigationState === 'function') {
@@ -154,13 +155,19 @@
                 activeDMId: null
               });
             }
+
+            if (window.socketLifecycle && typeof window.socketLifecycle.attachAllSocketListeners === 'function') {
+              window.socketLifecycle.attachAllSocketListeners();
+            }
+
             return { server, isRoom: true };
           }
 
           this._commitState({
             currentView: 'server',
             currentServer: server,
-            currentServerId: serverId
+            currentServerId: serverId,
+            currentDMConversation: null
           }, triggeredBy);
 
           if (typeof setNavigationState === 'function') {
@@ -173,6 +180,10 @@
 
           if (typeof showServerChannels === 'function') {
             showServerChannels(server);
+          }
+
+          if (window.socketLifecycle && typeof window.socketLifecycle.attachAllSocketListeners === 'function') {
+            window.socketLifecycle.attachAllSocketListeners();
           }
 
           return { server, isRoom: false };
@@ -194,6 +205,10 @@
      * @param {String} type - Channel type ('text' | 'voice')
      */
     async navigateToChannel(channelId, name, type, options = {}) {
+      window.unreadCount = 0;
+      if (window.electronAPI?.setBadgeCount) {
+        window.electronAPI.setBadgeCount(0);
+      }
       if (window.socketLifecycle && typeof window.socketLifecycle.detachScope === 'function') {
         window.socketLifecycle.detachScope('context');
       }
@@ -211,7 +226,8 @@
       this._state = {
         ...this._state,
         currentChannel: { _id: channelId, name, type },
-        currentChannelId: channelId
+        currentChannelId: channelId,
+        currentDMConversation: null
       };
       this._logTransition(fromState, this._state, triggeredBy, { channelType: type });
       this._notifyListeners();
@@ -227,6 +243,9 @@
     <svg width="20" height="20" viewBox="0 0 24 24" fill="#8e9297">
       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
     </svg>`;
+
+      const membersToggleBtn = document.getElementById('members-toggle-btn');
+      if (membersToggleBtn) membersToggleBtn.style.display = '';
 
       if (typeof showChatView === 'function') {
         showChatView();
@@ -253,6 +272,10 @@
       const input = document.getElementById('message-input');
       if (input) input.dataset.placeholder = `${window.i18n.t('message_write_in') || 'Написать в'} #${name}`;
 
+      if (window.socketLifecycle && typeof window.socketLifecycle.attachAllSocketListeners === 'function') {
+        window.socketLifecycle.attachAllSocketListeners();
+      }
+
       return { channelId, stale: false };
     }
 
@@ -272,6 +295,10 @@
      * @param {Object} options - Navigation options
      */
     async navigateToDM(conversationOrId, options = {}) {
+      window.unreadCount = 0;
+      if (window.electronAPI?.setBadgeCount) {
+        window.electronAPI.setBadgeCount(0);
+      }
       const requestSeq = ++this._dmNavigationSeq;
       const globalSeq = ++window._globalNavigationSeq;
       window._activeNavigationRequestId = globalSeq;
@@ -280,8 +307,8 @@
       try {
         let conversation;
         if (typeof conversationOrId === 'string') {
-          if (typeof window.DMAPI?.getAll === 'function') {
-            const data = await window.DMAPI.getAll();
+          if (typeof DMAPI !== 'undefined' && typeof DMAPI.getAll === 'function') {
+            const data = await DMAPI.getAll();
             conversation = data.conversations?.find(c => c._id === conversationOrId);
           }
           if (!conversation) {
@@ -314,6 +341,7 @@
           }
 
           // Commit state
+          window.currentDMConversationId = conversationId;
           this._commitState({
             currentView: 'dm',
             currentDMConversation: conversation,
@@ -343,7 +371,7 @@
           const headerIcon = document.getElementById('chat-header-icon');
           if (headerName) headerName.textContent = other.nickname || other.username;
           if (headerIcon) {
-            const avatarUrl = (typeof getAvatarUrl === 'function') ? getAvatarUrl(other.avatar) : '';
+            const avatarUrl = (typeof getAvatarUrl === 'function') ? getAvatarUrl(other.avatar, other.username, other._id) : '';
             headerIcon.innerHTML = `
               <img src="${avatarUrl}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" alt="">
             `;
@@ -353,9 +381,11 @@
           const callBtn = document.getElementById('dm-call-btn');
           if (callBtn) callBtn.style.display = 'flex';
 
-          // Hide members sidebar
+          // Hide members sidebar and button
           const membersSidebar = document.getElementById('members-sidebar');
           if (membersSidebar) membersSidebar.classList.add('hidden');
+          const membersToggleBtn = document.getElementById('members-toggle-btn');
+          if (membersToggleBtn) membersToggleBtn.style.display = 'none';
 
           // Show views
           if (typeof showDMView === 'function') showDMView();
@@ -511,6 +541,9 @@
       
       // Notify listeners
       this._notifyListeners();
+
+      // Dispatch navigation changed event
+      document.dispatchEvent(new CustomEvent('navigation:changed'));
     }
 
     _syncWindowState() {

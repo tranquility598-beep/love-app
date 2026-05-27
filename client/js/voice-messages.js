@@ -11,6 +11,10 @@ let currentVoicePreviewUrl = null;
 let currentVoicePreviewAudio = null;
 let activeVoiceMessageAudio = null;
 let activeVoiceMessageButton = null;
+let isVoiceSending = false;
+
+const VOICE_UNMUTE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+const VOICE_MUTE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
 
 /**
  * Безопасное форматирование длительности в "M:SS".
@@ -289,6 +293,8 @@ function toggleVoicePreviewPlayback(button) {
 
   if (!currentVoicePreviewAudio) {
     currentVoicePreviewAudio = new Audio(currentVoicePreviewUrl);
+    const volumeSetting = window.settingsManager ? window.settingsManager.get('output-volume') : 100;
+    currentVoicePreviewAudio.volume = (Number(volumeSetting) ?? 100) / 100;
     if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(currentVoicePreviewAudio);
     currentVoicePreviewAudio.addEventListener('timeupdate', () => {
       const audio = currentVoicePreviewAudio;
@@ -348,6 +354,14 @@ function playVoicePreview(audioUrl) {
  */
 async function sendVoiceMessage() {
   if (!window.currentVoiceBlob) return;
+  if (isVoiceSending) return;
+
+  isVoiceSending = true;
+  const sendBtn = document.querySelector('#voice-preview .voice-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.style.opacity = '0.5';
+  }
   
   try {
     // Создаем FormData для загрузки.
@@ -384,12 +398,15 @@ async function sendVoiceMessage() {
   } catch (error) {
     console.error('Error sending voice message:', error);
     alert('Не удалось отправить голосовое сообщение: ' + error.message);
+  } finally {
+    isVoiceSending = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+    }
   }
 }
 
-/**
- * Отобразить голосовое сообщение в чате
- */
 function renderVoiceMessage(attachment, isOwn) {
   const baseUrl = window.BASE_URL || 'http://localhost:5555';
   const raw = attachment.url || '';
@@ -407,24 +424,104 @@ function renderVoiceMessage(attachment, isOwn) {
         <div class="voice-message-duration">
           ГС · <span class="voice-current-time">0:00</span> / <span class="voice-total-time">--:--</span>
         </div>
-        <div class="voice-message-waveform" onclick="seekVoiceMessage(event, this)">
+        <div class="voice-message-waveform">
           <div class="voice-message-progress" style="width: 0%"></div>
         </div>
       </div>
+      <div class="voice-volume-controls">
+        <button type="button" class="voice-mute-btn" onclick="toggleVoiceMessageMute(this)">${VOICE_UNMUTE_SVG}</button>
+        <input type="range" class="voice-volume-slider" min="0" max="1" step="0.01" value="1" oninput="setVoiceVolume(this)">
+      </div>
     </div>
   `;
+}
+
+function toggleVoiceMessageMute(btn) {
+  const player = btn.closest('.voice-message-player');
+  const audio = player._audio;
+  if (!audio) return;
+  audio.muted = !audio.muted;
+  btn.innerHTML = audio.muted ? VOICE_MUTE_SVG : VOICE_UNMUTE_SVG;
+  const slider = player.querySelector('.voice-volume-slider');
+  if (slider) {
+    slider.value = audio.muted ? 0 : audio.volume;
+    slider.style.setProperty('--volume-progress', (slider.value * 100) + '%');
+  }
+}
+
+function setVoiceVolume(slider) {
+  const player = slider.closest('.voice-message-player');
+  const audio = player._audio;
+  if (!audio) return;
+  audio.volume = slider.value;
+  audio.muted = (slider.value == 0);
+  const muteBtn = player.querySelector('.voice-mute-btn');
+  if (muteBtn) {
+    muteBtn.innerHTML = audio.muted ? VOICE_MUTE_SVG : VOICE_UNMUTE_SVG;
+  }
+  slider.style.setProperty('--volume-progress', (slider.value * 100) + '%');
 }
 
 function playVoiceMessageFromButton(button) {
   const url = button?.dataset?.voiceUrl;
   if (!url) return;
   playVoiceMessage(url, button);
+  const player = button.closest('.voice-message-player');
+  if (player) {
+    player._audio = button._voiceAudio || player._voiceAudio;
+  }
 }
 
 function bindVoicePlayerAudio(player, button, audio, url) {
   if (!player || !button || !audio || audio._voicePlayerBound) return;
   if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
+  const volumeSetting = window.settingsManager ? window.settingsManager.get('output-volume') : 100;
+  audio.volume = (Number(volumeSetting) ?? 100) / 100;
   audio._voicePlayerBound = true;
+
+  // Waveform Drag seeking logic
+  const waveform = player.querySelector('.voice-message-waveform');
+  const progress = player.querySelector('.voice-message-progress');
+  if (waveform && progress && !waveform._dragBound) {
+    waveform._dragBound = true;
+
+    function scrubTo(e) {
+      if (!audio.duration) return;
+      const rect = waveform.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      audio.currentTime = pct * audio.duration;
+      progress.style.width = (pct * 100) + '%';
+    }
+
+    let isDragging = false;
+    waveform.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      scrubTo(e);
+
+      const onMouseMove = (moveEvent) => {
+        if (isDragging) scrubTo(moveEvent);
+      };
+      const onMouseUp = () => {
+        isDragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // Initialize volume UI state
+  const volumeSlider = player.querySelector('.voice-volume-slider');
+  if (volumeSlider) {
+    volumeSlider.value = audio.muted ? 0 : audio.volume;
+    volumeSlider.style.setProperty('--volume-progress', (volumeSlider.value * 100) + '%');
+  }
+  const muteBtn = player.querySelector('.voice-mute-btn');
+  if (muteBtn) {
+    muteBtn.innerHTML = audio.muted ? VOICE_MUTE_SVG : VOICE_UNMUTE_SVG;
+  }
+
   audio.addEventListener('loadedmetadata', () => {
     if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
       _resolveWebmDuration(audio);
@@ -486,7 +583,10 @@ function ensureVoiceMessageMetadata(button) {
   if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
   button._voiceAudio = audio;
   const player = button.closest('.voice-message-player');
-  if (player) player._voiceAudio = audio;
+  if (player) {
+    player._voiceAudio = audio;
+    player._audio = audio;
+  }
   bindVoicePlayerAudio(player, button, audio, url);
   audio.load();
 }
@@ -547,7 +647,10 @@ function playVoiceMessage(url, button) {
   if (button._voiceAudio) {
     const existing = button._voiceAudio;
     if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(existing);
-    if (player) player._voiceAudio = existing;
+    if (player) {
+      player._voiceAudio = existing;
+      player._audio = existing;
+    }
     bindVoicePlayerAudio(player, button, existing, url);
     if (existing.paused) {
       if (activeVoiceMessageAudio && activeVoiceMessageAudio !== existing) {
@@ -568,7 +671,10 @@ function playVoiceMessage(url, button) {
   const audio = new Audio(url);
   audio.preload = 'metadata';
   button._voiceAudio = audio;
-  if (player) player._voiceAudio = audio;
+  if (player) {
+    player._voiceAudio = audio;
+    player._audio = audio;
+  }
   bindVoicePlayerAudio(player, button, audio, url);
   
   if (activeVoiceMessageAudio && activeVoiceMessageAudio !== audio) {
@@ -615,3 +721,15 @@ function seekVoiceMessage(event, waveform) {
   audio.currentTime = ratio * audio.duration;
   updateVoicePlayerProgress(player, audio);
 }
+
+window.applyVolumeToVoiceMessages = function(volume) {
+  const volVal = volume / 100;
+  if (currentVoicePreviewAudio) {
+    currentVoicePreviewAudio.volume = volVal;
+  }
+  document.querySelectorAll('.voice-play-btn').forEach(btn => {
+    if (btn._voiceAudio) {
+      btn._voiceAudio.volume = volVal;
+    }
+  });
+};

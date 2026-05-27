@@ -5,30 +5,28 @@
 
 // Глобальные переменные состояния
 window.currentUser = null;
-window.currentServer = null;
-window.currentChannel = null;
-window.currentChannelId = null;
-window.currentVoiceChannel = null;
-window.currentDMConversation = null;
+// window.currentServer = null; (Handled by NavigationController StateGuard getters)
+// window.currentChannel = null; (Handled by NavigationController StateGuard getters)
+// window.currentChannelId = null; (Handled by NavigationController StateGuard getters)
+// window.currentVoiceChannel = null; (Handled by NavigationController StateGuard getters)
+// window.currentDMConversation = null; (Handled by NavigationController StateGuard getters)
+window._dmNavigationSeq = 0;
+window._globalNavigationSeq = 0;
+window._activeNavigationRequestId = 0;
 window.currentView = 'welcome'; // 'welcome' | 'server' | 'dm'
-window.navigationState = {
-  currentView: 'welcome',
-  activeServerId: null,
-  activeDMId: null
-};
 
 function setNavigationState(nextState = {}) {
-  const currentView = nextState.currentView || window.navigationState.currentView || 'welcome';
-
-  window.navigationState = {
-    currentView,
-    activeServerId: Object.prototype.hasOwnProperty.call(nextState, 'activeServerId')
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    const currentView = nextState.currentView || window.NavigationController.state.currentView || 'welcome';
+    const activeServerId = Object.prototype.hasOwnProperty.call(nextState, 'activeServerId')
       ? nextState.activeServerId
-      : window.navigationState.activeServerId,
-    activeDMId: Object.prototype.hasOwnProperty.call(nextState, 'activeDMId')
-      ? nextState.activeDMId
-      : window.navigationState.activeDMId
-  };
+      : window.NavigationController.state.currentServerId;
+
+    window.NavigationController._commitState({
+      currentView,
+      currentServerId: activeServerId
+    }, 'setNavigationState');
+  }
 
   window.currentView = window.navigationState.currentView;
   applyNavigationState();
@@ -112,6 +110,53 @@ window.testWarmupUI = async function() {
  * Инициализация приложения при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', async () => {
+  // --- SPLASH SCREEN SYSTEM ---
+  const splashStartTime = Date.now();
+  const MIN_SPLASH_TIME = 2500; 
+  const isFirstSession = sessionStorage.getItem('hasPlayedSplash') !== 'true';
+
+  const logo = document.querySelector('.loading-logo');
+  if (isFirstSession) {
+    if (window.SoundManager) window.SoundManager.play('app_splash');
+    if (logo) logo.classList.add('animate-heart');
+  } else {
+    if (logo) logo.classList.add('animate-heart');
+  }
+
+  const hideSplashScreen = (callback) => {
+    const elapsed = Date.now() - splashStartTime;
+    const remaining = isFirstSession ? Math.max(0, MIN_SPLASH_TIME - elapsed) : 0;
+    
+    setTimeout(() => {
+      if (window.SoundManager) window.SoundManager.stop('app_splash');
+
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+        loadingScreen.style.transition = 'opacity 0.4s ease';
+        loadingScreen.style.opacity = '0';
+        
+        setTimeout(() => {
+          loadingScreen.classList.add('hidden');
+          loadingScreen.style.display = 'none';
+          loadingScreen.style.opacity = '';
+          loadingScreen.style.transition = '';
+          
+          const content = document.getElementById('loading-content');
+          const progressBar = document.querySelector('.loading-progress-bar');
+          const status = document.getElementById('loading-status');
+          if (content) content.style.transform = '';
+          if (status) status.style.opacity = '0';
+          if (progressBar) progressBar.style.opacity = '0';
+          
+          if (callback) callback();
+        }, 400);
+      } else if (callback) {
+        callback();
+      }
+    }, remaining);
+  };
+  // ----------------------------
+
   // Применяем сохраненную тему (по умолчанию Космос)
   const savedTheme = localStorage.getItem('love-theme') || 'space';
   setTheme(savedTheme);
@@ -202,27 +247,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.setItem('user', JSON.stringify(data.user));
 
       // Скрываем экран загрузки плавно
-      const loadingScreen = document.getElementById('loading-screen');
-      if (loadingScreen) {
-        loadingScreen.style.transition = 'opacity 0.5s ease';
-        loadingScreen.style.opacity = '0';
-        setTimeout(() => {
-          loadingScreen.classList.add('hidden');
-          loadingScreen.style.display = 'none';
-          loadingScreen.style.opacity = '';
-          loadingScreen.style.transition = '';
-          // Сбрасываем трансформ группы и opacity вспомогательных элементов,
-          // чтобы следующий показ начинался с нуля.
-          const content = document.getElementById('loading-content');
-          const progressBar = document.querySelector('.loading-progress-bar');
-          const status = document.getElementById('loading-status');
-          if (content) content.style.transform = '';
-          if (status) status.style.opacity = '0';
-          if (progressBar) progressBar.style.opacity = '0';
-        }, 500);
-      }
-
-      await initApp();
+      hideSplashScreen(async () => {
+        await initApp();
+      });
       return;
     } catch (error) {
       // Токен недействителен — выкидываем на экран логина
@@ -250,39 +277,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   
-  // Показываем экран загрузки только если нет сохраненной сессии
-  setTimeout(() => {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      loadingScreen.style.opacity = '0';
-      setTimeout(() => loadingScreen.classList.add('hidden'), 500);
-    }
-  }, 1500);
-
-  showAuthScreen();
+  hideSplashScreen(() => {
+    showAuthScreen();
+  });
 });
 
 /**
  * Показать экран авторизации
  */
 function showAuthScreen() {
-  const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen) {
-    loadingScreen.style.transition = 'opacity 0.5s ease';
-    loadingScreen.style.opacity = '0';
-    setTimeout(() => {
-      loadingScreen.classList.add('hidden');
-      loadingScreen.style.display = 'none';
-      loadingScreen.style.opacity = '';
-      loadingScreen.style.transition = '';
-      const content = document.getElementById('loading-content');
-      const progressBar = document.querySelector('.loading-progress-bar');
-      const status = document.getElementById('loading-status');
-      if (content) content.style.transform = '';
-      if (status) status.style.opacity = '0';
-      if (progressBar) progressBar.style.opacity = '0';
-    }, 500);
-  }
+  // loadingScreen is managed by hideSplashScreen
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('register-screen').classList.add('hidden');
   
@@ -448,34 +452,14 @@ function renderServersList(servers) {
  * Выбрать сервер
  */
 async function selectServer(serverId) {
-  try {
-    const data = await ServersAPI.get(serverId);
-    window.currentServer = data.server;
-    window.currentServerId = serverId;
-    
-    // Обновляем сервер в кэше window.servers
-    if (window.servers) {
-      const index = window.servers.findIndex(s => s._id === serverId);
-      if (index !== -1) {
-        window.servers[index] = data.server;
-      }
-    }
-
-    setNavigationState({
-      currentView: 'server',
-      activeServerId: serverId,
-      activeDMId: null
-    });
-
-    // Показываем каналы сервера
-    showServerChannels(data.server);
-
-    // Присоединяемся к серверу через сокет
-    socketJoinServer(serverId);
-
-  } catch (error) {
-    showNotification('error', 'Не удалось загрузить сервер');
+  if (!window.NavigationController || typeof window.NavigationController.navigateToServer !== 'function') {
+    showNotification('error', 'Навигация недоступна');
+    return;
   }
+
+  return window.NavigationController.navigateToServer(serverId, {
+    triggeredBy: 'legacy-selectServer'
+  });
 }
 
 /**
@@ -511,8 +495,26 @@ function showServerChannels(server) {
   // Рендерим каналы
   renderServerChannels(server);
 
-  // Показываем приветственный экран
-  showWelcomeView();
+  // Показываем соответствующий вид в зависимости от состояния канала
+  if (window.currentChannelId) {
+    // Пользователь был в канале - проверяем, существует ли он на новом сервере
+    const channelExists = server.channels?.some(ch => ch._id === window.currentChannelId);
+    if (channelExists) {
+      showChatView();
+    } else {
+      // Предыдущий канал не существует на этом сервере, очищаем и показываем welcome
+      if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+        window.NavigationController._commitState({
+          currentChannelId: null,
+          currentChannel: null
+        }, 'showServerChannels');
+      }
+      showWelcomeView();
+    }
+  } else {
+    // Канал не выбран, показываем приветственный экран
+    showWelcomeView();
+  }
 }
 
 /**
@@ -703,9 +705,18 @@ function renderChannelItem(channel, server) {
 /**
  * Выбрать текстовый канал
  */
-async function selectChannel(channelId, channelName, channelType) {
-  window.currentChannelId = channelId;
-  window.currentChannel = { _id: channelId, name: channelName, type: channelType };
+async function __legacyNavigateToChannel(channelId, channelName, channelType, options = {}) {
+  const isStale = typeof options.isStale === 'function' ? options.isStale : () => false;
+
+  const globalSeq = ++window._globalNavigationSeq;
+  window._activeNavigationRequestId = globalSeq;
+
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    window.NavigationController._commitState({
+      currentChannelId: channelId,
+      currentChannel: { _id: channelId, name: channelName, type: channelType }
+    }, '__legacyNavigateToChannel');
+  }
 
   // Обновляем активный канал в UI
   document.querySelectorAll('.channel-item').forEach(el => {
@@ -729,26 +740,49 @@ async function selectChannel(channelId, channelName, channelType) {
   if (callBtn) callBtn.style.display = 'none';
 
   // Загружаем сообщения
-  await loadMessages(channelId);
+  await loadMessages(channelId, { globalSeq });
+  if (isStale()) return { stale: true };
   
   // Загружаем закрепленные сообщения
   if (typeof loadPinnedMessages === 'function') {
     loadPinnedMessages(channelId);
   }
+  if (isStale()) return { stale: true };
 
   // Загружаем участников
   await loadChannelMembers();
+  if (isStale()) return { stale: true };
 
   // Обновляем placeholder
   const input = document.getElementById('message-input');
   if (input) input.dataset.placeholder = `${window.i18n.t('message_write_in') || 'Написать в'} #${channelName}`;
 }
 
+window.__legacyNavigateToChannel = __legacyNavigateToChannel;
+
+async function selectChannel(channelId, channelName, channelType) {
+  if (window.NavigationController && typeof window.NavigationController.navigateToChannel === 'function') {
+    return window.NavigationController.navigateToChannel(channelId, channelName, channelType, {
+      triggeredBy: 'legacy-selectChannel'
+    });
+  }
+
+  return __legacyNavigateToChannel(channelId, channelName, channelType);
+}
+
 /**
  * Показать DM вид
  */
 function showDMView() {
-  window.currentServer = null;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    window.NavigationController._commitState({
+      currentServer: null,
+      currentServerId: null,
+      currentRoom: null,
+      currentChannel: null,
+      currentChannelId: null
+    }, 'showDMView');
+  }
 
   setNavigationState({
     currentView: 'dm',
@@ -782,24 +816,41 @@ function showDMView() {
 /**
  * Показать вид чата
  */
+/**
+ * Force clear and disable pointer events for all room overlays to prevent stuck overlays blocking click events.
+ */
+function forceClearRoomOverlays() {
+  if (window.ModalManager && typeof window.ModalManager.closeAll === 'function') {
+    window.ModalManager.closeAll();
+  }
+}
+window.forceClearRoomOverlays = forceClearRoomOverlays;
+
+function switchMainView(visibleId) {
+  const views = ['welcome-view', 'friends-view', 'chat-view', 'voice-view', 'room-view'];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (id === visibleId) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+  });
+}
+window.switchMainView = switchMainView;
+
 function showChatView() {
-  document.getElementById('welcome-view').classList.add('hidden');
-  document.getElementById('friends-view').classList.add('hidden');
-  const voiceView = document.getElementById('voice-view');
-  if (voiceView) voiceView.classList.add('hidden');
-  document.getElementById('chat-view').classList.remove('hidden');
+  switchMainView('chat-view');
 }
 
 /**
  * Показать приветственный экран
  */
 function showWelcomeView() {
-  document.getElementById('welcome-view').classList.remove('hidden');
-  document.getElementById('friends-view').classList.add('hidden');
-  document.getElementById('chat-view').classList.add('hidden');
-  const voiceView = document.getElementById('voice-view');
-  if (voiceView) voiceView.classList.add('hidden');
-
+  switchMainView('welcome-view');
+  
   // Скрываем кнопку звонка
   const callBtn = document.getElementById('dm-call-btn');
   if (callBtn) callBtn.style.display = 'none';
@@ -809,11 +860,7 @@ function showWelcomeView() {
  * Показать вид друзей
  */
 function showFriendsView() {
-  document.getElementById('welcome-view').classList.add('hidden');
-  document.getElementById('chat-view').classList.add('hidden');
-  const voiceView = document.getElementById('voice-view');
-  if (voiceView) voiceView.classList.add('hidden');
-  document.getElementById('friends-view').classList.remove('hidden');
+  switchMainView('friends-view');
   setNavigationState({
     currentView: 'dm',
     activeServerId: null,
@@ -826,14 +873,7 @@ function showFriendsView() {
  * Показать полноэкранный голосовой чат
  */
 function showVoiceView() {
-  document.getElementById('welcome-view').classList.add('hidden');
-  document.getElementById('friends-view').classList.add('hidden');
-  document.getElementById('chat-view').classList.add('hidden');
-  
-  const voiceView = document.getElementById('voice-view');
-  if (voiceView) {
-    voiceView.classList.remove('hidden');
-  }
+  switchMainView('voice-view');
 }
 
 /**
@@ -934,7 +974,7 @@ function createMemberElement(member) {
   if (topRole) {
     memberName.style.color = topRole.color;
   }
-  memberName.textContent = user.username; // Безопасно через textContent
+  memberName.textContent = user.nickname || user.username; // Безопасно через textContent
   
   if (user.role === 'owner') {
     const crownSpan = document.createElement('span');
@@ -1119,6 +1159,7 @@ function renderDMConversations(conversations) {
     const dmItem = document.createElement('div');
     dmItem.className = `dm-item ${window.navigationState?.currentView === 'dm' && window.navigationState?.activeDMId === conv._id ? 'active' : ''}`;
     dmItem.dataset.convId = conv._id;
+    dmItem.dataset.userId = other._id;
     dmItem.addEventListener('click', () => openDMConversation(conv));
 
     // Аватар
@@ -1141,7 +1182,7 @@ function renderDMConversations(conversations) {
     
     const dmName = document.createElement('div');
     dmName.className = 'dm-name';
-    dmName.textContent = other.username; // Безопасно через textContent
+    dmName.textContent = other.nickname || other.username; // Безопасно через textContent
     
     if (other.role === 'owner') {
       const crownSpan = document.createElement('span');
@@ -1180,56 +1221,40 @@ function renderDMConversations(conversations) {
  * Открыть DM диалог
  */
 async function openDMConversation(conversation) {
-  window.currentDMConversation = conversation;
-  // Сохраняем ID диалога для API вызовов
-  window.currentDMConversationId = conversation._id;
-
-  const other = conversation.participants?.find(p => p._id !== window.currentUser?._id);
-  if (!other) return;
-
-  setNavigationState({
-    currentView: 'dm',
-    activeServerId: null,
-    activeDMId: conversation._id
-  });
-
-  // Обновляем заголовок
-  const headerName = document.getElementById('chat-header-name');
-  const headerIcon = document.getElementById('chat-header-icon');
-  if (headerName) headerName.textContent = other.username;
-  if (headerIcon) headerIcon.innerHTML = `
-    <img src="${getAvatarUrl(other.avatar)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" alt="">
-  `;
-
-  // Показываем кнопку звонка
-  const callBtn = document.getElementById('dm-call-btn');
-  if (callBtn) callBtn.style.display = 'flex';
-
-  // Скрываем список участников для DM
-  const membersSidebar = document.getElementById('members-sidebar');
-  if (membersSidebar) membersSidebar.classList.add('hidden');
-
-  // Показываем DM вид с чатом
-  showDMView();
-  showChatView();
-
-  // Загружаем сообщения DM — это также установит правильный currentChannelId
-  await loadDMMessages(conversation._id);
-
-  const input = document.getElementById('message-input');
-  if (input) input.dataset.placeholder = `${window.i18n.t('message_write') || 'Написать'} ${other.username}`;
+  return window.NavigationController.navigateToDM(conversation);
 }
 
 /**
  * Загрузить сообщения DM
  */
-async function loadDMMessages(conversationId) {
+async function loadDMMessages(conversationId, options = {}) {
+  const requestSeq = options.requestSeq;
+  const globalSeq = options.globalSeq || window._activeNavigationRequestId;
   try {
     const data = await DMAPI.getMessages(conversationId);
+    
+    // Strict DM requestSeq guards before any write or render operation
+    if (requestSeq !== undefined && requestSeq !== window._dmNavigationSeq) {
+      console.warn('⚠️ Stale DM load aborted (seq mismatch) for conversation:', conversationId);
+      return;
+    }
+    if (window.currentDMConversationId !== conversationId) {
+      console.warn('⚠️ Stale DM load aborted (conversationId mismatch) for conversation:', conversationId);
+      return;
+    }
+    if (globalSeq !== undefined && globalSeq !== window._activeNavigationRequestId) {
+      console.warn('⚠️ Stale DM load aborted (global execution context mismatch) for conversation:', conversationId);
+      return;
+    }
+
     // Устанавливаем правильный channelId (ID канала, не диалога)
     // Сервер использует channel ID для сокет-событий
     if (data.channelId) {
-      window.currentChannelId = data.channelId.toString();
+      if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+        window.NavigationController._commitState({
+          currentChannelId: data.channelId.toString()
+        }, 'loadDMMessages');
+      }
       console.log('📬 DM channel ID set to:', window.currentChannelId);
     }
     renderMessages(data.messages || [], true);

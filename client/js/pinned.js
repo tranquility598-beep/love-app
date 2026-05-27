@@ -4,6 +4,9 @@
 
 let currentChannelPinnedMessages = [];
 
+// Export for socket handlers
+window.currentChannelPinnedMessages = [];
+
 /**
  * Закрепить сообщение
  */
@@ -89,16 +92,28 @@ function closePinnedBanner() {
 }
 
 /**
- * Показать модальное окно с закрепленными сообщениями
+ * Обновить список закрепленных сообщений (только данные, без открытия модалки)
+ * Вызывается из socket handlers для обновления данных
  */
-function showPinnedMessages() {
+function updatePinnedMessagesData() {
+  // Обновляем баннер с количеством
+  showPinnedBanner(currentChannelPinnedMessages.length);
+  
+  // Если модалка уже открыта, обновляем её содержимое
   const modal = document.getElementById('pinned-modal');
+  if (modal && !modal.classList.contains('hidden')) {
+    renderPinnedMessagesList();
+  }
+}
+
+/**
+ * Отрендерить список закрепленных сообщений в модалке
+ * (не открывает модалку, только обновляет содержимое)
+ */
+function renderPinnedMessagesList() {
   const list = document.getElementById('pinned-messages-list');
+  if (!list) return;
   
-  modal.classList.remove('hidden');
-  list.innerHTML = '<div class="loading-spinner">Загрузка...</div>';
-  
-  // Отображаем закрепленные сообщения
   if (currentChannelPinnedMessages.length === 0) {
     list.innerHTML = '<div class="loading-spinner">Нет закрепленных сообщений</div>';
     return;
@@ -112,11 +127,29 @@ function showPinnedMessages() {
 }
 
 /**
+ * Показать модальное окно с закрепленными сообщениями
+ * Вызывается только при клике пользователя на кнопку
+ */
+function showPinnedMessages() {
+  const modal = document.getElementById('pinned-modal');
+  const list = document.getElementById('pinned-messages-list');
+  
+  if (typeof openModal === 'function') {
+    openModal('pinned-modal');
+  }
+  list.innerHTML = '<div class="loading-spinner">Загрузка...</div>';
+  
+  // Отображаем закрепленные сообщения
+  renderPinnedMessagesList();
+}
+
+/**
  * Закрыть модальное окно закрепленных сообщений
  */
 function closePinnedModal() {
-  const modal = document.getElementById('pinned-modal');
-  modal.classList.add('hidden');
+  if (typeof closeModal === 'function') {
+    closeModal('pinned-modal');
+  }
 }
 
 /**
@@ -273,59 +306,12 @@ function escapeHtml(text) {
 
 // ==================== SOCKET ОБРАБОТЧИКИ ====================
 
-if (window.socket) {
-  // Сообщение закреплено
-  window.socket.on('message:pinned', (data) => {
-    const { messageId, channelId } = data;
-    
-    // Обновляем список закрепленных
-    loadPinnedMessages(channelId);
-    
-    // Показываем уведомление
-    showNotification('Сообщение закреплено', 'success');
-  });
-  
-  // Сообщение откреплено
-  window.socket.on('message:unpinned', (data) => {
-    const { messageId, channelId } = data;
-    
-    // Обновляем список закрепленных
-    loadPinnedMessages(channelId);
-    
-    // Показываем уведомление
-    showNotification('Сообщение откреплено', 'success');
-  });
-  
-  // Получен список закрепленных сообщений
-  window.socket.on('message:pinned_list', (data) => {
-    const { channelId, messages } = data;
-    
-    currentChannelPinnedMessages = messages || [];
-    
-    // Обновляем баннер
-    showPinnedBanner(currentChannelPinnedMessages.length);
-    
-    // Если модалка открыта, обновляем её
-    const modal = document.getElementById('pinned-modal');
-    if (!modal.classList.contains('hidden')) {
-      showPinnedMessages();
-    }
-  });
-}
+// Socket listeners now managed via socket.js lifecycle system
 
 // ==================== EVENT LISTENERS ====================
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Закрытие модалки по клику вне её
-  const modal = document.getElementById('pinned-modal');
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closePinnedModal();
-      }
-    });
-  }
-});
+// Click-outside handler is now managed by ModalManager in ui.js
+// No need for duplicate event listeners here
 
 // Показать уведомление (если не определена в profile.js)
 if (typeof showNotification === 'undefined') {
@@ -354,3 +340,8 @@ if (typeof showNotification === 'undefined') {
     }, 3000);
   }
 }
+
+// Export functions for socket handlers
+window.loadPinnedMessages = loadPinnedMessages;
+window.updatePinnedMessagesData = updatePinnedMessagesData; // For socket handlers - does NOT open modal
+window.showPinnedMessages = showPinnedMessages; // For user clicks - DOES open modal

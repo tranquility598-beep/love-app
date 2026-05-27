@@ -6,6 +6,11 @@ let currentServerId = null;
 let currentRoleId = null;
 let serverRoles = [];
 
+// Export for socket handlers
+if (window.NavigationController && typeof window.NavigationController._commitState === 'function') { window.NavigationController._commitState({ currentServerId: null }, 'roles.js'); }
+window.currentRoleId = null;
+window.serverRoles = [];
+
 /**
  * Открыть модальное окно ролей
  */
@@ -19,6 +24,7 @@ function openRolesModal(serverId) {
   }
   
   currentServerId = serverId;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') { window.NavigationController._commitState({ currentServerId: serverId }, 'roles.js'); }
   console.log('currentServerId set to:', currentServerId);
   
   const modal = document.getElementById('roles-modal');
@@ -29,7 +35,9 @@ function openRolesModal(serverId) {
     return;
   }
   
-  modal.classList.remove('hidden');
+  if (typeof openModal === 'function') {
+    openModal('roles-modal');
+  }
   console.log('Modal should be visible now');
   
   // Инициализируем обработчики сокетов
@@ -68,11 +76,15 @@ function openRolesModalFromSettings() {
  * Закрыть модальное окно ролей
  */
 function closeRolesModal() {
-  const modal = document.getElementById('roles-modal');
-  modal.classList.add('hidden');
+  if (typeof closeModal === 'function') {
+    closeModal('roles-modal');
+  }
   currentServerId = null;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') { window.NavigationController._commitState({ currentServerId: null }, 'roles.js'); }
   currentRoleId = null;
+  window.currentRoleId = null;
   serverRoles = [];
+  window.serverRoles = [];
 }
 
 /**
@@ -94,6 +106,7 @@ function loadServerRoles(serverId) {
   }
   
   serverRoles = server.roles || [];
+  window.serverRoles = serverRoles;
   console.log('serverRoles loaded:', serverRoles);
   displayRolesList();
 }
@@ -126,6 +139,7 @@ function displayRolesList() {
  */
 function selectRole(roleId) {
   currentRoleId = roleId;
+  window.currentRoleId = roleId;
   displayRolesList();
   displayRoleEditor();
 }
@@ -524,13 +538,12 @@ function deleteRole() {
  * Открыть модальное окно управления ролями участника
  */
 function openMemberRolesModal(userId, username) {
-  const modal = document.getElementById('member-roles-modal');
-  if (!modal) {
-    console.error('member-roles-modal not found');
-    return;
+  if (window.ModalManager && typeof window.ModalManager.open === 'function') {
+    window.ModalManager.open('member-roles-modal');
+  } else {
+    const modal = document.getElementById('member-roles-modal');
+    if (modal) modal.classList.remove('hidden');
   }
-  
-  modal.classList.remove('hidden');
   
   // Используем currentServerId или window.currentServerId
   const serverId = currentServerId || window.currentServerId;
@@ -593,9 +606,13 @@ function openMemberRolesModal(userId, username) {
  * Закрыть модальное окно управления ролями участника
  */
 function closeMemberRolesModal() {
-  const modal = document.getElementById('member-roles-modal');
-  if (modal) {
-    modal.classList.add('hidden');
+  if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+    window.ModalManager.close('member-roles-modal');
+  } else {
+    const modal = document.getElementById('member-roles-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
   }
 }
 
@@ -669,161 +686,17 @@ function showNotification(message, type = 'info') {
 
 /**
  * Инициализация обработчиков сокетов для ролей
+ * DEPRECATED: Listeners now managed via socket.js lifecycle system
  */
 function initRoleSocketHandlers() {
-  if (!window.socket) return;
-  
-  // Удаляем старые обработчики, если они есть
-  window.socket.off('role:created');
-  window.socket.off('role:updated');
-  window.socket.off('role:deleted');
-  
-  // Роль создана
-  window.socket.on('role:created', (data) => {
-    console.log('role:created event received:', data);
-    console.log('currentServerId:', currentServerId);
-    console.log('serverRoles before:', serverRoles);
-    
-    if (data.serverId === currentServerId) {
-      serverRoles.push(data.role);
-      displayRolesList();
-    }
-    
-    // Обновляем кэш сервера
-    const server = window.servers?.find(s => s._id === data.serverId);
-    if (server) {
-      server.roles.push(data.role);
-    }
-    
-    console.log('serverRoles after:', serverRoles);
-  });
-  
-  // Роль обновлена
-  window.socket.on('role:updated', (data) => {
-    console.log('role:updated event received:', data);
-    
-    if (data.serverId === currentServerId) {
-      const index = serverRoles.findIndex((r) => String(r._id) === String(data.roleId));
-      if (index !== -1) {
-        serverRoles[index] = data.role;
-        displayRolesList();
-        if (String(currentRoleId) === String(data.roleId)) {
-          displayRoleEditor();
-        }
-      }
-    }
-    
-    // Обновляем кэш сервера
-    const server = window.servers?.find(s => s._id === data.serverId);
-    if (server) {
-      const index = server.roles.findIndex((r) => String(r._id) === String(data.roleId));
-      if (index !== -1) {
-        server.roles[index] = data.role;
-      }
-    }
-    
-    // Обновляем текущий сервер и список участников
-    if (window.currentServer && window.currentServer._id === data.serverId) {
-      const index = window.currentServer.roles.findIndex((r) => String(r._id) === String(data.roleId));
-      if (index !== -1) {
-        window.currentServer.roles[index] = data.role;
-      }
-      
-      // Обновляем список участников (цвет/название роли могли измениться)
-      if (window.loadChannelMembers) {
-        window.loadChannelMembers();
-      }
-    }
-  });
-  
-  // Роль удалена
-  window.socket.on('role:deleted', (data) => {
-    console.log('role:deleted event received:', data);
-    
-    if (data.serverId === currentServerId) {
-      serverRoles = serverRoles.filter((r) => String(r._id) !== String(data.roleId));
-      if (String(currentRoleId) === String(data.roleId)) {
-        currentRoleId = null;
-      }
-      displayRolesList();
-      displayRoleEditor();
-    }
-    
-    // Обновляем кэш сервера
-    const server = window.servers?.find(s => s._id === data.serverId);
-    if (server) {
-      server.roles = server.roles.filter((r) => String(r._id) !== String(data.roleId));
-    }
-  });
-  
-  // Роль назначена участнику
-  window.socket.on('role:assigned', (data) => {
-    console.log('role:assigned event received:', data);
-    
-    // Обновляем кэш сервера
-    const server = window.servers?.find(s => s._id === data.serverId);
-    if (server) {
-      const member = server.members?.find((m) => {
-      const uid = m.user && m.user._id != null ? m.user._id : m.user;
-      return String(uid) === String(data.userId);
-    });
-      if (member && !member.roles.some((r) => r.toString() === String(data.roleId))) {
-        member.roles.push(data.roleId);
-      }
-    }
-    
-    // Обновляем текущий сервер
-    if (window.currentServer && window.currentServer._id === data.serverId) {
-      const member = window.currentServer.members?.find((m) => {
-        const uid = m.user && m.user._id != null ? m.user._id : m.user;
-        return String(uid) === String(data.userId);
-      });
-      if (member && !member.roles.some((r) => r.toString() === String(data.roleId))) {
-        member.roles.push(data.roleId);
-      }
-      
-      // Обновляем список участников
-      if (window.loadChannelMembers) {
-        window.loadChannelMembers();
-      }
-    }
-  });
-  
-  // Роль снята с участника
-  window.socket.on('role:removed', (data) => {
-    console.log('role:removed event received:', data);
-    
-    // Обновляем кэш сервера
-    const server = window.servers?.find(s => s._id === data.serverId);
-    if (server) {
-      const member = server.members?.find((m) => {
-        const uid = m.user && m.user._id != null ? m.user._id : m.user;
-        return String(uid) === String(data.userId);
-      });
-      if (member) {
-        member.roles = member.roles.filter((r) => r.toString() !== data.roleId.toString());
-      }
-    }
-    
-    // Обновляем текущий сервер
-    if (window.currentServer && window.currentServer._id === data.serverId) {
-      const member = window.currentServer.members?.find((m) => {
-        const uid = m.user && m.user._id != null ? m.user._id : m.user;
-        return String(uid) === String(data.userId);
-      });
-      if (member) {
-        member.roles = member.roles.filter((r) => r.toString() !== data.roleId.toString());
-      }
-      
-      // Обновляем список участников
-      if (window.loadChannelMembers) {
-        window.loadChannelMembers();
-      }
-    }
-  });
+  // No-op: Socket listeners now registered in socket.js attachAllSocketListeners()
 }
 
 window.initRoleSocketHandlers = initRoleSocketHandlers;
+
+// Export functions for socket handlers
+window.renderRolesList = displayRolesList;
+window.displayRoleEditor = displayRoleEditor;
 
 // Инициализируем обработчики при загрузке
 if (window.socket) {

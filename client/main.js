@@ -209,6 +209,9 @@ ipcMain.handle('clear-token', async () => {
   }
 });
 
+// Реестр активных контроллеров для отмены устаревших запросов (Deduplication)
+const activeRequests = new Map();
+
 // ====== БЕЗОПАСНЫЙ ПРОКСИ API ======
 ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null, headers = {} }) => {
   try {
@@ -252,7 +255,25 @@ ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null,
       }
     }
 
-    const response = await fetch(url, fetchOptions);
+    // Легковесная отмена только для Auth Namespace (Deduplication)
+    const isAuthRoute = path.startsWith('/auth/');
+    if (isAuthRoute) {
+      if (activeRequests.has(path)) {
+        activeRequests.get(path).abort();
+      }
+      const controller = new AbortController();
+      activeRequests.set(path, controller);
+      fetchOptions.signal = controller.signal;
+    }
+
+    let response;
+    try {
+      response = await fetch(url, fetchOptions);
+    } finally {
+      if (isAuthRoute) {
+        activeRequests.delete(path);
+      }
+    }
     
     // Читаем ответ как текст (иногда сервер может вернуть не JSON)
     const responseText = await response.text();
@@ -270,8 +291,12 @@ ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null,
     };
 
   } catch (error) {
+    // Если это была принудительная отмена (AbortController)
+    if (error.name === 'AbortError') {
+      return { ok: false, aborted: true, data: null };
+    }
     console.error('API proxy error:', error.message);
-    return { ok: false, status: 500, error: error.message };
+    return { ok: false, status: 500, data: { message: error.message }, error: error.message };
   }
 });
 
@@ -343,7 +368,7 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
     };
   } catch (error) {
     console.error('API upload error:', error);
-    return { ok: false, status: 500, error: error.message };
+    return { ok: false, status: 500, data: { message: error.message }, error: error.message };
   }
 });
 

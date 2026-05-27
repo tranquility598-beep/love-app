@@ -12,18 +12,37 @@ let isLoadingMessages = false;
 /**
  * Загрузить сообщения канала
  */
-async function loadMessages(channelId) {
+async function loadMessages(channelId, options = {}) {
   const list = document.getElementById('messages-list');
   if (!list) return;
 
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Загрузка...</div>';
 
+  const globalSeq = options.globalSeq || window._activeNavigationRequestId;
+
   try {
     const data = await MessagesAPI.getMessages(channelId);
+    
+    // Strict guards
+    if (window.currentChannelId !== channelId) {
+      console.warn('⚠️ Stale message load aborted (channelId mismatch):', channelId);
+      return;
+    }
+    if (options && options.requestSeq !== undefined && window.NavigationController && options.requestSeq !== window.NavigationController._channelNavigationSeq) {
+      console.warn('⚠️ Stale message load aborted (seq mismatch):', channelId);
+      return;
+    }
+    if (globalSeq !== undefined && globalSeq !== window._activeNavigationRequestId) {
+      console.warn('⚠️ Stale message load aborted (global execution context mismatch):', channelId);
+      return;
+    }
+
     renderMessages(data.messages || []);
     scrollToBottom();
   } catch (error) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Ошибка загрузки сообщений</div>';
+    if (window.currentChannelId === channelId) {
+      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Ошибка загрузки сообщений</div>';
+    }
   }
 }
 
@@ -92,7 +111,7 @@ function resolveAttachmentUrl(url) {
 function renderMessage(msg, isGrouped) {
   const author = msg.author || {};
   const authorId = author._id || author;
-  const authorName = author.username || 'Неизвестный';
+  const authorName = author.nickname || author.username || 'Неизвестный';
   const authorAvatar = getAvatarUrl(author.avatar);
   const time = formatTime(msg.createdAt);
   const fullTime = formatDate(msg.createdAt);
@@ -101,7 +120,7 @@ function renderMessage(msg, isGrouped) {
   // Ответ на сообщение (безопасно через DOM API)
   let replyHtml = '';
   if (msg.replyTo) {
-    const replyAuthor = escapeHtml(msg.replyTo.author?.username || 'Неизвестный'); // ИСПРАВЛЕНО: sanitize username
+    const replyAuthor = escapeHtml(msg.replyTo.author?.nickname || msg.replyTo.author?.username || 'Неизвестный'); // ИСПРАВЛЕНО: sanitize username
     const replyContent = msg.replyTo.content?.substring(0, 60) || '';
     const replyPreview = escapeHtml(replyContent);
     const replyId = msg.replyTo._id || '';
@@ -849,6 +868,7 @@ async function sendMessage() {
         author: {
           _id: window.currentUser?._id,
           username: window.currentUser?.username,
+          nickname: window.currentUser?.nickname,
           avatar: window.currentUser?.avatar,
           discriminator: window.currentUser?.discriminator
         },

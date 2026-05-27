@@ -71,9 +71,9 @@ class FounderSystem {
       this.showAdminPanel();
     }
     
-    // Уведомление
+    // Silent system event — no notification toast
     setTimeout(() => {
-      showNotification('success', 'Привилегии создателя активированы', '👑 FOUNDER MODE');
+      console.log('[Founder] Privileges activated');
     }, 1000);
   }
 
@@ -301,12 +301,27 @@ class FounderSystem {
     `;
 
     document.body.appendChild(overlay);
-    overlay.querySelectorAll('[data-close-founders-logs]').forEach((btn) => {
-      btn.addEventListener('click', () => overlay.remove());
-    });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    if (window.ModalManager && typeof window.ModalManager.open === 'function') {
+      window.ModalManager.open('founder-logs-modal-overlay', {
+        allowEscape: true,
+        allowClickOutside: true,
+        onClose: () => {
+          overlay.remove();
+        }
+      });
+      overlay.querySelectorAll('[data-close-founders-logs]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          window.ModalManager.close('founder-logs-modal-overlay');
+        });
+      });
+    } else {
+      overlay.querySelectorAll('[data-close-founders-logs]').forEach((btn) => {
+        btn.addEventListener('click', () => overlay.remove());
+      });
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+      });
+    }
   }
 
   // Создать контент админ-панели
@@ -414,7 +429,7 @@ class FounderSystem {
       godMode: enabled ? 'Бог-режим включен' : 'Бог-режим выключен'
     };
     
-    showNotification('success', messages[privilege] || 'Настройка обновлена');
+    console.log('[Founder] Privilege toggled:', privilege, enabled);
   }
 
   // Получить привилегию
@@ -430,12 +445,13 @@ window.founderSystem = new FounderSystem();
 function founderBroadcastMessage() {
   // Создаем модальное окно для ввода сообщения
   const modal = document.createElement('div');
+  modal.id = 'founder-broadcast-modal-overlay';
   modal.className = 'modal-overlay';
   modal.innerHTML = `
     <div class="modal">
       <div class="modal-header">
         <h2>📢 Отправить объявление</h2>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        <button class="modal-close" id="founder-broadcast-close">✕</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -444,13 +460,36 @@ function founderBroadcastMessage() {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
-        <button class="btn btn-primary" onclick="sendBroadcast()">Отправить</button>
+        <button class="btn btn-secondary" id="founder-broadcast-cancel">Отмена</button>
+        <button class="btn btn-primary" id="founder-broadcast-submit">Отправить</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
-  document.getElementById('broadcast-message').focus();
+
+  const closeBroadcastModal = () => {
+    if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+      window.ModalManager.close('founder-broadcast-modal-overlay');
+    } else {
+      modal.remove();
+    }
+  };
+
+  document.getElementById('founder-broadcast-close').addEventListener('click', closeBroadcastModal);
+  document.getElementById('founder-broadcast-cancel').addEventListener('click', closeBroadcastModal);
+  document.getElementById('founder-broadcast-submit').addEventListener('click', sendBroadcast);
+
+  if (window.ModalManager && typeof window.ModalManager.open === 'function') {
+    window.ModalManager.open('founder-broadcast-modal-overlay', {
+      allowEscape: true,
+      allowClickOutside: true,
+      onClose: () => {
+        modal.remove();
+      }
+    });
+  } else {
+    document.getElementById('broadcast-message').focus();
+  }
 }
 
 function sendBroadcast() {
@@ -459,17 +498,23 @@ function sendBroadcast() {
     if (window.socket) {
       window.socket.emit('founder:broadcast', { message });
     }
-    showNotification('success', 'Объявление отправлено всем пользователям');
-    document.querySelector('.modal-overlay').remove();
+    console.log('[Founder] Broadcast sent');
+    if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+      window.ModalManager.close('founder-broadcast-modal-overlay');
+    } else {
+      const modal = document.getElementById('founder-broadcast-modal-overlay');
+      if (modal) modal.remove();
+    }
   } else {
-    showNotification('warning', 'Введите текст объявления');
+    // Validation — keep visual feedback but no notification toast
+    console.warn('[Founder] Broadcast text is empty');
   }
 }
 
 function founderViewLogs() {
   if (window.socket && window.founderSystem.isFounder) {
     window.socket.emit('founder:get_logs', { limit: 100 });
-    showNotification('info', 'Загрузка логов...');
+    console.log('[Founder] Loading logs...');
   }
 }
 

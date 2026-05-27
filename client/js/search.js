@@ -222,12 +222,7 @@ if (typeof jumpToMessage === 'undefined') {
 
 // ==================== SOCKET ОБРАБОТЧИКИ ====================
 
-if (window.socket) {
-  // Получены результаты поиска
-  window.socket.on('message:search_results', (data) => {
-    displaySearchResults(data);
-  });
-}
+// Socket listeners now managed via socket.js lifecycle system
 
 // ==================== EVENT LISTENERS ====================
 
@@ -277,3 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// Export function for socket handlers
+window.displaySearchResults = displaySearchResults;

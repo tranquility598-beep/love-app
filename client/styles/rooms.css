@@ -156,8 +156,8 @@ body.room-mode #friends-view {
 }
 
 .room-header-online-dot {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #3ba55d;
   box-shadow: 0 0 0 2px rgba(59, 165, 93, 0.18);
@@ -374,7 +374,8 @@ body.room-mode #friends-view {
 /* В room-mode chat-view выглядит как единая полноэкранная панель чата,
    встроенная под шапку комнаты. Без лишних промежуточных границ
    и без дублирующего легаси-хедера. */
-body.room-mode #chat-view:not(.hidden) {
+body.room-mode[data-active-room-tab="chat"] #chat-view {
+  display: flex !important;
   flex: 1 1 auto;
   min-height: 0;
   background: rgba(255, 255, 255, 0.02);

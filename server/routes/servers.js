@@ -62,7 +62,7 @@ router.get('/', authMiddleware, async (req, res) => {
     
     const servers = await Server.find({ _id: { $in: validServerIds } })
       .populate('channels', 'name type position category')
-      .populate('members.user', 'username avatar status discriminator');
+      .populate('members.user', 'username nickname avatar status discriminator');
     
     res.json({ servers });
     
@@ -205,8 +205,8 @@ router.post('/', authMiddleware, sanitizeBody, validateServerName, async (req, r
     // Возвращаем сервер с заполненными данными
     const populatedServer = await Server.findById(server._id)
       .populate('channels', 'name type position topic category')
-      .populate('members.user', 'username avatar status discriminator')
-      .populate('owner', 'username avatar');
+      .populate('members.user', 'username nickname avatar status discriminator')
+      .populate('owner', 'username nickname avatar');
     
     res.status(201).json({ server: populatedServer, message: 'Сервер создан' });
     
@@ -247,7 +247,7 @@ router.get('/rooms', authMiddleware, async (req, res) => {
       'settings.kind': 'room'
     })
       .populate('channels', 'name type position category')
-      .populate('members.user', 'username avatar status discriminator');
+      .populate('members.user', 'username nickname avatar status discriminator');
 
     res.json({ rooms });
   } catch (error) {
@@ -351,8 +351,8 @@ router.post('/rooms', authMiddleware, sanitizeBody, validateServerName, async (r
 
     const populatedRoom = await Server.findById(room._id)
       .populate('channels', 'name type position topic category')
-      .populate('members.user', 'username avatar status discriminator')
-      .populate('owner', 'username avatar');
+      .populate('members.user', 'username nickname avatar status discriminator')
+      .populate('owner', 'username nickname avatar');
 
     res.status(201).json({
       room: populatedRoom,
@@ -395,8 +395,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const server = await Server.findById(req.params.id)
       .populate('channels', 'name type position topic settings category')
-      .populate('members.user', 'username avatar status discriminator customStatus')
-      .populate('owner', 'username avatar');
+      .populate('members.user', 'username nickname avatar status discriminator customStatus')
+      .populate('owner', 'username nickname avatar');
     
     if (!server) {
       return res.status(404).json({ message: 'Сервер не найден' });
@@ -609,8 +609,8 @@ router.post('/join/:code', authMiddleware, async (req, res) => {
     
     const populatedServer = await Server.findById(server._id)
       .populate('channels', 'name type position topic category')
-      .populate('members.user', 'username avatar status discriminator')
-      .populate('owner', 'username avatar');
+      .populate('members.user', 'username nickname avatar status discriminator')
+      .populate('owner', 'username nickname avatar');
     
     res.json({ server: populatedServer, message: `Вы присоединились к серверу ${server.name}` });
     

@@ -75,7 +75,7 @@ router.post('/', authMiddleware, sanitizeBody, validateChannelName, async (req, 
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const channel = await Channel.findById(req.params.id)
-      .populate('voiceMembers.user', 'username avatar status');
+      .populate('voiceMembers.user', 'username nickname avatar status');
     
     if (!channel) {
       return res.status(404).json({ message: 'Канал не найден' });

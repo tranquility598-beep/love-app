@@ -81,9 +81,9 @@ class VoiceManager {
     } catch (error) {
       console.error('Error joining voice channel:', error);
       if (error.name === 'NotAllowedError') {
-        showNotification('error', 'Нет доступа к микрофону. Разрешите доступ в настройках.');
+        console.warn('[Voice] Microphone access denied');
       } else {
-        showNotification('error', 'Не удалось подключиться к голосовому каналу');
+        console.warn('[Voice] Failed to join voice channel:', error.message);
       }
       return false;
     }
@@ -540,9 +540,13 @@ class VoiceManager {
    * Показать настройки демонстрации экрана
    */
   showScreenShareSettings() {
-    const modal = document.getElementById('screen-share-settings-modal');
-    if (modal) {
-      modal.classList.remove('hidden');
+    if (typeof openModal === 'function') {
+      openModal('screen-share-settings-modal');
+    } else {
+      const modal = document.getElementById('screen-share-settings-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
     }
   }
 
@@ -615,13 +619,13 @@ class VoiceManager {
         this.stopScreenShare();
       };
 
-      showNotification('success', 'Демонстрация экрана запущена');
+      console.log('[Voice] Screen share started');
       return true;
 
     } catch (error) {
       console.error('Error starting screen share:', error);
       if (error.name !== 'NotAllowedError') {
-        showNotification('error', 'Не удалось начать демонстрацию экрана');
+        console.warn('[Voice] Screen share failed:', error.message);
       }
       return false;
     }
@@ -658,7 +662,7 @@ class VoiceManager {
       socket.emit('screen:stop', { channelId: this.channelId });
     }
 
-    showNotification('info', 'Демонстрация экрана остановлена');
+    console.log('[Voice] Screen share stopped');
   }
 
   /**
@@ -753,15 +757,19 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
     // Set currentVoiceChannel BEFORE the socket emit happens inside joinChannel,
     // otherwise voice:members_update can arrive before this assignment and the
     // self user will be dropped by updateVoicePanelMembers' channel-id guard.
-    window.currentVoiceChannel = channelId;
+    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+      window.NavigationController._commitState({ currentVoiceChannel: channelId }, 'joinVoiceChannel');
+    }
     const success = await window.voiceManager.joinChannel(channelId);
 
     if (success) {
       showVoicePanel(channelName, serverName);
-      showNotification('success', `Вы подключились к каналу "${channelName}"`);
+      console.log(`[Voice] Connected to channel "${channelName}"`);
     } else {
       // Roll back so subsequent updates aren't routed to a non-joined channel
-      window.currentVoiceChannel = null;
+      if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+        window.NavigationController._commitState({ currentVoiceChannel: null }, 'joinVoiceChannel-fail');
+      }
     }
   } finally {
     // Снимаем блокировку через небольшую задержку чтобы предотвратить мгновенный повтор
@@ -780,7 +788,9 @@ async function leaveVoiceChannel() {
     window.voiceManager = null;
   }
   window.pendingDMCall = null;
-  window.currentVoiceChannel = null;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    window.NavigationController._commitState({ currentVoiceChannel: null }, 'leaveVoiceChannel');
+  }
   hideVoicePanel();
 
   // Если открыт полноэкранный интерфейс, закрываем его
@@ -902,7 +912,7 @@ function toggleCamera() {
   btn.title = isActive ? 'Выключить камеру' : 'Включить камеру';
   
   if (isActive) {
-    showNotification('info', 'Камера в разработке. Скоро здесь будет ваше видео!');
+    console.log('[Voice] Camera feature is under development');
   }
 }
 
@@ -911,7 +921,7 @@ function toggleCamera() {
  */
 async function toggleScreenShare() {
   if (!window.voiceManager) {
-    showNotification('warning', 'Сначала подключитесь к голосовому каналу');
+    console.warn('[Voice] Not connected to a voice channel');
     return;
   }
 
@@ -935,7 +945,11 @@ async function toggleScreenShare() {
       const defaultQuality = window.settingsManager.get('default-screen-quality') || 'medium';
       qualitySelect.value = defaultQuality;
     }
-    modal.classList.remove('hidden');
+    if (typeof openModal === 'function') {
+      openModal('screen-share-settings-modal');
+    } else {
+      modal.classList.remove('hidden');
+    }
   }
 }
 
@@ -1140,8 +1154,8 @@ function updateVoiceChannelMembersUI(channelId, members) {
   if (membersContainer) {
     membersContainer.innerHTML = members.map(member => `
       <div class="voice-member-item" data-user-id="${member.userId}">
-        <img class="voice-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.username}">
-        <span class="voice-member-name">${member.username}${member.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
+        <img class="voice-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
+        <span class="voice-member-name">${member.nickname || member.username}${member.role === 'owner' ? ' <span title="Создатель" style="font-size:1.1em">👑</span>' : ''}</span>
         ${member.muted ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="#ed4245"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>' : ''}
       </div>
     `).join('');
@@ -1163,8 +1177,8 @@ function updateVoicePanelMembers(channelId, members) {
   if (panelMembers) {
     panelMembers.innerHTML = members.map(member => `
       <div class="voice-panel-member ${member.userId === window.currentUser?._id ? 'self' : ''}" data-user-id="${member.userId}">
-        <img class="voice-panel-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.username}">
-        <span class="voice-panel-member-name">${member.username}</span>
+        <img class="voice-panel-member-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
+        <span class="voice-panel-member-name">${member.nickname || member.username}</span>
         ${member.muted ? '<span class="voice-panel-member-muted">🔇</span>' : ''}
       </div>
     `).join('');
@@ -1176,9 +1190,9 @@ function updateVoicePanelMembers(channelId, members) {
     gridContainer.innerHTML = members.map(member => `
       <div class="voice-card" id="voice-card-${member.userId}" data-user-id="${member.userId}">
         <!-- Если у юзера есть видео (демонстрация экрана), оно будет вставлено сюда поверх аватарки -->
-        <img class="voice-card-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.username}">
+        <img class="voice-card-avatar" src="${getAvatarUrl(member.avatar)}" alt="${member.nickname || member.username}">
         <div class="voice-card-name-tag">
-          ${member.username} 
+          ${member.nickname || member.username} 
           ${member.muted ? '🔇' : ''}
           ${member.deafened ? '🎧' : ''}
         </div>
@@ -1193,7 +1207,7 @@ function updateVoicePanelMembers(channelId, members) {
       const targetUserId = sourceId === 'local' ? window.currentUser?._id : sourceId;
       
       const memberInfo = members.find(m => m.userId === targetUserId);
-      const nameTag = memberInfo ? memberInfo.username : 'Пользователь';
+      const nameTag = memberInfo ? (memberInfo.nickname || memberInfo.username) : 'Пользователь';
 
       let screenCardId = 'voice-screen-card-' + targetUserId;
       let screenCard = document.getElementById(screenCardId);
@@ -1231,43 +1245,7 @@ function updateVoiceMuteUI(userId, muted) {
 
 // ==================== DM VOICE CALLS LOGIC ====================
 
-// Звуковое сопровождение (Discord-style)
-const sounds = {
-  calling: new Audio('assets/sounds/call_calling.mp3'),
-  ringing: new Audio('assets/sounds/call_ringing.mp3'),
-  join: new Audio('assets/sounds/user_join.mp3'),
-  leave: new Audio('assets/sounds/user_leave.mp3'),
-  mute: new Audio('assets/sounds/mute.mp3'),
-  unmute: new Audio('assets/sounds/unmute.mp3'),
-  deafen: new Audio('assets/sounds/deafen.mp3'),
-  undeafen: new Audio('assets/sounds/undeafen.mp3'),
-  disconnect: new Audio('assets/sounds/disconnect.mp3'),
-  notification: new Audio('assets/sounds/discord-notification1.mp3')
-};
-
-// Устанавливаем громкость на 30% (они слишком громкие по умолчанию)
-Object.values(sounds).forEach(s => s.volume = 0.3);
-
-// Зацикливаем гудки
-sounds.calling.loop = true;
-sounds.ringing.loop = true;
-
-/**
- * Проиграть звук
- */
-function playSound(name) {
-  if (sounds[name]) {
-    sounds[name].currentTime = 0;
-    sounds[name].play().catch(() => {});
-  }
-}
-
-function stopCallSounds() {
-  sounds.calling.pause();
-  sounds.calling.currentTime = 0;
-  sounds.ringing.pause();
-  sounds.ringing.currentTime = 0;
-}
+// Звуковое сопровождение интегрировано через SoundManager
 
 function showIncomingDMCallOverlay(call) {
   const overlay = document.getElementById('incoming-call-overlay');
@@ -1276,16 +1254,15 @@ function showIncomingDMCallOverlay(call) {
   const name = document.getElementById('incoming-call-name');
   window.pendingDMCall = call;
   if (avatar) avatar.src = getAvatarUrl(call.from.avatar);
-  if (name) name.textContent = call.from.username || 'Входящий звонок';
+  if (name) name.textContent = call.from.nickname || call.from.username || 'Входящий звонок';
   overlay.classList.remove('hidden');
-  sounds.ringing.play().catch(() => {});
+  if (window.SoundManager) window.SoundManager.play('call_incoming');
 }
 
 function hideIncomingDMCallOverlay() {
   const overlay = document.getElementById('incoming-call-overlay');
   if (overlay) overlay.classList.add('hidden');
-  sounds.ringing.pause();
-  sounds.ringing.currentTime = 0;
+  if (window.SoundManager) window.SoundManager.stop('call_incoming');
 }
 
 async function acceptIncomingDMCall() {
@@ -1333,7 +1310,7 @@ async function startDMCall() {
   showDMCallOverlay(other);
   
   // Звук исходящего вызова
-  sounds.calling.play().catch(() => {});
+  if (window.SoundManager) window.SoundManager.play('call_outgoing');
   
   // Отправляем сокет-запрос
   if (window.socketRequestCall) {
@@ -1359,7 +1336,7 @@ function showDMCallOverlay(peer) {
 
   myImg.src = getAvatarUrl(window.currentUser?.avatar);
   peerImg.src = getAvatarUrl(peer.avatar);
-  peerName.textContent = peer.username;
+  peerName.textContent = peer.nickname || peer.username;
   status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
   
   peerContainer.classList.add('peer-ringing');
@@ -1375,7 +1352,10 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   const peerContainer = document.getElementById('caller-mini-peer');
 
   // Всегда останавливаем гудок
-  stopCallSounds();
+  if (window.SoundManager) {
+    window.SoundManager.stop('call_outgoing');
+    window.SoundManager.stop('call_incoming');
+  }
 
   if (!accepted) {
     status.textContent = 'ВЫЗОВ ОТКЛОНЕН';
@@ -1387,7 +1367,7 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
 
     // Анимация уменьшения
     peerContainer.classList.add('shrinking');
-    playSound('disconnect');
+    if (window.SoundManager) window.SoundManager.play('user_leave');
 
     setTimeout(() => {
       overlay.classList.add('hidden');
@@ -1400,11 +1380,13 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   // Принято!
   status.textContent = 'В ЭФИРЕ';
   peerContainer.classList.remove('peer-ringing');
-  playSound('join');
+  if (window.SoundManager) window.SoundManager.play('user_join');
   
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || responderId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
-  window.currentVoiceChannel = callRoomId;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    window.NavigationController._commitState({ currentVoiceChannel: callRoomId }, 'handleDMCallResponse');
+  }
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
 }
@@ -1419,15 +1401,18 @@ function handleDMCallEnd() {
   if (overlay) overlay.classList.add('hidden');
   
   hideIncomingDMCallOverlay();
-  stopCallSounds();
-  playSound('disconnect');
+  if (window.SoundManager) {
+    window.SoundManager.stop('call_outgoing');
+    window.SoundManager.stop('call_incoming');
+    window.SoundManager.play('user_leave');
+  }
 
   if (window.voiceManager) {
     window.voiceManager.leaveChannel();
     window.voiceManager = null;
   }
   
-  showNotification('info', 'Звонок завершен');
+  console.log('[Voice] Call ended');
 }
 
 window.handleDMCallEnd = handleDMCallEnd;
@@ -1437,8 +1422,10 @@ window.handleDMCallEnd = handleDMCallEnd;
  */
 async function startWebRTCCall(callerId, meta = {}) {
   // Останавливаем все звуки вызова (если были)
-  sounds.calling.pause();
-  sounds.ringing.pause();
+  if (window.SoundManager) {
+    window.SoundManager.stop('call_outgoing');
+    window.SoundManager.stop('call_incoming');
+  }
 
   const caller = window.pendingDMCall?.from;
   if (caller) {
@@ -1451,16 +1438,31 @@ async function startWebRTCCall(callerId, meta = {}) {
 
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || callerId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
-  window.currentVoiceChannel = callRoomId;
+  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+    window.NavigationController._commitState({ currentVoiceChannel: callRoomId }, 'startWebRTCCall');
+  }
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
-  playSound('join');
+  if (window.SoundManager) window.SoundManager.play('user_join');
 }
 
 window.startWebRTCCall = startWebRTCCall;
 
 // Инициируем звуки при муте/дефене
-window.playVoiceSound = playSound;
+window.playVoiceSound = function(name) {
+  if (!window.SoundManager) return;
+  const map = {
+    'join': 'user_join',
+    'disconnect': 'user_leave',
+    'mute': 'voice_mute',
+    'unmute': 'voice_unmute',
+    'deafen': 'voice_deafen',
+    'undeafen': 'voice_undeafen'
+  };
+  if (map[name]) {
+    window.SoundManager.play(map[name]);
+  }
+};
 
 function showDMCallOverlay(peer) {
   const overlay = document.getElementById('dm-call-overlay');
@@ -1474,7 +1476,7 @@ function showDMCallOverlay(peer) {
 
   myImg.src = getAvatarUrl(window.currentUser?.avatar);
   peerImg.src = getAvatarUrl(peer.avatar);
-  peerName.textContent = peer.username;
+  peerName.textContent = peer.nickname || peer.username;
   status.textContent = 'ОЖИДАНИЕ ОТВЕТА...';
   
   peerContainer.classList.add('peer-ringing');

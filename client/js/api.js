@@ -145,6 +145,11 @@ async function apiFetch(endpoint, options = {}) {
       });
 
       if (!result.ok) {
+        if (result.aborted) {
+          const abortError = new Error('Отменено');
+          abortError.isAborted = true;
+          throw abortError;
+        }
         console.error('API request failed:', endpoint, result.status, result.data);
         if (result.status === 401 && !isAuthEntryEndpoint(endpoint)) {
           // Авторизованный запрос с протухшим токеном — чистим и
@@ -152,6 +157,7 @@ async function apiFetch(endpoint, options = {}) {
           // циклов перезагрузки при долгоживущих сбоях.
           await clearAuthToken();
           localStorage.removeItem('user');
+          if (typeof disconnectSocket === 'function') disconnectSocket();
           if (typeof showAuthScreen === 'function') {
             try { showAuthScreen(); } catch (_) {}
           }
@@ -212,6 +218,7 @@ async function apiFetch(endpoint, options = {}) {
     if (response.status === 401 && !isAuthEntryEndpoint(endpoint)) {
       await clearAuthToken();
       localStorage.removeItem('user');
+      if (typeof disconnectSocket === 'function') disconnectSocket();
       if (typeof showAuthScreen === 'function') {
         try { showAuthScreen(); } catch (_) {}
       }
@@ -338,7 +345,10 @@ const AuthAPI = {
     apiFetch('/auth/login-logs'),
 
   deleteLoginLog: (logId) =>
-    apiFetch(`/auth/login-logs/${logId}`, { method: 'DELETE' })
+    apiFetch(`/auth/login-logs/${logId}`, { method: 'DELETE' }),
+
+  logoutAll: () =>
+    apiFetch('/auth/logout-all', { method: 'POST' })
 };
 
 // ===== USERS API =====
@@ -351,6 +361,9 @@ const UsersAPI = {
 
   updateProfile: (data) =>
     apiFetch('/users/profile', { method: 'PUT', body: JSON.stringify(data) }),
+
+  updateAccount: (data) =>
+    apiFetch('/users/account', { method: 'PUT', body: JSON.stringify(data) }),
 
   uploadAvatar: (file) => {
     const formData = new FormData();

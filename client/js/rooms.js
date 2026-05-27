@@ -97,15 +97,27 @@
 
   function enterRoomMode() {
     document.body.classList.add('room-mode');
+    destroyRoomListeners();
+    registerRoomListeners();
   }
 
   function exitRoomMode() {
     document.body.classList.remove('room-mode');
+    document.body.removeAttribute('data-active-room-tab');
     detachLiveHandlers();
     destroyRoomListeners();
     hideRoomView();
     hideAllRoomPanels();
+    
+    // Synchronously force clear and deactivate all room overlays
+    if (typeof window.forceClearRoomOverlays === 'function') {
+      window.forceClearRoomOverlays();
+    }
+    
     _activeMode = null;
+    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+      window.NavigationController._commitState({ currentRoom: null }, 'exitRoomMode');
+    }
   }
 
   function hideAllMainViews() {
@@ -117,8 +129,12 @@
   }
 
   function showRoomView() {
-    const v = document.getElementById('room-view');
-    if (v) v.classList.remove('hidden');
+    if (typeof window.switchMainView === 'function') {
+      window.switchMainView('room-view');
+    } else {
+      const v = document.getElementById('room-view');
+      if (v) v.classList.remove('hidden');
+    }
   }
 
   function hideRoomView() {
@@ -147,6 +163,11 @@
       const btn = document.getElementById(`room-tab-${n}`);
       if (btn) btn.setAttribute('aria-selected', String(n === name));
     });
+    if (name) {
+      document.body.setAttribute('data-active-room-tab', name);
+    } else {
+      document.body.removeAttribute('data-active-room-tab');
+    }
   }
 
   // === Утилиты ============================================================
@@ -174,7 +195,7 @@
 
   function makeAvatar(node, user, fallbackName, klass) {
     node.className = klass;
-    const username = user?.username || fallbackName || '?';
+    const username = user?.nickname || user?.username || fallbackName || '?';
     const avatarUrl = (typeof getAvatarUrl === 'function' && user?.avatar) ? getAvatarUrl(user.avatar) : null;
     if (avatarUrl) {
       const img = document.createElement('img');
@@ -247,7 +268,7 @@
 
   function formatLastMessagePreview(msg) {
     if (!msg) return 'Нет сообщений';
-    const author = msg?.author?.username || 'Кто-то';
+    const author = msg?.author?.nickname || msg?.author?.username || 'Кто-то';
     let text = (msg.content || '').trim();
     if (!text && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
       const a = msg.attachments[0];
@@ -315,7 +336,7 @@
 
       const name = document.createElement('span');
       name.className = 'room-voice-card-name';
-      name.textContent = user?.username || 'Гость';
+      name.textContent = user?.nickname || user?.username || 'Гость';
       card.appendChild(name);
 
       if (m?.muted) {
@@ -419,10 +440,10 @@
   // === Register/Destroy Room Listeners ===================================
 
   function registerRoomListeners() {
-    // Prevent double registration
+    // Prevent double registration - perform self-healing teardown if already active
     if (roomListeners._registered) {
-      console.warn('[rooms] Listeners already registered');
-      return;
+      console.warn('[rooms] Listeners already registered, performing self-healing re-bind');
+      destroyRoomListeners();
     }
     
     // GROUP A: Navigation scroll
@@ -974,7 +995,7 @@
     const voiceCh = channels.find(c => hints && c._id === hints.voiceChannelId)
       || channels.find(c => c.type === 'voice');
 
-    window.currentRoom = {
+    const roomState = {
       _id: server._id,
       name: server.name,
       description: server.description || '',
@@ -982,7 +1003,17 @@
       voiceChannelId: voiceCh?._id || null
     };
 
+    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+      window.NavigationController._commitState({ currentRoom: roomState }, 'enterRoom');
+    }
+
     enterRoomMode();
+    
+    // Synchronously force clear and deactivate all room overlays
+    if (typeof window.forceClearRoomOverlays === 'function') {
+      window.forceClearRoomOverlays();
+    }
+    
     hideAllMainViews();
     renderRoomHeader(server);
     showRoomView();
@@ -1278,7 +1309,7 @@
       const name = document.createElement('span');
       name.className = 'room-settings-member-name';
       // Безопасный рендер username — только textContent
-      name.textContent = user.username || 'Гость';
+      name.textContent = user.nickname || user.username || 'Гость';
       li.appendChild(name);
 
       const isOwner = String(user._id || '') === ownerId;
@@ -1374,35 +1405,16 @@
     fillSettingsForm(server);
     setActiveSection('general');
 
-    const panel = document.getElementById('room-settings-panel');
-    const backdrop = document.getElementById('room-settings-backdrop');
-    if (panel) {
-      panel.classList.remove('hidden');
-      // requestAnimationFrame чтобы анимация transform сработала
-      requestAnimationFrame(() => panel.classList.add('visible'));
-      panel.setAttribute('aria-hidden', 'false');
-    }
-    if (backdrop) {
-      backdrop.classList.remove('hidden');
-      requestAnimationFrame(() => backdrop.classList.add('visible'));
-    }
-    // После раскрытия панели layout стабилизируется — пересчитываем
-    // фейды и активный таб.
-    requestAnimationFrame(updateNavScrollEdges);
+    window.ModalManager.open('room-settings-panel', {
+      backdropId: 'room-settings-backdrop',
+      onClose: () => {
+        requestAnimationFrame(updateNavScrollEdges);
+      }
+    });
   }
 
   function closeRoomSettings() {
-    const panel = document.getElementById('room-settings-panel');
-    const backdrop = document.getElementById('room-settings-backdrop');
-    if (panel) {
-      panel.classList.remove('visible');
-      panel.setAttribute('aria-hidden', 'true');
-      setTimeout(() => panel.classList.add('hidden'), 250);
-    }
-    if (backdrop) {
-      backdrop.classList.remove('visible');
-      setTimeout(() => backdrop.classList.add('hidden'), 250);
-    }
+    window.ModalManager.close('room-settings-panel');
   }
 
   async function handleSaveGeneral() {
@@ -1841,12 +1853,16 @@
 
     // 3. Очистить активную комнату/сервер/канал.
     const goneId = window.currentServer?._id || window.currentRoom?._id || null;
-    window.currentRoom = null;
-    window.currentServer = null;
-    window.currentServerId = null;
-    window.currentChannel = null;
-    window.currentChannelId = null;
-    window.currentVoiceChannel = null;
+    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+      window.NavigationController._commitState({
+        currentRoom: null,
+        currentServer: null,
+        currentServerId: null,
+        currentChannel: null,
+        currentChannelId: null,
+        currentVoiceChannel: null
+      }, 'afterRoomGone');
+    }
 
     // 4. Убрать активное состояние у удалённой комнаты через единый
     //    navigation state и физически очистить legacy channel sidebar (имя/каналы).
@@ -1949,6 +1965,9 @@
         const s = window.currentServer;
         if (!applyRoomViewFor(s, null)) {
           exitRoomMode();
+          if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+            window.NavigationController._commitState({ currentRoom: null }, 'wrapNavigation-selectServer');
+          }
         }
         return result;
       };
@@ -1960,6 +1979,9 @@
       const original = window.showDMView;
       const wrapped = function (...args) {
         exitRoomMode();
+        if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+          window.NavigationController._commitState({ currentRoom: null }, 'wrapNavigation-showDMView');
+        }
         return original.apply(this, args);
       };
       wrapped.__wrappedForRooms = true;

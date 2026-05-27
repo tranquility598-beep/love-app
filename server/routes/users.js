@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
-const { validateBio, validateCustomStatus, validateUsername, sanitizeBody } = require('../middleware/validation');
+const { validateBio, validateCustomStatus, validateUsername, validateEmail, sanitizeBody } = require('../middleware/validation');
 const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
@@ -73,44 +73,20 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 /**
  * PUT /api/users/profile
- * Обновить профиль пользователя
+ * Обновить профиль пользователя (публичная часть, без пароля)
  */
-router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (req, res) => {
+router.put('/profile', authMiddleware, sanitizeBody, async (req, res) => {
   try {
-    const { username, bio, customStatus, profileColor, currentPassword } = req.body;
+    const { nickname, bio, customStatus, profileColor } = req.body;
     
     const updateData = {};
     
-    if (username && username !== req.user.username) {
-      const nextUsername = String(username).trim();
-      if (nextUsername.length < 2 || nextUsername.length > 32) {
-        return res.status(400).json({ message: 'Имя пользователя должно быть от 2 до 32 символов' });
+    if (nickname !== undefined) {
+      const nextNickname = String(nickname).trim();
+      if (nextNickname.length > 32) {
+        return res.status(400).json({ message: 'Отображаемое имя должно быть не более 32 символов' });
       }
-
-      if (req.user.usernameChangedAt && Date.now() - new Date(req.user.usernameChangedAt).getTime() < USERNAME_CHANGE_COOLDOWN_MS) {
-        const availableAt = new Date(new Date(req.user.usernameChangedAt).getTime() + USERNAME_CHANGE_COOLDOWN_MS);
-        return res.status(429).json({
-          message: `Имя пользователя можно менять раз в 7 дней. Следующая смена доступна ${availableAt.toLocaleString('ru-RU')}`,
-          availableAt
-        });
-      }
-
-      const currentUser = await User.findById(req.user._id).select('+password');
-      if (currentUser.password) {
-        const isPasswordValid = await currentUser.comparePassword(currentPassword);
-        if (!isPasswordValid) {
-          return res.status(400).json({ message: 'Введите текущий пароль для смены имени' });
-        }
-      }
-      
-      // Проверяем уникальность имени
-      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: req.user._id } });
-      if (existingUser) {
-        return res.status(400).json({ message: 'Имя пользователя уже занято' });
-      }
-      
-      updateData.username = nextUsername;
-      updateData.usernameChangedAt = new Date();
+      updateData.nickname = nextNickname;
     }
     
     if (bio !== undefined) updateData.bio = bio;
@@ -141,6 +117,101 @@ router.put('/profile', authMiddleware, sanitizeBody, validateUsername, async (re
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * PUT /api/users/account
+ * Обновить данные аккаунта (системная часть, требует пароль)
+ */
+router.put('/account', authMiddleware, sanitizeBody, validateUsername, validateEmail, async (req, res) => {
+  try {
+    const { username, email, currentPassword } = req.body;
+    
+    const updateData = {};
+    let isUsernameChanged = false;
+    let isEmailChanged = false;
+
+    // Проверяем пароль перед любыми изменениями аккаунта
+    const currentUser = await User.findById(req.user._id).select('+password');
+    if (!currentUser) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    if (currentUser.password) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: 'Для изменения настроек аккаунта введите текущий пароль' });
+      }
+      const isPasswordValid = await currentUser.comparePassword(currentPassword);
+      if (!isPasswordValid) {
+        return res.status(400).json({ message: 'Неверный текущий пароль' });
+      }
+    }
+
+    // Обработка смены username
+    if (username && username !== req.user.username) {
+      const nextUsername = String(username).trim();
+      if (nextUsername.length < 2 || nextUsername.length > 32) {
+        return res.status(400).json({ message: 'Имя пользователя должно быть от 2 до 32 символов' });
+      }
+
+      // Защита от частой смены имени (7 дней cooldown)
+      if (req.user.usernameChangedAt && Date.now() - new Date(req.user.usernameChangedAt).getTime() < USERNAME_CHANGE_COOLDOWN_MS) {
+        const availableAt = new Date(new Date(req.user.usernameChangedAt).getTime() + USERNAME_CHANGE_COOLDOWN_MS);
+        return res.status(429).json({
+          message: `Имя пользователя можно менять раз в 7 дней. Следующая смена доступна ${availableAt.toLocaleString('ru-RU')}`,
+          availableAt
+        });
+      }
+
+      // Проверяем уникальность имени
+      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: req.user._id } });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Имя пользователя уже занято' });
+      }
+
+      updateData.username = nextUsername;
+      updateData.usernameChangedAt = new Date();
+      isUsernameChanged = true;
+    }
+
+    // Обработка смены email
+    if (email && email.toLowerCase() !== req.user.email.toLowerCase()) {
+      const nextEmail = String(email).trim().toLowerCase();
+      
+      // Проверяем уникальность email
+      const existingUser = await User.findOne({ email: nextEmail, _id: { $ne: req.user._id } });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email уже зарегистрирован на другого пользователя' });
+      }
+
+      updateData.email = nextEmail;
+      isEmailChanged = true;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'Нет изменений для сохранения' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      updateData,
+      { new: true }
+    ).select('+password');
+
+    let msg = 'Настройки аккаунта обновлены';
+    if (isUsernameChanged && isEmailChanged) {
+      msg = 'Имя пользователя и email успешно изменены';
+    } else if (isUsernameChanged) {
+      msg = 'Имя пользователя изменено';
+    } else if (isEmailChanged) {
+      msg = 'Email успешно изменен';
+    }
+
+    res.json({ user: buildPublicUser(updatedUser), message: msg });
+  } catch (error) {
+    console.error('Update account error:', error);
+    res.status(500).json({ message: 'Ошибка сервера при обновлении настроек аккаунта' });
   }
 });
 

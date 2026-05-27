@@ -123,9 +123,15 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
       $or: [{ email: email.toLowerCase() }, { username }]
     });
     
+    const COOLDOWN_MS = 60 * 1000;
+    
     if (existingUser) {
-      // Если пользователь есть но не верифицирован — удаляем и создаем заново или просто обновляем
+      // Если пользователь есть но не верифицирован — проверяем кулдаун, затем удаляем и создаем заново
       if (!existingUser.isVerified) {
+        if (existingUser.otpLastSentAt && (Date.now() - existingUser.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+          const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - existingUser.otpLastSentAt.getTime())) / 1000);
+          return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+        }
         await User.deleteOne({ _id: existingUser._id });
       } else {
         if (existingUser.email === email.toLowerCase()) {
@@ -162,6 +168,9 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     if (!emailSent) {
       return res.status(500).json({ message: 'Ошибка отправки письма. Проверьте настройки Gmail.' });
     }
+    
+    user.otpLastSentAt = new Date();
+    await user.save();
     
     res.status(201).json({
       message: 'OTP отправлен на вашу почту',
@@ -244,12 +253,25 @@ router.post('/resend-otp', otpLimiter, async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
+    const COOLDOWN_MS = 60 * 1000;
+    if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+      const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
+      return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+    }
+    
     const otp = generateOTP();
     user.otpCode = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
     
-    await sendOTPEmail(user.email, otp, 'verification');
+    const emailSent = await sendOTPEmail(user.email, otp, 'verification');
+    if (!emailSent) {
+      return res.status(500).json({ message: 'Ошибка отправки письма. Проверьте настройки SMTP.' });
+    }
+    
+    user.otpLastSentAt = new Date();
+    await user.save();
+    
     res.json({ message: 'Новый код отправлен' });
     
   } catch (error) {
@@ -324,11 +346,23 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     
     // Проверяем верификацию
     if (!user.isVerified) {
+      const COOLDOWN_MS = 60 * 1000;
+      if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+        const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
+        return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+      }
+
       const otp = generateOTP();
       user.otpCode = otp;
       user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
       await user.save();
-      await sendOTPEmail(user.email, otp, 'verification');
+      const emailSent = await sendOTPEmail(user.email, otp, 'verification');
+      if (!emailSent) {
+        return res.status(500).json({ message: 'Ошибка отправки письма с кодом подтверждения.' });
+      }
+      
+      user.otpLastSentAt = new Date();
+      await user.save();
       
       // Логируем попытку входа (но еще не полноценный вход)
       await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, location, loginMethod: 'password', status: 'success' });
@@ -341,6 +375,12 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     }
     
     if (user.twoFactorEnabled) {
+      const COOLDOWN_MS = 60 * 1000;
+      if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+        const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
+        return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+      }
+
       const code = generateOTP();
       user.twoFactorCode = code;
       user.twoFactorExpires = new Date(Date.now() + 10 * 60 * 1000);
@@ -350,6 +390,9 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       if (!emailSent) {
         return res.status(500).json({ message: 'Не удалось отправить код входа' });
       }
+
+      user.otpLastSentAt = new Date();
+      await user.save();
 
       const pendingToken = jwt.sign(
         { userId: user._id, purpose: '2fa-login' },
@@ -467,12 +510,25 @@ router.post('/forgot-password', passwordResetLimiter, sanitizeBody, validateEmai
       return res.status(404).json({ message: 'Пользователь с такой почтой не найден' });
     }
     
+    const COOLDOWN_MS = 60 * 1000;
+    if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+      const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
+      return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+    }
+    
     const otp = generateOTP();
     user.otpCode = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
     
-    await sendOTPEmail(user.email, otp, 'reset');
+    const emailSent = await sendOTPEmail(user.email, otp, 'reset');
+    if (!emailSent) {
+      return res.status(500).json({ message: 'Ошибка отправки письма для восстановления пароля.' });
+    }
+    
+    user.otpLastSentAt = new Date();
+    await user.save();
+    
     res.json({ message: 'Код восстановления отправлен на почту' });
     
   } catch (error) {
@@ -626,6 +682,28 @@ router.post('/logout', authMiddleware, async (req, res) => {
 });
 
 /**
+ * POST /api/auth/logout-all
+ * Выход со всех устройств (удаление всех сессий)
+ */
+router.post('/logout-all', authMiddleware, async (req, res) => {
+  try {
+    // Удаляем все записи сессий пользователя в БД
+    await LoginLog.deleteMany({ userId: req.user._id });
+
+    // Устанавливаем статус пользователя в оффлайн
+    await User.findByIdAndUpdate(req.user._id, {
+      status: 'offline',
+      lastSeen: new Date()
+    });
+
+    res.json({ message: 'Выход со всех устройств выполнен успешно' });
+  } catch (error) {
+    console.error('Logout-all error:', error);
+    res.status(500).json({ message: 'Ошибка сервера при выходе со всех устройств' });
+  }
+});
+
+/**
  * POST /api/auth/socket-token
  * Выдать короткоживущий JWT специально для Socket.io.
  *
@@ -662,7 +740,7 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('+password')
       .populate('servers', 'name icon')
-      .populate('friends', 'username avatar status role');
+      .populate('friends', 'username nickname avatar status role');
 
     const userObj = buildAuthUser(user, { servers: user.servers, friends: user.friends });
 

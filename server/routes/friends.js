@@ -15,9 +15,9 @@ const authMiddleware = require('../middleware/auth');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .populate('friends', 'username avatar status discriminator customStatus lastSeen')
-      .populate('friendRequestsReceived.from', 'username avatar discriminator')
-      .populate('friendRequestsSent.to', 'username avatar discriminator');
+      .populate('friends', 'username nickname avatar status discriminator customStatus lastSeen')
+      .populate('friendRequestsReceived.from', 'username nickname avatar discriminator')
+      .populate('friendRequestsSent.to', 'username nickname avatar discriminator');
     
     res.json({
       friends: user.friends,

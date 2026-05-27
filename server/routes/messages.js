@@ -38,10 +38,10 @@ router.get('/:channelId', authMiddleware, async (req, res) => {
     }
     
     const messages = await Message.find(query)
-      .populate('author', 'username avatar discriminator role')
+      .populate('author', 'username nickname avatar discriminator role')
       .populate({
         path: 'replyTo',
-        populate: { path: 'author', select: 'username avatar role' }
+        populate: { path: 'author', select: 'username nickname avatar role' }
       })
       .sort({ createdAt: -1 })
       .limit(parseInt(limit));
@@ -102,11 +102,11 @@ router.post('/:channelId', authMiddleware, messageLimiter, messageAntiSpamMiddle
     await Channel.findByIdAndUpdate(channelId, { lastMessage: message._id });
     
     // Заполняем данные автора
-    await message.populate('author', 'username avatar discriminator role');
+    await message.populate('author', 'username nickname avatar discriminator role');
     if (validReplyTo) {
       await message.populate({
         path: 'replyTo',
-        populate: { path: 'author', select: 'username avatar role' }
+        populate: { path: 'author', select: 'username nickname avatar role' }
       });
     }
     
@@ -146,7 +146,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     message.editedAt = new Date();
     
     await message.save();
-    await message.populate('author', 'username avatar discriminator role');
+    await message.populate('author', 'username nickname avatar discriminator role');
     
     res.json({ message });
     
@@ -241,7 +241,7 @@ router.post('/:id/react', authMiddleware, async (req, res) => {
     }
     
     await message.save();
-    await message.populate('author', 'username avatar discriminator role');
+    await message.populate('author', 'username nickname avatar discriminator role');
     
     res.json({ message });
     

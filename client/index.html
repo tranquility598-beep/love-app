@@ -41,6 +41,22 @@
   <div class="loading-status" id="loading-status"></div>
 </div>
 
+<div class="modal-overlay hidden" id="legal-modal">
+  <div class="modal legal-modal">
+    <div class="modal-header">
+      <h2 id="legal-modal-title">Условия использования</h2>
+      <button class="modal-close-btn" onclick="closeModal('legal-modal')" aria-label="Закрыть">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body legal-modal-body" id="legal-modal-body">
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn primary" onclick="closeModal('legal-modal')">Понятно</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="google-onboarding-modal">
   <div class="modal confirm-dialog">
     <div class="modal-header">
@@ -131,12 +147,12 @@
     <div id="otp-error" class="auth-error hidden"></div>
     
     <div class="otp-input-container">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-1" oninput="handleOtpInput(this, 1)" onkeydown="handleOtpKeyDown(event, 1)">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-2" oninput="handleOtpInput(this, 2)" onkeydown="handleOtpKeyDown(event, 2)">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-3" oninput="handleOtpInput(this, 3)" onkeydown="handleOtpKeyDown(event, 3)">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-4" oninput="handleOtpInput(this, 4)" onkeydown="handleOtpKeyDown(event, 4)">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-5" oninput="handleOtpInput(this, 5)" onkeydown="handleOtpKeyDown(event, 5)">
-      <input type="text" maxlength="1" class="otp-digit" id="otp-6" oninput="handleOtpInput(this, 6)" onkeydown="handleOtpKeyDown(event, 6)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-1" oninput="handleOtpInput(this, 1)" onkeydown="handleOtpKeyDown(event, 1)" onpaste="handleOtpPaste(event)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-2" oninput="handleOtpInput(this, 2)" onkeydown="handleOtpKeyDown(event, 2)" onpaste="handleOtpPaste(event)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-3" oninput="handleOtpInput(this, 3)" onkeydown="handleOtpKeyDown(event, 3)" onpaste="handleOtpPaste(event)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-4" oninput="handleOtpInput(this, 4)" onkeydown="handleOtpKeyDown(event, 4)" onpaste="handleOtpPaste(event)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-5" oninput="handleOtpInput(this, 5)" onkeydown="handleOtpKeyDown(event, 5)" onpaste="handleOtpPaste(event)">
+      <input type="text" maxlength="1" class="otp-digit" id="otp-6" oninput="handleOtpInput(this, 6)" onkeydown="handleOtpKeyDown(event, 6)" onpaste="handleOtpPaste(event)">
     </div>
 
     <button class="auth-btn" id="verify-btn" onclick="handleVerifyOtp()">
@@ -205,12 +221,12 @@
     <div id="reset-error" class="auth-error hidden"></div>
     
     <div class="otp-input-container">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-1" oninput="handleOtpInput(this, 1, 'reset')" onkeydown="handleOtpKeyDown(event, 1, 'reset')">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-2" oninput="handleOtpInput(this, 2, 'reset')" onkeydown="handleOtpKeyDown(event, 2, 'reset')">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-3" oninput="handleOtpInput(this, 3, 'reset')" onkeydown="handleOtpKeyDown(event, 3, 'reset')">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-4" oninput="handleOtpInput(this, 4, 'reset')" onkeydown="handleOtpKeyDown(event, 4, 'reset')">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-5" oninput="handleOtpInput(this, 5, 'reset')" onkeydown="handleOtpKeyDown(event, 5, 'reset')">
-      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-6" oninput="handleOtpInput(this, 6, 'reset')" onkeydown="handleOtpKeyDown(event, 6, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-1" oninput="handleOtpInput(this, 1, 'reset')" onkeydown="handleOtpKeyDown(event, 1, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-2" oninput="handleOtpInput(this, 2, 'reset')" onkeydown="handleOtpKeyDown(event, 2, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-3" oninput="handleOtpInput(this, 3, 'reset')" onkeydown="handleOtpKeyDown(event, 3, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-4" oninput="handleOtpInput(this, 4, 'reset')" onkeydown="handleOtpKeyDown(event, 4, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-5" oninput="handleOtpInput(this, 5, 'reset')" onkeydown="handleOtpKeyDown(event, 5, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
+      <input type="text" maxlength="1" class="otp-digit reset-otp" id="reset-otp-6" oninput="handleOtpInput(this, 6, 'reset')" onkeydown="handleOtpKeyDown(event, 6, 'reset')" onpaste="handleOtpPaste(event, 'reset')">
     </div>
 
     <div class="auth-divider">
@@ -265,6 +281,9 @@
     <button class="auth-btn" id="register-btn" onclick="handleRegister()">
       Создать аккаунт
     </button>
+    <div class="auth-legal-text">
+      Нажимая «Создать аккаунт», вы соглашаетесь с <a onclick="openLegalModal('terms')">Условиями использования</a> и <a onclick="openLegalModal('privacy')">Политикой конфиденциальности</a>.
+    </div>
     <div class="auth-divider">
       <span>Уже есть аккаунт?</span>
       <a class="auth-link" onclick="showLogin()">Войти</a>
@@ -454,7 +473,6 @@
         <div class="voice-panel hidden" id="voice-panel">
           <div class="voice-panel-info">
             <div class="voice-panel-status">
-              <div class="voice-status-dot"></div>
               <span id="voice-channel-name">Голосовой канал</span>
             </div>
             <div class="voice-panel-server" id="voice-server-name"></div>
@@ -480,7 +498,7 @@
       <div class="user-panel" id="user-panel-root">
         <div class="user-panel-avatar" onclick="toggleProfilePopover(event)">
           <img class="avatar-img" id="user-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23222'/%3E%3Cpath d='M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z' fill='white' opacity='0.6'/%3E%3C/svg%3E" alt="Avatar">
-          <div class="user-status-dot online" id="user-status-dot"></div>
+          <div class="status-dot online" id="user-status-dot"></div>
         </div>
         <div class="user-panel-info" onclick="toggleProfilePopover(event)">
           <div class="user-panel-name" id="user-panel-name">Загрузка...</div>
@@ -1266,14 +1284,17 @@
 <div class="modal-overlay hidden" id="settings-modal">
   <div class="settings-modal">
     <div class="settings-sidebar">
-      <div class="settings-section-title">Аккаунт</div>
+      <div class="settings-section-title">Настройки пользователя</div>
       <div class="settings-nav-item active" onclick="showSettingsTab('profile', this)">Профиль</div>
+      <div class="settings-nav-item" onclick="showSettingsTab('account', this)">Учетная запись</div>
+      <div class="settings-nav-item" id="settings-security-nav" onclick="showSettingsTab('security', this)">Активность входов</div>
+      <div class="settings-divider"></div>
+      <div class="settings-section-title">Настройки приложения</div>
       <div class="settings-nav-item" onclick="showSettingsTab('appearance', this)">Внешний вид</div>
       <div class="settings-nav-item" onclick="showSettingsTab('notifications', this)">Уведомления</div>
       <div class="settings-nav-item" onclick="showSettingsTab('voice', this)">Голос и видео</div>
       <div class="settings-nav-item" onclick="showSettingsTab('privacy', this)">Конфиденциальность</div>
       <div class="settings-nav-item" onclick="showSettingsTab('language', this)">Язык и регион</div>
-      <div class="settings-nav-item" id="settings-security-nav" onclick="showSettingsTab('security', this)">Безопасность</div>
       <div class="settings-divider"></div>
       <div class="settings-nav-item danger" onclick="handleLogout()">Выйти</div>
     </div>
@@ -1302,8 +1323,8 @@
         <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
         
         <div class="settings-field">
-          <label class="settings-label">Имя пользователя</label>
-          <input type="text" id="settings-username" class="settings-input" placeholder="username">
+          <label class="settings-label">Отображаемое имя</label>
+          <input type="text" id="settings-nickname" class="settings-input" placeholder="Никнейм">
         </div>
         <div class="settings-field">
           <label class="settings-label">О себе</label>
@@ -1694,8 +1715,21 @@
 
       <!-- Security Tab -->
       <div class="settings-tab hidden" id="settings-security">
-        <h2 class="settings-title">Безопасность</h2>
-        <p class="settings-description">История входов в ваш аккаунт. Если вы видите незнакомый IP или устройство, рекомендуется сменить пароль.</p>
+        <h2 class="settings-title">Активность входов</h2>
+        <div class="security-logs-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <p class="settings-description" style="margin: 0; max-width: 70%;">История входов в ваш аккаунт. Если вы видите незнакомый IP или устройство, вы можете завершить сессии.</p>
+          <button class="security-action-btn danger" style="margin: 0; padding: 8px 16px; font-size: 12px; width: auto;" onclick="logoutAllDevices()">Выйти со всех устройств</button>
+        </div>
+        
+        <div class="login-logs-list" id="login-logs-list">
+          <div class="logs-loading">Загрузка данных...</div>
+        </div>
+      </div>
+
+      <!-- Account Tab -->
+      <div class="settings-tab hidden" id="settings-account">
+        <h2 class="settings-title">Учетная запись</h2>
+        <p class="settings-description">Настройки безопасности и доступа к вашему аккаунту.</p>
 
         <div class="security-panel hidden" id="security-password-alert">
           <div>
@@ -1704,11 +1738,12 @@
           </div>
         </div>
 
+        <!-- Change Username -->
         <div class="settings-field security-card">
           <div class="security-card-head">
             <div>
-              <label class="settings-label">Имя пользователя</label>
-              <div class="settings-hint" id="security-username-hint">Имя пользователя можно менять один раз в 7 дней.</div>
+              <label class="settings-label">Имя пользователя (системное)</label>
+              <div class="settings-hint" id="security-username-hint">Имя пользователя можно менять один раз в 7 дней. Используется для упоминаний и авторизации.</div>
             </div>
           </div>
           <input type="text" id="security-username-input" class="settings-input" placeholder="Новое имя пользователя">
@@ -1716,6 +1751,20 @@
           <button class="security-action-btn" onclick="changeSecurityUsername()">Изменить имя пользователя</button>
         </div>
 
+        <!-- Change Email -->
+        <div class="settings-field security-card">
+          <div class="security-card-head">
+            <div>
+              <label class="settings-label">Электронная почта (Email)</label>
+              <div class="settings-hint">Почта используется для авторизации и двухфакторной аутентификации.</div>
+            </div>
+          </div>
+          <input type="email" id="security-email-input" class="settings-input" placeholder="Новый email">
+          <input type="password" id="security-email-password" class="settings-input" placeholder="Текущий пароль для подтверждения">
+          <button class="security-action-btn" onclick="changeSecurityEmail()">Изменить email</button>
+        </div>
+
+        <!-- Change Password -->
         <div class="settings-field security-card">
           <label class="settings-label">Сменить пароль</label>
           <input type="password" id="security-current-password" class="settings-input" placeholder="Текущий пароль">
@@ -1724,6 +1773,7 @@
           <button class="security-action-btn" onclick="changeSecurityPassword()">Изменить пароль</button>
         </div>
 
+        <!-- 2FA -->
         <div class="settings-field security-card">
           <div class="security-card-head">
             <div>
@@ -1735,10 +1785,6 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
-        </div>
-        
-        <div class="login-logs-list" id="login-logs-list">
-          <div class="logs-loading">Загрузка данных...</div>
         </div>
       </div>
 
@@ -1909,9 +1955,11 @@
 <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js" type="module"></script>
 <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+<script src="js/navigation-controller.js"></script>
 <script src="js/sanitize.js"></script>
 <script src="js/api.js"></script>
 <script src="js/socket.js"></script>
+<script src="js/sound-manager.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/settings.js"></script>
@@ -1948,7 +1996,17 @@ function togglePassword(inputId, btn) {
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
+  if (window.OverlayManager && typeof window.OverlayManager.close === 'function') {
+    window.OverlayManager.close(id);
+  } else if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+    window.ModalManager.close(id);
+  } else {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.add('hidden');
+      el.style.pointerEvents = 'none';
+    }
+  }
 }
 
 function selectChannelType(type, el) {
@@ -1991,31 +2049,7 @@ function showServerSettingsTab(tab, el) {
   document.getElementById('server-settings-' + tab).classList.remove('hidden');
 }
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', (e) => {
-    // Не закрываем окно разработчиков кликом по оверлею
-    if (overlay.id === 'developer-modal-egg') return;
-    
-    if (e.target === overlay) {
-      overlay.classList.add('hidden');
-    }
-  });
-});
-
-// Keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    // Не закрываем окно разработчиков через Escape
-    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
-      if (m.id !== 'developer-modal-egg') m.classList.add('hidden');
-    });
-    const contextMenu = document.querySelector('.context-menu');
-    if (contextMenu) contextMenu.remove();
-    const emojiPicker = document.getElementById('emoji-picker-container');
-    if (emojiPicker) emojiPicker.classList.add('hidden');
-  }
-});
+// Modals click-outside and ESC keydown are now handled exclusively by ModalManager in ui.js
 
 // ===== SETTINGS SLIDERS =====
 
@@ -2126,7 +2160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="profile-header">
       <div class="profile-avatar-container">
         <img id="profile-avatar" class="profile-avatar" src="" alt="">
-        <div class="profile-status-indicator" id="profile-status"></div>
+        <div class="status-dot" id="profile-status-dot"></div>
       </div>
       
       <div class="profile-info">
@@ -2209,9 +2243,11 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="popover-body">
     <div class="popover-avatar-wrap">
       <img class="popover-avatar" id="popover-avatar" src="" alt="">
-      <div class="popover-status-dot" id="popover-status-dot"></div>
+      <div class="status-dot" id="popover-status-dot"></div>
     </div>
-    <div class="popover-username" id="popover-username"></div>
+    <div class="popover-username-container" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; margin-bottom: 2px;">
+      <div class="popover-username" id="popover-username"></div>
+    </div>
     <div class="popover-status-text" id="popover-status-text"></div>
     <div class="popover-divider"></div>
     <div class="popover-section-title">О СЕБЕ</div>
@@ -2227,6 +2263,6 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
-
+<script src="js/runtime-diagnostics.js"></script>
 </body>
 </html>

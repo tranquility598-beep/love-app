@@ -3,6 +3,7 @@
  */
 
 let currentProfileUserId = null;
+window.currentProfileUserId = null; // Export for socket handlers
 
 /**
  * Открыть профиль пользователя
@@ -14,13 +15,16 @@ function openProfile(userId) {
   }
   
   currentProfileUserId = userId;
+  window.currentProfileUserId = userId;
   const modal = document.getElementById('profile-modal');
   const editBtn = document.getElementById('profile-edit-btn');
   const messageBtn = document.getElementById('profile-message-btn');
   const blockBtn = document.getElementById('profile-block-btn');
   
-  // Показываем модалку
-  if (modal) modal.classList.remove('hidden');
+  // Показываем модалку через ModalManager
+  if (modal && typeof openModal === 'function') {
+    openModal('profile-modal');
+  }
   
   // Проверяем свой ли это профиль
   const isOwnProfile = userId === window.currentUser._id;
@@ -46,9 +50,11 @@ function openProfile(userId) {
  * Закрыть модалку профиля
  */
 function closeProfileModal() {
-  const modal = document.getElementById('profile-modal');
-  modal.classList.add('hidden');
+  if (typeof closeModal === 'function') {
+    closeModal('profile-modal');
+  }
   currentProfileUserId = null;
+  window.currentProfileUserId = null;
 }
 
 // Функции редактирования профиля перенесены в настройки (settings.js/ui.js)
@@ -62,7 +68,6 @@ function displayProfile(profile) {
   const username = document.getElementById('profile-username');
   const bio = document.getElementById('profile-bio');
   const memberSince = document.getElementById('profile-member-since');
-  const status = document.getElementById('profile-status');
   const badges = document.getElementById('profile-badges');
   
   // Баннер
@@ -81,8 +86,43 @@ function displayProfile(profile) {
   // Аватар
   avatar.src = typeof getAvatarUrl === 'function' ? getAvatarUrl(profile.avatar, profile.username) : (profile.avatar || 'https://via.placeholder.com/100?text=' + (profile.username ? profile.username[0] : '?'));
   
-  // Имя пользователя
-  username.textContent = profile.username;
+  // Render status dot overlay
+  const statusDot = document.getElementById('profile-status-dot');
+  if (statusDot) {
+    const profileId = profile._id || profile.id;
+    let currentStatus = profile.status || 'online';
+    
+    // Check if it's current user
+    if (window.currentUser && window.currentUser._id === profileId) {
+      currentStatus = window.currentUser.status || 'online';
+    } else if (profileId) {
+      // Find any existing status dot for this user on the page to get real-time state
+      const existingDot = document.querySelector(`[data-user-id="${profileId}"] .status-dot`);
+      if (existingDot) {
+        if (existingDot.classList.contains('online')) currentStatus = 'online';
+        else if (existingDot.classList.contains('idle')) currentStatus = 'idle';
+        else if (existingDot.classList.contains('dnd')) currentStatus = 'dnd';
+        else if (existingDot.classList.contains('offline')) currentStatus = 'offline';
+      }
+    }
+    
+    statusDot.className = 'status-dot ' + currentStatus;
+  }
+  
+  // Имя пользователя (Никнейм)
+  if (username) {
+    username.textContent = profile.nickname || profile.username;
+    
+    // Системный юзернейм (ручка)
+    let handle = document.getElementById('profile-username-handle');
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.id = 'profile-username-handle';
+      handle.className = 'profile-username-handle';
+      username.parentNode.insertBefore(handle, username.nextSibling);
+    }
+    handle.textContent = `@${profile.username}`;
+  }
   
   // Биография
   bio.textContent = profile.bio ? profile.bio : 'Биография не указана';
@@ -95,10 +135,7 @@ function displayProfile(profile) {
   } else {
     memberSince.style.display = 'none';
   }
-  
-  // Статус
-  status.className = 'profile-status-indicator ' + (profile.status || 'offline');
-  
+
   // Соцсети
   const socialLinks = document.getElementById('profile-social-links');
   if (socialLinks) {
@@ -198,47 +235,6 @@ function messageUser() {
 
 // ==================== SOCKET ОБРАБОТЧИКИ ====================
 
-if (window.socket) {
-  // Получены данные профиля
-  window.socket.on('profile:data', (profile) => {
-    displayProfile(profile);
-  });
-  
-  // Профиль успешно обновлен
-  window.socket.on('profile:update_success', (profile) => {
-    // Обновляем текущего пользователя
-    window.currentUser = { ...window.currentUser, ...profile };
-    
-    // Обновляем отображение профиля если он открыт
-    if (currentProfileUserId === profile._id) {
-      displayProfile(profile);
-    }
-    
-    // Показываем уведомление
-    if (typeof showNotification === 'function') {
-      showNotification('success', 'Профиль успешно обновлен');
-    }
-  });
-  
-  // Профиль другого пользователя обновлен
-  window.socket.on('profile:updated', (data) => {
-    // Обновляем отображение если профиль открыт
-    if (currentProfileUserId === data.userId) {
-      displayProfile(data.profile);
-    }
-  });
-  
-  // Пользователь заблокирован
-  window.socket.on('user:blocked', (data) => {
-    if (typeof showNotification === 'function') showNotification('success', 'Пользователь заблокирован');
-  });
-  
-  // Пользователь разблокирован
-  window.socket.on('user:unblocked', (data) => {
-    if (typeof showNotification === 'function') showNotification('success', 'Пользователь разблокирован');
-  });
-}
-
 // ==================== EVENT LISTENERS ====================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -283,15 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   
-  // Закрытие модалки по клику вне её
-  const modal = document.getElementById('profile-modal');
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeProfileModal();
-      }
-    });
-  }
+  // Click-outside handler is now managed by ModalManager in ui.js
+  // Removed duplicate event listener
 });
 
 // Дубликат функции showNotification удален. Используется глобальная из ui.js

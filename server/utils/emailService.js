@@ -144,7 +144,11 @@ const sendEmail = async (to, subject, html) => {
     console.log('Email sent: %s', info.messageId);
     return true;
   } catch (error) {
-    console.error('Send email error:', error);
+    console.error('Send email error:', error.message);
+    if (error.response) {
+      console.error('SMTP Response:', error.response);
+    }
+    console.error('Full stack:', error);
     return false;
   }
 };

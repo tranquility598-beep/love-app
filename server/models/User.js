@@ -37,6 +37,14 @@ const userSchema = new mongoose.Schema({
   },
   
   // Профиль
+  nickname: {
+    type: String,
+    trim: true,
+    maxlength: 32,
+    default: function() {
+      return this.username;
+    }
+  },
   avatar: {
     type: String,
     default: null // URL аватара
@@ -168,6 +176,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  otpLastSentAt: {
+    type: Date,
+    default: null
+  },
   
   // Безопасность и блокировка
   loginAttempts: {
@@ -224,6 +236,7 @@ userSchema.methods.toPublicJSON = function() {
   return {
     _id: this._id,
     username: this.username,
+    nickname: this.nickname || this.username,
     role: this.role,
     avatar: this.avatar,
     banner: this.banner,

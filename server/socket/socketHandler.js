@@ -224,11 +224,11 @@ module.exports = (io) => {
           await Channel.findByIdAndUpdate(channelId, { lastMessage: message._id });
           
           // Заполняем данные
-          await message.populate('author', 'username avatar discriminator role');
+          await message.populate('author', 'username nickname avatar discriminator role');
           if (validReplyTo) {
             await message.populate({
               path: 'replyTo',
-              populate: { path: 'author', select: 'username avatar role' }
+              populate: { path: 'author', select: 'username nickname avatar role' }
             });
           }
           
@@ -330,7 +330,7 @@ module.exports = (io) => {
         message.editedAt = new Date();
         await message.save();
         
-        await message.populate('author', 'username avatar discriminator role');
+        await message.populate('author', 'username nickname avatar discriminator role');
         
         const channel = await Channel.findById(message.channel);
         
@@ -561,6 +561,7 @@ module.exports = (io) => {
             userId: m.userId,
             socketId: m.socketId,
             username: m.username,
+            nickname: m.nickname,
             avatar: m.avatar
           }));
           socket.emit('voice:existing_members', { channelId, members: existingMembers });
@@ -593,6 +594,7 @@ module.exports = (io) => {
           userId: m.userId,
           socketId: m.socketId,
           username: m.username,
+          nickname: m.nickname,
           avatar: m.avatar
         }));
         
@@ -601,6 +603,7 @@ module.exports = (io) => {
           userId,
           socketId: socket.id,
           username: socket.user.username,
+          nickname: socket.user.nickname,
           avatar: socket.user.avatar
         });
         
@@ -635,6 +638,7 @@ module.exports = (io) => {
           userId,
           socketId: socket.id,
           username: socket.user.username,
+          nickname: socket.user.nickname,
           avatar: socket.user.avatar
         });
         
@@ -1353,7 +1357,7 @@ module.exports = (io) => {
       const channel = await Channel.findById(channelId)
         .populate({
           path: 'pinnedMessages',
-          populate: { path: 'author', select: 'username avatar role' }
+          populate: { path: 'author', select: 'username nickname avatar role' }
         });
       
       if (!channel) {
@@ -1394,7 +1398,7 @@ module.exports = (io) => {
         channel: channelId,
         content: { $regex: query, $options: 'i' } // case-insensitive поиск
       })
-        .populate('author', 'username avatar role')
+        .populate('author', 'username nickname avatar role')
         .sort({ createdAt: -1 })
         .limit(limit);
       
@@ -1438,7 +1442,7 @@ module.exports = (io) => {
         channel: { $in: channelIds },
         content: { $regex: query, $options: 'i' }
       })
-        .populate('author', 'username avatar role')
+        .populate('author', 'username nickname avatar role')
         .populate('channel', 'name')
         .sort({ createdAt: -1 })
         .limit(limit);

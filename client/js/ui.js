@@ -115,10 +115,8 @@ function showNotification(type, message, title) {
 
   container.appendChild(notif);
   
-  // Воспроизводим звук если настройка включена
-  if (window.settingsManager && window.settingsManager.get('notif-sound')) {
-    playNotificationSound(type);
-  }
+  // Sound is NOT played here. Only communication events
+  // (DMs, mentions) trigger sound via their own handlers.
   
   setTimeout(() => {
     notif.style.animation = 'slideOut 0.3s ease forwards';
@@ -176,57 +174,20 @@ function showGlobalAnnouncementBanner(data) {
 window.showGlobalAnnouncementBanner = showGlobalAnnouncementBanner;
 
 // Воспроизведение звука уведомления
-function playNotificationSound(type) {
-  try {
-    const audio = new Audio();
-    // Разные звуки для разных типов уведомлений
-    const frequencies = {
-      success: [523.25, 659.25], // C5, E5
-      error: [392.00, 329.63],   // G4, E4
-      warning: [440.00, 493.88], // A4, B4
-      info: [523.25, 587.33]     // C5, D5
-    };
-    
-    const freq = frequencies[type] || frequencies.info;
-    
-    // Создаем простой звук используя Web Audio API
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = freq[0];
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
-    
-    // Второй тон
-    setTimeout(() => {
-      const osc2 = audioContext.createOscillator();
-      const gain2 = audioContext.createGain();
-      osc2.connect(gain2);
-      gain2.connect(audioContext.destination);
-      osc2.frequency.value = freq[1];
-      osc2.type = 'sine';
-      gain2.gain.setValueAtTime(0.1, audioContext.currentTime);
-      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-      osc2.start(audioContext.currentTime);
-      osc2.stop(audioContext.currentTime + 0.1);
-    }, 50);
-  } catch (err) {
-    console.error('Error playing notification sound:', err);
-  }
-}
+/**
+ * Legacy playNotificationSound removed.
+ * Sound is now handled exclusively by SoundManager
+ * and only triggered for communication events.
+ */
 
 function showMessageNotification(message) {
   if (document.hasFocus()) return;
   showNotification('info', message.content?.substring(0, 80) || 'Новое сообщение', message.author?.username);
+  
+  // Only real communication events trigger sound
+  if (window.settingsManager && window.settingsManager.get('notif-sound')) {
+    if (window.SoundManager) window.SoundManager.play('notification');
+  }
 }
 
 // ===== МОДАЛЬНЫЕ ОКНА — UNIFIED ARCHITECTURE =====
@@ -243,7 +204,7 @@ const ModalManager = {
   /**
    * Opens a modal and adds it to the stack
    * @param {string} id - Modal overlay element ID
-   * @param {Object} options - { allowEscape: true, allowClickOutside: true, initialFocus: null }
+   * @param {Object} options - { allowEscape: true, allowClickOutside: true, initialFocus: null, backdropId: null }
    */
   open(id, options = {}) {
     const modal = document.getElementById(id);
@@ -252,10 +213,11 @@ const ModalManager = {
       return;
     }
 
-    // Check if already open
-    if (this.stack.find(m => m.id === id)) {
-      console.warn(`[ModalManager] Modal already open: ${id}`);
-      return;
+    // Check if already open - if so, remove stale entry
+    const existingIndex = this.stack.findIndex(m => m.id === id);
+    if (existingIndex !== -1) {
+      console.warn(`[ModalManager] Removing stale modal entry: ${id}`);
+      this.stack.splice(existingIndex, 1);
     }
 
     // Store currently focused element
@@ -266,6 +228,7 @@ const ModalManager = {
       allowEscape: options.allowEscape !== false, // Default true
       allowClickOutside: options.allowClickOutside !== false, // Default true
       initialFocus: options.initialFocus || null,
+      backdropId: options.backdropId || null,
       ...options
     };
 
@@ -278,10 +241,27 @@ const ModalManager = {
     });
 
     // Set z-index based on stack position
-    modal.style.zIndex = this.baseZIndex + this.stack.length * 10;
+    const zIndexVal = this.baseZIndex + this.stack.length * 10;
+    modal.style.zIndex = zIndexVal;
+    modal.style.pointerEvents = 'auto';
 
-    // Show modal
+    // Show modal and handle transitions
     modal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      modal.classList.add('visible');
+    });
+
+    if (config.backdropId) {
+      const backdrop = document.getElementById(config.backdropId);
+      if (backdrop) {
+        backdrop.style.zIndex = zIndexVal - 1;
+        backdrop.style.pointerEvents = 'auto';
+        backdrop.classList.remove('hidden');
+        requestAnimationFrame(() => {
+          backdrop.classList.add('visible');
+        });
+      }
+    }
 
     // Enable scroll lock
     this.enableScrollLock();
@@ -309,11 +289,38 @@ const ModalManager = {
     const modalData = this.stack[index];
     const modal = modalData.element;
 
-    // Hide modal
+    // Synchronously remove visible, add hidden, and disable pointer events
+    modal.classList.remove('visible');
     modal.classList.add('hidden');
+    modal.style.pointerEvents = 'none';
+
+    // Synchronously hide associated backdrop (atomic state update)
+    if (modalData.backdropId) {
+      const backdrop = document.getElementById(modalData.backdropId);
+      if (backdrop) {
+        backdrop.classList.remove('visible');
+        backdrop.classList.add('hidden');
+        backdrop.style.pointerEvents = 'none';
+      }
+    }
 
     // Remove from stack
     this.stack.splice(index, 1);
+
+    // Forced backdrop synchronization: check all backdrops in the DOM
+    // and hide those that don't have a corresponding open modal in the stack.
+    const activeBackdropIds = new Set();
+    this.stack.forEach(m => {
+      if (m.backdropId) activeBackdropIds.add(m.backdropId);
+    });
+
+    document.querySelectorAll('[class*="backdrop"], [id*="backdrop"]').forEach(backdrop => {
+      if (!backdrop.id || !activeBackdropIds.has(backdrop.id)) {
+        backdrop.classList.remove('visible');
+        backdrop.classList.add('hidden');
+        backdrop.style.pointerEvents = 'none';
+      }
+    });
 
     // Disable scroll lock if no modals remain
     if (this.stack.length === 0) {
@@ -326,6 +333,15 @@ const ModalManager = {
         modalData.previousFocus.focus();
       } catch (e) {
         console.warn('[ModalManager] Could not return focus:', e);
+      }
+    }
+
+    // Call custom onClose callback if provided
+    if (typeof modalData.onClose === 'function') {
+      try {
+        modalData.onClose();
+      } catch (e) {
+        console.warn('[ModalManager] Error in onClose callback:', e);
       }
     }
 
@@ -618,13 +634,41 @@ function getFileIcon(mimetype) {
   return '📎';
 }
 
-function updateUserStatusInDOM(userId, status) {
+function updateUserStatus(userId, status) {
+  if (!userId) return;
+  const normalizedStatus = status || 'online';
+
+  // 1. Cache the status state on currentUser if it matches
+  if (window.currentUser && window.currentUser._id === userId) {
+    window.currentUser.status = normalizedStatus;
+  }
+
+  // 2. Update list and sidebar status dots (servers members and DM user list)
   document.querySelectorAll(`[data-user-id="${userId}"] .status-dot`).forEach(dot => {
-    dot.className = `status-dot ${status}`;
+    dot.className = `status-dot ${normalizedStatus}`;
   });
-  document.querySelectorAll(`[data-user-id="${userId}"] .user-status-dot`).forEach(dot => {
-    dot.className = `user-status-dot ${status}`;
-  });
+
+  // 3. Update current user specific panel indicators
+  if (window.currentUser && window.currentUser._id === userId) {
+    const userDot = document.getElementById('user-status-dot');
+    if (userDot) userDot.className = `status-dot ${normalizedStatus}`;
+    
+    const railDot = document.getElementById('rail-account-dot');
+    if (railDot) railDot.className = `rail-account-dot ${normalizedStatus}`;
+  }
+
+  // 4. Update active profile popover status dot
+  const activeUserId = window.activePopoverUserId || (window.currentUser && window.currentUser._id);
+  if (activeUserId === userId) {
+    const popoverDot = document.getElementById('popover-status-dot');
+    if (popoverDot) popoverDot.className = `status-dot ${normalizedStatus}`;
+  }
+
+  // 5. Update active profile modal status dot
+  if (window.currentProfileUserId === userId) {
+    const modalDot = document.getElementById('profile-status-dot');
+    if (modalDot) modalDot.className = `status-dot ${normalizedStatus}`;
+  }
 }
 
 // ===== ПАНЕЛЬ ПОЛЬЗОВАТЕЛЯ =====
@@ -636,28 +680,28 @@ function updateUserPanel() {
   const nameEl = document.getElementById('user-panel-name');
   const tagEl = document.getElementById('user-panel-tag');
   const avatarEl = document.getElementById('user-avatar'); // ID в HTML: user-avatar
-  const statusDot = document.getElementById('user-status-dot');
 
   if (nameEl) {
-    nameEl.textContent = user.username || 'Пользователь';
+    nameEl.textContent = user.nickname || user.username || 'Пользователь';
     if (user.role === 'owner') {
       nameEl.innerHTML += ' <span class="owner-badge" title="Создатель" style="font-size:1.1em; margin-left:4px;">👑</span>';
     }
   }
+  if (tagEl) {
+    tagEl.textContent = `@${user.username}`;
+  }
   if (avatarEl) avatarEl.src = getAvatarUrl(user.avatar, user.username);
-  if (statusDot) statusDot.className = 'user-status-dot ' + (user.status || 'online');
+
+  // Centralized status updates
+  updateUserStatus(user._id, user.status);
 
   // Compact account в server rail (виден в room-mode). Не дубликат
   // большого user-panel — это отдельный DOM-узел с другими id.
   const railImg = document.getElementById('rail-account-img');
-  const railDot = document.getElementById('rail-account-dot');
   const railProfileBtn = document.getElementById('rail-profile-btn');
   if (railImg) {
     railImg.src = getAvatarUrl(user.avatar, user.username);
     railImg.alt = user.username || '';
-  }
-  if (railDot) {
-    railDot.className = 'rail-account-dot ' + (user.status || 'online');
   }
   if (railProfileBtn && user.username) {
     railProfileBtn.title = user.username;
@@ -1040,13 +1084,13 @@ function getStatusText(status) {
 function updateProfilePopover() {
   const user = window.currentUser;
   if (!user) return;
+  window.activePopoverUserId = user._id;
 
   const avatar = document.getElementById('popover-avatar');
   const username = document.getElementById('popover-username');
   const statusText = document.getElementById('popover-status-text');
   const bio = document.getElementById('popover-bio');
   const memberSince = document.getElementById('popover-member-since');
-  const statusDot = document.getElementById('popover-status-dot');
   const banner = document.getElementById('popover-banner');
   
   // Принимаем только hex — защита от CSS-инъекций.
@@ -1054,7 +1098,23 @@ function updateProfilePopover() {
   const profileColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawColor) ? rawColor : '#5865F2';
 
   if (avatar) avatar.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
-  if (username) username.textContent = user.username || '';
+  if (username) {
+    username.textContent = user.nickname || user.username || '';
+    
+    // Юзернейм (ручка) в поповере
+    let handle = document.getElementById('popover-username-handle');
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.id = 'popover-username-handle';
+      handle.className = 'popover-username-handle';
+      handle.style.fontSize = '12px';
+      handle.style.color = 'var(--text-muted)';
+      handle.style.marginTop = '2px';
+      const container = username.parentNode;
+      container.parentNode.insertBefore(handle, container.nextSibling);
+    }
+    handle.textContent = `@${user.username}`;
+  }
   if (statusText) statusText.textContent = getStatusText(user.status);
   if (bio) bio.textContent = user.bio ? user.bio : 'Биография не указана';
   
@@ -1068,9 +1128,8 @@ function updateProfilePopover() {
     }
   }
   
-  if (statusDot) {
-    statusDot.className = 'popover-status-dot ' + (user.status || 'online');
-  }
+  // Centralized status updates
+  updateUserStatus(user._id, user.status);
   
   // Apply profile color glow to banner
   if (banner) {
@@ -1116,7 +1175,7 @@ function showSettings() {
   if (!user) return;
 
   const avatarEl = document.getElementById('settings-avatar');
-  const usernameEl = document.getElementById('settings-username');
+  const nicknameEl = document.getElementById('settings-nickname');
   const bioEl = document.getElementById('settings-bio');
   const statusEl = document.getElementById('settings-status');
   const usernameDisplay = document.getElementById('settings-username-display');
@@ -1125,18 +1184,23 @@ function showSettings() {
   const banner = document.getElementById('settings-profile-banner');
 
   if (avatarEl) avatarEl.src = user.avatar ? getAvatarUrl(user.avatar) : generateDefaultAvatar(user.username);
-  if (usernameEl) usernameEl.value = user.username || '';
+  if (nicknameEl) nicknameEl.value = user.nickname || user.username || '';
   if (bioEl) bioEl.value = user.bio || '';
   if (statusEl) statusEl.value = user.status || 'online';
   if (colorEl) colorEl.value = user.profileColor || '#5865F2';
   if (usernameDisplay) {
-    usernameDisplay.textContent = user.username || '';
+    usernameDisplay.textContent = user.nickname || user.username || '';
     if (user.role === 'owner') usernameDisplay.innerHTML += ' 👑';
   }
   if (statusDisplay) statusDisplay.textContent = getStatusText(user.status);
 
   // Apply profile color glow to settings banner
   applyBannerGlow(banner, user.profileColor || '#5865F2');
+
+  // Синхронизируем поля учетной записи
+  if (typeof syncSecurityAccountFields === 'function') {
+    syncSecurityAccountFields();
+  }
 
   // Обновляем состояние кнопки сохранения
   checkProfileChanges();
@@ -1179,22 +1243,22 @@ function checkProfileChanges() {
   const user = window.currentUser;
   if (!user) return;
 
-  const usernameEl = document.getElementById('settings-username');
+  const nicknameEl = document.getElementById('settings-nickname');
   const bioEl = document.getElementById('settings-bio');
   const statusEl = document.getElementById('settings-status');
   const colorEl = document.getElementById('settings-profile-color');
 
-  const currentUsername = usernameEl ? usernameEl.value.trim() : '';
+  const currentNickname = nicknameEl ? nicknameEl.value.trim() : '';
   const currentBio = bioEl ? bioEl.value : '';
   const currentStatus = statusEl ? statusEl.value : 'online';
   const currentColor = colorEl ? colorEl.value : '#5865F2';
 
-  const originalUsername = user.username || '';
+  const originalNickname = user.nickname || user.username || '';
   const originalBio = user.bio || '';
   const originalStatus = user.status || 'online';
   const originalColor = user.profileColor || '#5865F2';
 
-  const hasChanges = (currentUsername !== originalUsername) || 
+  const hasChanges = (currentNickname !== originalNickname) || 
                      (currentBio !== originalBio) || 
                      (currentStatus !== originalStatus) ||
                      (currentColor.toLowerCase() !== originalColor.toLowerCase());
@@ -1206,7 +1270,7 @@ function checkProfileChanges() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const fields = ['settings-username', 'settings-bio', 'settings-status', 'settings-profile-color'];
+  const fields = ['settings-nickname', 'settings-bio', 'settings-status', 'settings-profile-color'];
   fields.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -1214,10 +1278,10 @@ document.addEventListener('DOMContentLoaded', () => {
         checkProfileChanges();
         
         // Моментальное обновление имени в превью
-        if (id === 'settings-username') {
+        if (id === 'settings-nickname') {
           const display = document.getElementById('settings-username-display');
           if (display && window.currentUser) {
-            display.textContent = e.target.value.trim() || window.currentUser.username;
+            display.textContent = e.target.value.trim() || window.currentUser.nickname || window.currentUser.username;
             if (window.currentUser.role === 'owner') {
               display.innerHTML += ' 👑';
             }
@@ -1252,18 +1316,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function saveProfile() {
-  const username = document.getElementById('settings-username') ? document.getElementById('settings-username').value.trim() : '';
+  const nickname = document.getElementById('settings-nickname') ? document.getElementById('settings-nickname').value.trim() : '';
   const bio = document.getElementById('settings-bio') ? document.getElementById('settings-bio').value : '';
   const status = document.getElementById('settings-status') ? document.getElementById('settings-status').value : 'online';
   const profileColor = document.getElementById('settings-profile-color') ? document.getElementById('settings-profile-color').value : '#5865F2';
 
-  if (!username) {
-    showNotification('warning', 'Введите имя пользователя');
+  if (!nickname) {
+    showNotification('warning', 'Отображаемое имя не может быть пустым');
     return;
   }
 
   try {
-    const data = await UsersAPI.updateProfile({ username, bio, profileColor });
+    const data = await UsersAPI.updateProfile({ nickname, bio, profileColor });
     if (status) await AuthAPI.updateStatus(status);
     window.currentUser = Object.assign({}, window.currentUser, (data.user || {}), { status, profileColor });
     localStorage.setItem('user', JSON.stringify(window.currentUser));
@@ -1274,7 +1338,7 @@ async function saveProfile() {
 
     const usernameDisplay = document.getElementById('settings-username-display');
     if (usernameDisplay) {
-      usernameDisplay.textContent = username;
+      usernameDisplay.textContent = window.currentUser.nickname || window.currentUser.username;
       if (window.currentUser.role === 'owner') usernameDisplay.innerHTML += ' 👑';
     }
     
@@ -1663,6 +1727,9 @@ async function deleteServer() {
           window.RoomsUI.closeSettingsPanel();
         }
         window.currentServer = null;
+        window.currentServerId = null;
+        window.currentChannel = null;
+        window.currentChannelId = null;
         if (typeof exitRoomMode === 'function') exitRoomMode();
         if (typeof showWelcomeView === 'function') showWelcomeView();
         else showDMView();
@@ -1694,6 +1761,9 @@ async function leaveServer() {
           window.RoomsUI.closeSettingsPanel();
         }
         window.currentServer = null;
+        window.currentServerId = null;
+        window.currentChannel = null;
+        window.currentChannelId = null;
         if (typeof exitRoomMode === 'function') exitRoomMode();
         if (typeof showWelcomeView === 'function') showWelcomeView();
         else showDMView();
@@ -1800,9 +1870,18 @@ function pinMessageFromContext() {
 
 // ===== ПРОСМОТР ИЗОБРАЖЕНИЙ =====
 function openImageViewer(url) {
+  let existing = document.getElementById('image-viewer-modal-overlay');
+  if (existing) {
+    if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+      window.ModalManager.close('image-viewer-modal-overlay');
+    } else {
+      existing.remove();
+    }
+  }
+
   const overlay = document.createElement('div');
+  overlay.id = 'image-viewer-modal-overlay';
   overlay.className = 'modal-overlay';
-  overlay.style.zIndex = '9999';
   overlay.innerHTML = `
     <div class="image-viewer" role="dialog" aria-label="Просмотр изображения">
       <div class="image-viewer-toolbar">
@@ -1845,13 +1924,27 @@ function openImageViewer(url) {
   overlay.addEventListener('click', function(e) {
     const action = e.target?.dataset?.action;
     if (action === 'close' || e.target === overlay) {
-      overlay.remove();
+      if (window.ModalManager && typeof window.ModalManager.close === 'function') {
+        window.ModalManager.close('image-viewer-modal-overlay');
+      } else {
+        overlay.remove();
+      }
       return;
     }
     if (action === 'zoom-in') setScale(scale + 0.25);
     if (action === 'zoom-out') setScale(scale - 0.25);
     if (action === 'reset') setScale(1);
   });
+
+  if (window.ModalManager && typeof window.ModalManager.open === 'function') {
+    window.ModalManager.open('image-viewer-modal-overlay', {
+      allowEscape: true,
+      allowClickOutside: true,
+      onClose: () => {
+        overlay.remove();
+      }
+    });
+  }
 
   overlay.addEventListener('wheel', function(e) {
     e.preventDefault();
@@ -2025,7 +2118,27 @@ function syncSecurityAccountFields() {
   }
 
   const usernamePassword = document.getElementById('security-username-password');
-  if (usernamePassword) usernamePassword.classList.toggle('hidden', !window.currentUser?.hasPassword);
+  if (usernamePassword) {
+    usernamePassword.value = '';
+    usernamePassword.classList.toggle('hidden', !window.currentUser?.hasPassword);
+  }
+
+  const emailInput = document.getElementById('security-email-input');
+  if (emailInput && window.currentUser?.email) {
+    emailInput.value = window.currentUser.email;
+  }
+
+  const emailPassword = document.getElementById('security-email-password');
+  if (emailPassword) {
+    emailPassword.value = '';
+    emailPassword.classList.toggle('hidden', !window.currentUser?.hasPassword);
+  }
+
+  // Clear other password fields
+  ['security-current-password', 'security-new-password', 'security-confirm-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
 
   const passwordAlert = document.getElementById('security-password-alert');
   if (passwordAlert) passwordAlert.classList.toggle('hidden', Boolean(window.currentUser?.hasPassword));
@@ -2061,13 +2174,30 @@ async function changeSecurityUsername() {
 
   try {
     const currentPassword = document.getElementById('security-username-password')?.value || '';
-    const data = await UsersAPI.updateProfile({ username, currentPassword });
+    const data = await UsersAPI.updateAccount({ username, currentPassword });
     window.currentUser = data.user;
     localStorage.setItem('user', JSON.stringify(data.user));
     syncSecurityAccountFields();
     if (typeof showNotification === 'function') showNotification('success', 'Имя пользователя изменено');
   } catch (error) {
     if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить имя');
+  }
+}
+
+async function changeSecurityEmail() {
+  const input = document.getElementById('security-email-input');
+  const email = input?.value.trim();
+  if (!email) return;
+
+  try {
+    const currentPassword = document.getElementById('security-email-password')?.value || '';
+    const data = await UsersAPI.updateAccount({ email, currentPassword });
+    window.currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(data.user));
+    syncSecurityAccountFields();
+    if (typeof showNotification === 'function') showNotification('success', 'Email успешно изменен');
+  } catch (error) {
+    if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить email');
   }
 }
 
@@ -2102,14 +2232,33 @@ async function changeSecurityPassword() {
       window.currentUser = data.user;
       localStorage.setItem('user', JSON.stringify(data.user));
     }
-    ['security-current-password', 'security-new-password', 'security-confirm-password'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
     syncSecurityAccountFields();
     if (typeof showNotification === 'function') showNotification('success', 'Пароль изменен');
   } catch (error) {
     if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось изменить пароль');
+  }
+}
+
+async function logoutAllDevices() {
+  if (!confirm('Вы уверены, что хотите выйти со всех устройств? Все текущие сессии будут сброшены.')) {
+    return;
+  }
+  try {
+    await AuthAPI.logoutAll();
+    localStorage.removeItem('user');
+    window.currentUser = null;
+    if (typeof disconnectSocket === 'function') disconnectSocket();
+    if (typeof closeModal === 'function') closeModal('settings-modal');
+    if (typeof showAuthScreen === 'function') {
+      showAuthScreen();
+    } else {
+      document.getElementById('app')?.classList.add('hidden');
+      document.getElementById('login-screen')?.classList.remove('hidden');
+      document.getElementById('register-screen')?.classList.add('hidden');
+    }
+    if (typeof showNotification === 'function') showNotification('success', 'Вы вышли со всех устройств');
+  } catch (error) {
+    if (typeof showNotification === 'function') showNotification('error', error.message || 'Не удалось выйти со всех устройств');
   }
 }
 
@@ -2156,5 +2305,10 @@ async function deleteLoginLogRecord(logId, isCurrentSession = false) {
 window.loadLoginLogs = loadLoginLogs;
 window.deleteLoginLogRecord = deleteLoginLogRecord;
 window.changeSecurityUsername = changeSecurityUsername;
+window.changeSecurityEmail = changeSecurityEmail;
 window.changeSecurityPassword = changeSecurityPassword;
 window.toggleEmailTwoFactor = toggleEmailTwoFactor;
+window.logoutAllDevices = logoutAllDevices;
+window.ModalManager = ModalManager;
+window.openModal = openModal;
+window.closeModal = closeModal;

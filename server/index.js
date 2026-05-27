@@ -21,7 +21,14 @@ const app = express();
 const server = http.createServer(app);
 const passport = require('./config/passport');
 
-app.set('trust proxy', true);
+// Trust proxy configuration for rate limiting security
+// - Development (local): false - use direct IP
+// - Production (behind reverse proxy): 1 - trust first proxy only
+// This prevents IP spoofing attacks on rate limiters
+const isProduction = process.env.NODE_ENV === 'production';
+const trustProxyValue = isProduction ? 1 : false;
+app.set('trust proxy', trustProxyValue);
+console.log(`[Security] Trust proxy set to: ${trustProxyValue} (${isProduction ? 'production' : 'development'})`);
 
 // Инициализация Passport
 app.use(passport.initialize());

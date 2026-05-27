@@ -64,7 +64,6 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 10, // 10 попыток
   message: { message: 'Слишком много попыток входа, попробуйте через 15 минут' },
-  skipSuccessfulRequests: true, // Не считаем успешные попытки
   handler: (req, res) => {
     console.warn(`⚠️  Auth rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({ 

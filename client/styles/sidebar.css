@@ -318,6 +318,7 @@
   object-fit: cover;
   border: 2px solid var(--nav-item-border);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: block;
 }
 
 .dm-item:hover .dm-avatar img {
@@ -672,14 +673,21 @@ body.room-mode .server-rail-account {
 
 .rail-account-dot {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  bottom: calc(14.64% - 5px);
+  right: calc(14.64% - 5px);
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #ffffff;
   border: 2px solid var(--bg-primary);
+  background-color: var(--status-online);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
+
+.rail-account-dot.online { background-color: var(--status-online); }
+.rail-account-dot.idle { background-color: var(--status-idle); }
+.rail-account-dot.dnd { background-color: var(--status-dnd); }
+.rail-account-dot.offline { background-color: var(--status-offline); }
 
 .rail-account-settings {
   width: 28px;
@@ -816,6 +824,7 @@ body.room-mode .server-rail-account {
 }
 
 .popover-avatar {
+  display: block;
   width: 64px;
   height: 64px;
   border-radius: 50%;
@@ -824,20 +833,8 @@ body.room-mode .server-rail-account {
   object-fit: cover;
 }
 
-.popover-status-dot {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 3px solid var(--bg-secondary);
-  background: var(--status-offline);
-}
 
-.popover-status-dot.online { background: var(--status-online); }
-.popover-status-dot.idle { background: var(--status-idle); }
-.popover-status-dot.dnd { background: var(--status-dnd); }
+
 
 .popover-username {
   font-size: 18px;

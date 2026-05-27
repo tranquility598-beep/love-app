@@ -262,11 +262,7 @@ function buildFriendItem(friend, showActions) {
   avatarImg.src = getAvatarUrl(friend.avatar);
   avatarImg.alt = escapeHtml(friend.username);
   
-  const statusDot = document.createElement('div');
-  statusDot.className = `status-dot ${status}`;
-  
   friendAvatar.appendChild(avatarImg);
-  friendAvatar.appendChild(statusDot);
   
   // Информация
   const friendInfo = document.createElement('div');
@@ -274,7 +270,7 @@ function buildFriendItem(friend, showActions) {
   
   const friendName = document.createElement('div');
   friendName.className = 'friend-name';
-  friendName.textContent = friend.username; // ИСПРАВЛЕНО: Безопасно через textContent
+  friendName.textContent = friend.nickname || friend.username; // ИСПРАВЛЕНО: Безопасно через textContent
   
   if (friend.role === 'owner') {
     const crownSpan = document.createElement('span');
@@ -350,7 +346,7 @@ function buildPendingItem(user, type) {
   
   const friendName = document.createElement('div');
   friendName.className = 'friend-name';
-  friendName.textContent = user.username; // ИСПРАВЛЕНО: Безопасно через textContent
+  friendName.textContent = user.nickname || user.username; // ИСПРАВЛЕНО: Безопасно через textContent
   
   if (user.role === 'owner') {
     const crownSpan = document.createElement('span');

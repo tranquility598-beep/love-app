@@ -113,7 +113,6 @@
       }
       const requestSeq = ++this._serverNavigationSeq;
       const globalSeq = ++window._globalNavigationSeq;
-      window._activeNavigationRequestId = globalSeq;
       const triggeredBy = options.triggeredBy || 'navigateToServer';
 
       try {
@@ -125,6 +124,7 @@
         }
 
         this._acquireLock();
+        window._activeNavigationRequestId = globalSeq;
 
         try {
           const server = data.server;
@@ -301,7 +301,6 @@
       }
       const requestSeq = ++this._dmNavigationSeq;
       const globalSeq = ++window._globalNavigationSeq;
-      window._activeNavigationRequestId = globalSeq;
       const triggeredBy = options.triggeredBy || 'navigateToDM';
 
       try {
@@ -327,6 +326,7 @@
         }
 
         this._acquireLock();
+        window._activeNavigationRequestId = globalSeq;
 
         try {
           const other = conversation.participants?.find(p => p._id !== window.currentUser?._id);

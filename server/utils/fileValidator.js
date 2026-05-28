@@ -4,6 +4,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 
 // Magic bytes для проверки типов файлов
 const MAGIC_BYTES = {
@@ -144,7 +145,7 @@ function isAllowedMimeType(mimetype, isImage) {
 async function validateFile(file, isImage = false, fileCategory = 'document') {
   const errors = [];
 
-  if (!file || !file.data) {
+  if (!file || (!file.data && !file.tempFilePath)) {
     errors.push('Файл не предоставлен');
     return { valid: false, errors, sanitizedName: '' };
   }
@@ -156,7 +157,20 @@ async function validateFile(file, isImage = false, fileCategory = 'document') {
   }
 
   // Проверка magic bytes
-  const buffer = file.data;
+  // When useTempFiles is enabled, file.data may be undefined;
+  // read the first bytes from the temp file instead.
+  let buffer = file.data;
+  if (!buffer && file.tempFilePath) {
+    try {
+      const fd = fs.openSync(file.tempFilePath, 'r');
+      buffer = Buffer.alloc(16);
+      fs.readSync(fd, buffer, 0, 16, 0);
+      fs.closeSync(fd);
+    } catch (readErr) {
+      console.warn('[fileValidator] Failed to read temp file for magic bytes:', readErr.message);
+      buffer = null;
+    }
+  }
   const magicOk = (buffer && buffer.length > 0)
     ? checkMagicBytes(buffer, file.mimetype)
     : true;

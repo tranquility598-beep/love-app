@@ -41,18 +41,7 @@
     const stack = window.ModalManager.stack || [];
     const visibleModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
 
-    // Check: Stack count vs visible modals
-    if (stack.length !== visibleModals.length) {
-      log(
-        'modal',
-        `Stack has ${stack.length} modals but ${visibleModals.length} are visible in DOM`,
-        'high',
-        'ui.js',
-        'ModalManager',
-        'Call ModalManager.close() for stuck modals or remove stale stack entries'
-      );
-    }
-
+    // The length comparison check was removed here because the stack can contain non-overlay panels
     // Check: Modals in stack but hidden in DOM
     stack.forEach(modalData => {
       const el = document.getElementById(modalData.id);

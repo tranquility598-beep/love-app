@@ -70,8 +70,6 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
     let transformation = [];
     if (resourceType === 'image') {
       transformation.push({ quality: 'auto:good', fetch_format: 'auto', width: 2048, crop: 'limit' });
-    } else if (resourceType === 'video' && isVideo) {
-      transformation.push({ quality: 'auto:good', height: 1080, crop: 'limit', audio_codec: 'aac', audio_frequency: 44100 });
     }
     
     const uploadOptions = {
@@ -105,7 +103,7 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
     
   } catch (error) {
     console.error('Upload file error:', error);
-    res.status(500).json({ message: 'Ошибка при загрузке файла' });
+    res.status(500).json({ message: `Ошибка при загрузке файла: ${error.message || error}` });
   }
 });
 
@@ -163,8 +161,6 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
     let transformation = [];
     if (resourceType === 'image') {
       transformation.push({ quality: 'auto:good', fetch_format: 'auto', width: 2048, crop: 'limit' });
-    } else if (resourceType === 'video' && isVideo) {
-      transformation.push({ quality: 'auto:good', height: 1080, crop: 'limit', audio_codec: 'aac', audio_frequency: 44100 });
     }
     
     const uploadOptions = {
@@ -198,7 +194,7 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
     
   } catch (error) {
     console.error('Upload file error:', error);
-    res.status(500).json({ message: 'Ошибка при загрузке файла' });
+    res.status(500).json({ message: `Ошибка при загрузке файла: ${error.message || error}` });
   }
 });
 

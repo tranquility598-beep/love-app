@@ -1119,6 +1119,7 @@
 
       // Собираем вложения
       const mediaItems = [];
+      if (!Array.isArray(messages)) messages = [];
       messages.forEach(msg => {
         if (msg.attachments && msg.attachments.length > 0) {
           msg.attachments.forEach(att => {

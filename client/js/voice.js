@@ -21,6 +21,13 @@ class VoiceManager {
     this.remoteAudioStatsIntervals = new Map();
     this.channelMembers = [];
 
+    // Offer queue to prevent signaling glare (double-offer race condition)
+    this._offerQueue = new Map(); // socketId -> Array of pending offer tasks
+    this._processingOffer = new Map(); // socketId -> boolean
+
+    // ICE candidate buffer: store candidates that arrive before remote description is set
+    this._iceCandidateBuffer = new Map(); // socketId -> Array of RTCIceCandidate
+
     // ICE серверы для WebRTC
     this.iceServers = {
       iceServers: [
@@ -28,19 +35,19 @@ class VoiceManager {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turn:free.expressturn.com:3478',
+          username: '000000002095347409',
+          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
         },
         {
-          urls: 'turn:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turn:free.expressturn.com:3478?transport=tcp',
+          username: '000000002095347409',
+          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
         },
         {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
+          urls: 'turns:free.expressturn.com:443?transport=tcp',
+          username: '000000002095347409',
+          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
         }
       ]
     };
@@ -137,6 +144,11 @@ class VoiceManager {
     this.remoteAudioStatsIntervals.forEach(intervalId => clearInterval(intervalId));
     this.remoteAudioStatsIntervals.clear();
 
+    // Очищаем очереди и буферы сигнализации
+    this._offerQueue.clear();
+    this._processingOffer.clear();
+    this._iceCandidateBuffer.clear();
+
     // Останавливаем анализатор
     if (this.speakingCheckInterval) {
       clearInterval(this.speakingCheckInterval);
@@ -220,9 +232,44 @@ class VoiceManager {
   }
 
   /**
-   * Обработать входящий offer
+   * Обработать входящий offer (с очередью для предотвращения signaling glare)
    */
   async handleOffer(offer, fromSocketId, fromUserId) {
+    // Queue offers per peer to serialize processing and prevent glare
+    if (!this._offerQueue.has(fromSocketId)) {
+      this._offerQueue.set(fromSocketId, []);
+    }
+
+    const queue = this._offerQueue.get(fromSocketId);
+    
+    // If already processing an offer from this peer, queue the new one
+    // and drop any previously queued (only latest matters)
+    if (this._processingOffer.get(fromSocketId)) {
+      queue.length = 0; // drop stale queued offers
+      queue.push({ offer, fromSocketId, fromUserId });
+      console.log('[Voice] Queued offer from:', fromSocketId, '(previous still processing)');
+      return;
+    }
+
+    this._processingOffer.set(fromSocketId, true);
+    try {
+      await this._processOffer(offer, fromSocketId, fromUserId);
+    } finally {
+      this._processingOffer.set(fromSocketId, false);
+      // Process next queued offer if any
+      const next = queue.shift();
+      if (next) {
+        console.log('[Voice] Processing queued offer from:', next.fromSocketId);
+        this.handleOffer(next.offer, next.fromSocketId, next.fromUserId)
+          .catch(err => console.error('[Voice] Queued offer processing failed:', err));
+      }
+    }
+  }
+
+  /**
+   * Внутренняя обработка offer (без конкуренции)
+   */
+  async _processOffer(offer, fromSocketId, fromUserId) {
     try {
       const pc = this.createPeerConnection(fromSocketId);
 
@@ -246,15 +293,24 @@ class VoiceManager {
         });
       }
 
+      // Proper rollback: if we're not in stable state, rollback first
       if (pc.signalingState !== 'stable') {
+        console.log('[Voice] Rolling back signaling state:', pc.signalingState, 'for:', fromSocketId);
         try {
           await pc.setLocalDescription({ type: 'rollback' });
         } catch (rollbackError) {
-          console.warn('WebRTC rollback before remote offer failed:', rollbackError);
+          console.warn('WebRTC rollback failed, recreating PC:', rollbackError);
+          // If rollback fails, destroy and recreate the peer connection
+          this.peerConnections.delete(fromSocketId);
+          pc.close();
+          return await this._processOffer(offer, fromSocketId, fromUserId);
         }
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      // Flush any ICE candidates that arrived before we set remote desc
+      await this._flushIceCandidates(fromSocketId);
 
       // Создаем answer
       const answer = await pc.createAnswer();
@@ -276,10 +332,22 @@ class VoiceManager {
   async handleAnswer(answer, fromSocketId) {
     try {
       const pc = this.peerConnections.get(fromSocketId);
-      if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('✅ WebRTC connection established with:', fromSocketId);
+      if (!pc) return;
+
+      // Glare safety: if we rolled back our offer to accept theirs,
+      // the stale answer to our old offer will arrive later.
+      // Only apply answer if we're actually waiting for one.
+      if (pc.signalingState !== 'have-local-offer') {
+        console.warn('[Voice] Ignoring stale answer from:', fromSocketId,
+          '(signalingState:', pc.signalingState, ')');
+        return;
       }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('✅ WebRTC connection established with:', fromSocketId);
+
+      // Flush buffered ICE candidates now that remote description is set
+      this._flushIceCandidates(fromSocketId);
     } catch (error) {
       console.error('Error handling WebRTC answer:', error);
     }
@@ -291,11 +359,49 @@ class VoiceManager {
   async handleIceCandidate(candidate, fromSocketId) {
     try {
       const pc = this.peerConnections.get(fromSocketId);
-      if (pc && candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      if (!pc || !candidate) return;
+
+      // Buffer candidates if remote description hasn't been set yet
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        if (!this._iceCandidateBuffer.has(fromSocketId)) {
+          this._iceCandidateBuffer.set(fromSocketId, []);
+        }
+        this._iceCandidateBuffer.get(fromSocketId).push(candidate);
+        console.log('[Voice] Buffered ICE candidate for:', fromSocketId,
+          '(no remote desc yet, buffer size:', this._iceCandidateBuffer.get(fromSocketId).length, ')');
+        return;
       }
+
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error) {
-      console.error('Error handling ICE candidate:', error);
+      // Ignore harmless errors for candidates that arrive during rollback
+      if (error.name === 'InvalidStateError') {
+        console.warn('[Voice] Ignored ICE candidate in invalid state:', fromSocketId);
+      } else {
+        console.error('Error handling ICE candidate:', error);
+      }
+    }
+  }
+
+  /**
+   * Flush buffered ICE candidates after remote description is set
+   */
+  async _flushIceCandidates(socketId) {
+    const buffered = this._iceCandidateBuffer.get(socketId);
+    if (!buffered || buffered.length === 0) return;
+
+    const pc = this.peerConnections.get(socketId);
+    if (!pc) return;
+
+    console.log('[Voice] Flushing', buffered.length, 'buffered ICE candidates for:', socketId);
+    this._iceCandidateBuffer.delete(socketId);
+
+    for (const candidate of buffered) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.warn('[Voice] Failed to apply buffered ICE candidate:', error);
+      }
     }
   }
 
@@ -339,12 +445,10 @@ class VoiceManager {
       if (track.kind === 'audio') {
         this.playRemoteAudio(socketId, stream);
       } else if (track.kind === 'video') {
-        // Проверяем что видео еще не добавлено
-        const existingVideo = document.querySelector(`[data-socket-id="${socketId}"]`);
-        if (!existingVideo) {
-          // Демонстрация экрана от другого пользователя
-          showScreenShareVideo(stream, socketId);
-        }
+        // Демонстрация экрана от другого пользователя
+        // Always call showScreenShareVideo — it handles both creating new and
+        // updating existing elements (needed after renegotiation with new stream)
+        showScreenShareVideo(stream, socketId);
       }
     };
 
@@ -352,14 +456,18 @@ class VoiceManager {
     pc.onconnectionstatechange = () => {
       console.log(`WebRTC connection state (${socketId}):`, pc.connectionState);
       if (pc.connectionState === 'failed') {
-        if (this.channelId?.startsWith('dm_call:') && !pc._iceRestartAttempted) {
+        // Attempt ICE restart for any channel type (not just DM calls)
+        if (!pc._iceRestartAttempted) {
           pc._iceRestartAttempted = true;
+          console.log('[Voice] Connection failed, attempting ICE restart for:', socketId);
           this.restartConnection(socketId);
         } else {
+          console.warn('[Voice] ICE restart already attempted, removing connection:', socketId);
           this.removeConnection(socketId);
         }
       }
       if (pc.connectionState === 'connected') {
+        pc._iceRestartAttempted = false; // reset on success
         this.startRemoteAudioStats(socketId, pc);
       }
     };
@@ -483,6 +591,11 @@ class VoiceManager {
       this.remoteAudioStatsIntervals.delete(socketId);
     }
 
+    // Clean up offer queue and ICE buffer for this peer
+    this._offerQueue.delete(socketId);
+    this._processingOffer.delete(socketId);
+    this._iceCandidateBuffer.delete(socketId);
+
     // Если это был тот, кто шарил экран — убираем видео
     hideScreenShareVideoForUser(socketId);
   }
@@ -595,7 +708,8 @@ class VoiceManager {
       // Добавляем видеотрек во все существующие peer connections
       const videoTrack = this.screenStream.getVideoTracks()[0];
 
-      this.peerConnections.forEach(async (pc, socketId) => {
+      // Process peers sequentially to avoid overlapping renegotiations
+      for (const [socketId, pc] of this.peerConnections) {
         try {
           const senders = pc.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -608,12 +722,12 @@ class VoiceManager {
             pc.addTrack(videoTrack, this.screenStream);
           }
           
-          // Пересоздаем offer для обновления
-          this.renegotiate(socketId);
+          // Пересоздаем offer для обновления (sequential, not parallel)
+          await this.renegotiate(socketId);
         } catch (err) {
           console.error('Error adding screen share track:', err);
         }
-      });
+      }
 
       // Показываем свой экран локально (превью)
       showScreenShareVideo(this.screenStream, 'local');
@@ -644,21 +758,31 @@ class VoiceManager {
   /**
    * Остановить демонстрацию экрана
    */
-  stopScreenShare() {
+  async stopScreenShare() {
     console.log('[Voice] stopScreenShare called. isScreenSharing:', this.isScreenSharing, 'screenStream:', !!this.screenStream, 'Stack:', new Error().stack);
     if (!this.isScreenSharing || !this.screenStream) return;
 
-    // Удаляем видеотрек из всех peer connections
+    // Удаляем видеотрек из всех peer connections (sequential to avoid glare)
     const videoTrack = this.screenStream.getVideoTracks()[0];
+    const renegotiateList = [];
 
-    this.peerConnections.forEach((pc, socketId) => {
+    for (const [socketId, pc] of this.peerConnections) {
       const senders = pc.getSenders();
       const videoSender = senders.find(s => s.track && s.track.kind === 'video');
       if (videoSender) {
         pc.removeTrack(videoSender);
-        this.renegotiate(socketId);
+        renegotiateList.push(socketId);
       }
-    });
+    }
+
+    // Renegotiate sequentially
+    for (const socketId of renegotiateList) {
+      try {
+        await this.renegotiate(socketId);
+      } catch (err) {
+        console.error('[Voice] Renegotiate failed on screen stop for:', socketId, err);
+      }
+    }
 
     // Останавливаем поток
     this.screenStream.getTracks().forEach(track => track.stop());
@@ -697,17 +821,29 @@ class VoiceManager {
    */
   async renegotiate(socketId) {
     const pc = this.peerConnections.get(socketId);
-    if (!pc) return;
+    if (!pc || pc.signalingState === 'closed') return;
 
     try {
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
       });
+
+      // Guard: PC may have been closed while we awaited createOffer
+      // (e.g. user switched channels during renegotiation)
+      if (pc.signalingState === 'closed') {
+        console.warn('[Voice] PC closed during renegotiation, aborting for:', socketId);
+        return;
+      }
+
       await pc.setLocalDescription(offer);
       socketSendOffer(socketId, offer, this.channelId);
     } catch (error) {
-      console.error('Error renegotiating:', error);
+      if (error.name === 'InvalidStateError') {
+        console.warn('[Voice] Renegotiation aborted (PC closed):', socketId);
+      } else {
+        console.error('Error renegotiating:', error);
+      }
     }
   }
 
@@ -1076,8 +1212,17 @@ function showScreenShareVideo(stream, sourceId) {
     
     if (video.srcObject !== stream) {
       video.srcObject = stream;
+      // Debounced play: wait for loadedmetadata to avoid play() interruption race
+      video.onloadedmetadata = () => {
+        try {
+          video.play().catch(e => {
+            if (e.name !== 'AbortError') console.error('[ScreenShare] Grid video play failed:', e);
+          });
+        } catch (e) {
+          console.warn('[ScreenShare] Grid video play() sync error:', e);
+        }
+      };
     }
-    video.play().catch(e => console.error('[ScreenShare] Grid video play failed:', e));
   }
 
   // 2. Render in the chat screen share container (screen-share-container) if it exists
@@ -1121,8 +1266,16 @@ function showScreenShareVideo(stream, sourceId) {
 
       if (chatVideo.srcObject !== stream) {
         chatVideo.srcObject = stream;
+        chatVideo.onloadedmetadata = () => {
+          try {
+            chatVideo.play().catch(e => {
+              if (e.name !== 'AbortError') console.error('[ScreenShare] Chat video play failed:', e);
+            });
+          } catch (e) {
+            console.warn('[ScreenShare] Chat video play() sync error:', e);
+          }
+        };
       }
-      chatVideo.play().catch(e => console.error('[ScreenShare] Chat video play failed:', e));
     }
     container.classList.remove('hidden');
   }
@@ -1167,8 +1320,16 @@ function showScreenShareVideo(stream, sourceId) {
 
     if (roomVideo.srcObject !== stream) {
       roomVideo.srcObject = stream;
+      roomVideo.onloadedmetadata = () => {
+        try {
+          roomVideo.play().catch(e => {
+            if (e.name !== 'AbortError') console.error('[ScreenShare] Room video play failed:', e);
+          });
+        } catch (e) {
+          console.warn('[ScreenShare] Room video play() sync error:', e);
+        }
+      };
     }
-    roomVideo.play().catch(e => console.error('[ScreenShare] Room video play failed:', e));
   }
 }
 
@@ -1376,8 +1537,26 @@ function updateVoicePanelMembers(channelId, members) {
         
         gridContainer.appendChild(card);
         
-        // Перезапускаем воспроизведение после перемещения в DOM
-        v.play().catch(e => console.error('[ScreenShare] play failed on re-append:', e));
+        // Перезапускаем воспроизведение после перемещения в DOM (guarded)
+        try {
+          if (v.readyState >= 2) {
+            v.play().catch(e => {
+              if (e.name !== 'AbortError') console.error('[ScreenShare] play failed on re-append:', e);
+            });
+          } else {
+            v.onloadedmetadata = () => {
+              try {
+                v.play().catch(e => {
+                  if (e.name !== 'AbortError') console.error('[ScreenShare] play failed on re-append:', e);
+                });
+              } catch (e) {
+                console.warn('[ScreenShare] play() sync error on re-append:', e);
+              }
+            };
+          }
+        } catch (e) {
+          console.warn('[ScreenShare] play() sync error on re-append:', e);
+        }
       }
     });
     

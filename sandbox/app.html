@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love — Full UX Prototype Sandbox</title>
+    <!-- Подключаем шрифты: Lora (сериф для заголовков) и Outfit/Fira Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Outfit:wght@300;400;500;600&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=31">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 1. Левый узкий сайдбар (Глобальные разделы) -->
+        <aside class="global-sidebar">
+            <div class="logo-nav-area active" id="logo-nav-chats" data-target="view-chats" title="Чаты и ЛС (Клик для входа)">
+                <!-- Иконка сердца (Лого) -->
+                <svg id="logo-icon-heart" class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <!-- Иконка сообщений (при входе в DM) -->
+                <svg id="logo-icon-bubble" class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+            </div>
+
+            <nav class="global-nav">
+                <button class="nav-btn" title="Серверы и Комнаты" data-target="view-servers" id="nav-servers">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                </button>
+                <button class="nav-btn" title="Друзья" data-target="view-friends" id="nav-friends">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </button>
+                <button class="nav-btn" title="Love Hub (Сообщество)" data-target="view-hub" id="nav-hub">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                </button>
+                <button class="nav-btn" title="Уведомления" data-target="view-notifications" id="nav-notifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <div class="pulse-badge-dot" id="notif-badge"></div>
+                </button>
+                <button class="nav-btn" title="Еще" id="mobile-more-trigger" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                    <div class="pulse-badge-dot" id="mobile-more-badge"></div>
+                </button>
+            </nav>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Панель быстрого доступа (Quick Access Shortcuts) -->
+            <div class="sidebar-quick-access" id="sidebar-quick-access">
+                <div class="quick-access-items">
+                    <!-- Быстрый чат с Марией -->
+                    <button class="quick-btn" id="quick-dm-maria" title="Быстрый чат с Марией" data-dm="maria">
+                        <span class="quick-avatar">М</span>
+                        <span class="quick-status-dot online"></span>
+                    </button>
+                    <!-- Быстрый общий чат LC -->
+                    <button class="quick-btn" id="quick-channel-general" title="Перейти в общий канал LC" data-server="love-community" data-channel="general">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                    </button>
+                    <!-- Быстрый переход в войс -->
+                    <button class="quick-btn" id="quick-voice-lounge" title="Подключиться к Лаунж (Войс)" data-server="love-community" data-channel="voice-lounge" data-type="voice">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <line x1="12" y1="19" x2="12" y2="23"/>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Кнопка добавления быстрого перехода -->
+                <button class="quick-btn add-quick-btn" id="add-quick-access-btn" title="Добавить быстрый переход">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+
+
+            <div class="sidebar-footer">
+                <button class="nav-btn" title="Настройки" data-target="view-settings" id="nav-settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+                <div class="user-avatar-btn" id="nav-profile-btn" title="Мой профиль">
+                    <span class="avatar-letter">Я</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 1: ЧАТЫ И ЛС (view-chats)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel" id="view-chats">
+            <section class="conversations-sidebar">
+                <header class="sidebar-header">
+                    <h1 class="sidebar-title">беседы</h1>
+                    <button class="compose-btn" title="Новая беседа">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path>
+                        </svg>
+                    </button>
+                    <button type="button" class="sidebar-toggle-trigger mobile-only-toggle-close" title="Закрыть">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </header>
+                <div class="search-box">
+                    <input type="text" placeholder="поиск..." id="conv-search">
+                </div>
+                <div class="conversations-list" id="conversations-container"></div>
+            </section>
+
+            <main class="chat-area">
+                <button type="button" class="sidebar-toggle-trigger" title="Скрыть/показать боковые панели">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <header class="chat-header">
+                    <div class="chat-partner-info">
+                        <div class="partner-avatar" id="header-avatar">М</div>
+                        <div class="partner-meta">
+                            <h2 class="partner-name" id="header-name">Мария</h2>
+                            <span class="partner-status" id="header-status">в сети</span>
+                        </div>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="action-btn" title="Аудиозвонок" id="action-call">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                            </svg>
+                        </button>
+                        <button class="action-btn" title="Видеозвонок" id="action-video">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                            </svg>
+                        </button>
+                        <button class="action-btn" title="Поиск в чате">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                        </button>
+                        <button class="action-btn hidden" title="Список участников" id="action-toggle-members">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="chat-feed" id="chat-feed-container"></div>
+
+                <footer class="chat-input-area">
+                    <form id="message-form" class="message-input-form">
+                        <div class="input-controls-left">
+                            <button type="button" class="input-control-btn" title="Прикрепить файл">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                                </svg>
+                            </button>
+                            <button type="button" class="input-control-btn" title="Смайлики">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                                    <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                    <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <input type="text" placeholder="написать..." id="message-input" autocomplete="off">
+                        <button type="submit" class="send-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="input-control-btn voice-btn" title="Голосовое сообщение">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+                    </form>
+                </footer>
+            </main>
+            
+            <!-- Список участников для групп -->
+            <aside class="chat-members-sidebar hidden" id="chat-members-sidebar">
+                <header class="sidebar-header" style="height: 64px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
+                    <span class="sidebar-title" style="font-size: 15px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Участники</span>
+                    <span id="chat-members-count" style="font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 10px;">0</span>
+                </header>
+                <div id="chat-members-list" style="flex-grow: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Заполняется динамически -->
+                </div>
+            </aside>
+        </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 2: СЕРВЕРЫ И КАНАЛЫ (view-servers)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-servers">
+            <!-- Список серверов (колонка) - Скрыт в CSS -->
+            <section class="servers-sidebar-column hidden">
+                <div class="server-circle active" title="Love Community (Комната)" data-id="love-community" data-kind="room">LC</div>
+                <div class="server-circle" title="Music Lounge (Сервер)" data-id="music-lounge" data-kind="server">ML</div>
+                <div class="server-circle" title="Gaming Zone (Сервер)" data-id="gaming-zone" data-kind="server">GZ</div>
+                <button class="server-circle add-server-btn" title="Создать сервер">+</button>
+            </section>
+
+            <!-- Список каналов и серверов (Единый Сайдбар-Аккордеон) -->
+            <section class="channels-sidebar" id="server-channels-sidebar">
+                <header class="sidebar-header">
+                    <h2 class="sidebar-title">Сферы</h2>
+                    <span id="server-title-display" class="hidden"></span>
+                    <div id="channels-container" class="hidden"></div>
+                    <button type="button" class="sidebar-toggle-trigger mobile-only-toggle-close" title="Закрыть">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </header>
+                <div class="spaces-accordion" id="spaces-accordion-container">
+                    <!-- Заполняется динамически через JS -->
+                </div>
+            </section>
+
+            <!-- Контейнер для отображения (Чат сервера / Комната) -->
+            <div class="server-content-wrapper">
+                <!-- Кнопка скрытия/показа боковых панелей -->
+                <button type="button" class="sidebar-toggle-trigger" id="sidebar-drawer-toggle" title="Скрыть/показать боковые панели">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+
+                <!-- Вариант А: Стандартный чат канала сервера -->
+                <main class="chat-area" id="server-chat-panel">
+                    <header class="chat-header">
+                        <div class="chat-partner-info">
+                            <span class="channel-prefix">//</span>
+                            <div class="partner-meta">
+                                <h2 class="partner-name" id="server-channel-name">общий</h2>
+                                <span class="partner-status">Чат сервера</span>
+                            </div>
+                        </div>
+                    </header>
+                    <div class="chat-feed" id="server-chat-feed">
+                        <!-- Сообщения сервера -->
+                    </div>
+                    <footer class="chat-input-area">
+                        <form id="server-message-form" class="message-input-form">
+                            <div class="input-controls-left">
+                                <button type="button" class="input-control-btn" title="Прикрепить файл">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                                    </svg>
+                                </button>
+                                <button type="button" class="input-control-btn" title="Смайлики">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                                        <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                        <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <input type="text" placeholder="написать..." id="server-message-input" autocomplete="off">
+                            <button type="submit" class="send-btn">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                                </svg>
+                            </button>
+                            <button type="button" class="input-control-btn voice-btn" title="Голосовое сообщение">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                                </svg>
+                            </button>
+                        </form>
+                    </footer>
+                </main>
+
+                <!-- Вариант Б: Комната (Room View) из реального приложения -->
+                <main class="room-view-panel hidden" id="server-room-panel">
+                    <header class="room-header">
+                        <div class="room-header-left">
+                            <div class="room-header-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                            </div>
+                            <div class="room-header-info">
+                                <div class="room-header-title-row">
+                                    <h2 class="room-header-title" id="room-view-name">Love Community</h2>
+                                    <span class="room-header-online">
+                                        <span class="room-header-online-dot"></span>
+                                        <span class="room-header-online-text">15 онлайн</span>
+                                    </span>
+                                </div>
+                                <div class="room-header-subtitle">Главная комната сообщества</div>
+                            </div>
+                        </div>
+                        <button type="button" class="room-header-settings-btn" title="Настройки комнаты">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                        </button>
+                    </header>
+
+                    <!-- Вкладки комнаты -->
+                    <div class="room-tabs" role="tablist">
+                        <button type="button" class="room-tab active" data-room-tab="chat">
+                            <div class="room-tab-body">
+                                <span class="room-tab-label">Чат</span>
+                                <span class="room-tab-hint">Текстовый чат комнаты</span>
+                            </div>
+                            <span class="room-tab-arrow">→</span>
+                        </button>
+
+                        <button type="button" class="room-tab" data-room-tab="voice">
+                            <div class="room-tab-body">
+                                <span class="room-tab-label">Войс</span>
+                                <span class="room-tab-hint">Голосовой WebRTC-канал</span>
+                            </div>
+                            <span class="room-tab-arrow">→</span>
+                        </button>
+
+                        <button type="button" class="room-tab" data-room-tab="media">
+                            <div class="room-tab-body">
+                                <span class="room-tab-label">Медиа</span>
+                                <span class="room-tab-hint">Медиатека, фото и файлы</span>
+                            </div>
+                            <span class="room-tab-arrow">→</span>
+                        </button>
+                    </div>
+
+                    <!-- Панели для каждой вкладки комнаты -->
+                    <div class="room-panes-wrapper">
+                        <!-- Панель чата комнаты -->
+                        <div class="room-pane-content" id="room-pane-chat">
+                            <div class="chat-feed" id="room-chat-feed">
+                                <!-- Чат комнаты -->
+                            </div>
+                            <footer class="chat-input-area">
+                                <form id="room-message-form" class="message-input-form">
+                                    <div class="input-controls-left">
+                                        <button type="button" class="input-control-btn" title="Прикрепить файл">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="input-control-btn" title="Смайлики">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                                                <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <input type="text" placeholder="написать в чат комнаты..." id="room-message-input" autocomplete="off">
+                                    <button type="submit" class="send-btn">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                                        </svg>
+                                    </button>
+                                    <button type="button" class="input-control-btn voice-btn" title="Голосовое сообщение">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                                        </svg>
+                                    </button>
+                                </form>
+                            </footer>
+                        </div>
+
+                        <!-- Панель войса комнаты (внедряем голосовую сетку прямо сюда!) -->
+                        <div class="room-pane-content pane-hidden" id="room-pane-voice">
+                            <div class="voice-channel-panel">
+                                <header class="voice-header-bar">
+                                    <div class="voice-channel-info">
+                                        <span class="voice-status-indicator"></span>
+                                        <h3>Голосовое подключение активно</h3>
+                                    </div>
+                                    <div class="voice-controls-row">
+                                        <button type="button" class="voice-control-btn-circle active" title="Включить экран" id="room-screenshare-btn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="voice-control-btn-circle" title="Включить камеру">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                                <circle cx="12" cy="13" r="4"></circle>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </header>
+                                <div class="voice-grid-layout">
+                                    <!-- Screenshare превью -->
+                                    <div class="screenshare-card" id="room-screenshare-card">
+                                        <div class="screenshare-video-placeholder">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="pulse-icon">
+                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                                            </svg>
+                                            <span>Мария транслирует экран</span>
+                                            <button type="button" class="theater-mode-btn" id="room-theater-toggle">Увеличить в Кинотеатр</button>
+                                        </div>
+                                    </div>
+                                    <div class="voice-participants-list">
+                                        <div class="voice-member-card speaking">
+                                            <div class="voice-member-avatar">М</div>
+                                            <span class="voice-member-name">Мария</span>
+                                            <div class="speaking-wave">
+                                                <span></span><span></span><span></span>
+                                            </div>
+                                        </div>
+                                        <div class="voice-member-card">
+                                            <div class="voice-member-avatar">F</div>
+                                            <span class="voice-member-name">Founder</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Панель медиатеки комнаты -->
+                        <div class="room-pane-content pane-hidden" id="room-pane-media">
+                            <div class="hub-content-panel">
+                                <span class="helper-text">Вся медиатека комнаты (картинки, файлы, видео) собраны здесь.</span>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 16px;">
+                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Фото_июль.jpg</div>
+                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Скриншот_1.png</div>
+                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Трек.mp3</div>
+                                </div>
+                            </div>
+                        </div>
+                </main>
+
+                <!-- Вариант В: Голосовой канал сервера (Server Voice View) -->
+                <main class="room-view-panel hidden" id="server-voice-panel">
+                    <header class="room-header">
+                        <div class="room-header-left">
+                            <div class="room-header-icon" style="background: rgba(255,255,255,0.05); color: #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                </svg>
+                            </div>
+                            <div class="room-header-info">
+                                <div class="room-header-title-row" style="display: flex; align-items: center; gap: 8px;">
+                                    <h2 class="room-header-title" id="server-voice-channel-name">Лаунж (Войс)</h2>
+                                    <span class="room-header-online" style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary);">
+                                        <span class="room-header-online-dot" style="width: 6px; height: 6px; background-color: #fff; border-radius: 50%; display: inline-block;"></span>
+                                        <span class="room-header-online-text" id="voice-member-count-text">3 в канале</span>
+                                    </span>
+                                </div>
+                                <div class="room-header-subtitle">Голосовая связь сервера</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div class="voice-channel-panel" id="voice-channel-container">
+                        <!-- Сетка участников или Демонстрация экрана -->
+                        <div class="voice-layout-container" id="voice-layout-container">
+                            <!-- Сетка участников без демки (floating wabi-sabi constellation) -->
+                            <div class="voice-constellation" id="voice-grid-constellation">
+                                <!-- Заполняется динамически через JS -->
+                            </div>
+
+                            <!-- Режим демонстрации экрана (справа список участников, слева экран) -->
+                            <div class="voice-theater-view hidden" id="voice-theater-view">
+                                <div class="screenshare-large-card">
+                                    <div class="screenshare-video-mock" id="screenshare-feed-video">
+                                        <div class="screenshare-inner-gui">
+                                            <div class="screenshare-badge">LIVE</div>
+                                            <div class="screenshare-mock-content">
+                                                <div class="code-line"><span class="token-keyword">const</span> <span class="token-variable">loveApp</span> = <span class="token-keyword">new</span> <span class="token-class">WabiSabiInterface</span>();</div>
+                                                <div class="code-line"><span class="token-variable">loveApp</span>.<span class="token-method">setContrastMode</span>(<span class="token-string">'monochrome'</span>);</div>
+                                                <div class="code-line"><span class="token-variable">loveApp</span>.<span class="token-method">connectVoiceChannel</span>({ <span class="token-property">ambience</span>: <span class="token-string">'lounge'</span> });</div>
+                                                <div class="code-line"><span class="token-comment">// Симуляция сетевого потока...</span></div>
+                                                <div class="code-wave-graphic">
+                                                    <span></span><span></span><span></span><span></span><span></span>
+                                                </div>
+                                            </div>
+                                            <div class="screenshare-overlay-text" id="screenshare-stream-title">Мария транслирует экран</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="voice-compact-participants" id="voice-compact-participants-list">
+                                    <!-- Заполняется динамически через JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Нижняя панель управления -->
+                        <div class="voice-footer-bar">
+                            <div class="voice-footer-left">
+                                <span class="voice-footer-status-dot"></span>
+                                <span class="voice-footer-status-text">Связь установлена</span>
+                            </div>
+                            <div class="voice-footer-center">
+                                <!-- Микрофон -->
+                                <button type="button" class="voice-control-btn active-state" id="voice-btn-mic" title="Выключить микрофон">
+                                    <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        <line x1="12" y1="19" x2="12" y2="23"/>
+                                        <line x1="8" y1="23" x2="16" y2="23"/>
+                                    </svg>
+                                    <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                                        <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+                                        <line x1="12" y1="19" x2="12" y2="23"/>
+                                        <line x1="8" y1="23" x2="16" y2="23"/>
+                                    </svg>
+                                </button>
+
+                                <!-- Наушники (Звук) -->
+                                <button type="button" class="voice-control-btn active-state" id="voice-btn-sound" title="Выключить звук">
+                                    <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+                                    </svg>
+                                    <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        <path d="M3 14h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H3v7zM19 14h2V7h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"></path>
+                                        <path d="M14 14a5 5 0 0 1-4-4"></path>
+                                    </svg>
+                                </button>
+
+                                <!-- Камера -->
+                                <button type="button" class="voice-control-btn muted-state" id="voice-btn-cam" title="Включить камеру">
+                                    <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                    <svg class="voice-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v3.5"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                </button>
+
+                                <!-- Демонстрация экрана -->
+                                <button type="button" class="voice-control-btn muted-state" id="voice-btn-share" title="Включить трансляцию экрана">
+                                    <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                    <svg class="voice-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="voice-footer-right">
+                                <!-- Выйти из войса (Disconnect) -->
+                                <button type="button" class="voice-disconnect-btn" id="voice-btn-disconnect" title="Выйти из канала">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.62 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2 2A17.9 17.9 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .62 2.81 2 2 0 0 1-.45 2.11L8 9.91a16 16 0 0 0 2.68 3.4z"/>
+                                    </svg>
+                                    <span>Выйти</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 3: ДРУЗЬЯ (view-friends)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-friends">
+            <main class="friends-unified-panel">
+                <div class="unified-glass-card">
+                    <header class="friends-unified-header">
+                        <div class="friends-header-main-row">
+                            <h1 class="friends-title">Друзья</h1>
+                            <div class="friends-header-actions">
+                                <button class="friends-action-btn" id="friends-search-toggle-btn" title="Поиск друзей">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </button>
+                                <button class="friends-action-btn" id="friends-add-toggle-btn" title="Добавить друга">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="friends-header-secondary-row">
+                            <span class="friends-count-title" id="friends-list-title">Друзья в сети — 0</span>
+                            <div class="friends-filter-nav">
+                                <button class="filter-tab active" data-tab="online">В сети <span class="tab-count">(0)</span></button>
+                                <button class="filter-tab" data-tab="all">Все <span class="tab-count">(0)</span></button>
+                                <button class="filter-tab" data-tab="pending">Запросы <span class="tab-count">(0)</span><span class="pending-indicator-dot hidden"></span></button>
+                                <button class="filter-tab add-friend-tab" data-tab="add">Добавить</button>
+                            </div>
+                        </div>
+                        <!-- Выдвижная панель поиска друзей -->
+                        <div class="friends-inline-search-bar hidden" id="friends-inline-search-bar">
+                            <div class="friends-search-input-wrapper">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="friends-search-icon">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="friends-local-search-input" placeholder="Поиск по имени...">
+                                <button id="friends-clear-search-btn" class="friends-clear-btn" style="display: none;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                    <div class="friends-list-content" id="friends-list-container">
+                        <!-- Заполняется динамически -->
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 4: LOVE HUB (view-hub)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-hub">
+            <!-- Полностью переработанный Love Hub: Bento Grid Dashboard -->
+            <main class="hub-bento-dashboard" style="width: 100%; height: 100%; padding: 40px; overflow-y: auto; position: relative;">
+                <button type="button" class="sidebar-toggle-trigger" title="Скрыть/показать боковые панели" style="top: 20px; left: 20px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <header class="bento-header" style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h1 class="sidebar-title" style="font-size: 32px; font-family: var(--font-serif); margin-bottom: 8px;">Love Hub</h1>
+                        <p style="color: var(--text-secondary); font-size: 15px;">Центр управления сообществом и обновлениями</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="submit-action-btn" id="hub-view-ideas-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Все идеи</button>
+                        <button class="submit-action-btn admin-only hidden" id="hub-view-bugs-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Все баги</button>
+                        <button class="submit-action-btn" id="hub-suggest-btn" style="padding: 10px 20px; font-weight: 500;">Предложить идею</button>
+                        <button class="submit-action-btn" id="hub-report-bug-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Сообщить об ошибке</button>
+                    </div>
+                </header>
+
+                <div class="bento-grid">
+                    <!-- Главный анонс (Hero Block) -->
+                    <div class="bento-card bento-hero" style="position: relative;">
+                        <div class="bento-tag">Major Release</div>
+                        <h2 id="hub-hero-title">Обновление Love App v5.2.0</h2>
+                        <p id="hub-hero-desc">Мы полностью переработали визуальный стиль приложения. Улучшена плавность анимаций модальных окон, добавлены кастомные SVG-иконки и умный виджет в системном трее.</p>
+                        <button class="submit-action-btn admin-only hidden" id="hub-hero-edit-btn" style="position: absolute; bottom: 20px; right: 20px; font-size: 11px; padding: 6px 12px; border: none; background: #ffffff; color: #000;">Редактировать</button>
+                        <div class="bento-hero-visual">
+                            <!-- Абстрактный визуал -->
+                            <div class="bento-circle-accent"></div>
+                        </div>
+                    </div>
+
+                    <!-- Статистика / Метрика -->
+                    <div class="bento-card bento-stat">
+                        <h3>Онлайн сейчас</h3>
+                        <div class="stat-value">1,204</div>
+                        <div class="stat-trend positive">+14% за неделю</div>
+                    </div>
+
+                    <!-- Топ идея -->
+                    <div class="bento-card bento-idea">
+                        <div class="bento-header-row">
+                            <span class="bento-tag idea">Топ Идея</span>
+                            <span class="vote-count">▲ 142</span>
+                        </div>
+                        <h3>Анимированное сердце-логотип</h3>
+                        <p>Пульсация в такт пришедшим уведомлениям или изменение оттенка.</p>
+                        <span class="idea-status-tag planned">Запланировано</span>
+                    </div>
+
+                    <!-- Баг-репорт -->
+                    <div class="bento-card bento-bug">
+                        <div class="bento-header-row">
+                            <span class="bento-tag bug">Критический баг</span>
+                            <span class="bug-status">В работе</span>
+                        </div>
+                        <h3>Спам уведомлений</h3>
+                        <p>Приходят бесконечные уведомления от удалённых друзей, окно зависает.</p>
+                    </div>
+
+                    <!-- Быстрые действия / Ссылки -->
+                    <div class="bento-card bento-actions">
+                        <h3>Полезное</h3>
+                        <div class="bento-action-links">
+                            <a href="#">Правила сообщества ↗</a>
+                            <a href="#">Roadmap проекта ↗</a>
+                            <a href="#">Сообщить об ошибке ↗</a>
+                        </div>
+                    </div>
+
+                    <!-- Мелкий апдейт -->
+                    <div class="bento-card bento-minor">
+                        <div class="bento-tag update">Улучшение</div>
+                        <h3>Встроенный плеер ГС</h3>
+                        <p>Добавлен слайдер громкости и кнопка мьюта в чате.</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 5: ГОЛОСОВАЯ СЕТКА (view-voice)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-voice">
+            <main class="voice-channel-panel">
+                <header class="voice-header-bar">
+                    <div class="voice-channel-info">
+                        <span class="voice-status-indicator"></span>
+                        <h3>Комната: Лаунж (Голосовой Канал)</h3>
+                    </div>
+                    <div class="voice-controls-row">
+                        <button class="voice-control-btn-circle active" title="Включить экран" id="screenshare-toggle-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                        </button>
+                        <button class="voice-control-btn-circle" title="Включить камеру">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                        </button>
+                        <button class="voice-control-btn-circle" title="Отключиться" id="voice-disconnect-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="voice-grid-layout">
+                    <!-- Screenshare превью -->
+                    <div class="screenshare-card" id="screenshare-display-card">
+                        <div class="screenshare-video-placeholder">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="pulse-icon">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                            <span>Трансляция экрана: Мария (720p 15fps)</span>
+                            <button class="theater-mode-btn" id="theater-toggle">Увеличить в Кинотеатр</button>
+                        </div>
+                    </div>
+
+                    <!-- Карточки участников -->
+                    <div class="voice-participants-list">
+                        <div class="voice-member-card speaking">
+                            <div class="voice-member-avatar">М</div>
+                            <span class="voice-member-name">Мария</span>
+                            <div class="speaking-wave">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </div>
+                        <div class="voice-member-card">
+                            <div class="voice-member-avatar">F</div>
+                            <span class="voice-member-name">Founder</span>
+                            <span class="muted-tag">микрофон выкл.</span>
+                        </div>
+                        <div class="voice-member-card">
+                            <div class="voice-member-avatar">А</div>
+                            <span class="voice-member-name">Алексей</span>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 6: УВЕДОМЛЕНИЯ (view-notifications)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-notifications">
+            <main class="notifications-unified-panel">
+                <div class="unified-glass-card">
+                    <header class="notifications-unified-header">
+                        <h1 class="friends-title">Уведомления</h1>
+                        <div class="notif-actions-top">
+                            <button class="notif-action-text-btn" id="mark-all-read-notifs">Прочитать<br>все</button>
+                            <button class="notif-action-text-btn" id="clear-all-notifs">Очистить<br>все</button>
+                        </div>
+                    </header>
+                    <div class="notifications-feed-list" id="notif-feed-container">
+                        <!-- Заполняется динамически -->
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 7: НАСТРОЙКИ (view-settings)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+        <div class="view-panel panel-hidden" id="view-settings">
+            <main class="settings-unified-panel">
+                <div class="unified-glass-card settings-unified-container">
+                    <aside class="settings-menu-inner">
+                        <h2 class="settings-unified-title">настройки</h2>
+                        <div class="settings-menu-list">
+                            <button class="settings-menu-btn active" data-sect="profile">Мой профиль</button>
+                            <button class="settings-menu-btn" data-sect="status">Статус и Сеть</button>
+                            <button class="settings-menu-btn" data-sect="security">Безопасность (2FA)</button>
+                            <button class="settings-menu-btn admin-only hidden" data-sect="admin" style="border-left: 2px dashed rgba(255,255,255,0.2);">Админ-панель</button>
+                            <button class="settings-menu-btn text-danger" id="logout-sandbox">Выйти из сессии</button>
+                        </div>
+                    </aside>
+
+                    <section class="settings-content-inner">
+                        <div class="settings-section-pane" id="pane-settings-profile">
+                            <h3>Настройки профиля</h3>
+                            <div style="padding: 24px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; margin-top: 16px; text-align: center;">
+                                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">Мы перенесли настройки аккаунта в компактную карточку.</p>
+                                <button class="submit-action-btn" id="open-profile-modal-btn">Открыть мой профиль</button>
+                                <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+                                    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">Режим Разработчика / Админа (Временно)</p>
+                                    <button class="submit-action-btn" id="toggle-admin-btn" style="background: #ffffff; color: #000000; border: none; font-weight: 500;">Включить режим разработчика</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status & Network section -->
+                        <div class="settings-section-pane hidden" id="pane-settings-status">
+                            <h3>Статус и Сеть</h3>
+                            <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px; margin-bottom: 20px;">Настройки сетевого соединения и протоколов связи.</p>
+                            <div class="settings-card-grid">
+                                <div class="settings-status-card">
+                                    <span class="card-label">Канал связи</span>
+                                    <span class="card-value">WebRTC / Opus Stereo</span>
+                                </div>
+                                <div class="settings-status-card">
+                                    <span class="card-label">Пинг до сервера</span>
+                                    <span class="card-value">12 ms</span>
+                                </div>
+                                <div class="settings-status-card">
+                                    <span class="card-label">Потеря пакетов</span>
+                                    <span class="card-value">0.0%</span>
+                                </div>
+                                <div class="settings-status-card">
+                                    <span class="card-label">Тип NAT</span>
+                                    <span class="card-value">Symmetric NAT</span>
+                                </div>
+                            </div>
+                            <div class="settings-form-row">
+                                <label class="settings-toggle-label">
+                                    <input type="checkbox" id="low-bandwidth-toggle">
+                                    <span class="toggle-custom-box"></span>
+                                    <div>
+                                        <span class="toggle-title">Режим экономии трафика</span>
+                                        <span class="toggle-desc">Понижает битрейт аудио и отключает анимации созвездий.</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Security section -->
+                        <div class="settings-section-pane hidden" id="pane-settings-security">
+                            <h3>Безопасность учетной записи</h3>
+                            <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px; margin-bottom: 20px;">Защитите свой аккаунт с помощью двухфакторной аутентификации (2FA).</p>
+                            
+                            <div class="security-setup-wrapper">
+                                <div class="security-qr-mock">
+                                    <!-- Mock QR Code in monochrome -->
+                                    <div class="qr-code-grid">
+                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                                    </div>
+                                    <span class="qr-code-scan-text">Отсканируйте в Google Authenticator</span>
+                                </div>
+                                
+                                <div class="security-details-box">
+                                    <h4 style="margin-bottom: 8px; font-weight: 600;">Двухфакторная аутентификация (2FA)</h4>
+                                    <p style="color: var(--text-muted); font-size: 12.5px; margin-bottom: 16px; line-height: 1.4;">При включении 2FA вам потребуется вводить временный код при каждом входе.</p>
+                                    <button class="submit-action-btn" id="toggle-2fa-btn" style="background: #ffffff; color: #000000; border: none; font-weight: 500;">Включить 2FA</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Admin panel section -->
+                        <div class="settings-section-pane admin-only hidden" id="pane-settings-admin">
+                            <h3>Панель администратора</h3>
+                            <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;">Временный девелоперский режим.</p>
+                            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                                    <span style="font-size: 12px; color: var(--text-muted);">Uptime системы</span>
+                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">99.98%</h4>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                                    <span style="font-size: 12px; color: var(--text-muted);">Активные сокеты</span>
+                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">42 соединения</h4>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                                    <span style="font-size: 12px; color: var(--text-muted);">Режим базы данных</span>
+                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">Production (Replica)</h4>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
+                                    <span style="font-size: 12px; color: var(--text-muted);">Memory Usage</span>
+                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">124MB / 512MB</h4>
+                                </div>
+                            </div>
+                            <div style="margin-top: 24px;">
+                                <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Логи консоли сервера</span>
+                                <div id="admin-console-log" class="console-box">
+                                    <div class="console-line"><span class="log-time">[Система]</span> Соединение с панелью установлено. Ожидание логов...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Модалка звонка для интерактивного теста -->
+    <div class="modal-backdrop hidden" id="call-modal">
+        <div class="call-card">
+            <div class="call-avatar">М</div>
+            <h3 class="call-title">Звонок Марии...</h3>
+            <span class="call-duration">Подключение WebRTC...</span>
+            <div class="call-actions-row">
+                <button class="call-btn-circle mute" title="Выключить микрофон">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    </svg>
+                </button>
+                <button class="call-btn-circle end-call" id="btn-end-call" title="Сбросить">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Кинотеатр (Theater Mode Lightbox) -->
+    <div class="modal-backdrop hidden" id="theater-modal">
+        <div class="theater-lightbox-container">
+            <div class="theater-video-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="pulse-icon-large">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+                <span class="theater-video-caption">Кинотеатр: Демонстрация экрана Марии</span>
+            </div>
+            <button class="theater-close-btn" id="theater-close">Закрыть Кинотеатр</button>
+        </div>
+    </div>
+
+    <!-- Модалка-панель списков Love Hub (Идеи / Баги) — большое окно -->
+    <div class="modal-backdrop hidden" id="hub-list-modal">
+        <div class="hub-modal-card hub-fullscreen-card">
+            <header class="hub-modal-header">
+                <h3 id="hub-modal-title">Идеи сообщества</h3>
+                <button class="profile-close-btn" id="hub-modal-close" title="Закрыть">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <div class="hub-modal-content">
+                <div class="hub-modal-list" id="hub-modal-list-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка формы отправки (Идея / Баг-репорт) — компактная -->
+    <div class="modal-backdrop hidden" id="hub-form-modal">
+        <div class="hub-modal-card hub-form-card">
+            <header class="hub-modal-header">
+                <h3 id="hub-form-modal-title">Предложить идею</h3>
+                <button class="profile-close-btn" id="hub-form-modal-close" title="Закрыть">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <div class="hub-modal-content">
+                <div id="hub-form-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка предпросмотра аватара -->
+    <div class="modal-backdrop hidden" id="avatar-preview-modal">
+        <div class="profile-card" style="width: 340px; text-align: center; padding: 24px;">
+            <h3 style="margin-bottom: 16px;">Превью Аватара</h3>
+            <div id="avatar-preview-box" class="profile-avatar" style="margin: 0 auto 20px; width: 120px; height: 120px; border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;"></div>
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Размер (Масштаб)</label>
+                <input type="range" id="avatar-scale-slider" min="50" max="200" value="100" style="width: 100%;">
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="submit-action-btn" id="avatar-preview-cancel" style="background: rgba(255,255,255,0.05); color: #fff; flex: 1;">Отмена</button>
+                <button class="submit-action-btn" id="avatar-preview-apply" style="flex: 1;">Применить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Мой профиль (Cozy Wabi-Sabi Profile) -->
+    <div class="modal-backdrop hidden" id="profile-modal">
+        <div class="profile-card">
+            <button class="profile-close-btn" id="profile-close" title="Закрыть">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            
+            <!-- Вкладки управления картой -->
+            <div class="profile-tab-bar">
+                <button class="profile-tab-btn active" data-profile-tab="view">Профиль</button>
+                <button class="profile-tab-btn" data-profile-tab="edit">Настройки</button>
+            </div>
+            
+            <!-- Панель А: Просмотр профиля -->
+            <div class="profile-pane active" id="profile-pane-view">
+                <div class="profile-avatar-container">
+                    <input type="file" id="profile-avatar-upload" accept="image/*" style="display: none;">
+                    <div class="profile-avatar" id="profile-avatar-display">
+                        <span id="profile-avatar-text">Ал</span>
+                        <label for="profile-avatar-upload" class="profile-avatar-overlay" id="profile-avatar-overlay" title="Изменить аватар">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        </label>
+                    </div>
+                    <div class="profile-avatar-glow"></div>
+                </div>
+                
+                <div class="profile-name-row">
+                    <h2 class="profile-name" id="profile-name-display" title="Нажми, чтобы изменить">Александр</h2>
+                    <span class="profile-name-edit-icon" id="profile-name-edit-icon" title="Изменить имя">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </span>
+                </div>
+                <span class="profile-username" id="profile-username-display">@founder</span>
+                
+                <div class="profile-divider">
+                    <span class="divider-heart">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                    </span>
+                </div>
+                
+                <div class="profile-section">
+                    <span class="profile-section-label">настроение:</span>
+                    <div class="profile-status-box" style="position: relative;">
+                        <span class="status-emoji" id="profile-mood-trigger" style="cursor: pointer;" title="Изменить настроение">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                            </svg>
+                        </span>
+                        <span class="status-text" id="profile-status-text">завариваю травяной чай...</span>
+                        
+                        <!-- Поповер выбора настроения -->
+                        <div id="mood-picker-popover" class="hidden" style="position: absolute; top: 38px; left: 0; background: rgba(15, 15, 15, 0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); width: 170px; box-sizing: border-box;"></div>
+                    </div>
+                </div>
+                
+                <div class="profile-section">
+                    <span class="profile-section-label">сейчас слушает:</span>
+                    <div class="profile-lofi-player" id="profile-listening-box" style="cursor: pointer;" title="Открыть проигрыватель">
+                        <div class="player-visualizer">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <div class="player-info">
+                            <span class="track-title" id="profile-listening-title">Lofi Wabi-Sabi Ambient</span>
+                            <span class="track-artist" id="profile-listening-artist">Love Wave FM</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="profile-section">
+                    <span class="profile-section-label">сферы увлечений:</span>
+                    <div class="profile-tags-row" id="profile-hobbies-container">
+                        <!-- Заполняется динамически -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Панель Б: Редактирование профиля (Настройки) -->
+            <div class="profile-pane" id="profile-pane-edit">
+                <div class="profile-edit-title">Настройки аккаунта</div>
+                <div class="profile-edit-form">
+                    <div class="profile-form-group">
+                        <label for="profile-input-username">Никнейм</label>
+                        <input type="text" id="profile-input-username" value="@founder" autocomplete="off">
+                        <p class="profile-form-hint" style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 6px; margin-bottom: 0;">* Никнейм можно менять только раз в неделю.</p>
+                    </div>
+                    <div class="profile-form-group" style="margin-top: 16px;">
+                        <label for="profile-input-listening">Сейчас слушает (Исполнитель - Название)</label>
+                        <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+                            <input type="text" id="profile-input-listening" value="Love Wave FM - Lofi Wabi-Sabi Ambient" autocomplete="off" style="flex: 1; min-width: 0; box-sizing: border-box;">
+                            <label for="profile-audio-upload" class="action-btn" title="Импортировать свой аудиофайл" style="cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); transition: all 0.2s; box-sizing: border-box; flex-shrink: 0;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            </label>
+                            <input type="file" id="profile-audio-upload" accept="audio/*" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="profile-save-btn" id="profile-save">Всё хорошо</button>
+        </div>
+    </div>
+
+    <!-- Диалоговое окно для редактирования сферы увлечений -->
+    <div id="hobby-editor-modal" class="modal-backdrop hidden" style="z-index: 2000; background: rgba(0,0,0,0.6);">
+        <div class="profile-card" style="width: 320px; padding: 24px; text-align: left; align-items: stretch; border-radius: 24px;">
+            <h3 id="hobby-editor-title" style="font-family: var(--font-sans); font-size: 16px; font-weight: 500; margin-bottom: 16px; color: var(--text-primary); margin-top: 0;">Добавить сферу</h3>
+            
+            <div style="margin-bottom: 16px;">
+                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px;">Название</label>
+                <input type="text" id="hobby-input-name" placeholder="Например: Фотография" style="width: 100%; height: 36px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; padding: 0 10px; outline: none; font-size: 13.5px; box-sizing: border-box; font-family: var(--font-sans);">
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 8px;">Иконка</label>
+                <div id="hobby-icon-picker" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box;">
+                    <!-- 10 иконок будут добавлены динамически -->
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 8px;">
+                <button class="submit-action-btn" id="hobby-btn-delete" style="background: rgba(230, 80, 80, 0.1); color: #e65050; border: 1px solid rgba(230, 80, 80, 0.2); font-size: 12px; height: 36px; border-radius: 8px; cursor: pointer; flex: 1; transition: all 0.2s; font-family: var(--font-sans);">Удалить</button>
+                <button class="submit-action-btn" id="hobby-btn-cancel" style="background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.08); font-size: 12px; height: 36px; border-radius: 8px; cursor: pointer; flex: 1; transition: all 0.2s; font-family: var(--font-sans);">Отмена</button>
+                <button class="submit-action-btn" id="hobby-btn-save" style="background: #ffffff; color: #000; border: 1px solid #ffffff; font-size: 12px; height: 36px; border-radius: 8px; cursor: pointer; font-weight: 500; flex: 1; transition: all 0.2s; font-family: var(--font-sans);">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка создания группы (Create Group Chat Modal) -->
+    <div class="modal-backdrop hidden" id="create-group-modal">
+        <div class="profile-card" style="width: 500px; padding: 32px; box-sizing: border-box; text-align: left; align-items: stretch;">
+            <button class="profile-close-btn" id="create-group-close" title="Закрыть">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            
+            <header style="margin-bottom: 24px;">
+                <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 500; margin: 0; color: var(--text-primary);">Создать группу</h3>
+            </header>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: block; margin-bottom: 8px;">Название группы</label>
+                <input type="text" id="create-group-name-input" placeholder="Например: Обсуждение макета" style="width: 100%; height: 38px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; padding: 0 12px; outline: none; font-size: 14px; box-sizing: border-box; font-family: var(--font-sans);">
+            </div>
+            
+            <div style="margin-bottom: 28px;">
+                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: block; margin-bottom: 8px;">Выберите участников</label>
+                <div id="create-group-friends-list" style="max-height: 280px; overflow-y: auto; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;">
+                    <!-- Сюда вставятся друзья с чекбоксами -->
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 8px;">
+                <button class="submit-action-btn" id="create-group-cancel" style="background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.08); flex: 1; height: 38px; font-size: 13.5px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: var(--font-sans);">Отмена</button>
+                <button class="submit-action-btn" id="create-group-submit" style="background: #ffffff; color: #000; border: 1px solid #ffffff; flex: 1; height: 38px; font-size: 13.5px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; font-family: var(--font-sans);">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Мини-проигрыватель музыки (Music Mini Player Modal) -->
+    <div class="modal-backdrop hidden" id="music-mini-player-modal" style="z-index: 3000; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px);">
+        <div class="profile-card" style="width: 320px; padding: 24px; box-sizing: border-box; text-align: center; align-items: stretch; border-radius: 28px; background: rgba(15,15,15,0.7) !important;">
+            <button class="profile-close-btn" id="music-player-close" title="Закрыть" style="top: 16px; right: 16px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            
+            <div id="player-card-content" style="transition: opacity 0.2s; display: flex; flex-direction: column; width: 100%; height: 100%; align-items: stretch;">
+                <div style="margin-bottom: 20px;">
+                    <h4 id="player-track-title" style="font-family: var(--font-sans); font-size: 16px; font-weight: 600; margin: 0; color: #fff;">Название песни</h4>
+                    <p id="player-track-artist" style="font-family: var(--font-mono); font-size: 11px; margin: 4px 0 0; color: var(--text-muted); text-transform: uppercase;">Исполнитель</p>
+                </div>
+                
+                <div style="height: 120px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 20px; position: relative; overflow: hidden;">
+                    <div id="player-waves" class="player-waves-container" style="display: flex; align-items: center; gap: 4px;">
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                        <span class="wave-bar"></span>
+                    </div>
+                    <div style="position: absolute; right: 12px; top: 10px; bottom: 10px; width: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px; color: var(--text-muted);"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                        <div style="flex-grow: 1; width: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; position: relative; cursor: pointer;" id="player-volume-container">
+                            <div id="player-volume-bar" style="position: absolute; bottom: 0; left: 0; right: 0; height: 70%; background: #fff; border-radius: 2px; transition: height 0.1s;"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <div id="player-progress-container">
+                        <div id="player-progress-bar">
+                            <div id="player-progress-thumb"></div>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 6px;">
+                        <span id="player-time-current">0:00</span>
+                        <span id="player-time-total">2:15</span>
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: center;">
+                    <button id="player-play-btn" style="width: 48px; height: 48px; border-radius: 50%; background: #fff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(255,255,255,0.15);">
+                        <svg viewBox="0 0 24 24" fill="currentColor" style="width: 18px; height: 18px; color: #000; margin-left: 2px;" id="player-play-svg"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрытый аудиоплеер для реального воспроизведения импортированной музыки -->
+    <audio id="player-real-audio" style="display: none;"></audio>
+
+    <script src="script.js?v=31"></script>
+</body>
+</html>

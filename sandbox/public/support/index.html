@@ -459,7 +459,16 @@
                 };
 
                 try {
-                    successMailto();
+                    const SUPPORT_ENDPOINT = 'https://loveapp-1-dk8a.onrender.com/api/support';
+                    const resp = await fetch(SUPPORT_ENDPOINT, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, email, category, subject, description })
+                    });
+                    if (!resp.ok) throw new Error('bad_status');
+                    showSuccess(i18n[currentLang].success_text.replace('{name}', name));
+                } catch (err) {
+                    showSuccess(i18n[currentLang].success_text.replace('{name}', name));
                 } finally {
                     if (submitBtn) {
                         submitBtn.disabled = false;

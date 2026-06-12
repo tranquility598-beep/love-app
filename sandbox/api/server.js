@@ -58,6 +58,7 @@ app.post('/api/early-access', async (req, res) => {
     await resend.emails.send({
       from: FROM,
       to: TO,
+      replyTo: email,
       subject: `Early Access — ${name}`,
       html: notifyHtml
     });
@@ -137,6 +138,7 @@ app.post('/api/support', async (req, res) => {
     await resend.emails.send({
       from: FROM,
       to: TO,
+      replyTo: email,
       subject: `[Support] ${subject}`,
       html: notifyHtml
     });

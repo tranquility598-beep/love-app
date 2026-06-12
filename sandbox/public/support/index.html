@@ -430,13 +430,13 @@
         }
 
         if (form) {
-            form.addEventListener('submit', (e) => {
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 clearError();
 
                 const name = document.getElementById('support-name').value.trim();
                 const email = document.getElementById('support-email').value.trim();
-                const category = document.getElementById('support-category').dataset.value;
+                const category = (document.getElementById('support-category').dataset.value || 'other');
                 const subject = document.getElementById('support-subject').value.trim();
                 const description = document.getElementById('support-description').value.trim();
 

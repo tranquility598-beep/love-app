@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 const app = express();
 const PORT = process.env.PORT || 5556;
@@ -14,13 +14,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const escapeHtml = (s) =>
   String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -30,6 +24,7 @@ const escapeHtml = (s) =>
 const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
 
 const TO = process.env.EARLY_ACCESS_TO || 'support@loveapp.chat';
+const FROM = process.env.MAIL_FROM || 'LOVE <noreply@loveapp.chat>';
 
 app.post('/api/early-access', async (req, res) => {
   try {
@@ -47,7 +42,7 @@ app.post('/api/early-access', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'too_long' });
     }
 
-    const html = `
+    const notifyHtml = `
       <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border:1px solid #1a1a1a;border-radius:14px;overflow:hidden">
         <div style="padding:24px 28px;border-bottom:1px solid #161616">
           <h2 style="margin:0;font-size:18px">Новая заявка на ранний доступ — LOVE</h2>
@@ -60,14 +55,14 @@ app.post('/api/early-access', async (req, res) => {
         </div>
       </div>`;
 
-    const sent = await transporter.sendMail({
-      from: `"LOVE" <${process.env.GMAIL_USER}>`,
+    await resend.emails.send({
+      from: FROM,
       to: TO,
       subject: `Early Access — ${name}`,
-      html
+      html: notifyHtml
     });
 
-    console.log('Early access email sent:', sent.messageId);
+    console.log('Early access notification sent');
 
     const replyHtml = `
       <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border:1px solid #1a1a1a;border-radius:14px;overflow:hidden">
@@ -79,18 +74,18 @@ app.post('/api/early-access', async (req, res) => {
         </div>
         <div style="padding:24px 28px;font-size:14px;line-height:1.6">
           <p style="margin:0 0 14px;color:rgba(255,255,255,0.7)">Мы получили вашу заявку на ранний доступ к LOVE. Наша команда рассмотрит её в ближайшее время и свяжется с вами по адресу <a href="mailto:${escapeHtml(email)}" style="color:#9ecbff">${escapeHtml(email)}</a>.</p>
-          <p style="margin:0;color:rgba(255,255,255,0.5);font-size:12px">С любовью, команда LOVE ❤️</p>
+          <p style="margin:0;color:rgba(255,255,255,0.5);font-size:12px">С любовью, команда LOVE</p>
         </div>
       </div>`;
 
-    const replySent = await transporter.sendMail({
-      from: `"LOVE" <${process.env.GMAIL_USER}>`,
+    await resend.emails.send({
+      from: FROM,
       to: email,
       subject: `Ваша заявка на LOVE получена!`,
       html: replyHtml
     });
 
-    console.log('Auto-reply sent:', replySent.messageId);
+    console.log('Auto-reply sent to:', email);
     return res.json({ ok: true });
   } catch (err) {
     console.error('early-access error:', err.message);

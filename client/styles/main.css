@@ -1279,6 +1279,32 @@ body.space-theme #starfield-canvas {
   padding: 60px 20px;
 }
 
+.dm-empty-state {
+  padding: 28px 10px 24px;
+}
+
+.dm-empty-state .empty-state-icon {
+  font-size: 30px;
+  margin-bottom: 10px;
+}
+
+.dm-empty-state .empty-state-title {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.dm-empty-state .empty-state-desc {
+  max-width: 190px;
+  font-size: 12px;
+}
+
+.dm-empty-state .empty-state-btn {
+  min-height: 34px;
+  margin-top: 14px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
 .empty-state-icon {
   font-size: 48px;
   margin-bottom: 16px;

@@ -411,6 +411,11 @@ function renderServersList(servers) {
   if (!list) return;
 
   list.innerHTML = ''; // Очищаем список безопасно
+
+  if (!Array.isArray(servers) || servers.length === 0) {
+    list.appendChild(buildServerEmptyState());
+    return;
+  }
   
   servers.forEach(server => {
     const iconDiv = document.createElement('div');
@@ -439,6 +444,33 @@ function renderServersList(servers) {
 
     list.appendChild(iconDiv);
   });
+}
+
+function buildServerEmptyState() {
+  const wrap = document.createElement('div');
+  wrap.className = 'server-empty-state';
+
+  const title = document.createElement('div');
+  title.className = 'server-empty-title';
+  title.textContent = 'Нет сфер?';
+  wrap.appendChild(title);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'server-empty-btn';
+  btn.title = 'Создать сферу';
+  btn.setAttribute('aria-label', 'Создать сферу');
+  btn.textContent = 'Создать';
+  btn.addEventListener('click', () => {
+    if (typeof showCreateServerModal === 'function') {
+      showCreateServerModal();
+    } else {
+      document.getElementById('add-entity-btn')?.click();
+    }
+  });
+  wrap.appendChild(btn);
+
+  return wrap;
 }
 
 /**
@@ -1146,10 +1178,13 @@ function renderDMConversations(conversations) {
   const container = document.getElementById('dm-conversations');
   if (!container) return;
 
+  const items = Array.isArray(conversations) ? conversations : [];
+
   // Очищаем контейнер безопасно
   container.innerHTML = '';
+  let renderedCount = 0;
   
-  conversations.forEach(conv => {
+  items.forEach(conv => {
     const other = conv.participants?.find(p => p._id !== window.currentUser?._id);
     if (!other) return;
 
@@ -1212,7 +1247,49 @@ function renderDMConversations(conversations) {
     dmItem.appendChild(closeBtn);
     
     container.appendChild(dmItem);
+    renderedCount++;
   });
+
+  if (renderedCount === 0) {
+    container.appendChild(buildDMEmptyState());
+  }
+}
+
+function buildDMEmptyState() {
+  const wrap = document.createElement('div');
+  wrap.className = 'empty-state dm-empty-state';
+
+  const icon = document.createElement('div');
+  icon.className = 'empty-state-icon';
+  icon.textContent = '♡';
+  wrap.appendChild(icon);
+
+  const title = document.createElement('div');
+  title.className = 'empty-state-title';
+  title.textContent = 'Нет друзей или еще не добавили?';
+  wrap.appendChild(title);
+
+  const desc = document.createElement('div');
+  desc.className = 'empty-state-desc';
+  desc.textContent = 'Добавьте друга, чтобы начать личный чат.';
+  wrap.appendChild(desc);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'empty-state-btn';
+  btn.textContent = 'Добавить';
+  btn.addEventListener('click', () => {
+    if (typeof showFriendsView === 'function') showFriendsView();
+    if (typeof switchFriendsTab === 'function') {
+      switchFriendsTab('add');
+      requestAnimationFrame(() => {
+        document.getElementById('add-friend-input')?.focus();
+      });
+    }
+  });
+  wrap.appendChild(btn);
+
+  return wrap;
 }
 
 /**

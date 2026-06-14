@@ -153,11 +153,11 @@ function buildEmptyState(icon, title, desc, action) {
 
 function buildEmptyAllFriends() {
   return buildEmptyState(
-    '👥',
-    'У тебя пока нет друзей',
-    'Добавь друга по имени пользователя, чтобы начать общение.',
+    '♡',
+    'Нет друзей',
+    'Добавьте первого друга, чтобы начать общение в личных сообщениях.',
     {
-      label: 'Добавить в друзья',
+      label: 'Добавить',
       onClick: () => {
         switchFriendsTab('add');
         // Дать DOM перерисоваться, потом сфокусировать input.

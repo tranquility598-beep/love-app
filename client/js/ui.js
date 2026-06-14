@@ -512,7 +512,7 @@ function generateDefaultAvatar(username) {
   const index = nameStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
   const color = colors[index];
   const letter = nameStr[0].toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" rx="20" fill="${color}"/><text x="20" y="26" text-anchor="middle" fill="white" font-size="18" font-family="Arial" font-weight="bold">${letter}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" rx="8" fill="${color}"/><text x="20" y="26" text-anchor="middle" fill="white" font-size="18" font-family="Arial" font-weight="bold">${letter}</text></svg>`;
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 

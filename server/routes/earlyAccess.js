@@ -1,0 +1,64 @@
+const express = require('express');
+const router = express.Router();
+const { sendEmail } = require('../utils/emailService');
+
+/**
+ * Early Access — приём заявок с лендинга loveapp.chat
+ * POST /api/early-access  { name, email, why }
+ * Письмо уходит на support@loveapp.chat (пересылается на Gmail).
+ *
+ * Лендинг статический и живёт на другом origin — не забудь добавить его
+ * в ALLOWED_ORIGINS (.env), иначе глобальный CORS отклонит запрос.
+ */
+
+const TO = process.env.EARLY_ACCESS_TO || 'support@loveapp.chat';
+
+const escapeHtml = (s) =>
+  String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+
+const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+
+router.post('/', async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '').trim();
+    const email = String((req.body && req.body.email) || '').trim();
+    const why = String((req.body && req.body.why) || '').trim();
+
+    if (!name || !email || !why) {
+      return res.status(400).json({ ok: false, error: 'missing_fields' });
+    }
+    if (!isEmail(email)) {
+      return res.status(400).json({ ok: false, error: 'invalid_email' });
+    }
+    if (name.length > 120 || email.length > 160 || why.length > 4000) {
+      return res.status(400).json({ ok: false, error: 'too_long' });
+    }
+
+    const html = `
+      <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;border:1px solid #1a1a1a;border-radius:14px;overflow:hidden">
+        <div style="padding:24px 28px;border-bottom:1px solid #161616">
+          <h2 style="margin:0;font-size:18px">Новая заявка на ранний доступ — LOVE</h2>
+        </div>
+        <div style="padding:24px 28px;font-size:14px;line-height:1.6">
+          <p style="margin:0 0 14px"><b>Имя:</b> ${escapeHtml(name)}</p>
+          <p style="margin:0 0 14px"><b>Email:</b> <a href="mailto:${escapeHtml(email)}" style="color:#9ecbff">${escapeHtml(email)}</a></p>
+          <p style="margin:0 0 6px"><b>Зачем нужен доступ:</b></p>
+          <p style="margin:0;color:rgba(255,255,255,0.7);white-space:pre-wrap">${escapeHtml(why)}</p>
+        </div>
+      </div>`;
+
+    const sent = await sendEmail(TO, `Early Access — ${name}`, html);
+    if (!sent) {
+      return res.status(502).json({ ok: false, error: 'send_failed' });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('early-access error:', err.message);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+module.exports = router;

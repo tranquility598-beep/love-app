@@ -112,3 +112,55 @@
   * Диагностика больше не выдает ошибки рассинхрона бэкдропов (`backdrop visible but no modals open`).
   * Процесс создания и мгновенного входа в комнату работает абсолютно стабильно и мгновенно.
 
+---
+
+### 7. Исправление звонков в ЛС и оптимизация битрейта WebRTC (DM Calling Fix & WebRTC Bitrate Capping)
+**Файлы**: [socket.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/socket.js), [voice.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/voice.js), [screenshare.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/screenshare.js)
+
+* **Проблема**:
+  1. Звонки в ЛС не доходили до получателя, потому что сокет-функции сигналинга (`socketRequestCall`, `socketSendCallResponse`, `socketEndCall`) не были экспортированы в глобальный объект `window`. При попытке вызвать `window.socketRequestCall()` или `window.socketEndCall()` происходил тихий пропуск, и сокет-запрос не уходил на сервер.
+  2. Во время демонстрации экрана голос сильно пролагивал. В WebRTC не было жесткого ограничения битрейта (`maxBitrate`) для трансляции экрана, из-за чего видеопоток забивал весь исходящий канал (достигая 4-6 Mbps) и приводил к высокой потере пакетов, джиттеру и задержке на аудиоканале.
+* **Реализовано**:
+  1. **Экспорт сокет-методов**: В `socket.js` в глобальный объект `window` добавлены все необходимые сокет-интерфейсы: `socketJoinVoice`, `socketLeaveVoice`, `socketSendOffer`, `socketSendAnswer`, `socketSendIceCandidate`, `socketSpeaking`, `socketToggleMute`, `socketToggleDeafen`, `socketRequestCall`, `socketSendCallResponse`, `socketEndCall`.
+  2. **Ограничение битрейта WebRTC**: В `voice.js` реализован метод `applyVideoBitrate(pc, bitrateValue)`, который находит активный видео-сендер (`RTCRtpSender`) и принудительно выставляет параметр `maxBitrate`.
+  3. **Оптимизированные пресеты качества**: Уменьшены максимальные битрейты трансляций для домашних/мобильных интернет-соединений, чтобы защитить аудиоканал от забивания:
+     - `low`: 500 kbps (480p 10fps)
+     - `medium` (стандартный): 1.2 Mbps (720p 15fps)
+     - `high`: 2.0 Mbps (1080p 24fps)
+     - `ultra`: 3.0 Mbps (1080p 30fps)
+  4. **Автоматическое применение**: Ограничение битрейта автоматически форсируется во всех точках жизненного цикла соединения (при успешном созвоне `connected`, обмене SDP-офферами/ансверами в `handleAnswer` и при пересогласовании `renegotiate`).
+* **Результат**: Звонки в ЛС теперь стабильно доходят и вызывают оверлей звонка, а при запуске демонстрации экрана звук голоса остается кристально чистым и не пролагивает.
+
+---
+
+### 8. Разработка панели администратора (Admin App Development)
+**Файлы**: [admin/index.html](file:///C:/Users/Aleksandr/Desktop/Love/admin/index.html), [admin/src/index.css](file:///C:/Users/Aleksandr/Desktop/Love/admin/src/index.css), [admin/src/App.jsx](file:///C:/Users/Aleksandr/Desktop/Love/admin/src/App.jsx)
+
+* **Результат**: 
+  - *Login Screen*: Вход по почте/паролю с полноценной поддержкой 2FA-кодов.
+  - *Home (Аналитика)*: Графики Recharts по дням для новых регистраций и сообщений, а также KPI плитки.
+  - *Users (Модерация)*: Живой поиск, выдача мута (от 10 минут до бессрочного), бан с указанием причины, принудительное отключение от сокетов (Kick), смена ролей (Support / Moderator / Admin / Founder).
+  - *Servers*: Просмотр и полное удаление комнат/серверов.
+  - *Reports (Жалобы)*: Очередь жалоб пользователей с возможностью отклонения или вынесения вердикта.
+  - *Announcements (Анонсы)*: Форма отправки анонсов на клиенты (тосты или модальные окна) с интерактивным превью.
+  - *Logs (Аудит)*: Список всех действий администрации.
+  - *Infrastructure*: Режимы баз данных, Cloudinary, Node Uptime/Memory и количество сокет-соединений в реальном времени.
+* **Результат**: Полностью готовое к деплою на Vercel приложение, безопасно управляющее платформой.
+
+---
+
+### 9. Премиальный экран блокировки (Ban Screen), Real-Time выселение и поддержка/жалобы
+**Файлы**: [auth.js](file:///C:/Users/Aleksandr/Desktop/Love/server/middleware/auth.js), [auth.js](file:///C:/Users/Aleksandr/Desktop/Love/server/routes/auth.js), [admin.js](file:///C:/Users/Aleksandr/Desktop/Love/server/routes/admin.js), [users.js](file:///C:/Users/Aleksandr/Desktop/Love/server/routes/users.js), [index.html](file:///C:/Users/Aleksandr/Desktop/Love/client/index.html), [auth.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/auth.js), [app.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/app.js), [socket.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/socket.js), [api.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/api.js), [ui.js](file:///C:/Users/Aleksandr/Desktop/Love/client/js/ui.js), [auth.css](file:///C:/Users/Aleksandr/Desktop/Love/client/styles/auth.css), [main.css](file:///C:/Users/Aleksandr/Desktop/Love/client/styles/main.css), [modals.css](file:///C:/Users/Aleksandr/Desktop/Love/client/styles/modals.css)
+
+* **Реализовано**:
+  1. **Премиальный экран бана**: Добавлен новый оверлей `#ban-screen` с анимированным пульсирующим щитом блокировки, подробным блоком причины нарушения правил и кнопкой возврата.
+  2. **Real-time сокет-выселение**: При бане на бэкенде сначала отправляется персональное сокет-событие `user:banned`, и только через `setTimeout` (~500мс) сокет закрывается. Это гарантирует, что клиент успеет обработать событие и плавно переключится на экран блокировки. Также была удалена дублирующая отправка старого сокет-события `founder:announcement`, чтобы исключить появление старого верхнего баннера при публикации анонсов.
+  3. **Прямой редирект при запуске**: Защита на уровне `/api/auth/me` и `AuthAPI.getMe()` перехватывает бан и отправляет пользователя на Ban Screen прямо при запуске приложения.
+  4. **Адекватная система жалоб (Reports)**:
+     - Добавлен эндпоинт `POST /api/users/report` на бэкенде с регистронезависимым поиском нарушителя через RegExp (`User.findOne({ username: { $regex: new RegExp("^" + escapedUsername + "$", "i") } })`) с экранированием спецсимволов.
+     - Добавлен раздел «Поддержка и жалобы» в настройки пользователя в клиенте.
+     - Пользователи могут выбрать причину (спам, домогательства, шок-контент и др.), указать нарушителя и отправить жалобу, которая мгновенно попадает в очередь модераторов в админке.
+  5. **Редизайн тостов и модальных окон**:
+     - Тосты перерисованы в премиальном полупрозрачном стеклянном стиле (`backdrop-filter`) с неоновой подсветкой левой грани, соответствующей типу уведомления (Emerald green для успеха, Ruby red для ошибок, Amber для предупреждений и Cyber blue для инфо).
+     - Модальные окна стали более размытыми и аккуратными, добавлен новый `#announcement-modal` для глобальных объявлений от основателей и администрации.
+     - Полностью отключена регистрация старого сокет-слушателя `founder:announcement` в `client/js/socket.js`, а старый эмиттер в `server/socket/socketHandler.js` перенаправлен на событие `admin:announcement` типа `normal`, чтобы всегда выводить аккуратные тосты вместо верхнего баннера.

@@ -4,3 +4,4 @@ server/uploads/
 .env
 build/dist/
 .DS_Store
+send to ai/

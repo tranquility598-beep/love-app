@@ -169,6 +169,21 @@ module.exports = (io) => {
           return socket.emit('error', { message: 'Неверные данные сообщения' });
         }
 
+        // Проверяем, не заглушен ли пользователь модератором
+        const user = await User.findById(userId);
+        if (user && user.isMuted) {
+          if (user.muteUntil && user.muteUntil < Date.now()) {
+            user.isMuted = false;
+            user.muteUntil = null;
+            await user.save();
+          } else {
+            const timeStr = user.muteUntil 
+              ? ` до ${user.muteUntil.toLocaleTimeString()}`
+              : ' бессрочно';
+            return socket.emit('error', { message: `Вы временно лишены права отправлять сообщения${timeStr}` });
+          }
+        }
+
         // Per-user-per-channel anti-spam. Не используем 'error' event,
         // чтобы фронт не показал общую ошибку — отправляем отдельное
         // событие message:rate_limited с retryAfter, и фронт сам
@@ -190,6 +205,19 @@ module.exports = (io) => {
         const channel = await Channel.findById(channelId);
         if (!channel) {
           return socket.emit('error', { message: 'Канал не найден' });
+        }
+
+        // Если это DM-канал, проверяем что получатель не удалил отправителя из друзей
+        if (!channel.server) {
+          const dm = await DirectMessage.findOne({ channel: channelId });
+          if (dm) {
+            const otherParticipant = dm.participants.find(p => p.toString() !== userId);
+            const recipientUser = otherParticipant ? await User.findById(otherParticipant).lean() : null;
+            const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
+            if (!isFriend) {
+              return socket.emit('error', { message: 'Вы не можете отправлять сообщения пользователю, который удалил вас из друзей' });
+            }
+          }
         }
 
 
@@ -585,7 +613,7 @@ module.exports = (io) => {
     /**
      * Присоединение к голосовому каналу
      */
-    socket.on('voice:join', async (data) => {
+    socket.on('voice:join', async (data, callback) => {
       try {
         const { channelId } = data;
         
@@ -596,7 +624,10 @@ module.exports = (io) => {
         if (!isDMCall) {
           channel = await Channel.findById(channelId);
           if (!channel || channel.type !== 'voice') {
-            return socket.emit('error', { message: 'Голосовой канал не найден' });
+            const err = new Error('Голосовой канал не найден');
+            socket.emit('error', { message: err.message });
+            if (typeof callback === 'function') callback({ status: 'error', message: err.message });
+            return;
           }
         }
         
@@ -634,6 +665,7 @@ module.exports = (io) => {
             channelId,
             members: channelMembers
           });
+          if (typeof callback === 'function') callback({ status: 'ok' });
           return;
         }
         
@@ -720,24 +752,28 @@ module.exports = (io) => {
         });
 
         console.log(`🎤 ${socket.user.username} joined voice channel ${channelId}`);
+        if (typeof callback === 'function') callback({ status: 'ok' });
         
       } catch (error) {
         console.error('Voice join error:', error);
         socket.emit('error', { message: 'Ошибка при подключении к голосовому каналу' });
+        if (typeof callback === 'function') callback({ status: 'error', message: error.message });
       }
     });
     
     /**
      * Выход из голосового канала
      */
-    socket.on('voice:leave', async (data) => {
+    socket.on('voice:leave', async (data, callback) => {
       try {
         const { channelId } = data;
         
         await leaveVoiceChannel(socket, channelId);
+        if (typeof callback === 'function') callback({ status: 'ok' });
         
       } catch (error) {
         console.error('Voice leave error:', error);
+        if (typeof callback === 'function') callback({ status: 'error', message: error.message });
       }
     });
     
@@ -858,17 +894,23 @@ module.exports = (io) => {
     /**
      * Присоединение к серверу (после создания/вступления)
      */
-    socket.on('server:join', (data) => {
+    socket.on('server:join', (data, callback) => {
       const { serverId } = data;
       socket.join(`server:${serverId}`);
+      if (typeof callback === 'function') {
+        callback({ status: 'ok' });
+      }
     });
     
     /**
      * Покидание сервера
      */
-    socket.on('server:leave', (data) => {
+    socket.on('server:leave', (data, callback) => {
       const { serverId } = data;
       socket.leave(`server:${serverId}`);
+      if (typeof callback === 'function') {
+        callback({ status: 'ok' });
+      }
     });
 
     // ==================== ДРУЗЬЯ ====================
@@ -919,6 +961,14 @@ module.exports = (io) => {
       console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found socket: ${targetSocketId ? 'YES' : 'NO'}`);
 
       if (targetSocketId) {
+        // Проверка дружбы перед звонком
+        const recipientUser = await User.findById(targetIdStr).lean();
+        const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
+        if (!isFriend) {
+          socket.emit('call:error', { message: 'Вы не можете звонить пользователю, который удалил вас из друзей' });
+          return;
+        }
+
         const conversation = await DirectMessage.findOne({
           participants: { $all: [userId, targetIdStr] }
         }).select('_id channel participants');
@@ -1101,9 +1151,11 @@ module.exports = (io) => {
       const { message } = data;
       if (!message) return;
       
-      // Отправляем объявление всем подключенным пользователям
-      io.emit('founder:announcement', {
-        message,
+      // Отправляем объявление всем подключенным пользователям через новые системные тосты
+      io.emit('admin:announcement', {
+        title: '📢 Объявление',
+        content: message,
+        type: 'normal',
         from: socket.user.username,
         timestamp: new Date()
       });

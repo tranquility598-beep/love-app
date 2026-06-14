@@ -278,4 +278,60 @@ router.put('/avatar', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/users/report
+ * Создать новую жалобу (Report)
+ */
+router.post('/report', authMiddleware, async (req, res) => {
+  try {
+    const { reportedUser, targetUsername, reason, description } = req.body;
+    
+    if (!reason || !description) {
+      return res.status(400).json({ message: 'Причина и описание обязательны' });
+    }
+    
+    const validReasons = ['spam', 'harassment', 'inappropriate_content', 'violence', 'other'];
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({ message: 'Некорректная причина жалобы' });
+    }
+    
+    let offenderId = reportedUser || null;
+    
+    if (targetUsername && !offenderId) {
+      const cleanUsername = targetUsername.startsWith('@') ? targetUsername.substring(1) : targetUsername;
+      // Экранируем символы регулярных выражений для безопасности
+      const escapedUsername = cleanUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const targetUser = await User.findOne({ username: { $regex: new RegExp("^" + escapedUsername + "$", "i") } });
+      if (targetUser) {
+        offenderId = targetUser._id;
+      }
+    }
+    
+    const Report = require('../models/Report');
+    const newReport = new Report({
+      reporter: req.user._id,
+      reportedUser: offenderId,
+      reason,
+      description: targetUsername ? `[Жалоба на ${targetUsername}]: ${description}` : description
+    });
+    
+    await newReport.save();
+    
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('admin:new_report', {
+        _id: newReport._id,
+        reporter: { _id: req.user._id, username: req.user.username, avatar: req.user.avatar },
+        reason,
+        createdAt: newReport.createdAt
+      });
+    }
+    
+    res.status(201).json({ message: 'Жалоба успешно отправлена и будет рассмотрена модераторами' });
+  } catch (error) {
+    console.error('Create report error:', error);
+    res.status(500).json({ message: 'Ошибка сервера при отправке жалобы' });
+  }
+});
+
 module.exports = router;

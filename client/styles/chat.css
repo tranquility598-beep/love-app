@@ -193,7 +193,7 @@ body.hide-avatars .message-with-avatar {
 .message-avatar {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
   flex-shrink: 0;
   cursor: pointer;
@@ -304,7 +304,7 @@ body.hide-avatars .message-with-avatar {
 .message-reply-avatar {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
   border: 1px solid var(--border);
 }

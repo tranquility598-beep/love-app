@@ -49,6 +49,35 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
     
+    const isLargeFile = file.size > 5 * 1024 * 1024;
+
+    if (isVideo || isLargeFile) {
+      // Локальное сохранение на сервере Hetzner
+      const localFolder = isVideo ? 'video' : (isImage ? 'images' : 'files');
+      const targetDir = path.join(__dirname, '..', 'uploads', localFolder);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      const safeName = generateSafeFilename(file.name, file.mimetype);
+      const targetPath = path.join(targetDir, safeName);
+
+      await file.mv(targetPath);
+
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${localFolder}/${safeName}`;
+
+      return res.json({
+        url: fileUrl,
+        filename: safeName,
+        originalName: validation.sanitizedName,
+        size: file.size,
+        type: isVideo ? 'video' : (isAudio ? 'audio' : (isImage ? 'image' : 'file')),
+        mimetype: file.mimetype,
+        storage: 'local'
+      });
+    }
+
+    // Загрузка в Cloudinary (изображения, аудио и файлы до 5 МБ)
     let folder = 'files';
     if (isImage) folder = 'images';
     if (isAudio) folder = 'audio';
@@ -98,7 +127,8 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       originalName: validation.sanitizedName,
       size: file.size,
       type: isAudio ? 'audio' : (isImage ? 'image' : 'file'),
-      mimetype: file.mimetype
+      mimetype: file.mimetype,
+      storage: 'cloudinary'
     });
     
   } catch (error) {
@@ -142,6 +172,35 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
     
+    const isLargeFile = file.size > 5 * 1024 * 1024;
+
+    if (isVideo || isLargeFile) {
+      // Локальное сохранение на сервере Hetzner
+      const localFolder = isVideo ? 'video' : (isImage ? 'images' : 'files');
+      const targetDir = path.join(__dirname, '..', 'uploads', localFolder);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      const safeName = generateSafeFilename(file.name, file.mimetype);
+      const targetPath = path.join(targetDir, safeName);
+
+      await file.mv(targetPath);
+
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${localFolder}/${safeName}`;
+
+      return res.json({
+        url: fileUrl,
+        filename: safeName,
+        originalName: validation.sanitizedName,
+        size: file.size,
+        type: isVideo ? 'video' : (isImage ? 'image' : 'file'),
+        mimetype: file.mimetype,
+        storage: 'local'
+      });
+    }
+
+    // Загрузка в Cloudinary (файлы до 5 МБ)
     const folder = isImage ? 'images' : 'files';
     
     let filePath;
@@ -189,7 +248,8 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
       originalName: validation.sanitizedName,
       size: file.size,
       type: isImage ? 'image' : 'file',
-      mimetype: file.mimetype
+      mimetype: file.mimetype,
+      storage: 'cloudinary'
     });
     
   } catch (error) {

@@ -52,6 +52,10 @@ const authMiddleware = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: 'Пользователь не найден' });
     }
+
+    if (user.isBanned) {
+      return res.status(403).json({ message: 'Ваш аккаунт заблокирован', isBanned: true, reason: user.banReason || '' });
+    }
     
     // Добавляем пользователя и ID сессии в запрос
     req.user = user;

@@ -67,7 +67,7 @@
 .voice-card-avatar {
   width: 96px;
   height: 96px;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
 }
 

@@ -185,7 +185,7 @@ body.room-mode #friends-view {
 .room-header-member-avatar {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #5865f2;
   display: inline-flex;
   align-items: center;
@@ -580,7 +580,7 @@ body.room-mode #chat-view .channel-start-desc {
 .room-voice-card-avatar {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #5865f2;
   display: inline-flex;
   align-items: center;
@@ -1150,7 +1150,7 @@ body.room-mode #chat-view .channel-start-desc {
 .room-settings-member-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #5865f2;
   display: inline-flex;
   align-items: center;

@@ -898,7 +898,7 @@
   cursor: pointer;
   width: 80px;
   height: 80px;
-  border-radius: 50%;
+  border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
   border: 2px solid var(--border);
@@ -1144,7 +1144,7 @@
 .server-member-avatar {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
   border: 1px solid var(--border);
 }

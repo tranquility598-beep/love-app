@@ -55,7 +55,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'owner', 'admin'],
+    enum: ['user', 'owner', 'admin', 'founder', 'moderator', 'support'],
     default: 'user'
   },
   bio: {
@@ -214,6 +214,14 @@ const userSchema = new mongoose.Schema({
   twoFactorExpires: {
     type: Date,
     default: null
+  },
+  isBanned: {
+    type: Boolean,
+    default: false
+  },
+  banReason: {
+    type: String,
+    default: ''
   }
 });
 

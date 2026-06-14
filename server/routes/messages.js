@@ -101,6 +101,19 @@ router.post('/:channelId', authMiddleware, messageLimiter, messageAntiSpamMiddle
   try {
     const { channelId } = req.params;
     const { content, replyTo } = req.body;
+
+    if (req.user.isMuted) {
+      if (req.user.muteUntil && req.user.muteUntil < Date.now()) {
+        req.user.isMuted = false;
+        req.user.muteUntil = null;
+        await req.user.save();
+      } else {
+        const timeStr = req.user.muteUntil 
+          ? ` до ${req.user.muteUntil.toLocaleTimeString()}`
+          : ' бессрочно';
+        return res.status(403).json({ message: `Вы временно лишены права отправлять сообщения${timeStr}` });
+      }
+    }
     
     if (!content && (!req.files || Object.keys(req.files).length === 0)) {
       return res.status(400).json({ message: 'Сообщение не может быть пустым' });

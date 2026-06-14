@@ -4,13 +4,180 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Love — Full UX Prototype Sandbox</title>
-    <!-- Подключаем шрифты: Lora (сериф для заголовков) и Outfit/Fira Mono -->
+    <!-- Подключаем шрифты: Lora/Cormorant (сериф для заголовков) и Outfit/Fira Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Outfit:wght@300;400;500;600&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=32">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Lora:ital,wght@0,400..700;1,400..700&family=Outfit:wght@300;400;500;600&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=34">
+    <link rel="stylesheet" href="settings.css?v=3">
+    <link rel="stylesheet" href="auth.css?v=3">
 </head>
 <body>
+    <!-- ════════════════ ЭКРАН АВТОРИЗАЦИИ (макет) ════════════════ -->
+    <div class="auth-screen" id="auth-screen">
+      <!-- Анимированный фон -->
+      <div class="auth-bg" aria-hidden="true">
+        <span class="auth-orb auth-orb--1"></span>
+        <span class="auth-orb auth-orb--2"></span>
+        <span class="auth-orb auth-orb--3"></span>
+        <div class="auth-particles" id="auth-particles"></div>
+        <div class="auth-grain"></div>
+      </div>
+
+      <!-- Основная карточка -->
+      <div class="auth-card" id="auth-card">
+        <div class="auth-brand">
+          <span class="auth-brand-heart">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          </span>
+          <span class="auth-brand-name">L O V E</span>
+          <span class="auth-brand-tag">мессенджер, сделанный с любовью</span>
+        </div>
+
+        <!-- Переключатель Вход / Регистрация -->
+        <div class="auth-switch" id="auth-switch">
+          <span class="auth-switch-thumb" id="auth-switch-thumb"></span>
+          <button type="button" class="auth-switch-btn active" data-auth-tab="login">Вход</button>
+          <button type="button" class="auth-switch-btn" data-auth-tab="register">Регистрация</button>
+        </div>
+
+        <div class="auth-forms" id="auth-forms">
+          <!-- ВХОД -->
+          <form class="auth-form active" id="auth-form-login" autocomplete="off" novalidate>
+            <div class="auth-field">
+              <label class="auth-label" for="login-email">Почта</label>
+              <div class="auth-input-wrap">
+                <input type="email" id="login-email" class="auth-input" placeholder="you@example.com" autocomplete="off">
+              </div>
+              <span class="auth-hint" id="login-email-hint"></span>
+            </div>
+            <div class="auth-field">
+              <label class="auth-label" for="login-password">Пароль</label>
+              <div class="auth-input-wrap">
+                <input type="password" id="login-password" class="auth-input" placeholder="••••••••" autocomplete="off">
+                <button type="button" class="auth-eye" data-toggle-pass="login-password" title="Показать пароль" aria-label="Показать пароль">
+                  <svg class="auth-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="auth-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+              <span class="auth-hint" id="login-password-hint"></span>
+            </div>
+            <button type="submit" class="auth-submit" id="login-submit">Войти</button>
+            <div class="auth-divider"><span>или</span></div>
+            <button type="button" class="auth-google" id="login-google">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8" opacity="0"/><path d="M21 12.3c0-.7-.06-1.4-.18-2H12v3.8h5.06a4.3 4.3 0 0 1-1.87 2.82v2.34h3.02C19.98 17.6 21 15.2 21 12.3z" fill="currentColor" stroke="none"/><path d="M12 21c2.43 0 4.47-.8 5.96-2.18l-3.02-2.34c-.84.56-1.9.9-2.94.9-2.26 0-4.18-1.53-4.86-3.58H3.98v2.42A9 9 0 0 0 12 21z" fill="currentColor" stroke="none"/><path d="M7.14 13.8a5.4 5.4 0 0 1 0-3.6V7.78H3.98a9 9 0 0 0 0 8.44l3.16-2.42z" fill="currentColor" stroke="none" opacity="0.55"/><path d="M12 6.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A8.98 8.98 0 0 0 3.98 7.78l3.16 2.42C7.82 8.13 9.74 6.58 12 6.58z" fill="currentColor" stroke="none" opacity="0.8"/></svg>
+              <span>Войти через Google</span>
+            </button>
+          </form>
+
+          <!-- РЕГИСТРАЦИЯ -->
+          <form class="auth-form" id="auth-form-register" autocomplete="off" novalidate>
+            <div class="auth-field">
+              <label class="auth-label" for="reg-email">Почта</label>
+              <div class="auth-input-wrap">
+                <input type="email" id="reg-email" class="auth-input" placeholder="you@example.com" autocomplete="off">
+                <span class="auth-status" id="reg-email-status"></span>
+              </div>
+              <span class="auth-hint" id="reg-email-hint"></span>
+            </div>
+            <div class="auth-field">
+              <label class="auth-label" for="reg-username">Имя пользователя</label>
+              <div class="auth-input-wrap auth-input-prefixed">
+                <span class="auth-prefix">@</span>
+                <input type="text" id="reg-username" class="auth-input" placeholder="username" autocomplete="off" maxlength="24">
+                <span class="auth-status" id="reg-username-status"></span>
+              </div>
+              <span class="auth-hint" id="reg-username-hint"></span>
+            </div>
+            <div class="auth-field">
+              <label class="auth-label" for="reg-password">Пароль</label>
+              <div class="auth-input-wrap">
+                <input type="password" id="reg-password" class="auth-input" placeholder="минимум 8 символов и 1 цифра" autocomplete="off">
+                <button type="button" class="auth-eye" data-toggle-pass="reg-password" title="Показать пароль" aria-label="Показать пароль">
+                  <svg class="auth-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="auth-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+              <div class="auth-strength" id="reg-strength"><span class="auth-strength-fill" id="reg-strength-fill"></span></div>
+              <span class="auth-hint" id="reg-password-hint"></span>
+            </div>
+
+            <label class="auth-terms">
+              <span class="auth-checkbox">
+                <input type="checkbox" id="reg-terms">
+                <span class="auth-checkbox-box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+              </span>
+              <span class="auth-terms-text">Я принимаю
+                <button type="button" class="auth-link" data-doc="terms">Условия пользования</button> и
+                <button type="button" class="auth-link" data-doc="privacy">Политику конфиденциальности</button>
+              </span>
+            </label>
+
+            <button type="submit" class="auth-submit" id="register-submit" disabled>Создать аккаунт</button>
+            <div class="auth-divider"><span>или</span></div>
+            <button type="button" class="auth-google" id="register-google">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.3c0-.7-.06-1.4-.18-2H12v3.8h5.06a4.3 4.3 0 0 1-1.87 2.82v2.34h3.02C19.98 17.6 21 15.2 21 12.3z" fill="currentColor" stroke="none"/><path d="M12 21c2.43 0 4.47-.8 5.96-2.18l-3.02-2.34c-.84.56-1.9.9-2.94.9-2.26 0-4.18-1.53-4.86-3.58H3.98v2.42A9 9 0 0 0 12 21z" fill="currentColor" stroke="none"/><path d="M7.14 13.8a5.4 5.4 0 0 1 0-3.6V7.78H3.98a9 9 0 0 0 0 8.44l3.16-2.42z" fill="currentColor" stroke="none" opacity="0.55"/><path d="M12 6.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A8.98 8.98 0 0 0 3.98 7.78l3.16 2.42C7.82 8.13 9.74 6.58 12 6.58z" fill="currentColor" stroke="none" opacity="0.8"/></svg>
+              <span>Регистрация через Google</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Шаг выбора username после Google OAuth -->
+      <div class="auth-oauth-step" id="auth-oauth-step">
+        <div class="auth-card auth-card--narrow">
+          <div class="auth-brand">
+            <span class="auth-brand-heart">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </span>
+            <span class="auth-brand-name">Почти готово</span>
+            <span class="auth-brand-tag">придумайте имя пользователя или оставьте предложенное</span>
+          </div>
+          <div class="auth-field">
+            <label class="auth-label" for="oauth-username">Имя пользователя</label>
+            <div class="auth-input-wrap auth-input-prefixed">
+              <span class="auth-prefix">@</span>
+              <input type="text" id="oauth-username" class="auth-input" autocomplete="off" maxlength="24">
+              <span class="auth-status" id="oauth-username-status"></span>
+            </div>
+            <span class="auth-hint" id="oauth-username-hint"></span>
+          </div>
+          <button type="button" class="auth-submit" id="oauth-continue">Продолжить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Модалка документов (Условия / Политика) -->
+    <div class="modal-backdrop hidden" id="auth-doc-modal" style="z-index: 6000;">
+      <div class="profile-card auth-doc-card" style="width: 580px; max-width: calc(100% - 32px); padding: 28px 30px; text-align: left; align-items: stretch; box-sizing: border-box;">
+        <button class="profile-close-btn" id="auth-doc-close" title="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3 class="auth-doc-title" id="auth-doc-title">Условия пользования</h3>
+        <div class="auth-doc-body" id="auth-doc-body"></div>
+      </div>
+    </div>
+
+    <!-- Тест-панель макета авторизации -->
+    <div class="auth-test-panel" id="auth-test-panel">
+      <div class="auth-test-head">
+        <span>AUTH · тест</span>
+        <button type="button" id="auth-test-collapse" title="Свернуть">–</button>
+      </div>
+      <div class="auth-test-body" id="auth-test-body">
+        <button type="button" class="auth-test-btn" data-test="open">Открыть авторизацию</button>
+        <button type="button" class="auth-test-btn" data-test="login">→ Вход</button>
+        <button type="button" class="auth-test-btn" data-test="register">→ Регистрация</button>
+        <button type="button" class="auth-test-btn" data-test="oauth">OAuth-шаг (username)</button>
+        <button type="button" class="auth-test-btn" data-test="welcome">Приветствие</button>
+        <button type="button" class="auth-test-btn" data-test="guide">Spotlight onboarding</button>
+        <button type="button" class="auth-test-btn" data-test="reset-onboard">Сбросить онбординг</button>
+        <button type="button" class="auth-test-btn" data-test="enter">В приложение →</button>
+      </div>
+    </div>
+
     <div class="app-container">
         <!-- 1. Левый узкий сайдбар (Глобальные разделы) -->
         <aside class="global-sidebar">
@@ -112,12 +279,10 @@
                 <div class="user-avatar-btn" id="nav-profile-btn" title="Мой профиль">
                     <span class="avatar-letter">Я</span>
                 </div>
-            </div>
-        </aside>
+              </div>
 
-        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-           ПРЕДСТАВЛЕНИЕ 1: ЧАТЫ И ЛС (view-chats)
-           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+            </aside>
+
         <div class="view-panel" id="view-chats">
             <section class="conversations-sidebar">
                 <header class="sidebar-header">
@@ -426,55 +591,85 @@
                             </footer>
                         </div>
 
-                        <!-- Панель войса комнаты (внедряем голосовую сетку прямо сюда!) -->
+                        <!-- Панель войса комнаты -->
                         <div class="room-pane-content pane-hidden" id="room-pane-voice">
-                            <div class="voice-channel-panel">
-                                <header class="voice-header-bar">
-                                    <div class="voice-channel-info">
-                                        <span class="voice-status-indicator"></span>
-                                        <h3>Голосовое подключение активно</h3>
-                                    </div>
-                                    <div class="voice-controls-row">
-                                        <button type="button" class="voice-control-btn-circle active" title="Включить экран" id="room-screenshare-btn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                                <line x1="8" y1="21" x2="16" y2="21"></line>
-                                                <line x1="12" y1="17" x2="12" y2="21"></line>
-                                            </svg>
-                                        </button>
-                                        <button type="button" class="voice-control-btn-circle" title="Включить камеру">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                                                <circle cx="12" cy="13" r="4"></circle>
-                                            </svg>
+                            <div class="voice-channel-panel" id="room-voice-channel-container">
+                                <div class="voice-constellation" id="room-voice-grid-constellation"></div>
+
+                                <!-- Оверлей «Войти в войс» (до подключения) -->
+                                <div class="voice-preconnect-overlay" id="room-voice-preconnect">
+                                    <div class="voice-preconnect-content">
+                                        <span class="voice-preconnect-users" id="room-voice-preconnect-count">0 в канале</span>
+                                        <button type="button" class="voice-preconnect-join-btn" id="room-voice-join-btn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                                            <span>Войти в голосовой</span>
                                         </button>
                                     </div>
-                                </header>
-                                <div class="voice-grid-layout">
-                                    <!-- Screenshare превью -->
-                                    <div class="screenshare-card" id="room-screenshare-card">
-                                        <div class="screenshare-video-placeholder">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="pulse-icon">
-                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                                <line x1="8" y1="21" x2="16" y2="21"></line>
-                                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                                </div>
+
+                                <!-- Нижняя панель управления комнаты (после подключения) -->
+                                <div class="voice-footer-bar hidden" id="room-voice-connected-bar">
+                                    <div class="voice-footer-center">
+                                        <button type="button" class="voice-control-btn active-state" id="room-voice-btn-mic" title="Выключить микрофон">
+                                            <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                                <line x1="12" y1="19" x2="12" y2="23"/>
+                                                <line x1="8" y1="23" x2="16" y2="23"/>
                                             </svg>
-                                            <span>Мария транслирует экран</span>
-                                            <button type="button" class="theater-mode-btn" id="room-theater-toggle">Увеличить в Кинотеатр</button>
-                                        </div>
+                                            <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                                <line x1="12" y1="19" x2="12" y2="23"/>
+                                                <line x1="8" y1="23" x2="16" y2="23"/>
+                                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="voice-control-btn active-state" id="room-voice-btn-sound" title="Выключить звук">
+                                            <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+                                            </svg>
+                                            <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+                                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="voice-control-btn muted-state" id="room-voice-btn-cam" title="Включить камеру">
+                                            <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M23 7l-7 5 7 5V7z"/>
+                                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                            </svg>
+                                            <svg class="voice-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                                <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v3.5"/>
+                                                <circle cx="12" cy="13" r="4"/>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="voice-control-btn muted-state" id="room-voice-btn-share" title="Включить трансляцию">
+                                            <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                                <line x1="12" y1="17" x2="12" y2="21"/>
+                                            </svg>
+                                            <svg class="voice-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="1" y1="1" x2="23" y2="23"/>
+                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                                <line x1="12" y1="17" x2="12" y2="21"/>
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <div class="voice-participants-list">
-                                        <div class="voice-member-card speaking">
-                                            <div class="voice-member-avatar">М</div>
-                                            <span class="voice-member-name">Мария</span>
-                                            <div class="speaking-wave">
-                                                <span></span><span></span><span></span>
-                                            </div>
-                                        </div>
-                                        <div class="voice-member-card">
-                                            <div class="voice-member-avatar">F</div>
-                                            <span class="voice-member-name">Founder</span>
-                                        </div>
+                                    <div class="voice-footer-right">
+                                        <button type="button" class="voice-disconnect-btn" id="room-voice-btn-disconnect" title="Выйти из войса">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                                <polyline points="16 17 21 12 16 7"/>
+                                                <line x1="21" y1="12" x2="9" y2="12"/>
+                                            </svg>
+                                            <span>Выйти</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -519,46 +714,36 @@
                     </header>
 
                     <div class="voice-channel-panel" id="voice-channel-container">
-                        <!-- Сетка участников или Демонстрация экрана -->
-                        <div class="voice-layout-container" id="voice-layout-container">
-                            <!-- Сетка участников без демки (floating wabi-sabi constellation) -->
-                            <div class="voice-constellation" id="voice-grid-constellation">
-                                <!-- Заполняется динамически через JS -->
+                        <!-- Плавающий мини-превью демки/камеры -->
+                        <div class="voice-float-preview hidden" id="server-float-preview">
+                            <div class="voice-preview-content" id="server-preview-content"></div>
+                            <div class="voice-preview-controls">
+                                <button class="voice-preview-btn" id="server-preview-collapse" title="Скрыть в аватар">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                                </button>
+                                <button class="voice-preview-btn" id="server-preview-expand" title="На весь экран">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                                </button>
                             </div>
-
-                            <!-- Режим демонстрации экрана (справа список участников, слева экран) -->
-                            <div class="voice-theater-view hidden" id="voice-theater-view">
-                                <div class="screenshare-large-card">
-                                    <div class="screenshare-video-mock" id="screenshare-feed-video">
-                                        <div class="screenshare-inner-gui">
-                                            <div class="screenshare-badge">LIVE</div>
-                                            <div class="screenshare-mock-content">
-                                                <div class="code-line"><span class="token-keyword">const</span> <span class="token-variable">loveApp</span> = <span class="token-keyword">new</span> <span class="token-class">WabiSabiInterface</span>();</div>
-                                                <div class="code-line"><span class="token-variable">loveApp</span>.<span class="token-method">setContrastMode</span>(<span class="token-string">'monochrome'</span>);</div>
-                                                <div class="code-line"><span class="token-variable">loveApp</span>.<span class="token-method">connectVoiceChannel</span>({ <span class="token-property">ambience</span>: <span class="token-string">'lounge'</span> });</div>
-                                                <div class="code-line"><span class="token-comment">// Симуляция сетевого потока...</span></div>
-                                                <div class="code-wave-graphic">
-                                                    <span></span><span></span><span></span><span></span><span></span>
-                                                </div>
-                                            </div>
-                                            <div class="screenshare-overlay-text" id="screenshare-stream-title">Мария транслирует экран</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="voice-compact-participants" id="voice-compact-participants-list">
-                                    <!-- Заполняется динамически через JS -->
-                                </div>
-                            </div>
+                            <div class="voice-preview-label" id="server-preview-label">Демонстрация экрана</div>
                         </div>
 
-                        <!-- Нижняя панель управления -->
+                        <!-- Сетка участников -->
+                        <div class="voice-constellation" id="voice-grid-constellation">
+                            <!-- Заполняется динамически через JS -->
+                        </div>
+
+                        <!-- Кастомный фуллскрин оверлей -->
+                        <div class="voice-fullscreen-overlay hidden" id="voice-fullscreen-overlay">
+                            <div class="voice-fullscreen-content" id="voice-fullscreen-content"></div>
+                            <button class="voice-fullscreen-close" id="voice-fullscreen-close">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Нижняя панель управления (серверный войс) -->
                         <div class="voice-footer-bar">
-                            <div class="voice-footer-left">
-                                <span class="voice-footer-status-dot"></span>
-                                <span class="voice-footer-status-text">Связь установлена</span>
-                            </div>
                             <div class="voice-footer-center">
-                                <!-- Микрофон -->
                                 <button type="button" class="voice-control-btn active-state" id="voice-btn-mic" title="Выключить микрофон">
                                     <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -575,24 +760,22 @@
                                     </svg>
                                 </button>
 
-                                <!-- Наушники (Звук) -->
                                 <button type="button" class="voice-control-btn active-state" id="voice-btn-sound" title="Выключить звук">
                                     <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
                                         <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
                                     </svg>
                                     <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
                                         <line x1="1" y1="1" x2="23" y2="23"></line>
-                                        <path d="M3 14h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H3v7zM19 14h2V7h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"></path>
-                                        <path d="M14 14a5 5 0 0 1-4-4"></path>
                                     </svg>
                                 </button>
 
-                                <!-- Камера -->
                                 <button type="button" class="voice-control-btn muted-state" id="voice-btn-cam" title="Включить камеру">
                                     <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                                        <circle cx="12" cy="13" r="4"></circle>
+                                        <path d="M23 7l-7 5 7 5V7z"/>
+                                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                                     </svg>
                                     <svg class="voice-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="1" y1="1" x2="23" y2="23"></line>
@@ -601,7 +784,6 @@
                                     </svg>
                                 </button>
 
-                                <!-- Демонстрация экрана -->
                                 <button type="button" class="voice-control-btn muted-state" id="voice-btn-share" title="Включить трансляцию экрана">
                                     <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -617,10 +799,11 @@
                                 </button>
                             </div>
                             <div class="voice-footer-right">
-                                <!-- Выйти из войса (Disconnect) -->
                                 <button type="button" class="voice-disconnect-btn" id="voice-btn-disconnect" title="Выйти из канала">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.62 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2 2A17.9 17.9 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .62 2.81 2 2 0 0 1-.45 2.11L8 9.91a16 16 0 0 0 2.68 3.4z"/>
+                                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                        <polyline points="16 17 21 12 16 7"/>
+                                        <line x1="21" y1="12" x2="9" y2="12"/>
                                     </svg>
                                     <span>Выйти</span>
                                 </button>
@@ -699,19 +882,21 @@
                         <h1 class="sidebar-title" style="font-size: 32px; font-family: var(--font-serif); margin-bottom: 8px;">Love Hub</h1>
                         <p style="color: var(--text-secondary); font-size: 15px;">Центр управления сообществом и обновлениями</p>
                     </div>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button class="submit-action-btn" id="hub-view-updates-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">История обновлений</button>
-                        <button class="submit-action-btn" id="hub-view-ideas-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Все идеи</button>
-                        <button class="submit-action-btn admin-only hidden" id="hub-view-bugs-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Все баги</button>
-                        <button class="submit-action-btn admin-only hidden" id="hub-add-update-btn" style="background: #ffffff; color: #000; border: none; font-weight: 500;">Написать обновление</button>
-                        <button class="submit-action-btn" id="hub-suggest-btn" style="padding: 10px 20px; font-weight: 500;">Предложить идею</button>
-                        <button class="submit-action-btn" id="hub-report-bug-btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1);">Сообщить об ошибке</button>
+                    <div class="hub-header-actions">
+                        <button class="hub-btn hub-btn-primary" id="hub-devlog-btn">Dev Log</button>
+                        <button class="hub-btn hub-btn-ghost" id="hub-view-updates-btn">История обновлений</button>
+                        <button class="hub-btn hub-btn-ghost" id="hub-view-ideas-btn">Все идеи</button>
+                        <button class="hub-btn hub-btn-ghost admin-only hidden" id="hub-view-bugs-btn">Все баги</button>
+                        <button class="hub-btn hub-btn-primary admin-only hidden" id="hub-add-update-btn">Написать обновление</button>
+                        <button class="hub-btn hub-btn-ghost" id="hub-suggest-btn">Предложить идею</button>
+                        <button class="hub-btn hub-btn-ghost" id="hub-report-bug-btn">Сообщить об ошибке</button>
                     </div>
                 </header>
 
                 <div class="bento-grid">
                     <!-- Главный анонс (Hero Block) -->
                     <div class="bento-card bento-hero" style="position: relative;">
+                        <span class="bento-corner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></span>
                         <div class="bento-tag">Major Release</div>
                         <h2 id="hub-hero-title">Обновление Love App v5.2.0</h2>
                         <p id="hub-hero-desc">Мы полностью переработали визуальный стиль приложения. Улучшена плавность анимаций модальных окон, добавлены кастомные SVG-иконки и умный виджет в системном трее.</p>
@@ -733,40 +918,42 @@
                     <div class="bento-card bento-idea">
                         <div class="bento-header-row">
                             <span class="bento-tag idea">Топ Идея</span>
-                            <span class="vote-count">▲ 142</span>
+                            <span class="vote-count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>142</span>
                         </div>
                         <h3>Анимированное сердце-логотип</h3>
                         <p>Пульсация в такт пришедшим уведомлениям или изменение оттенка.</p>
                         <span class="idea-status-tag planned">Запланировано</span>
                     </div>
 
-                    <!-- Баг-репорт -->
-                    <div class="bento-card bento-bug">
-                        <div class="bento-header-row">
-                            <span class="bento-tag bug">Критический баг</span>
-                            <span class="bug-status">В работе</span>
-                        </div>
-                        <h3>Спам уведомлений</h3>
-                        <p>Приходят бесконечные уведомления от удалённых друзей, окно зависает.</p>
-                    </div>
-
                     <!-- Быстрые действия / Ссылки -->
                     <div class="bento-card bento-actions">
                         <h3>Полезное</h3>
                         <div class="bento-action-links">
-                            <a href="#">Правила сообщества ↗</a>
-                            <a href="#">Roadmap проекта ↗</a>
-                            <a href="#">Сообщить об ошибке ↗</a>
+                            <a href="#" id="hub-link-rules">Правила сообщества ↗</a>
+                            <a href="#" id="hub-link-roadmap">Roadmap проекта ↗</a>
+                            <a href="#" id="hub-link-report-bug">Сообщить об ошибке ↗</a>
                         </div>
                     </div>
 
                     <!-- Мелкий апдейт -->
                     <div class="bento-card bento-minor">
+                        <span class="bento-corner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></span>
                         <div class="bento-tag update">Улучшение</div>
                         <h3>Встроенный плеер ГС</h3>
                         <p>Добавлен слайдер громкости и кнопка мьюта в чате.</p>
                     </div>
+
+                    <!-- Dev Log (открывает модалку с голосованием) -->
+                    <div class="bento-card bento-devlog" id="bento-devlog-card">
+                        <span class="bento-corner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></span>
+                        <span class="bento-tag devlog">Dev Log</span>
+                        <h3>Заметки разработки</h3>
+                        <p>Голосуйте за идеи и направление развития — <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;display:inline;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> за, <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;display:inline;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><path d="M13 5l-2.5 5 3.5 2-3 4.5"/></svg> против.</p>
+                        <span class="bento-devlog-cta">Открыть и проголосовать</span>
+                    </div>
                 </div>
+
+                <!-- Dev Log вынесен в модальное окно (#devlog-modal) -->
             </main>
         </div>
 
@@ -854,64 +1041,622 @@
                     </header>
                     <div class="notifications-feed-list" id="notif-feed-container">
                         <!-- Заполняется динамически -->
-                                            <!-- Security section -->
-                        <div class="settings-section-pane hidden" id="pane-settings-security">
-                            <h3>Безопасность учетной записи</h3>
-                            <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px; margin-bottom: 20px;">Защитите свой аккаунт с помощью двухфакторной аутентификации (2FA).</p>
-                            
-                            <div class="security-setup-wrapper">
-                                <div class="security-qr-mock">
-                                    <!-- Mock QR Code in monochrome -->
-                                    <div class="qr-code-grid">
-                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                                    </div>
-                                    <span class="qr-code-scan-text">Отсканируйте в Google Authenticator</span>
-                                </div>
-                                
-                                <div class="security-details-box">
-                                    <h4 style="margin-bottom: 8px; font-weight: 600;">Двухфакторная аутентификация (2FA)</h4>
-                                    <p style="color: var(--text-muted); font-size: 12.5px; margin-bottom: 16px; line-height: 1.4;">При включении 2FA вам потребуется вводить временный код при каждом входе.</p>
-                                    <button class="submit-action-btn" id="toggle-2fa-btn" style="background: #ffffff; color: #000000; border: none; font-weight: 500;">Включить 2FA</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Admin panel section -->
-                        <div class="settings-section-pane admin-only hidden" id="pane-settings-admin">
-                            <h3>Панель администратора</h3>
-                            <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;">Временный девелоперский режим.</p>
-                            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                                    <span style="font-size: 12px; color: var(--text-muted);">Uptime системы</span>
-                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">99.98%</h4>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                                    <span style="font-size: 12px; color: var(--text-muted);">Активные сокеты</span>
-                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">42 соединения</h4>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                                    <span style="font-size: 12px; color: var(--text-muted);">Режим базы данных</span>
-                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">Production (Replica)</h4>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 12px;">
-                                    <span style="font-size: 12px; color: var(--text-muted);">Memory Usage</span>
-                                    <h4 style="font-size: 20px; color: #fff; margin-top: 4px;">124MB / 512MB</h4>
-                                </div>
-                            </div>
-                            <div style="margin-top: 24px;">
-                                <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Логи консоли сервера</span>
-                                <div id="admin-console-log" class="console-box">
-                                    <div class="console-line"><span class="log-time">[Система]</span> Соединение с панелью установлено. Ожидание логов...</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                                                                </div>
                 </div>
             </main>
         </div>
+
+        <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ПРЕДСТАВЛЕНИЕ 7: НАСТРОЙКИ (view-settings)
+           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+    <div class="view-panel panel-hidden" id="view-settings">
+      <!-- ===== SETTINGS (новый дизайн) ===== -->
+      <div class="settings-shell" id="settings-shell">
+
+        <button class="settings-close-btn" id="settings-close-btn" title="Закрыть" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+
+        <!-- Сайдбар навигации настроек -->
+        <aside class="settings-sidebar">
+          <div class="settings-sidebar-header">
+            <h2 class="settings-sidebar-title">Настройки</h2>
+          </div>
+          <nav class="settings-nav">
+
+            <div class="settings-nav-group">Пользователь</div>
+            <button class="settings-nav-item active" data-settings-section="settings-profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Профиль</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-account">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>Аккаунт</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-privacy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Конфиденциальность</span>
+            </button>
+
+            <div class="settings-nav-group">Приложение</div>
+            <button class="settings-nav-item" data-settings-section="settings-appearance">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+              <span>Внешний вид</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-notifications">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span>Уведомления</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-voice">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+              <span>Голос и звук</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-hub">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              <span>Love Hub</span>
+            </button>
+
+            <div class="settings-nav-group">Система</div>
+            <button class="settings-nav-item" data-settings-section="settings-updates">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              <span>Обновления</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-advanced">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>Расширенные</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-about">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>О приложении</span>
+            </button>
+
+          </nav>
+        </aside>
+
+        <!-- Рабочая область -->
+        <main class="settings-content">
+          <div class="settings-content-scroll">
+
+            <!-- Мобильный заголовок с кнопкой "Назад" -->
+            <div class="settings-mobile-header">
+              <button class="settings-back-btn" id="settings-back-btn" aria-label="Назад">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              </button>
+              <span class="settings-mobile-title" id="settings-mobile-title">Профиль</span>
+            </div>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 1: ПРОФИЛЬ ━━━━━━━━━ -->
+            <section class="settings-section active" id="settings-profile">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Профиль</h1>
+                <p class="lvs-section-desc">Так вас видят другие пользователи Love</p>
+              </header>
+
+              <div class="lvs-grid lvs-grid--split">
+                <!-- Форма редактирования -->
+                <div class="lvs-card">
+                  <div class="lvs-avatar-row">
+                    <div class="lvs-avatar" id="lvs-avatar-preview"><span id="lvs-avatar-letters">АЛ</span></div>
+                    <div class="lvs-avatar-actions">
+                      <button class="lvs-btn" id="lvs-avatar-upload">Загрузить</button>
+                      <button class="lvs-btn lvs-btn--ghost" id="lvs-avatar-remove">Удалить</button>
+                      <p class="lvs-hint">PNG, JPG или GIF. До 5 МБ.</p>
+                    </div>
+                    <input type="file" id="lvs-avatar-input" accept="image/*" hidden>
+                  </div>
+
+                  <div class="lvs-divider"></div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label" for="lvs-input-name">Отображаемое имя</label>
+                    <input class="lvs-input" id="lvs-input-name" type="text" maxlength="32" value="Александр">
+                    <span class="lvs-counter"><span id="lvs-name-count">9</span>/32</span>
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label" for="lvs-input-username">Имя пользователя</label>
+                    <div class="lvs-input-prefixed">
+                      <span class="lvs-input-prefix">@</span>
+                      <input class="lvs-input" id="lvs-input-username" type="text" maxlength="24" value="founder">
+                    </div>
+                    <span class="lvs-hint" id="lvs-username-result">Менять можно раз в 7 дней.</span>
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label" for="lvs-input-bio">О себе</label>
+                    <textarea class="lvs-input lvs-textarea" id="lvs-input-bio" maxlength="190" rows="3" placeholder="Расскажите о себе...">завариваю чай и строю Love</textarea>
+                    <span class="lvs-counter"><span id="lvs-bio-count">26</span>/190</span>
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label" for="lvs-input-status">Статус (настроение)</label>
+                    <input class="lvs-input" id="lvs-input-status" type="text" maxlength="48" value="завариваю чай...">
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label">Иконка настроения</label>
+                    <div class="lvs-mood-picker" id="lvs-mood-picker"></div>
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label" for="lvs-input-listening">Сейчас слушает</label>
+                    <div class="lvs-input-prefixed">
+                      <input class="lvs-input" id="lvs-input-listening" type="text" maxlength="80" placeholder="Исполнитель — Название" value="Comastudio - Irreducible">
+                      <button class="lvs-btn lvs-btn--ghost" id="lvs-audio-upload" type="button" title="Импортировать свой аудиофайл">Загрузить</button>
+                      <input type="file" id="lvs-audio-input" accept="audio/*" hidden>
+                    </div>
+                    <span class="lvs-hint">Формат «Исполнитель — Название». Можно загрузить свой трек.</span>
+                  </div>
+
+                  <div class="lvs-field">
+                    <label class="lvs-label">Сферы увлечений</label>
+                    <div class="lvs-hobbies-editor" id="lvs-hobbies-editor"></div>
+                    <span class="lvs-hint">До 5 увлечений, по 20 символов каждое.</span>
+                  </div>
+                </div>
+
+                <!-- Живое превью — так профиль видит другой человек -->
+                <div class="lvs-preview-card lvs-vitrine-preview" id="lvs-profile-preview">
+                  <div class="lvs-preview-label">Так видят ваш профиль</div>
+                  <div class="lvs-vitrine">
+                    <div class="profile-avatar-container">
+                      <div class="profile-avatar" id="lvs-vitrine-avatar"><span id="lvs-vitrine-avatar-text">АЛ</span></div>
+                      <div class="profile-avatar-glow"></div>
+                    </div>
+                    <div class="profile-name-row">
+                      <h2 class="profile-name" id="lvs-vitrine-name">Александр</h2>
+                    </div>
+                    <span class="profile-username" id="lvs-vitrine-username">@founder</span>
+                    <div class="profile-divider">
+                      <span class="divider-heart">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      </span>
+                    </div>
+                    <div class="profile-section">
+                      <span class="profile-section-label">настроение:</span>
+                      <div class="profile-status-box">
+                        <span class="status-emoji" id="lvs-vitrine-mood"></span>
+                        <span class="status-text" id="lvs-vitrine-status">завариваю чай...</span>
+                      </div>
+                    </div>
+                    <div class="profile-section">
+                      <span class="profile-section-label">сейчас слушает:</span>
+                      <div class="profile-lofi-player">
+                        <div class="player-visualizer"><span></span><span></span><span></span><span></span></div>
+                        <div class="player-info">
+                          <span class="track-title" id="lvs-vitrine-track-title">Irreducible</span>
+                          <span class="track-artist" id="lvs-vitrine-track-artist">Comastudio</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="profile-section">
+                      <span class="profile-section-label">сферы увлечений:</span>
+                      <div class="profile-tags-row" id="lvs-vitrine-hobbies"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 2: АККАУНТ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-account">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Аккаунт</h1>
+                <p class="lvs-section-desc">Данные для входа и безопасность</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Электронная почта</div><div class="lvs-row-sub">founder@loveapp.chat</div></div>
+                  <button class="lvs-btn">Изменить</button>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Имя пользователя</div><div class="lvs-row-sub">@founder</div></div>
+                  <button class="lvs-btn">Изменить</button>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Пароль</div><div class="lvs-row-sub">Последнее изменение 2 месяца назад</div></div>
+                  <button class="lvs-btn">Изменить</button>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Дата создания</div><div class="lvs-row-sub">27 мая 2025</div></div>
+                  <span class="lvs-badge">312 дней</span>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Двухфакторная аутентификация</div><div class="lvs-row-sub">Дополнительная защита при входе</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Выйти из аккаунта</div><div class="lvs-row-sub">Завершить текущую сессию</div></div>
+                  <button class="lvs-btn">Выйти</button>
+                </div>
+              </div>
+
+              <div class="lvs-card lvs-card--danger">
+                <div class="lvs-section-subtitle lvs-danger-text">Опасная зона</div>
+                <p class="lvs-section-desc">Удаление аккаунта необратимо. Все сообщения, серверы и данные будут стёрты навсегда.</p>
+                <div class="lvs-row lvs-row--end">
+                  <button class="lvs-btn lvs-btn--danger" id="lvs-delete-account">Удалить аккаунт</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 3: КОНФИДЕНЦИАЛЬНОСТЬ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-privacy">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Конфиденциальность</h1>
+                <p class="lvs-section-desc">Кто и что может видеть о вас</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Видимость</div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Статус «в сети»</div><div class="lvs-row-sub">Показывать, когда вы онлайн</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Кто видит профиль</div></div>
+                  <div class="lvs-select" data-value="all"><button class="lvs-select-btn"><span>Все</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="all">Все</li><li data-value="friends">Друзья</li><li data-value="none">Никто</li></ul></div>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Показывать активность</div><div class="lvs-row-sub">Что вы слушаете и во что играете</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Запросы</div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Запросы в друзья</div></div>
+                  <div class="lvs-select" data-value="all"><button class="lvs-select-btn"><span>Все</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="all">Все</li><li data-value="fof">Друзья друзей</li><li data-value="none">Никто</li></ul></div>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Личные сообщения</div></div>
+                  <div class="lvs-select" data-value="friends"><button class="lvs-select-btn"><span>Друзья</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="all">Все</li><li data-value="friends">Друзья</li><li data-value="none">Никто</li></ul></div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 4: ВНЕШНИЙ ВИД ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-appearance">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Внешний вид</h1>
+                <p class="lvs-section-desc">Тема, масштаб и эффекты интерфейса</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Тема</div>
+                <div class="lvs-theme-grid">
+                  <button class="lvs-theme-option active" data-theme="dark">
+                    <span class="lvs-theme-swatch lvs-theme-swatch--dark"></span>
+                    <span class="lvs-theme-name">Тёмная</span>
+                  </button>
+                  <button class="lvs-theme-option" data-theme="light">
+                    <span class="lvs-theme-swatch lvs-theme-swatch--light"></span>
+                    <span class="lvs-theme-name">Светлая</span>
+                  </button>
+                  <button class="lvs-theme-option" data-theme="system">
+                    <span class="lvs-theme-swatch lvs-theme-swatch--system"></span>
+                    <span class="lvs-theme-name">Системная</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Масштаб интерфейса</div><div class="lvs-row-sub">Размер текста и элементов</div></div>
+                  <div class="lvs-slider-wrap">
+                    <input type="range" class="lvs-slider" id="lvs-scale-slider" min="75" max="125" step="5" value="100">
+                    <span class="lvs-slider-value" id="lvs-scale-value">100%</span>
+                  </div>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Компактный режим</div><div class="lvs-row-sub">Плотнее размещать сообщения</div></div>
+                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Анимации</div><div class="lvs-row-sub">Плавные переходы интерфейса</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Эффекты прозрачности</div><div class="lvs-row-sub">Размытие и стекло</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 5: УВЕДОМЛЕНИЯ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-notifications">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Уведомления</h1>
+                <p class="lvs-section-desc">Что и где вам показывать</p>
+              </header>
+
+              <div class="lvs-notif-preview" id="lvs-notif-preview">
+                <div class="lvs-notif-icon">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-label="Love"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="lvs-notif-text">
+                  <div class="lvs-notif-title">Love</div>
+                  <div class="lvs-notif-body">Так будут выглядеть ваши уведомления</div>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Уведомления на рабочем столе</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Push на телефон</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Сообщения</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Упоминания</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Обновления приложения</div></div>
+                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Love Hub</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 6: ГОЛОС И ЗВУК ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-voice">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Голос и звук</h1>
+                <p class="lvs-section-desc">Микрофон, динамики и обработка</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Устройство ввода</div></div>
+                  <div class="lvs-select" id="lvs-input-device" data-value="default"><button class="lvs-select-btn"><span>Микрофон по умолчанию</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="default">Микрофон по умолчанию</li></ul></div>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Громкость ввода</div></div>
+                  <div class="lvs-slider-wrap">
+                    <input type="range" class="lvs-slider" id="lvs-mic-volume" min="0" max="100" value="80">
+                    <span class="lvs-slider-value" id="lvs-mic-volume-value">80%</span>
+                  </div>
+                </div>
+                <div class="lvs-meter"><div class="lvs-meter-fill" id="lvs-mic-meter"></div></div>
+                <div class="lvs-row lvs-row--end">
+                  <button class="lvs-btn" id="lvs-mic-test">🎙 Проверить микрофон</button>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Устройство вывода</div></div>
+                  <div class="lvs-select" id="lvs-output-device" data-value="default"><button class="lvs-select-btn"><span>Динамики по умолчанию</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="default">Динамики по умолчанию</li></ul></div>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Громкость вывода</div></div>
+                  <div class="lvs-slider-wrap">
+                    <input type="range" class="lvs-slider" id="lvs-out-volume" min="0" max="100" value="100">
+                    <span class="lvs-slider-value" id="lvs-out-volume-value">100%</span>
+                  </div>
+                </div>
+                <div class="lvs-row lvs-row--end">
+                  <button class="lvs-btn" id="lvs-sound-test">🔊 Проверить звук</button>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Шумоподавление</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Эхоподавление</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Активация по голосу</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Push-to-Talk</div><div class="lvs-row-sub">Говорить при зажатой клавише</div></div>
+                  <kbd class="lvs-kbd">V</kbd>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 7: LOVE HUB ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-hub">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Love Hub</h1>
+                <p class="lvs-section-desc">Уведомления из центра сообщества</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Анонсы</div><div class="lvs-row-sub">Новости и важные объявления</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Dev Log</div><div class="lvs-row-sub">Заметки разработки</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Идеи</div><div class="lvs-row-sub">Предложения сообщества</div></div>
+                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Обратная связь</div><div class="lvs-row-sub">Ответы на ваши отзывы</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
+
+              <div class="lvs-info-banner">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Вы подписаны на <b>3 из 4</b> каналов Love Hub.</span>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 8: ОБНОВЛЕНИЯ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-updates">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Обновления</h1>
+                <p class="lvs-section-desc">Версия и канал обновлений</p>
+              </header>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Текущая версия</div></div>
+                  <span class="lvs-badge">1.0.0-beta.4</span>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Статус</div></div>
+                  <span class="lvs-badge lvs-badge--success">Актуальная версия</span>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Канал обновлений</div></div>
+                  <div class="lvs-select" data-value="beta"><button class="lvs-select-btn"><span>Beta</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                    <ul class="lvs-select-menu"><li data-value="stable">Stable</li><li data-value="beta">Beta</li><li data-value="canary">Canary</li></ul></div>
+                </div>
+                <div class="lvs-row lvs-row--end">
+                  <button class="lvs-btn" id="lvs-check-updates">Проверить обновления</button>
+                </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Что нового в beta.4</div>
+                <ul class="lvs-changelog">
+                  <li>Полностью переработанный экран настроек</li>
+                  <li>Живое превью профиля и темы</li>
+                  <li>Новый аудио-метр в разделе «Голос»</li>
+                  <li>Десятки мелких улучшений и исправлений</li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 9: РАСШИРЕННЫЕ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-advanced">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Расширенные</h1>
+                <p class="lvs-section-desc">Для продвинутых пользователей</p>
+              </header>
+
+              <div class="lvs-warning-banner">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Изменяйте эти настройки, только если понимаете последствия.</span>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Режим отладки</div><div class="lvs-row-sub">Подробные логи в консоли</div></div>
+                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Аппаратное ускорение</div><div class="lvs-row-sub">Использовать GPU для отрисовки</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Кэш приложения</div><div class="lvs-row-sub" id="lvs-cache-size">Занято 128 МБ</div></div>
+                  <button class="lvs-btn" id="lvs-clear-cache">Очистить</button>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Диагностика</div><div class="lvs-row-sub">Сведения о среде выполнения</div></div>
+                  <button class="lvs-btn">Открыть</button>
+                </div>
+              </div>
+
+              <div class="lvs-card lvs-card--danger">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Сбросить все настройки</div><div class="lvs-row-sub">Вернуть приложение к настройкам по умолчанию. Действие необратимо.</div></div>
+                  <button class="lvs-btn lvs-btn--danger" id="lvs-reset-settings">Сбросить</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ СЕКЦИЯ 10: О ПРИЛОЖЕНИИ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-about">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">О приложении</h1>
+                <p class="lvs-section-desc">Информация о Love</p>
+              </header>
+
+              <div class="lvs-card lvs-about-card">
+                <div class="lvs-about-logo">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-label="Love"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="lvs-about-name">L O V E</div>
+                <div class="lvs-about-version">
+                  <span class="lvs-badge">v1.0.0-beta.4</span>
+                  <span class="lvs-badge">build #20260609</span>
+                </div>
+                <p class="lvs-about-tagline">Мессенджер, сделанный с любовью.</p>
+
+                <div class="lvs-divider"></div>
+
+                <div class="lvs-about-credits">
+                  <div class="lvs-section-subtitle">Команда</div>
+                  <div class="lvs-credit-row"><span class="lvs-credit-name">Александр</span><span class="lvs-credit-role">Основатель</span></div>
+                </div>
+
+                <div class="lvs-about-links">
+                  <a class="lvs-btn lvs-btn--ghost" href="https://loveapp.chat" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    Сайт
+                  </a>
+                  <a class="lvs-btn lvs-btn--ghost" href="#" data-stub="docs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Документация
+                  </a>
+                  <a class="lvs-btn lvs-btn--ghost" href="#" data-stub="support" id="lvs-support-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Поддержка
+                  </a>
+                </div>
+                <p class="lvs-about-mail">support@loveapp.chat</p>
+                <p class="lvs-about-made">Сделано с <svg class="lvs-inline-heart" viewBox="0 0 24 24" fill="currentColor" aria-label="любовью"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></p>
+              </div>
+            </section>
+
+          </div><!-- .settings-content-scroll -->
+
+          <!-- Плашка несохранённых изменений -->
+          <div class="lvs-save-bar" id="lvs-save-bar">
+            <span class="lvs-save-bar-text">Есть несохранённые изменения</span>
+            <div class="lvs-save-bar-actions">
+              <button class="lvs-btn lvs-btn--ghost" id="lvs-reset-btn" type="button">Сбросить</button>
+              <button class="lvs-btn" id="lvs-save-btn" type="button">Сохранить</button>
+            </div>
+          </div>
+        </main>
+
+      </div><!-- .settings-shell -->
+    </div>
+
+    <!-- Модалка подтверждения выхода из настроек с несохранёнными изменениями -->
+    <div class="modal-backdrop hidden" id="lvs-close-confirm" style="z-index: 4000;">
+      <div class="profile-card" style="width: 360px; max-width: calc(100% - 32px); padding: 28px; text-align: center; align-items: stretch; box-sizing: border-box;">
+        <h3 style="margin: 0 0 10px; font-family: var(--font-serif); font-size: 20px; color: var(--text-primary);">Несохранённые изменения</h3>
+        <p style="margin: 0 0 22px; font-size: 13.5px; color: var(--text-secondary); line-height: 1.5; font-family: var(--font-sans);">У вас есть несохранённые изменения настроек. Сохранить их перед выходом?</p>
+        <div style="display: flex; gap: 10px;">
+          <button class="lvs-btn lvs-btn--ghost" id="lvs-close-confirm-cancel" type="button" style="flex: 1;">Отмена</button>
+          <button class="lvs-btn" id="lvs-close-confirm-save" type="button" style="flex: 1;">Сохранить</button>
+        </div>
+      </div>
     </div>
 
     <!-- Модалка звонка для интерактивного теста -->
@@ -1124,6 +1869,45 @@
         </div>
     </div>
 
+    <!-- Модалка Dev Log (влоги с голосованием) -->
+    <div class="modal-backdrop hidden" id="devlog-modal">
+        <div class="hub-modal-card hub-fullscreen-card">
+            <header class="hub-modal-header">
+                <div class="devlog-header-text">
+                    <h3>Dev Log</h3>
+                    <p class="devlog-subtitle">Заметки разработки. Голосуйте за идеи — <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;display:inline;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> за, <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;display:inline;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><path d="M13 5l-2.5 5 3.5 2-3 4.5"/></svg> против.</p>
+                </div>
+                <button class="profile-close-btn" id="devlog-modal-close" title="Закрыть">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <div class="hub-modal-content">
+                <!-- Поле добавления поста (только для автора/админа) -->
+                <div class="devlog-composer admin-only hidden" id="devlog-composer">
+                    <textarea id="devlog-input" class="devlog-input" rows="2" placeholder="Написать новый пост в Dev Log..."></textarea>
+                    <button class="devlog-post-btn" id="devlog-post-btn">Опубликовать</button>
+                </div>
+                <!-- Лента постов -->
+                <div class="devlog-feed" id="devlog-feed"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Универсальная инфо-модалка (Правила / Roadmap) -->
+    <div class="modal-backdrop hidden" id="hub-info-modal">
+        <div class="hub-modal-card hub-fullscreen-card">
+            <header class="hub-modal-header">
+                <h3 id="hub-info-modal-title">Информация</h3>
+                <button class="profile-close-btn" id="hub-info-modal-close" title="Закрыть">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </header>
+            <div class="hub-modal-content">
+                <div id="hub-info-modal-body" class="hub-info-body"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Модалка предпросмотра аватара -->
     <div class="modal-backdrop hidden" id="avatar-preview-modal">
         <div class="profile-card" style="width: 340px; text-align: center; padding: 24px;">
@@ -1147,30 +1931,17 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             
-            <!-- Вкладки управления картой -->
-            <div class="profile-tab-bar">
-                <button class="profile-tab-btn active" data-profile-tab="view">Профиль</button>
-                <button class="profile-tab-btn" data-profile-tab="edit">Настройки</button>
-            </div>
-            
-            <!-- Панель А: Просмотр профиля -->
+            <!-- Витрина профиля (только просмотр; редактирование — в Настройки → Профиль) -->
             <div class="profile-pane active" id="profile-pane-view">
                 <div class="profile-avatar-container">
-                    <input type="file" id="profile-avatar-upload" accept="image/*" style="display: none;">
                     <div class="profile-avatar" id="profile-avatar-display">
                         <span id="profile-avatar-text">Ал</span>
-                        <label for="profile-avatar-upload" class="profile-avatar-overlay" id="profile-avatar-overlay" title="Изменить аватар">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                        </label>
                     </div>
                     <div class="profile-avatar-glow"></div>
                 </div>
                 
                 <div class="profile-name-row">
-                    <h2 class="profile-name" id="profile-name-display" title="Нажми, чтобы изменить">Александр</h2>
-                    <span class="profile-name-edit-icon" id="profile-name-edit-icon" title="Изменить имя">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                    </span>
+                    <h2 class="profile-name" id="profile-name-display">Александр</h2>
                 </div>
                 <span class="profile-username" id="profile-username-display">@founder</span>
                 
@@ -1192,9 +1963,6 @@
                             </svg>
                         </span>
                         <span class="status-text" id="profile-status-text">завариваю травяной чай...</span>
-                        
-                        <!-- Поповер выбора настроения -->
-                        <div id="mood-picker-popover" class="hidden" style="position: absolute; top: 42px; left: 14px; background: rgba(10, 10, 10, 0.98); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 10px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; z-index: 1000; box-shadow: 0 12px 36px rgba(0,0,0,0.6); backdrop-filter: blur(20px); width: 170px; box-sizing: border-box;"></div>
                     </div>
                 </div>
                 
@@ -1222,47 +1990,7 @@
                 </div>
             </div>
             
-            <!-- Панель Б: Редактирование профиля (Настройки) -->
-            <div class="profile-pane" id="profile-pane-edit">
-                <div class="profile-edit-title">Настройки аккаунта</div>
-                <div class="profile-edit-form">
-                    <div class="profile-form-group">
-                        <label for="profile-input-username">Имя пользователя</label>
-                        <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-                            <input type="text" id="profile-input-username" value="@founder" autocomplete="off" style="flex: 1; min-width: 0; box-sizing: border-box;">
-                            <button id="profile-username-check-btn" class="action-btn" title="Проверить и сохранить имя пользователя" style="cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); transition: all 0.2s; box-sizing: border-box; flex-shrink: 0;">
-                                <svg id="username-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
-                                    <polyline points="20 6 9 17 4 12"></polyline>
-                                </svg>
-                                <svg id="username-loader-icon" class="hidden spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
-                                    <line x1="12" y1="2" x2="12" y2="6"></line>
-                                    <line x1="12" y1="18" x2="12" y2="22"></line>
-                                    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-                                    <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-                                    <line x1="2" y1="12" x2="6" y2="12"></line>
-                                    <line x1="18" y1="12" x2="22" y2="12"></line>
-                                    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-                                    <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-                                </svg>
-                            </button>
-                        </div>
-                        <p id="username-check-result" style="font-family: var(--font-sans); font-size: 11px; margin-top: 6px; margin-bottom: 0; display: none; line-height: 1.4;"></p>
-                        <p class="profile-form-hint" style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 6px; margin-bottom: 0;">* Имя пользователя можно менять только раз в неделю.</p>
-                    </div>
-                    <div class="profile-form-group" style="margin-top: 16px;">
-                        <label for="profile-input-listening">Сейчас слушает (Исполнитель - Название)</label>
-                        <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-                            <input type="text" id="profile-input-listening" value="Love Wave FM - Lofi Wabi-Sabi Ambient" autocomplete="off" style="flex: 1; min-width: 0; box-sizing: border-box;">
-                            <label for="profile-audio-upload" class="action-btn" title="Импортировать свой аудиофайл" style="cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); transition: all 0.2s; box-sizing: border-box; flex-shrink: 0;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            </label>
-                            <input type="file" id="profile-audio-upload" accept="audio/*" style="display: none;">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <button class="profile-save-btn" id="profile-save">Всё хорошо</button>
+            <button class="profile-save-btn" id="profile-configure-btn">Настроить профиль</button>
         </div>
     </div>
 
@@ -1458,6 +2186,36 @@
     <!-- Скрытый аудиоплеер для реального воспроизведения импортированной музыки -->
     <audio id="player-real-audio" style="display: none;"></audio>
 
-    <script src="script.js?v=31"></script>
+    <script src="settings-ui.js?v=3"></script>
+    <script src="script.js?v=32"></script>
+    <script src="auth-ui.js?v=3"></script>
+
+    <!-- Модалка создания сферы/комнаты -->
+    <div class="modal-backdrop hidden" id="create-space-modal">
+        <div class="profile-card" style="width:440px;">
+            <button class="profile-close-btn" id="create-space-close" title="Закрыть">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <h3 style="margin-bottom:20px;">Создать</h3>
+
+            <div class="create-space-type-selector">
+                <button type="button" class="create-space-type-btn active" data-type="server">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>Сфера</span>
+                    <small>Сервер с каналами</small>
+                </button>
+                <button type="button" class="create-space-type-btn" data-type="room">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+                    <span>Комната</span>
+                    <small>Приватный войс+чат</small>
+                </button>
+            </div>
+
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin:16px 0 6px;">Название</label>
+            <input type="text" id="create-space-name" placeholder="Моя новая сфера..." style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;" autocomplete="off">
+
+            <button type="button" class="submit-action-btn" id="create-space-submit" style="width:100%;margin-top:20px;">Создать</button>
+        </div>
+    </div>
 </body>
 </html>

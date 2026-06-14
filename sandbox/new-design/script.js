@@ -376,12 +376,128 @@ const actionVideo = document.getElementById("action-video");
 const callModal = document.getElementById("call-modal");
 const btnEndCall = document.getElementById("btn-end-call");
 
+const EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)";
+const EASE_IN = "cubic-bezier(0.4, 0, 1, 1)";
+
+function animateLayoutFlip(elements, mutate, options = {}) {
+    const list = Array.from(elements || []).filter(Boolean);
+    const first = new Map(list.map(el => [el, el.getBoundingClientRect()]));
+    mutate();
+    list.forEach(el => el.getBoundingClientRect());
+    requestAnimationFrame(() => {
+        list.forEach(el => {
+            const a = first.get(el);
+            const b = el.getBoundingClientRect();
+            if (!a || !b.width || !b.height) return;
+            const dx = a.left - b.left;
+            const dy = a.top - b.top;
+            const sx = a.width / b.width;
+            const sy = a.height / b.height;
+            el.animate([
+                { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+                { transform: "translate(0, 0) scale(1, 1)" }
+            ], {
+                duration: options.duration || 420,
+                easing: options.easing || EASE_OUT,
+                fill: "both"
+            });
+        });
+    });
+}
+
+function animatePresence(el, show, options = {}) {
+    if (!el) return Promise.resolve();
+    const duration = options.duration || 280;
+    if (show) {
+        el.classList.remove("hidden");
+        el.classList.remove("is-leaving");
+        el.classList.add("is-entering");
+        const anim = el.animate([
+            { opacity: 0, transform: options.from || "translateY(12px) scale(0.97)", filter: "blur(8px)" },
+            { opacity: 1, transform: options.to || "translateY(0) scale(1)", filter: "blur(0)" }
+        ], { duration, easing: options.easing || EASE_OUT, fill: "both" });
+        return anim.finished.finally(() => el.classList.remove("is-entering")).catch(() => {});
+    }
+    el.classList.remove("is-entering");
+    el.classList.add("is-leaving");
+    const anim = el.animate([
+        { opacity: 1, transform: options.to || "translateY(0) scale(1)", filter: "blur(0)" },
+        { opacity: 0, transform: options.from || "translateY(10px) scale(0.96)", filter: "blur(8px)" }
+    ], { duration, easing: options.easing || EASE_IN, fill: "both" });
+    return anim.finished.then(() => {
+        el.classList.add("hidden");
+        el.classList.remove("is-leaving");
+    }).catch(() => {});
+}
+
+function setIconSwap(button, onSelector, offSelector, enabled) {
+    const iconOn = button?.querySelector(onSelector);
+    const iconOff = button?.querySelector(offSelector);
+    iconOn?.classList.toggle("hidden", !enabled);
+    iconOff?.classList.toggle("hidden", enabled);
+    button?.classList.add("call-control-swapping");
+    setTimeout(() => button?.classList.remove("call-control-swapping"), 260);
+}
+
+function setCallFeedVisible(feed, visible, options = {}) {
+    if (!feed) return;
+    feed.classList.toggle("is-screenshare", !!options.screenshare);
+    if (visible) {
+        feed.classList.remove("hidden", "stream-leaving");
+        feed.classList.add("stream-entering");
+        feed.animate([
+            { opacity: 0, transform: "scale(0.94)", filter: "blur(10px)" },
+            { opacity: 1, transform: "scale(1)", filter: options.screenshare ? "contrast(1.22) brightness(1.08)" : "none" }
+        ], { duration: 360, easing: EASE_OUT, fill: "both" }).finished.finally(() => {
+            feed.classList.remove("stream-entering");
+        }).catch(() => {});
+        return;
+    }
+    feed.classList.remove("stream-entering");
+    feed.classList.add("stream-leaving");
+    feed.animate([
+        { opacity: 1, transform: "scale(1)", filter: "none" },
+        { opacity: 0, transform: "scale(0.94)", filter: "blur(10px)" }
+    ], { duration: 240, easing: EASE_IN, fill: "both" }).finished.then(() => {
+        feed.classList.add("hidden");
+        feed.classList.remove("stream-leaving", "is-screenshare");
+    }).catch(() => {});
+}
+
+function createEmptyState(title, text, buttonText, onClick) {
+    const wrap = document.createElement("div");
+    wrap.className = "empty-state-panel";
+    wrap.innerHTML = `
+        <div class="empty-state-mark">+</div>
+        <h3>${title}</h3>
+        <p>${text}</p>
+        ${buttonText ? `<button type="button" class="empty-state-btn">${buttonText}</button>` : ""}
+    `;
+    const btn = wrap.querySelector(".empty-state-btn");
+    if (btn && typeof onClick === "function") btn.addEventListener("click", onClick);
+    return wrap;
+}
+
 function renderConversationsList(filterQuery = "") {
     conversationsContainer.innerHTML = "";
     
     const filtered = mockConversations.filter(c => 
         c.name.toLowerCase().includes(filterQuery.toLowerCase())
     );
+
+    if (filtered.length === 0) {
+        conversationsContainer.appendChild(createEmptyState(
+            "Пока нет личных чатов",
+            "Еще никого не добавили? Перейдите в друзья и найдите первого собеседника.",
+            "Добавить друга",
+            () => {
+                const friendsBtn = document.getElementById("nav-friends");
+                if (friendsBtn) friendsBtn.click();
+                setTimeout(() => loadFriends("add"), 80);
+            }
+        ));
+        return;
+    }
 
     filtered.forEach(conv => {
         const lastMsgObj = conv.messages[conv.messages.length - 1];
@@ -648,10 +764,11 @@ function updateZoomButtons(currentLayout) {
 function showVideoGrid() {
     const callVoiceProfile = document.getElementById("call-voice-profile");
     const callVideoGrid = document.getElementById("call-video-grid");
-    callVoiceProfile?.classList.add("hidden");
+    animatePresence(callVoiceProfile, false, { duration: 190, from: "translateY(-8px) scale(0.98)" });
     if (callVideoGrid) {
         callVideoGrid.classList.remove("hidden", "layout-remote-max", "layout-local-max");
         callVideoGrid.classList.add("layout-split");
+        animatePresence(callVideoGrid, true, { duration: 360, from: "translateY(14px) scale(0.96)" });
         updateZoomButtons("layout-split");
     }
 }
@@ -660,8 +777,90 @@ function showVideoGrid() {
 function hideVideoGrid() {
     const callVoiceProfile = document.getElementById("call-voice-profile");
     const callVideoGrid = document.getElementById("call-video-grid");
-    callVoiceProfile?.classList.remove("hidden");
-    callVideoGrid?.classList.add("hidden");
+    animatePresence(callVideoGrid, false, { duration: 230, from: "translateY(12px) scale(0.96)" }).then(() => {
+        callVideoGrid?.classList.remove("layout-remote-max", "layout-local-max");
+        callVideoGrid?.classList.add("layout-split");
+    });
+    animatePresence(callVoiceProfile, true, { duration: 320, from: "translateY(10px) scale(0.97)" });
+}
+
+function animateCallModalToMini() {
+    const modal = document.getElementById("call-modal");
+    const container = modal?.querySelector(".call-overlay-container");
+    const mini = document.getElementById("call-mini-bar");
+    if (!modal || !container || !mini || modal.classList.contains("hidden")) return;
+
+    modal.style.pointerEvents = "none";
+    if (window._callMiniPos?.left && window._callMiniPos?.top) {
+        mini.style.setProperty("--call-mini-left", window._callMiniPos.left);
+        mini.style.setProperty("--call-mini-top", window._callMiniPos.top);
+        mini.style.setProperty("--call-mini-transform", "none");
+        mini.classList.add("is-moved");
+    }
+    mini.classList.remove("hidden", "is-leaving");
+    mini.classList.add("is-preparing");
+    const from = container.getBoundingClientRect();
+    const to = mini.getBoundingClientRect();
+    mini.classList.remove("is-preparing");
+    mini.classList.add("is-entering");
+
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    const scaleX = Math.max(0.18, to.width / from.width);
+    const scaleY = Math.max(0.18, to.height / from.height);
+    const anim = container.animate([
+        { transform: "translate(0, 0) scale(1)", opacity: 1, filter: "blur(0)" },
+        { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, opacity: 0, filter: "blur(8px)" }
+    ], { duration: 360, easing: EASE_IN, fill: "forwards" });
+
+    mini.animate([
+        { opacity: 0, transform: "translateY(-14px) scale(0.92)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" }
+    ], { duration: 340, easing: EASE_OUT, fill: "both" }).finished.finally(() => {
+        mini.classList.remove("is-entering");
+    }).catch(() => {});
+
+    anim.finished.finally(() => {
+        modal.classList.add("hidden");
+        modal.style.pointerEvents = "";
+        container.style.transform = "";
+        container.style.opacity = "";
+        container.style.filter = "";
+    }).catch(() => {});
+}
+
+function animateMiniToCallModal() {
+    const modal = document.getElementById("call-modal");
+    const container = modal?.querySelector(".call-overlay-container");
+    const mini = document.getElementById("call-mini-bar");
+    if (!modal || !container || !mini) return;
+
+    const from = mini.getBoundingClientRect();
+    modal.classList.remove("hidden");
+    modal.style.pointerEvents = "none";
+    container.style.opacity = "0";
+    const to = container.getBoundingClientRect();
+    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+    const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+    const scaleX = Math.max(0.18, from.width / to.width);
+    const scaleY = Math.max(0.18, from.height / to.height);
+
+    mini.classList.add("is-leaving");
+    mini.animate([
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+        { opacity: 0, transform: "translateY(-12px) scale(0.94)" }
+    ], { duration: 220, easing: EASE_IN, fill: "both" }).finished.finally(() => {
+        mini.classList.add("hidden");
+        mini.classList.remove("is-leaving");
+    }).catch(() => {});
+
+    container.animate([
+        { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, opacity: 0, filter: "blur(8px)" },
+        { transform: "translate(0, 0) scale(1)", opacity: 1, filter: "blur(0)" }
+    ], { duration: 380, easing: EASE_OUT, fill: "both" }).finished.finally(() => {
+        modal.style.pointerEvents = "";
+        container.style.opacity = "";
+    }).catch(() => {});
 }
 
 // Полный сброс при завершении звонка
@@ -675,14 +874,34 @@ function endCallFull() {
         cvg.classList.remove("layout-remote-max", "layout-local-max");
         cvg.classList.add("layout-split");
     }
+
+    const callModal = document.getElementById("call-modal");
+    const miniBar = document.getElementById("call-mini-bar");
+
+    // Анимация завершения звонка
+    if (callModal && !callModal.classList.contains("hidden")) {
+        callModal.style.animation = 'callEndShrink 0.3s cubic-bezier(0.4,0,1,1) forwards';
+        callModal.style.pointerEvents = 'none';
+        setTimeout(() => {
+            callModal.style.animation = '';
+            callModal.style.pointerEvents = '';
+            callModal.classList.add("hidden");
+        }, 300);
+    }
+    if (miniBar && !miniBar.classList.contains("hidden")) {
+        miniBar.style.animation = 'miniBarSlideOut 0.3s ease forwards';
+        setTimeout(() => {
+            miniBar.style.animation = '';
+            miniBar.classList.add("hidden");
+        }, 300);
+    }
+
     isCallMuted = false;
     isCallVideoActive = false;
     isCallScreenSharing = false;
     isCallMinimized = false;
     const ssBtn = document.getElementById("call-btn-screenshare");
     if (ssBtn) ssBtn.classList.remove("screenshare-active");
-    document.getElementById("call-modal")?.classList.add("hidden");
-    document.getElementById("call-mini-bar")?.classList.add("hidden");
 }
 
 // Синхронизация таймера с мини-баром
@@ -763,16 +982,23 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false) {
 
     if (isVideo) {
         showVideoGrid();
-        callRemoteFeed?.classList.remove("hidden");
-        callLocalFeed?.classList.remove("hidden");
+        setCallFeedVisible(callRemoteFeed, true);
+        setCallFeedVisible(callLocalFeed, true);
     } else {
         hideVideoGrid();
-        callRemoteFeed?.classList.add("hidden");
-        callLocalFeed?.classList.add("hidden");
+        setCallFeedVisible(callRemoteFeed, false);
+        setCallFeedVisible(callLocalFeed, false);
     }
 
     // 5. Показ модалки звонка, скрыть мини-бар
-    if (callModal) callModal.classList.remove("hidden");
+    if (callModal) {
+        callModal.classList.remove("hidden");
+        const container = callModal.querySelector(".call-overlay-container");
+        container?.animate([
+            { opacity: 0, transform: "translateY(18px) scale(0.94)", filter: "blur(10px)" },
+            { opacity: 1, transform: "translateY(0) scale(1)", filter: "blur(0)" }
+        ], { duration: 430, easing: EASE_OUT, fill: "both" });
+    }
     document.getElementById("call-mini-bar")?.classList.add("hidden");
 
     // 6. Имитация этапов соединения
@@ -827,8 +1053,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
     if (e.target.closest("#call-btn-minimize")) {
         isCallMinimized = true;
-        document.getElementById("call-modal")?.classList.add("hidden");
-        document.getElementById("call-mini-bar")?.classList.remove("hidden");
+        animateCallModalToMini();
     }
 });
 
@@ -836,12 +1061,133 @@ document.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
     if (e.target.closest("#call-mini-expand")) {
         isCallMinimized = false;
-        document.getElementById("call-modal")?.classList.remove("hidden");
-        document.getElementById("call-mini-bar")?.classList.add("hidden");
+        animateMiniToCallModal();
     }
 });
 
 // Мини-бар: мьют
+let _miniBarDrag = null;
+const miniBar = document.getElementById("call-mini-bar");
+
+if (miniBar) {
+    const startMiniBarDrag = (clientX, clientY) => {
+        const rect = miniBar.getBoundingClientRect();
+        _miniBarDrag = {
+            offsetX: clientX - rect.left,
+            offsetY: clientY - rect.top,
+            startX: rect.left,
+            startY: rect.top,
+            renderX: rect.left,
+            renderY: rect.top,
+            targetX: rect.left,
+            targetY: rect.top,
+            rafId: null
+        };
+        miniBar.classList.add('dragging', 'is-moved');
+        miniBar.style.setProperty("--call-mini-transform", "none");
+        miniBar.style.setProperty("--call-mini-left", rect.left + 'px');
+        miniBar.style.setProperty("--call-mini-top", rect.top + 'px');
+    };
+
+    miniBar.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.call-mini-btn')) return;
+        startMiniBarDrag(e.clientX, e.clientY);
+        e.preventDefault();
+    });
+
+    miniBar.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse') return;
+        if (e.target.closest('.call-mini-btn')) return;
+        startMiniBarDrag(e.clientX, e.clientY);
+        miniBar.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+    });
+
+    miniBar.addEventListener('touchstart', (e) => {
+        if (e.target.closest('.call-mini-btn')) return;
+        startMiniBarDrag(e.touches[0].clientX, e.touches[0].clientY);
+        e.preventDefault();
+    }, { passive: false });
+}
+
+function handleMiniBarDragMove(clientX, clientY) {
+    if (!_miniBarDrag) return;
+    const el = miniBar;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let tx = clientX - _miniBarDrag.offsetX;
+    let ty = clientY - _miniBarDrag.offsetY;
+    tx = Math.max(0, Math.min(tx, window.innerWidth - w));
+    ty = Math.max(0, Math.min(ty, window.innerHeight - h));
+    _miniBarDrag.targetX = tx;
+    _miniBarDrag.targetY = ty;
+    if (!_miniBarDrag.rafId) {
+        const tick = () => {
+            if (!_miniBarDrag) return;
+            _miniBarDrag.renderX += (_miniBarDrag.targetX - _miniBarDrag.renderX) * 0.25;
+            _miniBarDrag.renderY += (_miniBarDrag.targetY - _miniBarDrag.renderY) * 0.25;
+            el.style.setProperty("--call-mini-left", _miniBarDrag.renderX + 'px');
+            el.style.setProperty("--call-mini-top", _miniBarDrag.renderY + 'px');
+            if (Math.abs(_miniBarDrag.targetX - _miniBarDrag.renderX) > 0.3 || Math.abs(_miniBarDrag.targetY - _miniBarDrag.renderY) > 0.3) {
+                _miniBarDrag.rafId = requestAnimationFrame(tick);
+            } else {
+                _miniBarDrag.renderX = _miniBarDrag.targetX;
+                _miniBarDrag.renderY = _miniBarDrag.targetY;
+                el.style.setProperty("--call-mini-left", _miniBarDrag.renderX + 'px');
+                el.style.setProperty("--call-mini-top", _miniBarDrag.renderY + 'px');
+                _miniBarDrag.rafId = null;
+            }
+        };
+        _miniBarDrag.rafId = requestAnimationFrame(tick);
+    }
+}
+
+function finishMiniBarDrag() {
+    if (!_miniBarDrag) return;
+    miniBar.classList.remove('dragging');
+    miniBar.classList.add('is-moved');
+    window._callMiniPos = {
+        left: miniBar.style.getPropertyValue("--call-mini-left"),
+        top: miniBar.style.getPropertyValue("--call-mini-top")
+    };
+    _miniBarDrag = null;
+}
+
+document.addEventListener('mousemove', (e) => {
+    if (!_miniBarDrag) return;
+    handleMiniBarDragMove(e.clientX, e.clientY);
+});
+document.addEventListener('mouseup', () => {
+    if (!_miniBarDrag) return;
+    finishMiniBarDrag();
+});
+document.addEventListener('pointermove', (e) => {
+    if (!_miniBarDrag) return;
+    handleMiniBarDragMove(e.clientX, e.clientY);
+});
+document.addEventListener('pointerup', () => {
+    if (!_miniBarDrag) return;
+    finishMiniBarDrag();
+});
+document.addEventListener('pointercancel', () => {
+    if (!_miniBarDrag) return;
+    finishMiniBarDrag();
+});
+document.addEventListener('touchmove', (e) => {
+    if (!_miniBarDrag) return;
+    e.preventDefault();
+    handleMiniBarDragMove(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+document.addEventListener('touchend', () => {
+    if (!_miniBarDrag) return;
+    finishMiniBarDrag();
+});
+document.addEventListener('touchcancel', () => {
+    if (!_miniBarDrag) return;
+    finishMiniBarDrag();
+});
+
+// Мини-бар: мьют (делегирование клика)
 document.addEventListener("click", (e) => {
     if (e.target.closest("#call-mini-btn-mute")) {
         e.stopPropagation();
@@ -857,28 +1203,12 @@ document.addEventListener("click", (e) => {
         isCallMuted = !isCallMuted;
         btnMute.classList.toggle("muted-active", isCallMuted);
         
-        const iconOn = btnMute.querySelector(".icon-mic-on");
-        const iconOff = btnMute.querySelector(".icon-mic-off");
-        if (isCallMuted) {
-            iconOn?.classList.add("hidden");
-            iconOff?.classList.remove("hidden");
-        } else {
-            iconOn?.classList.remove("hidden");
-            iconOff?.classList.add("hidden");
-        }
+        setIconSwap(btnMute, ".icon-mic-on", ".icon-mic-off", !isCallMuted);
         // Синхронизация мини-бара
         const miniMuteBtn = document.getElementById("call-mini-btn-mute");
         if (miniMuteBtn) {
             miniMuteBtn.classList.toggle("muted-mini", isCallMuted);
-            const miniOn = miniMuteBtn.querySelector(".icon-mic-on");
-            const miniOff = miniMuteBtn.querySelector(".icon-mic-off");
-            if (isCallMuted) {
-                miniOn?.classList.add("hidden");
-                miniOff?.classList.remove("hidden");
-            } else {
-                miniOn?.classList.remove("hidden");
-                miniOff?.classList.add("hidden");
-            }
+            setIconSwap(miniMuteBtn, ".icon-mic-on", ".icon-mic-off", !isCallMuted);
         }
     }
 });
@@ -907,17 +1237,15 @@ document.addEventListener("click", (e) => {
         const callLocalFeed = document.getElementById("call-local-feed");
 
         if (isCallVideoActive) {
-            iconOn?.classList.remove("hidden");
-            iconOff?.classList.add("hidden");
+            setIconSwap(btnVideo, ".icon-video-on", ".icon-video-off", true);
             showVideoGrid();
-            callRemoteFeed?.classList.remove("hidden");
-            callLocalFeed?.classList.remove("hidden");
+            setCallFeedVisible(callRemoteFeed, true);
+            setCallFeedVisible(callLocalFeed, true);
         } else {
-            iconOn?.classList.add("hidden");
-            iconOff?.classList.remove("hidden");
+            setIconSwap(btnVideo, ".icon-video-on", ".icon-video-off", false);
             hideVideoGrid();
-            callRemoteFeed?.classList.add("hidden");
-            callLocalFeed?.classList.add("hidden");
+            setCallFeedVisible(callRemoteFeed, false);
+            setCallFeedVisible(callLocalFeed, false);
         }
     }
 });
@@ -944,16 +1272,12 @@ document.addEventListener("click", (e) => {
             }
             
             showVideoGrid();
-            callLocalFeed?.classList.remove("hidden");
-            if (callLocalFeed) {
-                callLocalFeed.style.filter = "contrast(1.4) brightness(1.1)";
-            }
+            setCallFeedVisible(callLocalFeed, true, { screenshare: true });
         } else {
-            if (callLocalFeed) callLocalFeed.style.filter = "none";
             // Если камера выключена — скрыть сетку
             if (!isCallVideoActive) {
                 hideVideoGrid();
-                callLocalFeed?.classList.add("hidden");
+                setCallFeedVisible(callLocalFeed, false);
             }
         }
     }
@@ -985,9 +1309,11 @@ document.addEventListener("click", (e) => {
         newLayout = (currentLayout === "layout-local-max") ? "layout-split" : "layout-local-max";
     }
 
-    grid.classList.remove("layout-split", "layout-remote-max", "layout-local-max");
-    grid.classList.add(newLayout);
-    updateZoomButtons(newLayout);
+    animateLayoutFlip(grid.querySelectorAll(".video-stream-box"), () => {
+        grid.classList.remove("layout-split", "layout-remote-max", "layout-local-max");
+        grid.classList.add(newLayout);
+        updateZoomButtons(newLayout);
+    }, { duration: 430 });
 });
 
 if (searchInput) {
@@ -1038,6 +1364,19 @@ function renderUnifiedSidebar() {
     const existingCards = accordion.querySelectorAll(".space-card");
     if (existingCards.length === 0) {
         accordion.innerHTML = ""; // Очищаем на всякий случай
+
+        if (spaces.length === 0) {
+            accordion.appendChild(createEmptyState(
+                "Нет сфер",
+                "Создайте первую сферу или комнату, чтобы собрать людей в одном месте.",
+                "Создать",
+                () => {
+                    const modal = document.getElementById("create-space-modal");
+                    if (modal) modal.classList.remove("hidden");
+                }
+            ));
+            return;
+        }
         
         spaces.forEach(space => {
             const serverData = mockServers[space.id];
@@ -1075,7 +1414,10 @@ function renderUnifiedSidebar() {
                     item.className = `channel-item`;
                     item.setAttribute("data-channel-id", ch.id);
                     item.setAttribute("data-type", ch.type);
-                    item.innerHTML = `<span>${ch.name}</span>`;
+                    const chIcon = ch.type === 'voice'
+                        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:0.5;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
+                        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:0.5;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+                    item.innerHTML = `${chIcon}<span>${ch.name}</span>`;
                     
                     item.addEventListener("click", (e) => {
                         e.stopPropagation();
@@ -1138,7 +1480,8 @@ function renderUnifiedSidebar() {
             </button>
         `;
         addBtnContainer.querySelector("button").addEventListener("click", () => {
-            showToast("Новая сфера", "Создание нового пространства временно недоступно.");
+            const modal = document.getElementById("create-space-modal");
+            if (modal) modal.classList.remove("hidden");
         });
         accordion.appendChild(addBtnContainer);
     }
@@ -1283,15 +1626,80 @@ let voiceState = {
     channelName: "Лаунж (Войс)"
 };
 
+let roomVoiceConnected = false;
+
 let voiceMembers = [
-    { name: "Мария", avatar: "М", speaking: true, hasCam: false, isOwn: false, micActive: true, soundActive: true },
-    { name: "Founder", avatar: "F", speaking: false, hasCam: false, isOwn: true, micActive: true, soundActive: true },
-    { name: "Иван", avatar: "И", speaking: false, hasCam: false, isOwn: false, micActive: false, soundActive: true },
-    { name: "Анна", avatar: "А", speaking: false, hasCam: false, isOwn: false, micActive: true, soundActive: true },
-    { name: "Дмитрий", avatar: "Д", speaking: true, hasCam: false, isOwn: false, micActive: true, soundActive: true }
+    { name: "Мария", avatar: "М", speaking: true, hasCam: false, hasShare: false, isOwn: false, micActive: true, soundActive: true },
+    { name: "Founder", avatar: "F", speaking: false, hasCam: false, hasShare: false, isOwn: true, micActive: true, soundActive: true },
+    { name: "Иван", avatar: "И", speaking: false, hasCam: false, hasShare: false, isOwn: false, micActive: false, soundActive: true },
+    { name: "Анна", avatar: "А", speaking: false, hasCam: false, hasShare: false, isOwn: false, micActive: true, soundActive: true },
+    { name: "Дмитрий", avatar: "Д", speaking: true, hasCam: false, hasShare: false, isOwn: false, micActive: true, soundActive: true }
 ];
 
 let voiceControlsInitialized = false;
+let _streamAnimating = false;
+const _streamAnimTimer = () => setTimeout(() => { _streamAnimating = false; }, 800);
+
+function syncRoomBtns() {
+    const map = [
+        ['voice-btn-mic', 'room-voice-btn-mic'],
+        ['voice-btn-sound', 'room-voice-btn-sound'],
+        ['voice-btn-cam', 'room-voice-btn-cam'],
+        ['voice-btn-share', 'room-voice-btn-share']
+    ];
+    map.forEach(([sId, rId]) => {
+        const s = document.getElementById(sId);
+        const r = document.getElementById(rId);
+        if (!s || !r) return;
+        r.className = s.className;
+        r.title = s.title;
+        const sActive = s.querySelector('.voice-icon-active');
+        const sMuted = s.querySelector('.voice-icon-muted');
+        const rActive = r.querySelector('.voice-icon-active');
+        const rMuted = r.querySelector('.voice-icon-muted');
+        if (sActive && rActive) rActive.classList.toggle('hidden', sActive.classList.contains('hidden'));
+        if (sMuted && rMuted) rMuted.classList.toggle('hidden', sMuted.classList.contains('hidden'));
+    });
+}
+
+// Кнопки комнаты → делегируют серверным
+document.addEventListener('DOMContentLoaded', () => {
+    const roomMap = [
+        ['room-voice-btn-mic', 'voice-btn-mic'],
+        ['room-voice-btn-sound', 'voice-btn-sound'],
+        ['room-voice-btn-cam', 'voice-btn-cam'],
+        ['room-voice-btn-share', 'voice-btn-share']
+    ];
+    roomMap.forEach(([rId, sId]) => {
+        const r = document.getElementById(rId);
+        const s = document.getElementById(sId);
+        if (r && s) r.addEventListener('click', () => s.click());
+    });
+    const roomDisconnectBtn = document.getElementById('room-voice-btn-disconnect');
+    if (roomDisconnectBtn) {
+        roomDisconnectBtn.addEventListener('click', () => {
+            const preconnect = document.getElementById('room-voice-preconnect');
+            const connectedBar = document.getElementById('room-voice-connected-bar');
+            if (preconnect) preconnect.classList.remove('hidden');
+            if (connectedBar) connectedBar.classList.add('hidden');
+            roomVoiceConnected = false;
+            showToast("Голосовая связь", "Вы отключились от голосового канала.");
+        });
+    }
+
+    const roomJoinBtn = document.getElementById('room-voice-join-btn');
+    if (roomJoinBtn) {
+        roomJoinBtn.addEventListener('click', () => {
+            const preconnect = document.getElementById('room-voice-preconnect');
+            const connectedBar = document.getElementById('room-voice-connected-bar');
+            if (preconnect) preconnect.classList.add('hidden');
+            if (connectedBar) connectedBar.classList.remove('hidden');
+            roomVoiceConnected = true;
+            if (typeof syncRoomBtns === 'function') syncRoomBtns();
+            showToast("Голосовая связь", "Вы подключились к голосовому каналу.");
+        });
+    }
+});
 
 function initVoiceControls() {
     if (voiceControlsInitialized) return;
@@ -1309,12 +1717,18 @@ function initVoiceControls() {
             micBtn.classList.toggle("active-state", voiceState.micActive);
             micBtn.classList.toggle("muted-state", !voiceState.micActive);
             micBtn.title = voiceState.micActive ? "Выключить микрофон" : "Включить микрофон";
-            
-            // Toggle icons
             micBtn.querySelector(".voice-icon-active").classList.toggle("hidden", !voiceState.micActive);
             micBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", voiceState.micActive);
-
-            // Update my speak status (if mic is off, I can't be speaking)
+            if (voiceState.micActive && !voiceState.soundActive) {
+                voiceState.soundActive = true;
+                if (soundBtn) {
+                    soundBtn.classList.toggle("active-state", true);
+                    soundBtn.classList.toggle("muted-state", false);
+                    soundBtn.title = "Выключить звук";
+                    soundBtn.querySelector(".voice-icon-active").classList.toggle("hidden", false);
+                    soundBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", true);
+                }
+            }
             const ownMember = voiceMembers.find(m => m.isOwn);
             if (ownMember) {
                 ownMember.speaking = false;
@@ -1329,51 +1743,129 @@ function initVoiceControls() {
             soundBtn.classList.toggle("active-state", voiceState.soundActive);
             soundBtn.classList.toggle("muted-state", !voiceState.soundActive);
             soundBtn.title = voiceState.soundActive ? "Выключить звук" : "Включить звук";
-            
-            // Toggle icons
             soundBtn.querySelector(".voice-icon-active").classList.toggle("hidden", !voiceState.soundActive);
             soundBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", voiceState.soundActive);
+            if (!voiceState.soundActive && voiceState.micActive) {
+                voiceState.micActive = false;
+                if (micBtn) {
+                    micBtn.classList.toggle("active-state", false);
+                    micBtn.classList.toggle("muted-state", true);
+                    micBtn.title = "Включить микрофон";
+                    micBtn.querySelector(".voice-icon-active").classList.toggle("hidden", true);
+                    micBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", false);
+                }
+                const ownMember = voiceMembers.find(m => m.isOwn);
+                if (ownMember) ownMember.speaking = false;
+            }
             renderVoiceChannel();
         });
     }
 
+    let _streamAnimating = false;
+
     if (camBtn) {
         camBtn.addEventListener("click", () => {
-            voiceState.camActive = !voiceState.camActive;
-            camBtn.classList.toggle("active-state", voiceState.camActive);
-            camBtn.classList.toggle("muted-state", !voiceState.camActive);
-            camBtn.title = voiceState.camActive ? "Выключить камеру" : "Включить камеру";
-            
-            // Toggle icons
-            camBtn.querySelector(".voice-icon-active").classList.toggle("hidden", !voiceState.camActive);
-            camBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", voiceState.camActive);
-
-            // Update my camera status in participant list
+            if (_streamAnimating) return;
             const ownMember = voiceMembers.find(m => m.isOwn);
-            if (ownMember) {
-                ownMember.hasCam = voiceState.camActive;
+            const ps = window._voicePreviewState || {};
+            if (voiceState.camActive) {
+                _streamAnimating = true; _streamAnimTimer();
+                voiceState.camActive = false;
+                camBtn.classList.remove("active-state");
+                camBtn.classList.add("muted-state");
+                camBtn.title = "Включить камеру";
+                camBtn.querySelector(".voice-icon-active").classList.add("hidden");
+                camBtn.querySelector(".voice-icon-muted").classList.remove("hidden");
+                if (ownMember) ownMember.hasCam = false;
+                animatePreviewShrink('own', () => { _streamAnimating = false; renderVoiceChannel(); });
+                return;
             }
+            if (voiceState.shareActive) {
+                _streamAnimating = true; _streamAnimTimer();
+                voiceState.shareActive = false;
+                shareBtn.classList.remove("active-state");
+                shareBtn.classList.add("muted-state");
+                shareBtn.querySelector(".voice-icon-active").classList.add("hidden");
+                shareBtn.querySelector(".voice-icon-muted").classList.remove("hidden");
+                if (ownMember) ownMember.hasShare = false;
+                animatePreviewShrink('own', () => {
+                    voiceState.camActive = true;
+                    camBtn.classList.add("active-state");
+                    camBtn.classList.remove("muted-state");
+                    camBtn.title = "Выключить камеру";
+                    camBtn.querySelector(".voice-icon-active").classList.remove("hidden");
+                    camBtn.querySelector(".voice-icon-muted").classList.add("hidden");
+                    if (ownMember) ownMember.hasCam = true;
+                    if (ps) { ps.openUserId = 'own'; ps.collapsed['own'] = false; }
+                    _streamAnimating = false;
+                    renderVoiceChannel();
+                });
+                return;
+            }
+            voiceState.camActive = true;
+            camBtn.classList.add("active-state");
+            camBtn.classList.remove("muted-state");
+            camBtn.title = "Выключить камеру";
+            camBtn.querySelector(".voice-icon-active").classList.remove("hidden");
+            camBtn.querySelector(".voice-icon-muted").classList.add("hidden");
+            if (ownMember) ownMember.hasCam = true;
+            if (ps) { ps.openUserId = 'own'; ps.collapsed['own'] = false; }
             renderVoiceChannel();
         });
     }
 
     if (shareBtn) {
         shareBtn.addEventListener("click", () => {
-            voiceState.shareActive = !voiceState.shareActive;
-            shareBtn.classList.toggle("active-state", voiceState.shareActive);
-            shareBtn.classList.toggle("muted-state", !voiceState.shareActive);
-            shareBtn.title = voiceState.shareActive ? "Выключить трансляцию экрана" : "Включить трансляцию экрана";
-            
-            // Toggle icons
-            shareBtn.querySelector(".voice-icon-active").classList.toggle("hidden", !voiceState.shareActive);
-            shareBtn.querySelector(".voice-icon-muted").classList.toggle("hidden", voiceState.shareActive);
-
-            // Update screenshare title if active
+            if (_streamAnimating) return;
+            const ownMember = voiceMembers.find(m => m.isOwn);
+            const ps = window._voicePreviewState || {};
+            if (voiceState.shareActive) {
+                _streamAnimating = true; _streamAnimTimer();
+                voiceState.shareActive = false;
+                shareBtn.classList.remove("active-state");
+                shareBtn.classList.add("muted-state");
+                shareBtn.title = "Включить трансляцию экрана";
+                shareBtn.querySelector(".voice-icon-active").classList.add("hidden");
+                shareBtn.querySelector(".voice-icon-muted").classList.remove("hidden");
+                if (ownMember) ownMember.hasShare = false;
+                animatePreviewShrink('own', () => { _streamAnimating = false; renderVoiceChannel(); });
+                return;
+            }
+            if (voiceState.camActive) {
+                _streamAnimating = true; _streamAnimTimer();
+                voiceState.camActive = false;
+                camBtn.classList.remove("active-state");
+                camBtn.classList.add("muted-state");
+                camBtn.querySelector(".voice-icon-active").classList.add("hidden");
+                camBtn.querySelector(".voice-icon-muted").classList.remove("hidden");
+                if (ownMember) ownMember.hasCam = false;
+                animatePreviewShrink('own', () => {
+                    voiceState.shareActive = true;
+                    shareBtn.classList.add("active-state");
+                    shareBtn.classList.remove("muted-state");
+                    shareBtn.title = "Выключить трансляцию экрана";
+                    shareBtn.querySelector(".voice-icon-active").classList.remove("hidden");
+                    shareBtn.querySelector(".voice-icon-muted").classList.add("hidden");
+                    if (ownMember) ownMember.hasShare = true;
+                    if (ps) { ps.openUserId = 'own'; ps.collapsed['own'] = false; }
+                    _streamAnimating = false;
+                    renderVoiceChannel();
+                });
+                return;
+            }
+            voiceState.shareActive = true;
+            shareBtn.classList.add("active-state");
+            shareBtn.classList.remove("muted-state");
+            shareBtn.title = "Выключить трансляцию экрана";
+            shareBtn.querySelector(".voice-icon-active").classList.remove("hidden");
+            shareBtn.querySelector(".voice-icon-muted").classList.add("hidden");
             const titleEl = document.getElementById("screenshare-stream-title");
             if (titleEl) {
                 const profileName = document.getElementById("profile-name-display")?.textContent.trim() || "Александр";
-                titleEl.textContent = voiceState.shareActive ? `${profileName} транслирует экран` : "Мария транслирует экран";
+                titleEl.textContent = `${profileName} транслирует экран`;
             }
+            if (ownMember) ownMember.hasShare = true;
+            if (ps) { ps.openUserId = 'own'; ps.collapsed['own'] = false; }
             renderVoiceChannel();
         });
     }
@@ -1389,309 +1881,469 @@ function initVoiceControls() {
             if (chatPanel) chatPanel.classList.remove("hidden");
         });
     }
+
+    // Фуллскрин закрытие
+    const fullscreenOverlay = document.getElementById("voice-fullscreen-overlay");
+    const fullscreenClose = document.getElementById("voice-fullscreen-close");
+
+    if (fullscreenClose) {
+        fullscreenClose.addEventListener("click", () => {
+            if (fullscreenOverlay) fullscreenOverlay.classList.add("hidden");
+        });
+    }
+
+    if (fullscreenOverlay) {
+        fullscreenOverlay.addEventListener("click", (e) => {
+            if (e.target === fullscreenOverlay) {
+                fullscreenOverlay.classList.add("hidden");
+            }
+        });
+    }
 }
 
-const constellationLayouts = {
-    1: [{ left: 50, top: 50 }],
-    2: [{ left: 35, top: 45 }, { left: 65, top: 55 }],
-    3: [
-        { left: 25, top: 40 },
-        { left: 50, top: 65 },
-        { left: 75, top: 35 }
-    ],
-    4: [
-        { left: 20, top: 30 },
-        { left: 45, top: 65 },
-        { left: 80, top: 35 },
-        { left: 70, top: 70 }
-    ],
-    5: [
-        { left: 38, top: 25 },
-        { left: 15, top: 40 },
-        { left: 68, top: 30 },
-        { left: 50, top: 65 },
-        { left: 85, top: 50 }
-    ],
-    6: [
-        { left: 15, top: 30 },
-        { left: 30, top: 65 },
-        { left: 50, top: 30 },
-        { left: 50, top: 80 },
-        { left: 85, top: 30 },
-        { left: 70, top: 65 }
-    ]
-};
+const MIC_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const SOUND_OFF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+const SCREENSHARE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+const CAM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="4"/><path d="M6 20c0-4 3-6 6-6s6 2 6 6"/></svg>';
+const EXPAND_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+const SHRINK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+
+function animatePreviewToAvatar(userId, onDone, previewEl = null) {
+    const preview = previewEl || document.querySelector(`.voice-float-preview[data-user-id="${userId}"]`);
+    if (!preview) { onDone(); return; }
+    preview.classList.remove('appearing');
+    preview.style.animation = 'none';
+    const vp = preview.parentElement;
+    const root = preview.closest('#voice-channel-container, #room-voice-channel-container, #server-voice-panel, #server-room-panel') || vp || document;
+    const candidateTargets = Array.from(root.querySelectorAll(`.voice-pcard[data-user-id="${userId}"] .voice-member-avatar-wrap, .voice-pcard[data-user-id="${userId}"] .collapsed-stream`));
+    if (!candidateTargets.length) {
+        candidateTargets.push(...document.querySelectorAll(`.voice-pcard[data-user-id="${userId}"] .voice-member-avatar-wrap, .voice-pcard[data-user-id="${userId}"] .collapsed-stream`));
+    }
+    const pRectRaw = preview.getBoundingClientRect();
+    const pRect = {
+        left: Number.isFinite(pRectRaw.left) ? pRectRaw.left : 0,
+        top: Number.isFinite(pRectRaw.top) ? pRectRaw.top : 0,
+        width: Math.max(1, Number.isFinite(pRectRaw.width) ? pRectRaw.width : preview.offsetWidth || 280),
+        height: Math.max(1, Number.isFinite(pRectRaw.height) ? pRectRaw.height : preview.offsetHeight || 158)
+    };
+    const pcard = candidateTargets
+        .map(el => ({ el, rect: el.getBoundingClientRect() }))
+        .filter(item => item.rect.width > 0 && item.rect.height > 0)
+        .sort((a, b) => {
+            const acx = a.rect.left + a.rect.width / 2;
+            const acy = a.rect.top + a.rect.height / 2;
+            const bcx = b.rect.left + b.rect.width / 2;
+            const bcy = b.rect.top + b.rect.height / 2;
+            const pcx = pRect.left + pRect.width / 2;
+            const pcy = pRect.top + pRect.height / 2;
+            return Math.hypot(acx - pcx, acy - pcy) - Math.hypot(bcx - pcx, bcy - pcy);
+        })[0]?.el;
+    const aRect = pcard?.getBoundingClientRect();
+    const targetRect = (aRect && aRect.width > 0 && aRect.height > 0) ? aRect : {
+        left: pRect.left + pRect.width / 2 - 22,
+        top: pRect.top + pRect.height / 2 - 22,
+        width: 44,
+        height: 44
+    };
+    const ghost = preview.cloneNode(true);
+    ghost.classList.add('voice-preview-ghost');
+    ghost.style.position = 'fixed';
+    ghost.style.left = `${pRect.left}px`;
+    ghost.style.top = `${pRect.top}px`;
+    ghost.style.width = `${pRect.width}px`;
+    ghost.style.height = `${pRect.height}px`;
+    ghost.style.right = 'auto';
+    ghost.style.bottom = 'auto';
+    ghost.style.margin = '0';
+    ghost.style.zIndex = '10050';
+    ghost.style.pointerEvents = 'none';
+    document.body.appendChild(ghost);
+
+    const dx = (targetRect.left + targetRect.width / 2) - (pRect.left + pRect.width / 2);
+    const dy = (targetRect.top + targetRect.height / 2) - (pRect.top + pRect.height / 2);
+    const targetScale = Math.max(0.1, Math.min(0.24, (targetRect.width || 44) / pRect.width));
+
+    preview.classList.add('is-closing');
+    preview.style.transformOrigin = 'center center';
+    preview.style.pointerEvents = 'none';
+    preview.style.opacity = '0';
+    preview.style.visibility = 'hidden';
+    const anim = ghost.animate([
+        { transform: 'translate(0, 0) scale(1)', opacity: 1, filter: 'blur(0)' },
+        { transform: `translate(${dx}px, ${dy}px) scale(${targetScale})`, opacity: 0, filter: 'blur(8px)' }
+    ], { duration: 460, easing: 'cubic-bezier(0.28, 0.86, 0.32, 1)', fill: 'forwards' });
+    anim.onfinish = () => {
+        ghost.remove();
+        onDone();
+    };
+}
+
+function animatePreviewShrink(userId, onDone) {
+    const previews = Array.from(document.querySelectorAll(`.voice-float-preview[data-user-id="${userId}"]`));
+    const collapsedItems = Array.from(document.querySelectorAll(`.voice-pcard[data-user-id="${userId}"] .collapsed-stream`));
+    const animations = [];
+
+    previews.forEach(preview => {
+        preview.classList.remove('appearing');
+        preview.style.animation = 'none';
+        preview.classList.add('is-closing');
+        preview.style.transformOrigin = 'center center';
+        preview.style.pointerEvents = 'none';
+        animations.push(preview.animate([
+            { transform: 'scale(1)', opacity: 1, filter: 'blur(0)' },
+            { transform: 'scale(0)', opacity: 0, filter: 'blur(10px)' }
+        ], { duration: 340, easing: EASE_IN, fill: 'forwards' }).finished.catch(() => {}));
+    });
+
+    collapsedItems.forEach(collapsed => {
+        collapsed.classList.add('stream-avatar-closing');
+        animations.push(collapsed.animate([
+            { transform: 'scale(1)', opacity: 1, filter: 'blur(0)' },
+            { transform: 'scale(0)', opacity: 0, filter: 'blur(10px)' }
+        ], { duration: 300, easing: EASE_IN, fill: 'forwards' }).finished.catch(() => {}));
+    });
+
+    if (!animations.length) { onDone(); return; }
+    Promise.all(animations).then(onDone);
+}
+
+let _renderQueued = false;
+function queueRenderVoiceChannel() {
+    if (_renderQueued) return;
+    _renderQueued = true;
+    requestAnimationFrame(() => {
+        _renderQueued = false;
+        renderVoiceChannel();
+    });
+}
 
 function renderVoiceChannel() {
     const gridConstellation = document.getElementById("voice-grid-constellation");
-    const theaterView = document.getElementById("voice-theater-view");
-    const compactList = document.getElementById("voice-compact-participants-list");
     const memberCountText = document.getElementById("voice-member-count-text");
 
-    if (!gridConstellation || !theaterView || !compactList) return;
+    if (!gridConstellation) return;
 
     if (memberCountText) {
         memberCountText.textContent = `${voiceMembers.length} в канале`;
     }
 
-    const createParticipantElement = (member, compactMode = false) => {
-        const wrap = document.createElement("div");
-        wrap.className = `voice-member-bubble ${member.speaking ? 'speaking' : ''}`;
-        if (compactMode) {
-            wrap.classList.add("compact");
+    const hasShare = (m) => m.isOwn ? voiceState.shareActive : !!m.hasShare;
+    const hasCam = (m) => m.isOwn ? voiceState.camActive : !!m.hasCam;
+    const hasStream = (m) => hasShare(m) || hasCam(m);
+    const streamers = voiceMembers.filter(hasStream);
+
+    if (!window._voicePreviewState) {
+        window._voicePreviewState = { openUserId: null, collapsed: {}, positions: {}, _miniPos: {} };
+    }
+    const ps = window._voicePreviewState;
+    if (!ps._miniPos) ps._miniPos = {};
+    if (!ps.positions) ps.positions = {};
+    if (!ps.collapsed) ps.collapsed = {};
+
+    // Если текущий открытый перестал стримить — закрыть
+    if (ps.openUserId) {
+        const stillStreaming = streamers.find(m => (m.isOwn ? 'own' : m.name) === ps.openUserId);
+        if (!stillStreaming) {
+            ps.openUserId = null;
         }
+    }
+
+    // Сохранить позиции не-expanded превью
+    document.querySelectorAll('.voice-float-preview:not(.expanded)').forEach(el => {
+        const uid = el.dataset.userId;
+        if (uid) ps.positions[uid] = { left: el.style.left, top: el.style.top };
+    });
+    document.querySelectorAll('.voice-float-preview').forEach(el => el.remove());
+
+    const voicePanel = document.getElementById("voice-channel-container") || gridConstellation.parentElement;
+    const roomVoicePanel = document.getElementById("room-voice-channel-container");
+    const frag = document.createDocumentFragment();
+    const roomFrag = document.createDocumentFragment();
+
+    streamers.forEach(m => {
+        const userId = m.isOwn ? 'own' : m.name;
+        const isCollapsed = ps.collapsed[userId] || ps.openUserId !== userId;
+        if (isCollapsed) return;
+
+        const profileName = document.getElementById("profile-name-display")?.textContent.trim() || "Александр";
+        const displayName = m.isOwn ? profileName : m.name;
+        const isShare = hasShare(m);
+
+        const preview = document.createElement('div');
+        preview.className = 'voice-float-preview appearing';
+        preview.dataset.userId = userId;
+        preview.addEventListener('animationend', () => preview.classList.remove('appearing'), { once: true });
+
+        const previewContent = document.createElement('div');
+        previewContent.className = 'voice-preview-content';
+        if (isShare) {
+            previewContent.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#111,#0a0a0a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;"><span style="font-size:10px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;">LIVE</span><span style="font-size:11px;color:rgba(255,255,255,0.2);">${displayName} — экран</span></div>`;
+        } else {
+            previewContent.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#111,#0a0a0a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;"><svg viewBox="0 0 100 100" style="width:30%;height:30%;opacity:0.3;"><circle cx="50" cy="38" r="16" fill="none" stroke="#fff" stroke-width="2"/><path d="M24 82c0-16 12-24 26-24s26 8 26 24" fill="none" stroke="#fff" stroke-width="2"/></svg><span style="font-size:11px;color:rgba(255,255,255,0.2);">${displayName} — камера</span></div>`;
+        }
+
+        const controls = document.createElement('div');
+        controls.className = 'voice-preview-controls';
+
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'voice-preview-btn';
+        expandBtn.title = 'Развернуть';
+        expandBtn.innerHTML = EXPAND_SVG;
+        expandBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (preview.classList.contains('expanded')) {
+                if (ps._miniPos[userId]) {
+                    const mini = ps._miniPos[userId];
+                    preview.style.width = mini.w + 'px';
+                    preview.style.height = mini.h + 'px';
+                    preview.style.left = mini.x + 'px';
+                    preview.style.top = mini.y + 'px';
+                    preview.style.right = 'auto';
+                    preview.style.bottom = 'auto';
+                }
+                preview.classList.remove('expanded');
+                expandBtn.title = 'Развернуть';
+                expandBtn.innerHTML = EXPAND_SVG;
+            } else {
+                const vp = preview.parentElement;
+                if (vp) {
+                    const vpRect = vp.getBoundingClientRect();
+                    const curRect = preview.getBoundingClientRect();
+                    ps._miniPos[userId] = {
+                        x: curRect.left - vpRect.left,
+                        y: curRect.top - vpRect.top,
+                        w: curRect.width,
+                        h: curRect.height
+                    };
+                    preview.style.left = (curRect.left - vpRect.left) + 'px';
+                    preview.style.top = (curRect.top - vpRect.top) + 'px';
+                    preview.style.right = 'auto';
+                    preview.style.bottom = 'auto';
+                    requestAnimationFrame(() => {
+                        preview.style.width = (vpRect.width * 0.9) + 'px';
+                        preview.style.height = (vpRect.height * 0.9) + 'px';
+                        preview.style.left = (vpRect.width * 0.05) + 'px';
+                        preview.style.top = (vpRect.height * 0.05) + 'px';
+                    });
+                }
+                preview.classList.add('expanded');
+                expandBtn.title = 'Свернуть';
+                expandBtn.innerHTML = SHRINK_SVG;
+            }
+        });
+
+        const hideBtn = document.createElement('button');
+        hideBtn.className = 'voice-preview-btn';
+        hideBtn.title = 'Скрыть в аватар';
+        hideBtn.innerHTML = SHRINK_SVG;
+        controls.appendChild(expandBtn);
+        controls.appendChild(hideBtn);
+
+        const label = document.createElement('div');
+        label.className = 'voice-preview-label';
+        label.textContent = isShare ? `${displayName} — демонстрация` : `${displayName} — камера`;
+
+        preview.appendChild(previewContent);
+        preview.appendChild(controls);
+        preview.appendChild(label);
+
+        const saved = ps.positions[userId];
+        if (saved && saved.left) {
+            const vpRect = voicePanel.getBoundingClientRect();
+            const sl = parseFloat(saved.left);
+            const st = parseFloat(saved.top);
+            preview.style.left = Math.max(0, Math.min(sl, vpRect.width - 280)) + 'px';
+            preview.style.top = Math.max(0, Math.min(st, vpRect.height - 158)) + 'px';
+            preview.style.right = 'auto';
+            preview.style.bottom = 'auto';
+        }
+
+        makeDraggable(preview);
+        frag.appendChild(preview);
+        const roomClone = preview.cloneNode(true);
+        roomClone.removeAttribute('style');
+        makeDraggable(roomClone);
+        roomFrag.appendChild(roomClone);
+    });
+
+    if (voicePanel) {
+        voicePanel.style.position = 'relative';
+        voicePanel.appendChild(frag);
+    }
+    if (roomVoicePanel) {
+        roomVoicePanel.style.position = 'relative';
+        roomVoicePanel.appendChild(roomFrag);
+    }
+
+    // Рендер участников через DocumentFragment
+    const pFrag = document.createDocumentFragment();
+    voiceMembers.forEach(member => {
+        const wrap = document.createElement("div");
+        wrap.className = "voice-pcard";
+        wrap.dataset.userId = member.isOwn ? 'own' : member.name;
+        if (member.isOwn) wrap.classList.add("is-own");
+        if (member.speaking) wrap.classList.add("speaking");
 
         const profileName = document.getElementById("profile-name-display")?.textContent.trim() || member.name;
         const displayName = member.isOwn ? profileName : member.name;
         const displayAvatar = member.isOwn ? profileName.charAt(0).toUpperCase() : member.avatar;
 
-        let insideContent = "";
-        if (member.hasCam) {
-            insideContent = `
-                <div class="voice-cam-stream-mock">
-                    <svg viewBox="0 0 100 100" class="voice-cam-svg">
-                        <circle cx="50" cy="40" r="18" fill="none" stroke="#fff" stroke-width="1.8"/>
-                        <path d="M25 80c0-15 10-22 25-22s25 7 25 22" fill="none" stroke="#fff" stroke-width="1.8"/>
-                    </svg>
-                    <span class="cam-label">${displayName.charAt(0)}</span>
-                </div>
-            `;
-        } else {
-            insideContent = `
-                <div class="voice-member-avatar-wrap">
-                    <div class="voice-member-avatar">${displayAvatar}</div>
-                </div>
-            `;
-        }
-
         const isMicMuted = member.isOwn ? !voiceState.micActive : !member.micActive;
         const isSoundMuted = member.isOwn ? !voiceState.soundActive : !member.soundActive;
 
-        if (compactMode) {
-            wrap.innerHTML = `
-                ${insideContent}
-                <span class="voice-member-name">${displayName}</span>
-                ${(!isMicMuted && member.speaking) ? '<div class="speaking-wave"><span></span><span></span><span></span></div>' : ''}
-                ${isMicMuted ? '<div class="voice-status-badge mic-muted" title="Микрофон выключен" style="bottom: 25px; right: 15px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></div>' : ''}
-                ${isSoundMuted ? '<div class="voice-status-badge sound-muted" title="Звук выключен" style="bottom: 25px; left: 15px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M3 14h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H3v7zM19 14h2V7h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"></path><path d="M14 14a5 5 0 0 1-4-4"></path></svg></div>' : ''}
-            `;
+        const micBadge = isMicMuted ? `<div class="voice-status-badge mic-muted" title="Микрофон выключен">${MIC_OFF_SVG}</div>` : '';
+        const soundBadge = isSoundMuted ? `<div class="voice-status-badge sound-muted" title="Звук выключен">${SOUND_OFF_SVG}</div>` : '';
+
+        const userId = member.isOwn ? 'own' : member.name;
+        const isCollapsed = hasStream(member) && (ps.collapsed[userId] || ps.openUserId !== userId);
+
+        let orb;
+        if (hasStream(member) && isCollapsed) {
+            const isShare = hasShare(member);
+            orb = `<div class="voice-member-avatar-wrap collapsed-stream" title="${isShare ? 'Демонстрация скрыта — нажмите чтобы раскрыть' : 'Камера скрыта — нажмите чтобы раскрыть'}"><div class="collapsed-stream-icon">${isShare ? SCREENSHARE_SVG : CAM_SVG}</div></div>`;
         } else {
-            wrap.innerHTML = `
-                <div class="voice-member-bubble-inner">
-                    ${insideContent}
-                    <span class="voice-member-name">${displayName}</span>
-                    ${(!isMicMuted && member.speaking) ? '<div class="speaking-wave"><span></span><span></span><span></span></div>' : ''}
-                    ${isMicMuted ? '<div class="voice-status-badge mic-muted" title="Микрофон выключен" style="bottom: 25px; right: 15px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></div>' : ''}
-                    ${isSoundMuted ? '<div class="voice-status-badge sound-muted" title="Звук выключен" style="bottom: 25px; left: 15px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M3 14h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H3v7zM19 14h2V7h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"></path><path d="M14 14a5 5 0 0 1-4-4"></path></svg></div>' : ''}
-                </div>
-            `;
+            orb = `<div class="voice-member-avatar-wrap">${displayAvatar}${micBadge}${soundBadge}</div>`;
         }
-        
-        if (!member.isOwn) {
-            wrap.addEventListener("click", () => {
-                member.speaking = !member.speaking;
+
+        wrap.innerHTML = `${orb}<span class="voice-member-name">${displayName}</span>`;
+
+        const collapsedWrap = wrap.querySelector('.collapsed-stream');
+        if (collapsedWrap) {
+            collapsedWrap.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ps.collapsed[userId] = false;
+                ps.openUserId = userId;
                 renderVoiceChannel();
             });
         }
 
-        return wrap;
+        if (!member.isOwn && !collapsedWrap) {
+            wrap.addEventListener("click", () => {
+                member.speaking = !member.speaking;
+                queueRenderVoiceChannel();
+            });
+        }
+
+        pFrag.appendChild(wrap);
+    });
+
+    gridConstellation.innerHTML = "";
+    gridConstellation.appendChild(pFrag);
+
+    const roomGrid = document.getElementById("room-voice-grid-constellation");
+    if (roomGrid) {
+        roomGrid.innerHTML = gridConstellation.innerHTML;
+        const countEl = document.getElementById("room-voice-preconnect-count");
+        if (countEl) {
+            const n = voiceMembers.length;
+            countEl.textContent = n + " в канале";
+        }
+    }
+
+    if (typeof syncRoomBtns === 'function') syncRoomBtns();
+}
+
+let _dragState = null;
+
+function handleDragMove(clientX, clientY) {
+    if (!_dragState) return;
+    const parentRect = _dragState.el.parentElement.getBoundingClientRect();
+    const elW = _dragState.el.offsetWidth;
+    const elH = _dragState.el.offsetHeight;
+    let tx = clientX - parentRect.left - _dragState.offsetX;
+    let ty = clientY - parentRect.top - _dragState.offsetY;
+    tx = Math.max(0, Math.min(tx, parentRect.width - elW));
+    ty = Math.max(0, Math.min(ty, parentRect.height - elH));
+    _dragState.targetX = tx;
+    _dragState.targetY = ty;
+    if (!_dragState.rafId) {
+        const tick = () => {
+            if (!_dragState) return;
+            _dragState.renderX += (_dragState.targetX - _dragState.renderX) * 0.25;
+            _dragState.renderY += (_dragState.targetY - _dragState.renderY) * 0.25;
+            _dragState.el.style.left = _dragState.renderX + 'px';
+            _dragState.el.style.top = _dragState.renderY + 'px';
+            if (Math.abs(_dragState.targetX - _dragState.renderX) > 0.3 || Math.abs(_dragState.targetY - _dragState.renderY) > 0.3) {
+                _dragState.rafId = requestAnimationFrame(tick);
+            } else {
+                _dragState.renderX = _dragState.targetX;
+                _dragState.renderY = _dragState.targetY;
+                _dragState.el.style.left = _dragState.renderX + 'px';
+                _dragState.el.style.top = _dragState.renderY + 'px';
+                _dragState.rafId = null;
+            }
+        };
+        _dragState.rafId = requestAnimationFrame(tick);
+    }
+}
+
+document.addEventListener('mousemove', (e) => handleDragMove(e.clientX, e.clientY));
+document.addEventListener('mouseup', () => { _dragState = null; });
+document.addEventListener('touchmove', (e) => {
+    if (!_dragState) return;
+    e.preventDefault();
+    handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+document.addEventListener('touchend', () => { _dragState = null; });
+document.addEventListener('touchcancel', () => { _dragState = null; });
+
+document.addEventListener('click', (e) => {
+    const previewBtn = e.target.closest('.voice-preview-btn');
+    if (!previewBtn) return;
+    if (e.__voicePreviewHandled) return;
+    const preview = previewBtn.closest('.voice-float-preview');
+    if (!preview || !preview.dataset.userId) return;
+
+    const buttons = Array.from(preview.querySelectorAll('.voice-preview-btn'));
+    const isHideButton = buttons.indexOf(previewBtn) === 1;
+    if (!isHideButton) return;
+
+    const ps = window._voicePreviewState || (window._voicePreviewState = { openUserId: null, collapsed: {}, positions: {}, _miniPos: {} });
+    const userId = preview.dataset.userId;
+    e.__voicePreviewHandled = true;
+    e.stopPropagation();
+    animatePreviewToAvatar(userId, () => {
+        ps.collapsed[userId] = true;
+        renderVoiceChannel();
+    }, preview);
+});
+
+function makeDraggable(el) {
+    const startDrag = (clientX, clientY) => {
+        if (el.classList.contains('expanded')) return;
+        const rect = el.getBoundingClientRect();
+        const parentRect = el.parentElement.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const offsetY = clientY - rect.top;
+        const startX = rect.left - parentRect.left;
+        const startY = rect.top - parentRect.top;
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+        _dragState = {
+            el,
+            offsetX,
+            offsetY,
+            targetX: startX,
+            targetY: startY,
+            renderX: startX,
+            renderY: startY,
+            rafId: null
+        };
+        el.style.left = startX + 'px';
+        el.style.top = startY + 'px';
     };
 
-    if (voiceState.shareActive) {
-        gridConstellation.classList.add("hidden");
-        theaterView.classList.remove("hidden");
+    el.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.voice-preview-btn')) return;
+        startDrag(e.clientX, e.clientY);
+        e.preventDefault();
+    });
 
-        compactList.innerHTML = "";
-        voiceMembers.forEach(m => {
-            compactList.appendChild(createParticipantElement(m, true));
-        });
-    } else {
-        theaterView.classList.add("hidden");
-        gridConstellation.classList.remove("hidden");
-
-        const numMembers = voiceMembers.length;
-        const coords = constellationLayouts[numMembers] || constellationLayouts[3] || [];
-
-        // 1. Ensure the SVG element exists and is updated
-        let svg = gridConstellation.querySelector(".constellation-lines-svg");
-        if (!svg) {
-            svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-            svg.setAttribute("class", "constellation-lines-svg");
-            svg.setAttribute("viewBox", "0 0 100 100");
-            gridConstellation.appendChild(svg);
-        }
-
-        // We will manage lines. In-place matching of lines to target coordinate pairs.
-        const targetLines = [];
-        if (numMembers > 1) {
-            for (let i = 0; i < numMembers; i++) {
-                const nextIdx = (i + 1) % numMembers;
-                const p1 = coords[i];
-                const p2 = coords[nextIdx];
-                if (p1 && p2) {
-                    targetLines.push({
-                        x1: p1.left,
-                        y1: p1.top,
-                        x2: p2.left,
-                        y2: p2.top
-                    });
-                }
-            }
-        }
-
-        const existingLines = Array.from(svg.querySelectorAll("line"));
-        const targetCount = targetLines.length;
-        const currentCount = existingLines.length;
-
-        // If we have fewer lines than target, create new lines starting from center (50, 50)
-        for (let i = currentCount; i < targetCount; i++) {
-            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line.setAttribute("x1", "50");
-            line.setAttribute("y1", "50");
-            line.setAttribute("x2", "50");
-            line.setAttribute("y2", "50");
-            line.setAttribute("stroke", "rgba(255, 255, 255, 0.08)");
-            line.setAttribute("stroke-dasharray", "2 3");
-            line.setAttribute("stroke-width", "0.4");
-            line.style.opacity = "0";
-            line.style.transition = "opacity 0.5s ease, x1 0.8s cubic-bezier(0.4, 0, 0.2, 1), y1 0.8s cubic-bezier(0.4, 0, 0.2, 1), x2 0.8s cubic-bezier(0.4, 0, 0.2, 1), y2 0.8s cubic-bezier(0.4, 0, 0.2, 1)";
-            svg.appendChild(line);
-            existingLines.push(line);
-        }
-
-        // If we have more lines than target, move extra lines to center and fade out
-        for (let i = currentCount - 1; i >= targetCount; i--) {
-            const line = existingLines[i];
-            line.style.opacity = "0";
-            line.setAttribute("x1", "50");
-            line.setAttribute("y1", "50");
-            line.setAttribute("x2", "50");
-            line.setAttribute("y2", "50");
-            setTimeout(() => {
-                line.remove();
-            }, 800);
-        }
-
-        // Force a layout/reflow to register starting positions before updating
-        if (svg.children.length > 0) {
-            svg.children[0].getBoundingClientRect();
-        }
-
-        // Update active lines to target positions
-        for (let i = 0; i < targetCount; i++) {
-            const line = existingLines[i];
-            const target = targetLines[i];
-            line.setAttribute("x1", target.x1);
-            line.setAttribute("y1", target.y1);
-            line.setAttribute("x2", target.x2);
-            line.setAttribute("y2", target.y2);
-            line.style.opacity = "1";
-        }
-
-        // 2. Manage participant bubbles in-place
-        const currentBubbleNames = voiceMembers.map(m => m.name);
-
-        // Remove bubbles that are no longer present
-        const existingBubbles = gridConstellation.querySelectorAll(".voice-member-bubble:not(.compact)");
-        existingBubbles.forEach(bubble => {
-            const name = bubble.getAttribute("data-name");
-            if (!currentBubbleNames.includes(name)) {
-                bubble.style.opacity = "0";
-                bubble.style.transform = "translate(-50%, -50%) scale(0.5)";
-                setTimeout(() => {
-                    bubble.remove();
-                }, 800);
-            }
-        });
-
-        // Add or update bubbles
-        voiceMembers.forEach((member, idx) => {
-            const pos = coords[idx] || { left: 50, top: 50 };
-            let bubbleEl = gridConstellation.querySelector(`.voice-member-bubble[data-name="${member.name}"]:not(.compact)`);
-
-            if (!bubbleEl) {
-                // Create new bubble
-                bubbleEl = createParticipantElement(member, false);
-                bubbleEl.setAttribute("data-name", member.name);
-                
-                // Spawn new members smoothly from the center (50%, 50%)
-                bubbleEl.style.left = "50%";
-                bubbleEl.style.top = "50%";
-                bubbleEl.style.opacity = "0";
-                bubbleEl.style.transform = "translate(-50%, -50%) scale(0.5)";
-                
-                gridConstellation.appendChild(bubbleEl);
-                
-                // Force a layout/reflow so the browser registers the initial state
-                bubbleEl.offsetWidth;
-                
-                // Trigger transition to target position
-                bubbleEl.style.left = `${pos.left}%`;
-                bubbleEl.style.top = `${pos.top}%`;
-                bubbleEl.style.opacity = "1";
-                bubbleEl.style.transform = "translate(-50%, -50%) scale(1)";
-            } else {
-                // Update existing bubble
-                // Update speaking state
-                bubbleEl.classList.toggle("speaking", member.speaking);
-                
-                const inner = bubbleEl.querySelector(".voice-member-bubble-inner");
-                if (inner) {
-                    // Update microphone and sound mute status badges
-                    const isMicMuted = member.isOwn ? !voiceState.micActive : !member.micActive;
-                    const isSoundMuted = member.isOwn ? !voiceState.soundActive : !member.soundActive;
-                    
-                    // Update mic badge
-                    let micBadge = inner.querySelector(".mic-muted");
-                    if (isMicMuted) {
-                        if (!micBadge) {
-                            micBadge = document.createElement("div");
-                            micBadge.className = "voice-status-badge mic-muted";
-                            micBadge.title = "Микрофон выключен";
-                            micBadge.style.cssText = "bottom: 25px; right: 15px;";
-                            micBadge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
-                            inner.appendChild(micBadge);
-                        }
-                    } else if (micBadge) {
-                        micBadge.remove();
-                    }
-
-                    // Update sound badge
-                    let soundBadge = inner.querySelector(".sound-muted");
-                    if (isSoundMuted) {
-                        if (!soundBadge) {
-                            soundBadge = document.createElement("div");
-                            soundBadge.className = "voice-status-badge sound-muted";
-                            soundBadge.title = "Звук выключен";
-                            soundBadge.style.cssText = "bottom: 25px; left: 15px;";
-                            soundBadge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M3 14h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H3v7zM19 14h2V7h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2z"></path><path d="M14 14a5 5 0 0 1-4-4"></path></svg>';
-                            inner.appendChild(soundBadge);
-                        }
-                    } else if (soundBadge) {
-                        soundBadge.remove();
-                    }
-
-                    // Update speaking wave display
-                    let speakingWave = inner.querySelector(".speaking-wave");
-                    if (!isMicMuted && member.speaking) {
-                        if (!speakingWave) {
-                            speakingWave = document.createElement("div");
-                            speakingWave.className = "speaking-wave";
-                            speakingWave.innerHTML = "<span></span><span></span><span></span>";
-                            inner.appendChild(speakingWave);
-                        }
-                    } else if (speakingWave) {
-                        speakingWave.remove();
-                    }
-                }
-                
-                // Smoothly slide to the new coordinate position
-                bubbleEl.style.left = `${pos.left}%`;
-                bubbleEl.style.top = `${pos.top}%`;
-                bubbleEl.style.opacity = "1";
-            }
-        });
-    }
+    el.addEventListener('touchstart', (e) => {
+        if (e.target.closest('.voice-preview-btn')) return;
+        startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        e.preventDefault();
+    }, { passive: false });
 }
 
 function showServerVoice(channelName) {
@@ -2036,16 +2688,10 @@ if (roomMessageForm && roomMessageInput) {
 // Управление голосовым каналом внутри комнаты
 const roomScreenshareBtn = document.getElementById("room-screenshare-btn");
 const roomScreenshareCard = document.getElementById("room-screenshare-card");
-if (roomScreenshareBtn && roomScreenshareCard) {
+if (roomScreenshareBtn) {
     roomScreenshareBtn.addEventListener("click", () => {
-        roomScreenshareBtn.classList.toggle("active");
-        if (roomScreenshareBtn.classList.contains("active")) {
-            roomScreenshareCard.style.display = "flex";
-            showToast("Стрим экрана в комнате", "Демонстрация экрана возобновлена.");
-        } else {
-            roomScreenshareCard.style.display = "none";
-            showToast("Стрим экрана в комнате", "Вы остановили демонстрацию экрана.");
-        }
+        const realShareBtn = document.getElementById("voice-btn-share");
+        if (realShareBtn) realShareBtn.click();
     });
 }
 
@@ -2057,9 +2703,53 @@ if (roomTheaterToggle) {
     });
 }
 
-document.querySelector(".add-server-btn").addEventListener("click", () => {
-    showToast("Создание сервера", "В этой песочнице функция создания серверов отключена.");
-});
+const addServerBtn = document.querySelector(".add-server-btn");
+if (addServerBtn) {
+    addServerBtn.addEventListener("click", () => {
+        const modal = document.getElementById("create-space-modal");
+        if (modal) modal.classList.remove("hidden");
+    });
+}
+
+(function initCreateSpaceModal() {
+    const modal = document.getElementById("create-space-modal");
+    if (!modal) return;
+    const closeBtn = document.getElementById("create-space-close");
+    const typeBtns = modal.querySelectorAll(".create-space-type-btn");
+    const nameInput = document.getElementById("create-space-name");
+    const submitBtn = document.getElementById("create-space-submit");
+    let selectedType = "server";
+
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
+
+    typeBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            typeBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            selectedType = btn.dataset.type;
+            nameInput.placeholder = selectedType === "server" ? "Моя новая сфера..." : "Моя новая комната...";
+        });
+    });
+
+    if (submitBtn) {
+        submitBtn.addEventListener("click", () => {
+            const name = nameInput.value.trim();
+            if (!name) return;
+            const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-zа-яё0-9-]/gi, '') + '-' + Date.now().toString(36);
+            if (selectedType === "server") {
+                serversData[id] = { name, kind: "server", channels: [{ id: id + "-general", name: "общий", type: "text" }, { id: id + "-voice", name: "Голосовой", type: "voice" }] };
+            } else {
+                serversData[id] = { name, kind: "room" };
+            }
+            renderUnifiedSidebar();
+            modal.classList.add("hidden");
+            nameInput.value = "";
+            showToast("Создано", `${selectedType === "server" ? 'Сфера' : 'Комната'} «${name}» создана.`);
+            selectServerOrRoom(id, selectedType);
+        });
+    }
+})();
 
 function loadServer(serverId) {
     const chatPanel = document.getElementById("server-chat-panel");
@@ -2542,6 +3232,16 @@ function loadFriends(type) {
         friendsListTitle.textContent = `Все друзья — ${list.length}`;
     }
 
+    if (list.length === 0) {
+        friendsListContainer.appendChild(createEmptyState(
+            type === "online" ? "Никого нет в сети" : "Пока нет друзей",
+            "Добавьте первого человека, чтобы быстро писать, звонить и видеть статус.",
+            "Добавить",
+            () => loadFriends("add")
+        ));
+        return;
+    }
+
     list.forEach(friend => {
         const card = document.createElement("div");
         card.className = "friend-card";
@@ -2711,7 +3411,7 @@ function updateHubBentoPreview() {
             bentoIdeaCard.innerHTML = `
                 <div class="bento-header-row">
                     <span class="bento-tag idea">Топ Идея</span>
-                    <span class="vote-count">▲ ${topIdea.votes}</span>
+                    <span class="vote-count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>${topIdea.votes}</span>
                 </div>
                 <h3>${escapeHTML(topIdea.title)}</h3>
                 <p>${escapeHTML(topIdea.desc)}</p>
@@ -2719,7 +3419,7 @@ function updateHubBentoPreview() {
             `;
         } else {
             bentoIdeaCard.innerHTML = `
-                <div class="bento-header-row"><span class="bento-tag idea">Топ Идея</span><span class="vote-count">▲ 0</span></div>
+                <div class="bento-header-row"><span class="bento-tag idea">Топ Идея</span><span class="vote-count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>0</span></div>
                 <h3>Нет идей</h3><p>Предложите первую идею для приложения!</p>
                 <span class="idea-status-tag new">Новая</span>
             `;
@@ -2779,8 +3479,10 @@ function renderIdeasList(container) {
                 </div>
             </div>
             <div class="hub-item-right">
-                <span class="hub-item-votes">▲ ${idea.votes}</span>
-                <button class="hub-upvote-btn" onclick="upvoteHubIdea(${idea.id}, this)" title="Проголосовать">▲</button>
+                <button class="hub-upvote-btn ${hasVotedHubIdea(idea.id) ? "voted" : ""}" onclick="upvoteHubIdea(${idea.id}, this)" title="${hasVotedHubIdea(idea.id) ? "Убрать голос" : "Проголосовать"}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                </button>
+                <span class="hub-item-votes">${idea.votes}</span>
                 ${deleteBtn}
             </div>
         `;
@@ -2895,6 +3597,37 @@ function openHubListModal(type) {
     modal.classList.remove("hidden");
 }
 
+// ─── Кастомный выпадающий список (как в настройках) ─────────────────────
+
+function initHubSelect(root) {
+    if (!root) return;
+    const btn = root.querySelector(".hub-select-btn");
+    const valueEl = root.querySelector(".hub-select-value");
+    const items = root.querySelectorAll(".hub-select-menu li");
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // Закрыть другие открытые селекты
+        document.querySelectorAll(".hub-select.open").forEach(s => { if (s !== root) s.classList.remove("open"); });
+        root.classList.toggle("open");
+    });
+
+    items.forEach(li => {
+        li.addEventListener("click", () => {
+            root.dataset.value = li.dataset.value;
+            valueEl.textContent = li.textContent;
+            items.forEach(i => i.classList.remove("selected"));
+            li.classList.add("selected");
+            root.classList.remove("open");
+        });
+    });
+
+    // Клик вне — закрыть
+    document.addEventListener("click", (e) => {
+        if (!root.contains(e.target)) root.classList.remove("open");
+    });
+}
+
 // ─── Открытие формы (компактное окно) ───────────────────────────────────
 
 function openHubFormModal(type) {
@@ -2950,20 +3683,29 @@ function openHubFormModal(type) {
             </p>
             <input type="text" id="hub-new-bug-title" class="profile-status-input" placeholder="Что сломалось?..." style="font-size: 15px; padding: 12px 16px;">
             <textarea id="hub-new-bug-desc" class="profile-status-input" placeholder="Опишите шаги воспроизведения ошибки..." rows="4" style="resize: vertical; min-height: 80px; font-size: 13px; padding: 12px 16px; font-family: var(--font-sans); border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; outline: none;"></textarea>
-            <select id="hub-new-bug-priority" style="width: 100%; height: 42px; color: #fff; background: rgba(20,20,20,0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; outline: none; padding: 0 14px; font-family: var(--font-sans); font-size: 13px;">
-                <option value="critical" style="background: #111;">Критический</option>
-                <option value="high" style="background: #111;">Высокий</option>
-                <option value="medium" selected style="background: #111;">Средний</option>
-                <option value="low" style="background: #111;">Низкий</option>
-            </select>
+            <label class="hub-field-label">Приоритет</label>
+            <div class="hub-select" id="hub-new-bug-priority" data-value="medium">
+                <button type="button" class="hub-select-btn">
+                    <span class="hub-select-value">Средний</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <ul class="hub-select-menu">
+                    <li data-value="critical">Критический</li>
+                    <li data-value="high">Высокий</li>
+                    <li data-value="medium" class="selected">Средний</li>
+                    <li data-value="low">Низкий</li>
+                </ul>
+            </div>
             <button type="button" id="hub-submit-bug-btn" class="submit-action-btn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 4px;">Отправить отчет</button>
         `;
+
+        initHubSelect(document.getElementById("hub-new-bug-priority"));
 
         const submitBtn = document.getElementById("hub-submit-bug-btn");
         submitBtn.addEventListener("click", () => {
             const titleVal = document.getElementById("hub-new-bug-title").value.trim();
             const descVal = document.getElementById("hub-new-bug-desc").value.trim();
-            const priority = document.getElementById("hub-new-bug-priority").value;
+            const priority = document.getElementById("hub-new-bug-priority").dataset.value;
             if (!titleVal) {
                 showToast("Ошибка", "Укажите название ошибки.");
                 return;
@@ -3062,24 +3804,42 @@ function openHubFormModal(type) {
 
 // ─── Глобальные обработчики ─────────────────────────────────────────────
 
+function getHubIdeaVotes() {
+    try { return JSON.parse(localStorage.getItem("love_hub_idea_votes") || "{}"); } catch (e) { return {}; }
+}
+function hasVotedHubIdea(id) {
+    return !!getHubIdeaVotes()[id];
+}
+function persistHubIdeaVote(id, voted) {
+    const v = getHubIdeaVotes();
+    if (voted) v[id] = true; else delete v[id];
+    try { localStorage.setItem("love_hub_idea_votes", JSON.stringify(v)); } catch (e) {}
+}
+
 window.upvoteHubIdea = function(id, btn) {
     const idea = mockHubIdeas.find(i => i.id === id);
-    if (idea) {
-        idea.votes += 1;
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = "✓";
-        }
-        showToast("Голос учтен", `+1 за "${idea.title}"`);
+    if (!idea) return;
 
-        // Обновляем список если открыт
-        const listContainer = document.getElementById("hub-modal-list-container");
-        const listModal = document.getElementById("hub-list-modal");
-        if (listModal && !listModal.classList.contains("hidden") && currentModalType === "ideas" && listContainer) {
-            renderIdeasList(listContainer);
-        }
-        updateHubBentoPreview();
+    const already = hasVotedHubIdea(id);
+    if (already) {
+        // Повторный клик — снимаем голос
+        idea.votes = Math.max(0, idea.votes - 1);
+        persistHubIdeaVote(id, false);
+        showToast("Голос убран", `Вы убрали голос за "${idea.title}"`);
+    } else {
+        // Первый клик — голосуем
+        idea.votes += 1;
+        persistHubIdeaVote(id, true);
+        showToast("Голос учтен", `+1 за "${idea.title}"`);
     }
+
+    // Обновляем список если открыт
+    const listContainer = document.getElementById("hub-modal-list-container");
+    const listModal = document.getElementById("hub-list-modal");
+    if (listModal && !listModal.classList.contains("hidden") && currentModalType === "ideas" && listContainer) {
+        renderIdeasList(listContainer);
+    }
+    updateHubBentoPreview();
 };
 
 window.resolveHubBug = function(id) {
@@ -3174,6 +3934,208 @@ if (hubSuggestBtn) hubSuggestBtn.addEventListener("click", () => openHubFormModa
 const hubReportBugBtn = document.getElementById("hub-report-bug-btn");
 if (hubReportBugBtn) hubReportBugBtn.addEventListener("click", () => openHubFormModal("bug"));
 
+// ─── Ссылки в карточке «Полезное» ───────────────────────────────────────
+const HUB_INFO_CONTENT = {
+    rules: {
+        title: "Правила сообщества",
+        html: `
+            <p class="hub-info-lead">Love — это уютное пространство. Чтобы всем здесь было хорошо, придерживайтесь нескольких простых правил.</p>
+            <ol class="hub-info-list">
+                <li><strong>Уважение.</strong> Никаких оскорблений, травли и дискриминации. Относитесь к другим так, как хотели бы, чтобы относились к вам.</li>
+                <li><strong>Без спама.</strong> Не засоряйте чаты рекламой, флудом и повторяющимися сообщениями.</li>
+                <li><strong>Безопасность.</strong> Не делитесь чужими личными данными и не выдавайте себя за других людей.</li>
+                <li><strong>Контент 18+.</strong> Запрещён нелегальный и оскорбляющий контент. Будьте тактичны.</li>
+                <li><strong>Помощь.</strong> Нашли нарушение — сообщите через «Сообщить об ошибке» или поддержку.</li>
+            </ol>
+            <p class="hub-info-note">Нарушение правил может привести к ограничению доступа к приложению.</p>
+        `
+    },
+    roadmap: {
+        title: "Roadmap проекта",
+        html: `
+            <p class="hub-info-lead">Над чем мы работаем и что ждёт Love в ближайших обновлениях.</p>
+            <div class="hub-roadmap">
+                <div class="hub-roadmap-item done">
+                    <span class="hub-roadmap-badge">Готово</span>
+                    <div><strong>Новый дизайн (Wabi-Sabi)</strong><p>Полностью переработанный визуальный стиль приложения.</p></div>
+                </div>
+                <div class="hub-roadmap-item progress">
+                    <span class="hub-roadmap-badge">В работе</span>
+                    <div><strong>Голосовые комнаты 2.0</strong><p>Новый дизайн войса с «орбами присутствия» и адаптивом.</p></div>
+                </div>
+                <div class="hub-roadmap-item planned">
+                    <span class="hub-roadmap-badge">Запланировано</span>
+                    <div><strong>Кастомные звуки и стикеры</strong><p>Загрузка своих звуков уведомлений и наборов стикеров.</p></div>
+                </div>
+                <div class="hub-roadmap-item planned">
+                    <span class="hub-roadmap-badge">Запланировано</span>
+                    <div><strong>Веб-версия Love</strong><p>Доступ к приложению прямо из браузера, без установки.</p></div>
+                </div>
+            </div>
+        `
+    }
+};
+
+function openHubInfoModal(key) {
+    const data = HUB_INFO_CONTENT[key];
+    const modal = document.getElementById("hub-info-modal");
+    const title = document.getElementById("hub-info-modal-title");
+    const body = document.getElementById("hub-info-modal-body");
+    if (!data || !modal || !title || !body) return;
+    title.textContent = data.title;
+    body.innerHTML = data.html;
+    modal.classList.remove("hidden");
+}
+
+const hubLinkRules = document.getElementById("hub-link-rules");
+if (hubLinkRules) hubLinkRules.addEventListener("click", (e) => { e.preventDefault(); openHubInfoModal("rules"); });
+
+const hubLinkRoadmap = document.getElementById("hub-link-roadmap");
+if (hubLinkRoadmap) hubLinkRoadmap.addEventListener("click", (e) => { e.preventDefault(); openHubInfoModal("roadmap"); });
+
+const hubLinkReportBug = document.getElementById("hub-link-report-bug");
+if (hubLinkReportBug) hubLinkReportBug.addEventListener("click", (e) => { e.preventDefault(); openHubFormModal("bug"); });
+
+const hubInfoModalClose = document.getElementById("hub-info-modal-close");
+const hubInfoModal = document.getElementById("hub-info-modal");
+if (hubInfoModalClose && hubInfoModal) {
+    hubInfoModalClose.addEventListener("click", () => hubInfoModal.classList.add("hidden"));
+    hubInfoModal.addEventListener("click", (e) => { if (e.target === hubInfoModal) hubInfoModal.classList.add("hidden"); });
+}
+
+// ─── Dev Log (влоги с голосованием) ─────────────────────────────────────
+const DEVLOG_HEART_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+const DEVLOG_BROKEN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><path d="M13 5l-2.5 5 3.5 2-3 4.5"/></svg>';
+
+let devLogPosts = [
+    { id: "dl1", author: "Александр", date: "10 июня", text: "Переработал экран голосовых каналов — участники теперь в виде «орбов присутствия» с живой аурой у говорящего. Как вам такой подход?", hearts: 42, broken: 6 },
+    { id: "dl2", author: "Александр", date: "8 июня", text: "Думаю добавить авто-переключение тёмной/светлой темы по системным настройкам. Нужно вам это?", hearts: 88, broken: 12 },
+    { id: "dl3", author: "Александр", date: "5 июня", text: "Веб-версия Love — делать её в первую очередь, или сначала довести десктоп и мобильный билд?", hearts: 65, broken: 33 }
+];
+
+function getDevLogVotes() {
+    try { return JSON.parse(localStorage.getItem("love_devlog_votes") || "{}"); } catch (e) { return {}; }
+}
+function persistDevLogVote(id, vote) {
+    const v = getDevLogVotes();
+    if (vote === null) delete v[id]; else v[id] = vote;
+    try { localStorage.setItem("love_devlog_votes", JSON.stringify(v)); } catch (e) {}
+}
+
+function initDevLog() {
+    const modal = document.getElementById("devlog-modal");
+    const openBtn = document.getElementById("hub-devlog-btn");
+    const closeBtn = document.getElementById("devlog-modal-close");
+    if (!modal || !openBtn) return;
+
+    const openDevLog = () => {
+        renderDevLog();
+        modal.classList.remove("hidden");
+    };
+    openBtn.addEventListener("click", openDevLog);
+
+    // Клик по Bento-карточке Dev Log тоже открывает модалку
+    const bentoCard = document.getElementById("bento-devlog-card");
+    if (bentoCard) {
+        bentoCard.style.cursor = "pointer";
+        bentoCard.addEventListener("click", (e) => {
+            if (!e.target.closest("button") && !e.target.closest("a")) openDevLog();
+        });
+    }
+
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    // Клик по затемнённому фону закрывает модалку
+    modal.addEventListener("click", (e) => {
+        if (e.target === modal) modal.classList.add("hidden");
+    });
+
+    const postBtn = document.getElementById("devlog-post-btn");
+    const input = document.getElementById("devlog-input");
+    if (postBtn && input) {
+        postBtn.addEventListener("click", () => {
+            const text = input.value.trim();
+            if (!text) return;
+            devLogPosts.unshift({ id: "dl" + Date.now(), author: "Александр", date: "только что", text, hearts: 0, broken: 0 });
+            input.value = "";
+            renderDevLog();
+        });
+    }
+}
+
+function renderDevLog() {
+    const feed = document.getElementById("devlog-feed");
+    if (!feed) return;
+    const votes = getDevLogVotes();
+    feed.innerHTML = "";
+
+    devLogPosts.forEach(p => {
+        const myVote = votes[p.id] || null;
+        const total = p.hearts + p.broken;
+        const pct = total > 0 ? Math.round((p.hearts / total) * 100) : 0;
+
+        const card = document.createElement("div");
+        card.className = "devlog-post";
+        card.dataset.id = p.id;
+        card.innerHTML = `
+            <div class="devlog-post-head">
+                <div class="devlog-post-avatar">${escapeHTML(p.author.charAt(0))}</div>
+                <div>
+                    <div class="devlog-post-author">${escapeHTML(p.author)}</div>
+                    <div class="devlog-post-date">${escapeHTML(p.date)}</div>
+                </div>
+            </div>
+            <p class="devlog-post-text">${escapeHTML(p.text)}</p>
+            <div class="devlog-vote-bar"><div class="devlog-vote-fill" style="width:${pct}%"></div></div>
+            <div class="devlog-reactions">
+                <button class="devlog-react-btn heart ${myVote === "heart" ? "voted" : ""}" data-vote="heart" title="За">
+                    <span class="devlog-react-icon">${DEVLOG_HEART_SVG}</span>
+                    <span class="devlog-react-count">${p.hearts}</span>
+                </button>
+                <button class="devlog-react-btn broken ${myVote === "broken" ? "voted" : ""}" data-vote="broken" title="Против">
+                    <span class="devlog-react-icon">${DEVLOG_BROKEN_SVG}</span>
+                    <span class="devlog-react-count">${p.broken}</span>
+                </button>
+                <span class="devlog-vote-percent">${pct}% за</span>
+            </div>
+        `;
+        card.querySelectorAll(".devlog-react-btn").forEach(btn => {
+            btn.addEventListener("click", () => handleDevLogVote(p.id, btn.dataset.vote));
+        });
+        feed.appendChild(card);
+    });
+}
+
+function handleDevLogVote(id, vote) {
+    const post = devLogPosts.find(p => p.id === id);
+    if (!post) return;
+    const votes = getDevLogVotes();
+    const prev = votes[id] || null;
+
+    if (prev === "heart") post.hearts = Math.max(0, post.hearts - 1);
+    if (prev === "broken") post.broken = Math.max(0, post.broken - 1);
+
+    let next;
+    if (prev === vote) {
+        next = null; // повторный клик снимает голос
+    } else {
+        next = vote;
+        if (vote === "heart") post.hearts++; else post.broken++;
+    }
+    persistDevLogVote(id, next);
+    renderDevLog();
+
+    // Анимация отклика на только что нажатую кнопку (после ререндера)
+    if (next) {
+        const btn = document.querySelector(`.devlog-post[data-id="${id}"] .devlog-react-btn.${next}`);
+        if (btn) {
+            btn.classList.add("pop");
+            btn.addEventListener("animationend", () => btn.classList.remove("pop"), { once: true });
+        }
+    }
+}
+
+initDevLog();
+
 // ─── Закрытие модалок ───────────────────────────────────────────────────
 
 // Большое окно списка
@@ -3259,16 +4221,8 @@ const theaterClose = document.getElementById("theater-close");
 
 if (screenshareToggleBtn) {
     screenshareToggleBtn.addEventListener("click", () => {
-        screenshareToggleBtn.classList.toggle("active");
-        if (screenshareDisplayCard) {
-            if (screenshareToggleBtn.classList.contains("active")) {
-                screenshareDisplayCard.style.display = "flex";
-                showToast("Стрим экрана", "Демонстрация рабочего стола возобновлена.");
-            } else {
-                screenshareDisplayCard.style.display = "none";
-                showToast("Стрим экрана", "Вы остановили демонстрацию экрана.");
-            }
-        }
+        const realShareBtn = document.getElementById("voice-btn-share");
+        if (realShareBtn) realShareBtn.click();
     });
 }
 
@@ -3321,7 +4275,12 @@ function loadNotifications() {
     notifFeedContainer.innerHTML = "";
     
     if (mockNotifications.length === 0) {
-        notifFeedContainer.innerHTML = `<div class="notif-empty-state"><span class="helper-text">Нет новых уведомлений.</span></div>`;
+        notifFeedContainer.appendChild(createEmptyState(
+            "Уведомлений нет",
+            "Когда появятся ответы, упоминания или системные события, они будут здесь.",
+            "",
+            null
+        ));
         return;
     }
 
@@ -3644,14 +4603,11 @@ if (toggle2faBtn) {
 const navProfileBtn = document.getElementById("nav-profile-btn");
 const profileModal = document.getElementById("profile-modal");
 const profileClose = document.getElementById("profile-close");
-const profileSave = document.getElementById("profile-save");
 const profileStatusText = document.getElementById("profile-status-text");
 const profileTabButtons = document.querySelectorAll(".profile-tab-btn");
 const profilePanes = document.querySelectorAll(".profile-pane");
 
 let currentViewingProfileName = "own";
-let isUsernameCheckedAndSaved = true;
-
 let ownProfileData = {
     name: "Александр",
     username: "@founder",
@@ -3684,6 +4640,64 @@ function renderFriendHobbies(hobbies) {
     });
 }
 
+// Парсинг строки "Исполнитель - Название" в { artist, title }
+function parseListening(str) {
+    let artist = "Love Wave FM";
+    let title = "Lofi Wabi-Sabi Ambient";
+    if (str) {
+        const parts = str.split("-");
+        if (parts.length > 1) {
+            artist = parts[0].trim();
+            title = parts.slice(1).join("-").trim();
+        } else {
+            artist = "Неизвестный";
+            title = str.trim();
+        }
+    }
+    return { artist, title };
+}
+
+// Перерисовка витрины собственного профиля (только просмотр) из ownProfileData.
+// Вызывается при открытии модалки и после правок в настройках.
+function refreshProfileVitrine() {
+    const d = ownProfileData;
+    const nameDisplay = document.getElementById("profile-name-display");
+    const usernameDisplay = document.getElementById("profile-username-display");
+    const avatarDisplay = document.getElementById("profile-avatar-display");
+    const avatarText = document.getElementById("profile-avatar-text");
+    const moodTrigger = document.getElementById("profile-mood-trigger");
+    const statusText = document.getElementById("profile-status-text");
+    const listeningTitle = document.getElementById("profile-listening-title");
+    const listeningArtist = document.getElementById("profile-listening-artist");
+
+    if (nameDisplay) { nameDisplay.style.cursor = "default"; nameDisplay.textContent = d.name; }
+    if (usernameDisplay) usernameDisplay.textContent = d.username;
+    if (statusText) { statusText.textContent = d.statusText; statusText.style.cursor = "default"; statusText.removeAttribute("title"); }
+
+    const moodIcon = moodIcons.find(m => m.name === d.mood) || moodIcons[0];
+    if (moodTrigger) { moodTrigger.innerHTML = moodIcon.svg; moodTrigger.style.cursor = "default"; moodTrigger.removeAttribute("title"); }
+
+    const { artist, title } = parseListening(d.listening);
+    if (listeningTitle) listeningTitle.textContent = title;
+    if (listeningArtist) listeningArtist.textContent = artist;
+
+    if (avatarDisplay) {
+        if (d.avatarUrl) {
+            avatarDisplay.style.backgroundImage = d.avatarUrl;
+            avatarDisplay.style.backgroundSize = d.avatarSize;
+            if (avatarText) avatarText.textContent = "";
+        } else {
+            avatarDisplay.style.backgroundImage = "";
+            if (avatarText) avatarText.textContent = d.avatarLetters;
+        }
+    }
+
+    renderHobbyTags(document.getElementById("profile-hobbies-container"), { editable: false });
+}
+window.refreshProfileVitrine = refreshProfileVitrine;
+window.parseListening = parseListening;
+window.escapeHTML = escapeHTML;
+
 function showProfileModal(profileName = "own") {
     currentViewingProfileName = profileName;
     const pModal = document.getElementById("profile-modal");
@@ -3715,74 +4729,8 @@ function showProfileModal(profileName = "own") {
     }
 
     if (profileName === "own") {
-        // --- СОБСТВЕННЫЙ ПРОФИЛЬ ---
-        if (tabSelector) tabSelector.style.display = "flex";
-        if (saveBtn) {
-            saveBtn.style.display = "block";
-            saveBtn.textContent = "Всё хорошо";
-        }
-        if (nameEditIcon) nameEditIcon.style.display = "inline-flex";
-        if (avatarOverlay) avatarOverlay.style.display = "flex";
-        if (nameDisplay) {
-            nameDisplay.style.cursor = "pointer";
-            nameDisplay.textContent = ownProfileData.name;
-        }
-        if (usernameDisplay) usernameDisplay.textContent = ownProfileData.username;
-        if (statusText) {
-            statusText.textContent = ownProfileData.statusText;
-            statusText.style.cursor = "pointer";
-            statusText.title = "Нажмите для редактирования статуса";
-        }
-        
-        const moodIcon = moodIcons.find(m => m.name === ownProfileData.mood) || moodIcons[0];
-        if (moodTrigger) {
-            moodTrigger.innerHTML = moodIcon.svg;
-            moodTrigger.style.cursor = "pointer";
-            moodTrigger.title = "Изменить настроение";
-        }
-
-        // Парсинг музыки
-        let artist = "Love Wave FM";
-        let title = "Lofi Wabi-Sabi Ambient";
-        if (ownProfileData.listening) {
-            const parts = ownProfileData.listening.split("-");
-            if (parts.length > 1) {
-                artist = parts[0].trim();
-                title = parts.slice(1).join("-").trim();
-            } else {
-                artist = "Неизвестный";
-                title = ownProfileData.listening.trim();
-            }
-        }
-        if (listeningTitle) listeningTitle.textContent = title;
-        if (listeningArtist) listeningArtist.textContent = artist;
-
-        // Восстановление аватара
-        if (avatarDisplay) {
-            if (ownProfileData.avatarUrl) {
-                avatarDisplay.style.backgroundImage = ownProfileData.avatarUrl;
-                avatarDisplay.style.backgroundSize = ownProfileData.avatarSize;
-                if (avatarText) avatarText.textContent = "";
-            } else {
-                avatarDisplay.style.backgroundImage = "";
-                if (avatarText) avatarText.textContent = ownProfileData.avatarLetters;
-            }
-        }
-
-        renderMyHobbies();
-
-        // Заполнение инпутов настроек
-        isUsernameCheckedAndSaved = true;
-        const resultEl = document.getElementById("username-check-result");
-        if (resultEl) resultEl.style.display = "none";
-        
-        const usernameInput = document.getElementById("profile-input-username");
-        if (usernameInput) usernameInput.value = ownProfileData.username;
-
-        const listeningInput = document.getElementById("profile-input-listening");
-        if (listeningInput) {
-            listeningInput.value = ownProfileData.listening;
-        }
+        // --- СОБСТВЕННЫЙ ПРОФИЛЬ (только просмотр, редактирование в настройках) ---
+        refreshProfileVitrine();
     } else {
         // --- ПРОФИЛЬ ДРУГА ---
         const friend = mockFriends.find(f => f.name.toLowerCase() === profileName.toLowerCase());
@@ -3845,97 +4793,6 @@ const closeProfile = () => {
 };
 
 const saveProfileData = () => {
-    const usernameInput = document.getElementById("profile-input-username");
-    const usernameVal = usernameInput ? usernameInput.value.trim() : "@founder";
-    
-    // Проверка на то, сохранил/проверил ли пользователь новое имя пользователя
-    if (usernameVal !== ownProfileData.username && !isUsernameCheckedAndSaved) {
-        const resultEl = document.getElementById("username-check-result");
-        if (resultEl) {
-            resultEl.style.display = "block";
-            resultEl.style.color = "#ff4a4a"; // Красный цвет предупреждения
-            resultEl.textContent = "Вы не сохранили изменения!";
-        }
-        return; // Блокируем сохранение
-    }
-    
-    const nameDisplay = document.getElementById("profile-name-display");
-    const nameVal = nameDisplay ? nameDisplay.textContent.trim() : "Александр";
-
-    const statusText = document.getElementById("profile-status-text");
-    const statusVal = statusText ? statusText.textContent.trim() : "завариваю чай...";
-    
-    // Считываем настроение
-    const moodTrigger = document.getElementById("profile-mood-trigger");
-    let currentMoodName = "tea";
-    if (moodTrigger) {
-        const activeSvg = moodTrigger.innerHTML;
-        const foundMood = moodIcons.find(m => activeSvg.includes(m.name) || m.svg === activeSvg);
-        if (foundMood) {
-            currentMoodName = foundMood.name;
-        }
-    }
-
-    // Считываем музыку
-    const listeningInput = document.getElementById("profile-input-listening");
-    const listeningVal = listeningInput ? listeningInput.value.trim() : "Love Wave FM - Lofi Wabi-Sabi Ambient";
-    
-    let artist = "Love Wave FM";
-    let title = "Lofi Wabi-Sabi Ambient";
-    if (listeningVal) {
-        const parts = listeningVal.split("-");
-        if (parts.length > 1) {
-            artist = parts[0].trim();
-            title = parts.slice(1).join("-").trim();
-        } else {
-            artist = "Неизвестный";
-            title = listeningVal.trim();
-        }
-    }
-
-    // Сохраняем в ownProfileData
-    ownProfileData.name = nameVal;
-    ownProfileData.username = usernameVal;
-    ownProfileData.statusText = statusVal;
-    ownProfileData.mood = currentMoodName;
-    ownProfileData.listening = `${artist} - ${title}`;
-    
-    const avatarDisplay = document.getElementById("profile-avatar-display");
-    if (avatarDisplay && avatarDisplay.style.backgroundImage) {
-        ownProfileData.avatarUrl = avatarDisplay.style.backgroundImage;
-        ownProfileData.avatarSize = avatarDisplay.style.backgroundSize;
-    } else {
-        ownProfileData.avatarUrl = "";
-        ownProfileData.avatarSize = "100%";
-    }
-    
-    const cleanName = usernameVal.replace(/^@/, '');
-    const avatarLetters = cleanName.substring(0, 2).toUpperCase() || "US";
-    ownProfileData.avatarLetters = avatarLetters;
-
-    if (nameDisplay) nameDisplay.textContent = nameVal;
-    
-    const usernameDisplay = document.getElementById("profile-username-display");
-    if (usernameDisplay) usernameDisplay.textContent = usernameVal;
-    
-    if (statusText) statusText.textContent = statusVal;
-
-    const listeningTitle = document.getElementById("profile-listening-title");
-    if (listeningTitle) listeningTitle.textContent = title;
-
-    const listeningArtist = document.getElementById("profile-listening-artist");
-    if (listeningArtist) listeningArtist.textContent = artist;
-
-    const avatarText = document.getElementById("profile-avatar-text");
-    if (avatarText && avatarDisplay && !avatarDisplay.style.backgroundImage) {
-        avatarText.textContent = avatarLetters;
-    }
-    
-    const sidebarAvatar = document.querySelector("#nav-profile-btn .avatar-letter");
-    if (sidebarAvatar) {
-        sidebarAvatar.textContent = avatarLetters;
-    }
-
     closeProfile();
 };
 
@@ -3948,86 +4805,16 @@ if (navProfileBtn && profileModal) {
     });
     
     if (profileClose) profileClose.addEventListener("click", closeProfile);
-    if (profileSave) profileSave.addEventListener("click", saveProfileData);
 
-    // Смена и валидация имени пользователя
-    const usernameInput = document.getElementById("profile-input-username");
-    const usernameCheckBtn = document.getElementById("profile-username-check-btn");
-    
-    if (usernameInput) {
-        usernameInput.addEventListener("input", () => {
-            isUsernameCheckedAndSaved = false;
-            const resultEl = document.getElementById("username-check-result");
-            if (resultEl) resultEl.style.display = "none";
-        });
-    }
-
-    if (usernameCheckBtn && usernameInput) {
-        usernameCheckBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            const checkIcon = document.getElementById("username-check-icon");
-            const loaderIcon = document.getElementById("username-loader-icon");
-            const resultEl = document.getElementById("username-check-result");
-            
-            const rawVal = usernameInput.value.trim();
-            if (!rawVal) {
-                if (resultEl) {
-                    resultEl.style.display = "block";
-                    resultEl.style.color = "#ff4a4a";
-                    resultEl.textContent = "Не удалось изменить. Имя пользователя не может быть пустым.";
-                }
-                return;
-            }
-
-            // Добавляем @ если пользователь забыл
-            let formattedVal = rawVal;
-            if (!formattedVal.startsWith("@")) {
-                formattedVal = "@" + formattedVal;
-                usernameInput.value = formattedVal;
-            }
-
-            // Если введено текущее имя пользователя, сразу подтверждаем успех
-            if (formattedVal === ownProfileData.username) {
-                isUsernameCheckedAndSaved = true;
-                if (resultEl) {
-                    resultEl.style.display = "block";
-                    resultEl.style.color = "#ffffff";
-                    resultEl.textContent = "Успешно изменено имя пользователя";
-                }
-                return;
-            }
-
-            // Включаем анимацию загрузки
-            if (checkIcon) checkIcon.classList.add("hidden");
-            if (loaderIcon) loaderIcon.classList.remove("hidden");
-            if (resultEl) resultEl.style.display = "none";
-            usernameCheckBtn.disabled = true;
-
-            // Имитируем проверку занятости имени пользователя
-            setTimeout(() => {
-                // Выключаем загрузку
-                if (checkIcon) checkIcon.classList.remove("hidden");
-                if (loaderIcon) loaderIcon.classList.add("hidden");
-                usernameCheckBtn.disabled = false;
-
-                const takenUsernames = ["@maria", "@ivan", "@alexey", "@darya", "@admin", "@moderator", "@user"];
-                
-                if (takenUsernames.includes(formattedVal.toLowerCase())) {
-                    isUsernameCheckedAndSaved = false;
-                    if (resultEl) {
-                        resultEl.style.display = "block";
-                        resultEl.style.color = "#ff4a4a"; // Красный текст
-                        resultEl.textContent = "Не удалось изменить. Имя пользователя уже занято";
-                    }
-                } else {
-                    isUsernameCheckedAndSaved = true;
-                    if (resultEl) {
-                        resultEl.style.display = "block";
-                        resultEl.style.color = "#ffffff"; // Белый текст
-                        resultEl.textContent = "Успешно изменено имя пользователя";
-                    }
-                }
-            }, 1200);
+    // Кнопка «Настроить профиль» — закрыть профиль и открыть Настройки → раздел «Профиль»
+    const profileConfigureBtn = document.getElementById("profile-configure-btn");
+    if (profileConfigureBtn) {
+        profileConfigureBtn.addEventListener("click", () => {
+            closeProfile();
+            const navSettings = document.getElementById("nav-settings");
+            if (navSettings) navSettings.click();
+            const profileNav = document.querySelector('.settings-nav-item[data-settings-section="settings-profile"]');
+            if (profileNav) profileNav.click();
         });
     }
     
@@ -4038,22 +4825,7 @@ if (navProfileBtn && profileModal) {
     });
 }
 
-// Табы внутри профиля
-profileTabButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-        profileTabButtons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        
-        const targetTab = btn.getAttribute("data-profile-tab");
-        profilePanes.forEach(pane => {
-            if (pane.id === `profile-pane-${targetTab}`) {
-                pane.classList.add("active");
-            } else {
-                pane.classList.remove("active");
-            }
-        });
-    });
-});
+// Табы внутри профиля удалены — модалка профиля теперь только просмотр (редактирование в настройках).
 
 // Наборы иконок для профиля и увлечений
 const moodIcons = [
@@ -4092,55 +4864,64 @@ let myHobbies = [
 let editingHobbyIndex = -1;
 let selectedHobbyIcon = "tea";
 
-// Рендер сфер увлечений
-function renderMyHobbies() {
-    const container = document.getElementById("profile-hobbies-container");
+// Экспорт данных профиля для settings-ui.js (он грузится раньше, но инициализируется на DOMContentLoaded)
+window.ownProfileData = ownProfileData;
+window.moodIcons = moodIcons;
+window.hobbyIcons = hobbyIcons;
+window.myHobbies = myHobbies;
+
+// Рендер сфер увлечений (универсальный: read-only витрина или редактируемый список в настройках)
+function renderHobbyTags(container, opts = {}) {
     if (!container) return;
-    
+    const editable = !!opts.editable;
+    const onEdit = opts.onEdit || ((i) => openHobbyEditor(i));
+
     container.innerHTML = "";
-    
+
     myHobbies.forEach((hobby, index) => {
         const tag = document.createElement("div");
         tag.className = "profile-tag";
-        tag.style.cursor = "pointer";
-        tag.title = "Нажмите, чтобы изменить или удалить";
-        
         const iconData = hobbyIcons.find(i => i.name === hobby.icon) || hobbyIcons[0];
-        
         tag.innerHTML = `
             ${iconData.svg}
             <span>${escapeHTML(hobby.text)}</span>
         `;
-        
-        tag.addEventListener("click", () => {
-            openHobbyEditor(index);
-        });
-        
+        if (editable) {
+            tag.style.cursor = "pointer";
+            tag.title = "Нажмите, чтобы изменить или удалить";
+            tag.addEventListener("click", () => onEdit(index));
+        }
         container.appendChild(tag);
     });
-    
-    // Кнопка "+"
-    const addBtn = document.createElement("button");
-    addBtn.className = "profile-tag add-hobby-tag";
-    addBtn.style.cssText = "background: transparent; border: 1px dashed rgba(255,255,255,0.15); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 32px; padding: 0; height: 28px; border-radius: 8px; transition: all 0.2s;";
-    addBtn.title = "Добавить сферу увлечений";
-    addBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-    `;
-    
-    addBtn.addEventListener("click", () => {
-        openHobbyEditor(-1);
-    });
-    
-    container.appendChild(addBtn);
+
+    if (editable) {
+        // Кнопка "+"
+        const addBtn = document.createElement("button");
+        addBtn.className = "profile-tag add-hobby-tag";
+        addBtn.style.cssText = "background: transparent; border: 1px dashed rgba(255,255,255,0.15); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 32px; padding: 0; height: 28px; border-radius: 8px; transition: all 0.2s;";
+        addBtn.title = "Добавить сферу увлечений";
+        addBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        `;
+        addBtn.addEventListener("click", () => onEdit(-1));
+        container.appendChild(addBtn);
+    }
+}
+window.renderHobbyTags = renderHobbyTags;
+
+// Рендер увлечений в витрине профиля (только просмотр)
+function renderMyHobbies() {
+    renderHobbyTags(document.getElementById("profile-hobbies-container"), { editable: false });
 }
 
 // Открытие редактора увлечений
-function openHobbyEditor(index) {
+let _hobbyEditorOnDone = null;
+function openHobbyEditor(index, onDone) {
     editingHobbyIndex = index;
+    _hobbyEditorOnDone = typeof onDone === "function" ? onDone : null;
     const modal = document.getElementById("hobby-editor-modal");
     const title = document.getElementById("hobby-editor-title");
     const nameInput = document.getElementById("hobby-input-name");
@@ -4193,6 +4974,7 @@ function openHobbyEditor(index) {
     
     modal.classList.remove("hidden");
 }
+window.openHobbyEditor = openHobbyEditor;
 
 // Привязка обработчиков для редактора увлечений
 document.addEventListener("click", (e) => {
@@ -4211,10 +4993,10 @@ document.addEventListener("click", (e) => {
             myHobbies.push({ text: textVal, icon: selectedHobbyIcon });
         }
         
-        renderMyHobbies();
+        if (_hobbyEditorOnDone) { _hobbyEditorOnDone(); } else { renderMyHobbies(); }
         document.getElementById("hobby-editor-modal").classList.add("hidden");
     }
-    
+
     if (e.target.closest("#hobby-btn-cancel")) {
         document.getElementById("hobby-editor-modal").classList.add("hidden");
     }
@@ -4222,7 +5004,7 @@ document.addEventListener("click", (e) => {
     if (e.target.closest("#hobby-btn-delete")) {
         if (editingHobbyIndex >= 0 && editingHobbyIndex < myHobbies.length) {
             myHobbies.splice(editingHobbyIndex, 1);
-            renderMyHobbies();
+            if (_hobbyEditorOnDone) { _hobbyEditorOnDone(); } else { renderMyHobbies(); }
         }
         document.getElementById("hobby-editor-modal").classList.add("hidden");
     }
@@ -4230,6 +5012,7 @@ document.addEventListener("click", (e) => {
 
 // Инициализация пикера настроения
 function initMoodPicker() {
+    return;
     const popover = document.getElementById("mood-picker-popover");
     const trigger = document.getElementById("profile-mood-trigger");
     if (!popover || !trigger) return;
@@ -4279,41 +5062,10 @@ function initMoodPicker() {
     });
 }
 
-// Рендерим начальные увлечения и инициализируем пикер
+// Рендерим начальные увлечения
 renderMyHobbies();
-initMoodPicker();
 
-if (profileStatusText) {
-    profileStatusText.addEventListener("click", (e) => {
-        if (currentViewingProfileName !== "own") return;
-        e.stopPropagation();
-        const currentText = profileStatusText.textContent;
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = currentText;
-        input.className = "profile-status-input";
-        
-        profileStatusText.replaceWith(input);
-        input.focus();
-        
-        const saveStatus = () => {
-            const val = input.value.trim() || "завариваю чай...";
-            profileStatusText.textContent = val;
-            input.replaceWith(profileStatusText);
-            ownProfileData.statusText = val;
-        };
-        
-        input.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                saveStatus();
-            }
-        });
-        
-        input.addEventListener("blur", saveStatus);
-    });
-}
-
-// Импорт аудиофайла
+// Импорт аудиофайла (из настроек)
 const audioUpload = document.getElementById("profile-audio-upload");
 if (audioUpload) {
     audioUpload.addEventListener("change", (e) => {
@@ -4396,40 +5148,7 @@ if (avatarUpload && previewModal) {
     });
 }
 
-// Редактирование имени
-const editNameIcon = document.getElementById("profile-name-edit-icon");
-const profileNameDisplay = document.getElementById("profile-name-display");
-if (editNameIcon && profileNameDisplay) {
-    const editNameAction = () => {
-        const currentName = profileNameDisplay.textContent;
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = currentName;
-        input.className = "profile-status-input"; // Используем тот же стиль
-        input.style.fontSize = "22px";
-        input.style.fontWeight = "600";
-        input.style.fontFamily = "var(--font-serif)";
-        input.style.width = "160px";
-        
-        profileNameDisplay.replaceWith(input);
-        input.focus();
-        
-        const saveName = () => {
-            const val = input.value.trim() || currentName;
-            profileNameDisplay.textContent = val;
-            input.replaceWith(profileNameDisplay);
-        };
-        
-        input.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") saveName();
-        });
-        
-        input.addEventListener("blur", saveName);
-    };
-    
-    editNameIcon.addEventListener("click", editNameAction);
-    profileNameDisplay.addEventListener("click", editNameAction);
-}
+// Редактирование имени — перенесено в Настройки → Профиль
 
 // Инициализация по умолчанию
 renderConversationsList();

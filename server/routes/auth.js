@@ -300,6 +300,14 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       return res.status(401).json({ message: 'Неверный email или пароль' });
     }
 
+    if (user.isBanned) {
+      return res.status(403).json({ 
+        message: `Ваш аккаунт заблокирован${user.banReason ? ': ' + user.banReason : ''}`,
+        isBanned: true,
+        reason: user.banReason || ''
+      });
+    }
+
     // --- ЛОГИКА БЛОКИРОВКИ (Account Lockout) ---
     if (user.lockUntil && user.lockUntil > Date.now()) {
       const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
@@ -855,6 +863,86 @@ router.get('/google/callback',
   async (req, res) => {
     // Успешная авторизация
     const user = req.user;
+    
+    if (user.isBanned) {
+      return res.status(403).send(`
+        <html>
+          <head>
+            <title>Доступ ограничен</title>
+            <style>
+              body {
+                background: #000;
+                color: #fff;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                margin: 0;
+                overflow: hidden;
+              }
+              .card {
+                background: rgba(20, 20, 20, 0.8);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 59, 48, 0.2);
+                border-radius: 20px;
+                padding: 40px;
+                max-width: 400px;
+                text-align: center;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+              }
+              h2 {
+                color: #ff3b30;
+                font-size: 24px;
+                margin-top: 0;
+                margin-bottom: 16px;
+                font-weight: 700;
+              }
+              p {
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 14px;
+                line-height: 1.6;
+                margin-bottom: 24px;
+              }
+              .reason-box {
+                background: rgba(255, 59, 48, 0.05);
+                border: 1px solid rgba(255, 59, 48, 0.15);
+                border-radius: 10px;
+                padding: 12px 16px;
+                text-align: left;
+                margin-top: 20px;
+              }
+              .reason-title {
+                font-size: 11px;
+                color: #ff3b30;
+                text-transform: uppercase;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
+              }
+              .reason-text {
+                font-size: 13px;
+                color: #fff;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h2>Доступ ограничен</h2>
+              <p>Ваш аккаунт был заблокирован администратором платформы.</p>
+              ${user.banReason ? `
+                <div class="reason-box">
+                  <div class="reason-title">Причина блокировки</div>
+                  <div class="reason-text">${user.banReason}</div>
+                </div>
+              ` : ''}
+            </div>
+          </body>
+        </html>
+      `);
+    }
+
     user.status = user.statusPreference || 'online';
     user.lastSeen = new Date();
     await user.save();

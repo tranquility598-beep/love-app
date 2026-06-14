@@ -155,6 +155,7 @@ const sendEmail = async (to, subject, html) => {
 
 module.exports = {
   generateOTP,
+  sendEmail,
   sendOTPEmail: async (email, code, type = 'verification') => {
     const subject = type === 'reset' ? 'Код восстановления пароля — LOVE' : (type === 'login' ? 'Код входа — LOVE' : 'Код подтверждения регистрации — LOVE');
     const html = getOTPTemplate(code, type);

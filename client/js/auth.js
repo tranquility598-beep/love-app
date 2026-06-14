@@ -12,6 +12,7 @@ let authLoginLock = false;
 let authRegisterLock = false;
 let authForgotLock = false;
 let authResetLock = false;
+let loveOnboardingScheduled = false;
 
 // Единая точка входа для смены экранов авторизации
 function switchAuthScreen(screenId) {
@@ -240,13 +241,33 @@ if (window.electronAPI && window.electronAPI.onGoogleAuthSuccess) {
 }
 
 function maybeShowGoogleOnboarding() {
-  if (!window.currentUser?.hasGoogle || window.currentUser?.hasPassword || window.currentUser?.googleOnboardingComplete) return;
+  if (!window.currentUser?.hasGoogle || window.currentUser?.hasPassword || window.currentUser?.googleOnboardingComplete) return false;
   const modal = document.getElementById('google-onboarding-modal');
   const input = document.getElementById('google-onboarding-username');
   if (input) input.value = window.currentUser?.username || '';
   if (modal) {
     openModal('google-onboarding-modal', { allowEscape: false, allowClickOutside: false });
+    return true;
   }
+  return false;
+}
+
+function maybeStartLoveOnboarding(source) {
+  const onboarding = window.LoveOnboarding;
+  if (!onboarding || typeof onboarding.startIntro !== 'function') return false;
+  if (typeof onboarding.isDone === 'function' && onboarding.isDone()) return false;
+  if (loveOnboardingScheduled) return false;
+
+  loveOnboardingScheduled = true;
+  window.setTimeout(() => {
+    loveOnboardingScheduled = false;
+    const currentOnboarding = window.LoveOnboarding;
+    if (!currentOnboarding || typeof currentOnboarding.startIntro !== 'function') return;
+    if (typeof currentOnboarding.isDone === 'function' && currentOnboarding.isDone()) return;
+    currentOnboarding.startIntro({ source });
+  }, 650);
+
+  return true;
 }
 
 window.completeGoogleOnboarding = completeGoogleOnboarding;
@@ -262,6 +283,7 @@ async function completeGoogleOnboarding(keepCurrent) {
     window.currentUser = data.user;
     localStorage.setItem('user', JSON.stringify(data.user));
     closeModal('google-onboarding-modal');
+    maybeStartLoveOnboarding('google');
   } catch (e) {
     if (error) {
       error.textContent = e.message || 'Не удалось сохранить имя';
@@ -374,6 +396,7 @@ async function handleVerifyOtp() {
   const currentTransitionId = window.authTransitionId;
 
   try {
+    const shouldStartOnboarding = window.otpType !== 'login';
     const data = window.otpType === 'login'
       ? await AuthAPI.verifyTwoFactor(window.pendingTwoFactorToken, code)
       : await AuthAPI.verifyOtp(window.lastAuthEmail, code);
@@ -385,6 +408,7 @@ async function handleVerifyOtp() {
     localStorage.setItem('user', JSON.stringify(data.user));
     window.currentUser = data.user;
     await initApp();
+    if (shouldStartOnboarding) maybeStartLoveOnboarding('registration');
   } catch (error) {
     if (window.authTransitionId !== currentTransitionId || error.isAborted) return;
 

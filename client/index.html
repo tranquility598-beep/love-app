@@ -480,6 +480,14 @@
             </div>
           </div>
           <div class="voice-panel-members" id="voice-panel-members"></div>
+          <div class="voice-constellation-shell hidden" id="server-voice-constellation-shell" aria-hidden="true">
+            <div class="voice-constellation" id="server-voice-grid-constellation" role="list">
+              <svg class="constellation-lines-svg" id="server-voice-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+            </div>
+            <div class="voice-float-preview hidden" id="server-voice-float-preview" aria-hidden="true">
+              <div class="voice-preview-content" id="server-voice-preview-content"></div>
+            </div>
+          </div>
           <div class="voice-panel-controls">
             <button class="voice-ctrl" id="voice-mute-btn" onclick="toggleVoiceMute()" title="Микрофон">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
@@ -633,6 +641,14 @@
           <div class="room-voice-panel-subtitle" id="room-voice-panel-subtitle">Никого в войсе</div>
         </div>
         <div class="room-voice-panel-cards" id="room-voice-panel-cards" role="list"></div>
+        <div class="voice-constellation-shell hidden" id="room-voice-constellation-shell" aria-hidden="true">
+          <div class="voice-constellation" id="room-voice-grid-constellation" role="list">
+            <svg class="constellation-lines-svg" id="room-voice-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="voice-float-preview hidden" id="room-voice-float-preview" aria-hidden="true">
+            <div class="voice-preview-content" id="room-voice-preview-content"></div>
+          </div>
+        </div>
 
         <!-- Preconnect: одна большая зелёная кнопка -->
         <div class="room-voice-preconnect" id="room-voice-preconnect">
@@ -870,6 +886,14 @@
         <div class="voice-view-grid" id="voice-view-grid">
           <!-- User cards will be injected here by JS -->
         </div>
+        <div class="voice-constellation-shell hidden" id="voice-view-constellation-shell" aria-hidden="true">
+          <div class="voice-constellation" id="voice-view-grid-constellation" role="list">
+            <svg class="constellation-lines-svg" id="voice-view-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="voice-float-preview hidden" id="voice-view-float-preview" aria-hidden="true">
+            <div class="voice-preview-content" id="voice-view-preview-content"></div>
+          </div>
+        </div>
 
         <div class="voice-view-controls">
           <button class="voice-view-btn" id="voice-view-camera-btn" onclick="toggleCamera()" title="Включить камеру">
@@ -962,6 +986,23 @@
               </button>
             </div>
           </div>
+        </div>
+        <div class="dm-call-mini-bar hidden" id="dm-call-mini-bar" aria-hidden="true">
+          <div class="call-mini-bar-info">
+            <div class="caller-avatar-mini" id="dm-call-mini-avatar">
+              <img src="" id="dm-call-mini-avatar-img" alt="">
+            </div>
+            <div class="call-mini-bar-text">
+              <div class="call-overlay-name" id="dm-call-mini-name">Звонок</div>
+              <div class="call-overlay-status" id="dm-call-mini-status">В трее</div>
+            </div>
+          </div>
+          <button type="button" class="call-action-btn hide-overlay" id="dm-call-mini-expand" title="Открыть звонок" aria-label="Открыть звонок">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 15l6-6 6 6"/></svg>
+          </button>
+          <button type="button" class="call-action-btn end-call" id="dm-call-mini-end" title="Завершить" aria-label="Завершить">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 2.6 3.41l2.56-2.56"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+          </button>
         </div>
 
         <div class="messages-area" id="messages-area">

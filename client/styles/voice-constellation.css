@@ -13,6 +13,10 @@
   border-radius: var(--radius-2xl);
 }
 
+.voice-constellation-shell.hidden {
+  display: none;
+}
+
 .voice-constellation {
   position: relative;
   flex: 1 1 auto;
@@ -510,6 +514,11 @@
   cursor: grab;
   animation: miniBarSlideIn 260ms var(--ease-out) both;
   touch-action: none;
+}
+
+.dm-call-mini-bar.hidden,
+.call-mini-bar.hidden {
+  display: none;
 }
 
 .dm-call-mini-bar.is-moved,

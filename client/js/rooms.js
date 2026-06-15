@@ -6,11 +6,9 @@
  *  - Никаких inline onclick / inline style — все обработчики и стили
  *    через addEventListener и CSS классы.
  *  - Legacy UI обычных серверов остаётся нетронутым.
- *  - В room-mode чат — это обычная chat-view, визуально встроенная как
- *    карточка под room-chrome (через CSS overrides, без перемещения DOM).
- *  - Войс — отдельная панель внутри room-mode с двумя состояниями:
- *    preconnect (большая кнопка "Присоединиться") и connected
- *    (mic / sound / screen / leave).
+ *  - В room-mode чат, войс, медиа и настройки рендерятся только внутри
+ *    new-design структуры #server-room-panel / .room-pane-*.
+ *  - Бизнес-логика сообщений, WebRTC, socket events и auth остаётся общей.
  */
 
 (function () {
@@ -37,7 +35,7 @@
     windowResize: null,
     navPrev: null,
     navNext: null,
-    
+
     // Settings modal
     settingsClose: null,
     settingsCancel: null,
@@ -49,7 +47,7 @@
     settingsInviteCreate: null,
     settingsInviteCopy: null,
     settingsInviteShortcut: null,
-    
+
     // File inputs
     iconButton: null,
     iconFile: null,
@@ -57,38 +55,40 @@
     bannerButton: null,
     bannerFile: null,
     bannerClear: null,
-    
+
     // Color
     colorInput: null,
-    
+
     // Danger zone
     leaveButton: null,
     deleteButton: null,
-    
+
     // Global
     documentEscape: null,
-    
+
     // Create room modal
     createButton: null,
     createSubmit: null,
     createClose: null,
     createCancel: null,
-    
+
     // Room tabs
     tabChat: null,
     tabVoice: null,
     tabMedia: null,
-    
+
     // Voice controls
     voiceConnect: null,
     voiceMic: null,
     voiceSound: null,
     voiceScreen: null,
+    voiceCamera: null,
     voiceLeave: null,
-    
+    inputVoice: null,
+
     // Settings button
     settingsButton: null,
-    
+
     // Registration flag
     _registered: false
   };
@@ -108,12 +108,12 @@
     destroyRoomListeners();
     hideRoomView();
     hideAllRoomPanels();
-    
+
     // Synchronously force clear and deactivate all room overlays
     if (typeof window.forceClearRoomOverlays === 'function') {
       window.forceClearRoomOverlays();
     }
-    
+
     _activeMode = null;
     if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
       window.NavigationController._commitState({ currentRoom: null }, 'exitRoomMode');
@@ -121,7 +121,7 @@
   }
 
   function hideAllMainViews() {
-    ['welcome-view', 'friends-view', 'voice-view', 'chat-view', 'dm-empty', 'dm-view', 'room-view']
+    ['welcome-view', 'friends-view', 'voice-view', 'chat-view', 'dm-empty', 'dm-view', 'server-room-panel']
       .forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
@@ -130,15 +130,15 @@
 
   function showRoomView() {
     if (typeof window.switchMainView === 'function') {
-      window.switchMainView('room-view');
+      window.switchMainView('server-room-panel');
     } else {
-      const v = document.getElementById('room-view');
+      const v = document.getElementById('server-room-panel');
       if (v) v.classList.remove('hidden');
     }
   }
 
   function hideRoomView() {
-    const v = document.getElementById('room-view');
+    const v = document.getElementById('server-room-panel');
     if (v) v.classList.add('hidden');
   }
 
@@ -149,19 +149,30 @@
   }
 
   function hideAllRoomPanels() {
-    setHidden('room-chat-strip', true);
-    setHidden('room-voice-panel', true);
-    setHidden('room-media-panel', true);
-    // chat-view скрываем legacy-способом
+    ['room-pane-chat', 'room-pane-voice', 'room-pane-media'].forEach(id => {
+      const pane = document.getElementById(id);
+      if (pane) pane.classList.add('pane-hidden');
+    });
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
+  }
+
+  function showRoomPane(name) {
+    ['chat', 'voice', 'media'].forEach(tab => {
+      const pane = document.getElementById(`room-pane-${tab}`);
+      if (pane) pane.classList.toggle('pane-hidden', tab !== name);
+    });
   }
 
   function setActiveTab(name) {
     _activeMode = name;
     ['chat', 'voice', 'media'].forEach(n => {
       const btn = document.getElementById(`room-tab-${n}`);
-      if (btn) btn.setAttribute('aria-selected', String(n === name));
+      if (btn) {
+        const active = n === name;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', String(active));
+      }
     });
     if (name) {
       document.body.setAttribute('data-active-room-tab', name);
@@ -211,10 +222,10 @@
 
   function renderRoomHeader(room) {
     const iconEl = document.getElementById('room-header-icon');
-    const nameEl = document.getElementById('room-view-name');
-    const onlineEl = document.querySelector('#room-view-online .room-header-online-text');
-    const subtitleEl = document.getElementById('room-view-status');
-    const membersEl = document.getElementById('room-view-members');
+    const nameEl = document.getElementById('room-header-name');
+    const onlineEl = document.querySelector('#room-header-online .room-header-online-text');
+    const subtitleEl = document.getElementById('room-header-status');
+    const membersEl = document.getElementById('room-header-members');
 
     if (iconEl) {
       iconEl.innerHTML = '';
@@ -235,7 +246,7 @@
       const status = m?.user?.status;
       return status && status !== 'offline';
     }).length;
-    if (onlineEl) onlineEl.textContent = String(onlineCount);
+    if (onlineEl) onlineEl.textContent = `${onlineCount} онлайн`;
 
     if (subtitleEl) {
       const description = (room?.description || '').trim();
@@ -314,97 +325,30 @@
       ? `${count} ${pluralizePeople(count)} в войсе`
       : 'Никого в войсе';
     setTabMeta('voice', text);
-    const subtitle = document.getElementById('room-voice-panel-subtitle');
-    if (subtitle) subtitle.textContent = text;
+    const preconnectCount = document.getElementById('room-voice-preconnect-count');
+    if (preconnectCount) preconnectCount.textContent = count > 0 ? `${count} в канале` : '0 в канале';
   }
 
   function renderVoicePanelCards(members) {
-    const wrap = document.getElementById('room-voice-panel-cards');
-    if (!wrap) return;
-
     if (window.LoveVoiceConstellation && typeof window.LoveVoiceConstellation.setRoomMembers === 'function') {
       window.LoveVoiceConstellation.setRoomMembers(window.currentRoom?.voiceChannelId, members);
     }
-    
-    // Detach active screenshare cards to keep video players active
-    const activeScreenCards = Array.from(wrap.querySelectorAll('.screen-share-card'));
-    activeScreenCards.forEach(card => card.remove());
-
-    wrap.innerHTML = '';
-    members.forEach(m => {
-      const user = m?.user || m;
-      const card = document.createElement('div');
-      card.className = 'room-voice-card';
-      card.dataset.userId = String(user?.userId || user?._id || m?.userId || m?._id || '');
-      card.dataset.speaking = 'false';
-      card.setAttribute('role', 'listitem');
-
-      const avatar = document.createElement('div');
-      makeAvatar(avatar, user, 'Гость', 'room-voice-card-avatar');
-      card.appendChild(avatar);
-
-      const name = document.createElement('span');
-      name.className = 'room-voice-card-name';
-      name.textContent = user?.nickname || user?.username || 'Гость';
-      card.appendChild(name);
-
-      const statusIcons = document.createElement('div');
-      statusIcons.className = 'room-voice-card-status-icons';
-      statusIcons.style.cssText = 'display: flex; gap: 6px; align-items: center; justify-content: center; height: 16px; margin-top: -4px;';
-      
-      const isMuted = !!m?.muted;
-      const isDeafened = !!m?.deafened;
-      
-      statusIcons.innerHTML = `
-        ${isMuted ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
-        ${isDeafened ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
-      `;
-      card.appendChild(statusIcons);
-
-      wrap.appendChild(card);
-    });
-
-    // Re-append active screenshare cards and resume playback
-    activeScreenCards.forEach(card => {
-      wrap.appendChild(card);
-      const v = card.querySelector('video');
-      if (v) {
-        v.play().catch(e => console.error('[ScreenShare] Room video play failed on re-append:', e));
-      }
-    });
   }
 
   function setCardSpeaking(userId, speaking) {
-    const wrap = document.getElementById('room-voice-panel-cards');
+    const wrap = document.getElementById('room-voice-grid-constellation');
     if (!wrap) return;
-    const card = wrap.querySelector(`.room-voice-card[data-user-id="${CSS.escape(String(userId))}"]`);
+    const card = wrap.querySelector(`[data-user-id="${CSS.escape(String(userId))}"]`);
     if (card) card.dataset.speaking = String(!!speaking);
+    if (window.LoveVoiceConstellation && typeof window.LoveVoiceConstellation.setSpeaking === 'function') {
+      window.LoveVoiceConstellation.setSpeaking(userId, speaking);
+    }
   }
 
   function updateRoomCardVoiceState(userId, muted, deafened) {
-    const wrap = document.getElementById('room-voice-panel-cards');
-    if (!wrap) return;
-    const card = wrap.querySelector(`.room-voice-card[data-user-id="${CSS.escape(String(userId))}"]`);
-    if (!card) return;
-    
-    if (muted !== undefined) card.dataset.muted = String(!!muted);
-    if (deafened !== undefined) card.dataset.deafened = String(!!deafened);
-    
-    const isMuted = card.dataset.muted === 'true';
-    const isDeafened = card.dataset.deafened === 'true';
-    
-    let statusIcons = card.querySelector('.room-voice-card-status-icons');
-    if (!statusIcons) {
-      statusIcons = document.createElement('div');
-      statusIcons.className = 'room-voice-card-status-icons';
-      statusIcons.style.cssText = 'display: flex; gap: 6px; align-items: center; justify-content: center; height: 16px; margin-top: -4px;';
-      card.appendChild(statusIcons);
+    if (window.LoveVoiceConstellation && typeof window.LoveVoiceConstellation.updateMemberVoiceState === 'function') {
+      window.LoveVoiceConstellation.updateMemberVoiceState(userId, muted, deafened);
     }
-    
-    statusIcons.innerHTML = `
-      ${isMuted ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>` : ''}
-      ${isDeafened ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: gray;"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : ''}
-    `;
   }
 
   // === Live socket подписки ==============================================
@@ -484,7 +428,7 @@
       console.warn('[rooms] Listeners already registered, performing self-healing re-bind');
       destroyRoomListeners();
     }
-    
+
     // GROUP A: Navigation scroll
     const nav = document.querySelector('.room-settings-nav');
     if (nav) {
@@ -499,54 +443,48 @@
         updateNavScrollEdges();
       };
       nav.addEventListener('wheel', roomListeners.navWheel, { passive: false });
-      
+
       roomListeners.navScroll = updateNavScrollEdges;
       nav.addEventListener('scroll', roomListeners.navScroll, { passive: true });
-      
+
       roomListeners.windowResize = updateNavScrollEdges;
       window.addEventListener('resize', roomListeners.windowResize);
-      
+
       const scrollByStep = (direction) => {
         const step = Math.max(120, Math.round(nav.clientWidth * 0.6));
         nav.scrollBy({ left: direction * step, behavior: 'smooth' });
       };
-      
+
       const prev = document.getElementById('room-settings-nav-prev');
       const next = document.getElementById('room-settings-nav-next');
-      
+
       if (prev) {
         roomListeners.navPrev = () => scrollByStep(-1);
         prev.addEventListener('click', roomListeners.navPrev);
       }
-      
+
       if (next) {
         roomListeners.navNext = () => scrollByStep(1);
         next.addEventListener('click', roomListeners.navNext);
       }
-      
+
       const wrap = document.querySelector('.room-settings-nav-wrap');
       if (wrap) nav.__wrapEl = wrap;
     }
-    
+
     // GROUP B: Settings modal
     const close = document.getElementById('room-settings-close');
     if (close) {
       roomListeners.settingsClose = closeRoomSettings;
       close.addEventListener('click', roomListeners.settingsClose);
     }
-    
+
     const cancel = document.getElementById('room-settings-cancel');
     if (cancel) {
       roomListeners.settingsCancel = closeRoomSettings;
       cancel.addEventListener('click', roomListeners.settingsCancel);
     }
-    
-    const backdrop = document.getElementById('room-settings-backdrop');
-    if (backdrop) {
-      roomListeners.settingsBackdrop = closeRoomSettings;
-      backdrop.addEventListener('click', roomListeners.settingsBackdrop);
-    }
-    
+
     document.querySelectorAll('.room-settings-nav-item').forEach(btn => {
       const handler = () => {
         const name = btn.getAttribute('data-rs-section');
@@ -555,7 +493,7 @@
       roomListeners.settingsNavItems.push({ element: btn, handler });
       btn.addEventListener('click', handler);
     });
-    
+
     document.querySelectorAll('.room-settings-vibe-preset').forEach(btn => {
       const handler = () => {
         const v = btn.getAttribute('data-vibe') || '';
@@ -565,37 +503,37 @@
       roomListeners.settingsVibePresets.push({ element: btn, handler });
       btn.addEventListener('click', handler);
     });
-    
+
     const save = document.getElementById('room-settings-save');
     if (save) {
       roomListeners.settingsSave = handleSaveGeneral;
       save.addEventListener('click', roomListeners.settingsSave);
     }
-    
+
     const apprSave = document.getElementById('room-settings-appearance-save');
     if (apprSave) {
       roomListeners.settingsAppearanceSave = handleSaveAppearance;
       apprSave.addEventListener('click', roomListeners.settingsAppearanceSave);
     }
-    
+
     const inviteCreate = document.getElementById('room-settings-invite-create');
     if (inviteCreate) {
       roomListeners.settingsInviteCreate = handleCreateInvite;
       inviteCreate.addEventListener('click', roomListeners.settingsInviteCreate);
     }
-    
+
     const inviteCopy = document.getElementById('room-settings-invite-copy');
     if (inviteCopy) {
       roomListeners.settingsInviteCopy = handleCopyInvite;
       inviteCopy.addEventListener('click', roomListeners.settingsInviteCopy);
     }
-    
+
     const inviteShortcut = document.getElementById('room-settings-invite-shortcut');
     if (inviteShortcut) {
       roomListeners.settingsInviteShortcut = () => setActiveSection('invite');
       inviteShortcut.addEventListener('click', roomListeners.settingsInviteShortcut);
     }
-    
+
     // GROUP C: File inputs
     const iconBtn = document.getElementById('room-settings-icon-btn');
     const iconFile = document.getElementById('room-settings-icon-file');
@@ -603,56 +541,56 @@
       roomListeners.iconButton = () => iconFile.click();
       iconBtn.addEventListener('click', roomListeners.iconButton);
     }
-    
+
     if (iconFile) {
       roomListeners.iconFile = handleIconSelected;
       iconFile.addEventListener('change', roomListeners.iconFile);
     }
-    
+
     const iconClear = document.getElementById('room-settings-icon-clear');
     if (iconClear) {
       roomListeners.iconClear = handleIconClear;
       iconClear.addEventListener('click', roomListeners.iconClear);
     }
-    
+
     const bannerBtn = document.getElementById('room-settings-banner-btn');
     const bannerFile = document.getElementById('room-settings-banner-file');
     if (bannerBtn && bannerFile) {
       roomListeners.bannerButton = () => bannerFile.click();
       bannerBtn.addEventListener('click', roomListeners.bannerButton);
     }
-    
+
     if (bannerFile) {
       roomListeners.bannerFile = handleBannerSelected;
       bannerFile.addEventListener('change', roomListeners.bannerFile);
     }
-    
+
     const bannerClear = document.getElementById('room-settings-banner-clear');
     if (bannerClear) {
       roomListeners.bannerClear = handleBannerClear;
       bannerClear.addEventListener('click', roomListeners.bannerClear);
     }
-    
+
     // GROUP D: Color picker
     const colorEl = document.getElementById('room-settings-color');
     if (colorEl) {
       roomListeners.colorInput = (e) => applyRoomColor(e.target.value);
       colorEl.addEventListener('input', roomListeners.colorInput);
     }
-    
+
     // GROUP E: Danger zone
     const leaveBtn = document.getElementById('room-settings-leave');
     if (leaveBtn) {
       roomListeners.leaveButton = handleLeaveRoom;
       leaveBtn.addEventListener('click', roomListeners.leaveButton);
     }
-    
+
     const deleteBtn = document.getElementById('room-settings-delete');
     if (deleteBtn) {
       roomListeners.deleteButton = handleDeleteRoom;
       deleteBtn.addEventListener('click', roomListeners.deleteButton);
     }
-    
+
     // GROUP F: Global escape key for room settings panel
     // Note: Room settings panel is NOT a modal, it's a slide-out panel
     // ModalManager handles modals, but panel needs separate ESC handling
@@ -665,66 +603,78 @@
       closeRoomSettings();
     };
     document.addEventListener('keydown', roomListeners.documentEscape);
-    
+
     // (Create room modal listeners were moved to global init)
-    
+
     // GROUP H: Room tabs
     const tabChat = document.getElementById('room-tab-chat');
     if (tabChat) {
       roomListeners.tabChat = openRoomChat;
       tabChat.addEventListener('click', roomListeners.tabChat);
     }
-    
+
     const tabVoice = document.getElementById('room-tab-voice');
     if (tabVoice) {
       roomListeners.tabVoice = openRoomVoice;
       tabVoice.addEventListener('click', roomListeners.tabVoice);
     }
-    
+
     const tabMedia = document.getElementById('room-tab-media');
     if (tabMedia) {
       roomListeners.tabMedia = openRoomMedia;
       tabMedia.addEventListener('click', roomListeners.tabMedia);
     }
-    
+
     // GROUP I: Voice controls
-    const connect = document.getElementById('room-voice-connect-btn');
+    const connect = document.getElementById('room-voice-join-btn');
     if (connect) {
       roomListeners.voiceConnect = handleRoomVoiceConnect;
       connect.addEventListener('click', roomListeners.voiceConnect);
     }
-    
-    const mic = document.getElementById('room-voice-mic-btn');
+
+    const mic = document.getElementById('room-voice-btn-mic');
     if (mic) {
       roomListeners.voiceMic = handleRoomVoiceMicToggle;
       mic.addEventListener('click', roomListeners.voiceMic);
     }
-    
-    const sound = document.getElementById('room-voice-sound-btn');
+
+    const sound = document.getElementById('room-voice-btn-sound');
     if (sound) {
       roomListeners.voiceSound = handleRoomVoiceSoundToggle;
       sound.addEventListener('click', roomListeners.voiceSound);
     }
-    
-    const screen = document.getElementById('room-voice-screen-btn');
+
+    const camera = document.getElementById('room-voice-btn-cam');
+    if (camera) {
+      roomListeners.voiceCamera = handleRoomVoiceCameraToggle;
+      camera.addEventListener('click', roomListeners.voiceCamera);
+    }
+
+    const screen = document.getElementById('room-voice-btn-share');
     if (screen) {
       roomListeners.voiceScreen = handleRoomVoiceScreenToggle;
       screen.addEventListener('click', roomListeners.voiceScreen);
     }
-    
-    const voiceLeave = document.getElementById('room-voice-leave-btn');
+
+    const voiceLeave = document.getElementById('room-voice-btn-disconnect');
     if (voiceLeave) {
       roomListeners.voiceLeave = handleRoomVoiceLeave;
       voiceLeave.addEventListener('click', roomListeners.voiceLeave);
     }
-    
+
     // GROUP J: Settings button
     const settingsBtn = document.getElementById('room-settings-btn');
     if (settingsBtn) {
       roomListeners.settingsButton = openRoomSettings;
       settingsBtn.addEventListener('click', roomListeners.settingsButton);
     }
-    
+
+    const inputVoiceBtn = document.getElementById('room-input-voice-btn');
+    if (inputVoiceBtn) {
+      roomListeners.inputVoice = openRoomVoice;
+      inputVoiceBtn.addEventListener('click', roomListeners.inputVoice);
+    }
+
     roomListeners._registered = true;
     console.log('[rooms] Listeners registered');
   }
@@ -733,7 +683,7 @@
     if (!roomListeners._registered) {
       return;
     }
-    
+
     // GROUP A: Navigation scroll
     const nav = document.querySelector('.room-settings-nav');
     if (nav) {
@@ -745,175 +695,180 @@
       }
       nav.__wrapEl = null;
     }
-    
+
     if (roomListeners.windowResize) {
       window.removeEventListener('resize', roomListeners.windowResize);
     }
-    
+
     const prev = document.getElementById('room-settings-nav-prev');
     if (prev && roomListeners.navPrev) {
       prev.removeEventListener('click', roomListeners.navPrev);
     }
-    
+
     const next = document.getElementById('room-settings-nav-next');
     if (next && roomListeners.navNext) {
       next.removeEventListener('click', roomListeners.navNext);
     }
-    
+
     // GROUP B: Settings modal
     const close = document.getElementById('room-settings-close');
     if (close && roomListeners.settingsClose) {
       close.removeEventListener('click', roomListeners.settingsClose);
     }
-    
+
     const cancel = document.getElementById('room-settings-cancel');
     if (cancel && roomListeners.settingsCancel) {
       cancel.removeEventListener('click', roomListeners.settingsCancel);
     }
-    
-    const backdrop = document.getElementById('room-settings-backdrop');
-    if (backdrop && roomListeners.settingsBackdrop) {
-      backdrop.removeEventListener('click', roomListeners.settingsBackdrop);
-    }
-    
+
     roomListeners.settingsNavItems.forEach(({ element, handler }) => {
       element.removeEventListener('click', handler);
     });
     roomListeners.settingsNavItems = [];
-    
+
     roomListeners.settingsVibePresets.forEach(({ element, handler }) => {
       element.removeEventListener('click', handler);
     });
     roomListeners.settingsVibePresets = [];
-    
+
     const save = document.getElementById('room-settings-save');
     if (save && roomListeners.settingsSave) {
       save.removeEventListener('click', roomListeners.settingsSave);
     }
-    
+
     const apprSave = document.getElementById('room-settings-appearance-save');
     if (apprSave && roomListeners.settingsAppearanceSave) {
       apprSave.removeEventListener('click', roomListeners.settingsAppearanceSave);
     }
-    
+
     const inviteCreate = document.getElementById('room-settings-invite-create');
     if (inviteCreate && roomListeners.settingsInviteCreate) {
       inviteCreate.removeEventListener('click', roomListeners.settingsInviteCreate);
     }
-    
+
     const inviteCopy = document.getElementById('room-settings-invite-copy');
     if (inviteCopy && roomListeners.settingsInviteCopy) {
       inviteCopy.removeEventListener('click', roomListeners.settingsInviteCopy);
     }
-    
+
     const inviteShortcut = document.getElementById('room-settings-invite-shortcut');
     if (inviteShortcut && roomListeners.settingsInviteShortcut) {
       inviteShortcut.removeEventListener('click', roomListeners.settingsInviteShortcut);
     }
-    
+
     // GROUP C: File inputs
     const iconBtn = document.getElementById('room-settings-icon-btn');
     if (iconBtn && roomListeners.iconButton) {
       iconBtn.removeEventListener('click', roomListeners.iconButton);
     }
-    
+
     const iconFile = document.getElementById('room-settings-icon-file');
     if (iconFile && roomListeners.iconFile) {
       iconFile.removeEventListener('change', roomListeners.iconFile);
     }
-    
+
     const iconClear = document.getElementById('room-settings-icon-clear');
     if (iconClear && roomListeners.iconClear) {
       iconClear.removeEventListener('click', roomListeners.iconClear);
     }
-    
+
     const bannerBtn = document.getElementById('room-settings-banner-btn');
     if (bannerBtn && roomListeners.bannerButton) {
       bannerBtn.removeEventListener('click', roomListeners.bannerButton);
     }
-    
+
     const bannerFile = document.getElementById('room-settings-banner-file');
     if (bannerFile && roomListeners.bannerFile) {
       bannerFile.removeEventListener('change', roomListeners.bannerFile);
     }
-    
+
     const bannerClear = document.getElementById('room-settings-banner-clear');
     if (bannerClear && roomListeners.bannerClear) {
       bannerClear.removeEventListener('click', roomListeners.bannerClear);
     }
-    
+
     // GROUP D: Color picker
     const colorEl = document.getElementById('room-settings-color');
     if (colorEl && roomListeners.colorInput) {
       colorEl.removeEventListener('input', roomListeners.colorInput);
     }
-    
+
     // GROUP E: Danger zone
     const leaveBtn = document.getElementById('room-settings-leave');
     if (leaveBtn && roomListeners.leaveButton) {
       leaveBtn.removeEventListener('click', roomListeners.leaveButton);
     }
-    
+
     const deleteBtn = document.getElementById('room-settings-delete');
     if (deleteBtn && roomListeners.deleteButton) {
       deleteBtn.removeEventListener('click', roomListeners.deleteButton);
     }
-    
+
     // GROUP F: Global escape key
     if (roomListeners.documentEscape) {
       document.removeEventListener('keydown', roomListeners.documentEscape);
     }
-    
+
     // (Create room modal listeners were moved to global init)
-    
+
     // GROUP H: Room tabs
     const tabChat = document.getElementById('room-tab-chat');
     if (tabChat && roomListeners.tabChat) {
       tabChat.removeEventListener('click', roomListeners.tabChat);
     }
-    
+
     const tabVoice = document.getElementById('room-tab-voice');
     if (tabVoice && roomListeners.tabVoice) {
       tabVoice.removeEventListener('click', roomListeners.tabVoice);
     }
-    
+
     const tabMedia = document.getElementById('room-tab-media');
     if (tabMedia && roomListeners.tabMedia) {
       tabMedia.removeEventListener('click', roomListeners.tabMedia);
     }
-    
+
     // GROUP I: Voice controls
-    const connect = document.getElementById('room-voice-connect-btn');
+    const connect = document.getElementById('room-voice-join-btn');
     if (connect && roomListeners.voiceConnect) {
       connect.removeEventListener('click', roomListeners.voiceConnect);
     }
-    
-    const mic = document.getElementById('room-voice-mic-btn');
+
+    const mic = document.getElementById('room-voice-btn-mic');
     if (mic && roomListeners.voiceMic) {
       mic.removeEventListener('click', roomListeners.voiceMic);
     }
-    
-    const sound = document.getElementById('room-voice-sound-btn');
+
+    const sound = document.getElementById('room-voice-btn-sound');
     if (sound && roomListeners.voiceSound) {
       sound.removeEventListener('click', roomListeners.voiceSound);
     }
-    
-    const screen = document.getElementById('room-voice-screen-btn');
+
+    const camera = document.getElementById('room-voice-btn-cam');
+    if (camera && roomListeners.voiceCamera) {
+      camera.removeEventListener('click', roomListeners.voiceCamera);
+    }
+
+    const screen = document.getElementById('room-voice-btn-share');
     if (screen && roomListeners.voiceScreen) {
       screen.removeEventListener('click', roomListeners.voiceScreen);
     }
-    
-    const voiceLeave = document.getElementById('room-voice-leave-btn');
+
+    const voiceLeave = document.getElementById('room-voice-btn-disconnect');
     if (voiceLeave && roomListeners.voiceLeave) {
       voiceLeave.removeEventListener('click', roomListeners.voiceLeave);
     }
-    
+
     // GROUP J: Settings button
     const settingsBtn = document.getElementById('room-settings-btn');
     if (settingsBtn && roomListeners.settingsButton) {
       settingsBtn.removeEventListener('click', roomListeners.settingsButton);
     }
-    
+
+    const inputVoiceBtn = document.getElementById('room-input-voice-btn');
+    if (inputVoiceBtn && roomListeners.inputVoice) {
+      inputVoiceBtn.removeEventListener('click', roomListeners.inputVoice);
+    }
+
     // Clear all references
     Object.keys(roomListeners).forEach(key => {
       if (key !== '_registered') {
@@ -924,7 +879,7 @@
         }
       }
     });
-    
+
     roomListeners._registered = false;
     console.log('[rooms] Listeners destroyed');
   }
@@ -1001,17 +956,17 @@
     }
 
     enterRoomMode();
-    
+
     // Synchronously force clear and deactivate all room overlays
     if (typeof window.forceClearRoomOverlays === 'function') {
       window.forceClearRoomOverlays();
     }
-    
+
     hideAllMainViews();
     renderRoomHeader(server);
     showRoomView();
-    hideAllRoomPanels();
-    setActiveTab(null);
+    setActiveTab('chat');
+    showRoomPane('chat');
     // Применяем тему комнаты (цвет/баннер) сразу при входе.
     // Используем сохранённые значения из server.settings.color / server.banner.
     applyRoomThemeFromServer(server);
@@ -1021,6 +976,7 @@
     refreshChatMeta(window.currentRoom);
     refreshVoiceMeta(window.currentRoom);
     attachLiveHandlers(window.currentRoom);
+    openRoomChat().catch(e => console.warn('[room] failed to open room chat:', e));
 
     return true;
   }
@@ -1037,28 +993,41 @@
 
   // === Active mode panels ================================================
 
-  // Чат: показываем room-chat-strip + chat-view, оставляем room-view chrome.
-  function openRoomChat() {
+  async function openRoomChat() {
     const room = window.currentRoom;
     if (!room || !room.textChannelId) {
       console.warn('Текстовый канал комнаты не найден');
       return;
     }
-    if (typeof selectChannel !== 'function') return;
 
     setActiveTab('chat');
-    // Прячем альтернативные панели
-    setHidden('room-voice-panel', true);
-    setHidden('room-media-panel', true);
-    // Показываем strip и инициируем chat-view
-    setHidden('room-chat-strip', false);
-    selectChannel(room.textChannelId, 'Чат', 'text');
-    // selectChannel вызывает showChatView(), которая снимает hidden c chat-view
-    // и hidden с других. Не позволяем ей скрывать наш room-chrome.
+    showRoomPane('chat');
     showRoomView();
+
+    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
+      window.NavigationController._commitState({
+        currentView: 'room',
+        currentServer: window.currentServer || null,
+        currentServerId: window.currentServer?._id || room._id || null,
+        currentRoom: room,
+        currentChannelId: room.textChannelId,
+        currentChannel: { _id: room.textChannelId, name: 'Чат', type: 'text' },
+        currentDMConversation: null
+      }, 'openRoomChat');
+    }
+
+    if (window.socketLifecycle && typeof window.socketLifecycle.attachAllSocketListeners === 'function') {
+      window.socketLifecycle.attachAllSocketListeners();
+    }
+
+    if (typeof loadMessages === 'function') {
+      await loadMessages(room.textChannelId);
+    }
+
+    const input = document.getElementById('room-message-input');
+    if (input) input.dataset.placeholder = `Написать в ${room.name || 'чат комнаты'}`;
   }
 
-  // Войс: показываем room-voice-panel, прячем chat и media.
   function openRoomVoice() {
     const room = window.currentRoom;
     if (!room || !room.voiceChannelId) {
@@ -1066,11 +1035,7 @@
       return;
     }
     setActiveTab('voice');
-    setHidden('room-chat-strip', true);
-    const chat = document.getElementById('chat-view');
-    if (chat) chat.classList.add('hidden');
-    setHidden('room-media-panel', true);
-    setHidden('room-voice-panel', false);
+    showRoomPane('voice');
     refreshVoiceMeta(room);
     renderVoicePanelMode();
   }
@@ -1078,11 +1043,7 @@
   // Медиа: динамически загружаем контент.
   async function openRoomMedia() {
     setActiveTab('media');
-    setHidden('room-chat-strip', true);
-    const chat = document.getElementById('chat-view');
-    if (chat) chat.classList.add('hidden');
-    setHidden('room-voice-panel', true);
-    setHidden('room-media-panel', false);
+    showRoomPane('media');
 
     const emptyState = document.getElementById('room-media-empty');
     const gallery = document.getElementById('room-media-gallery');
@@ -1093,10 +1054,10 @@
     emptyState.classList.remove('hidden');
     const titleEl = emptyState.querySelector('.room-media-empty-title');
     const hintEl = emptyState.querySelector('.room-media-empty-hint');
-    
+
     const originalTitle = 'Медиа появятся здесь';
     const originalHint = 'Когда участники начнут делиться файлами, изображениями, видео и голосовыми — всё это окажется на этой вкладке.';
-    
+
     if (titleEl) titleEl.textContent = 'Загрузка медиа...';
     if (hintEl) hintEl.textContent = 'Мы собираем все отправленные файлы...';
 
@@ -1147,60 +1108,7 @@
       } else {
         emptyState.classList.add('hidden');
         gallery.classList.remove('hidden');
-
-        gallery.innerHTML = mediaItems.map(item => {
-          const att = item.attachment;
-          const authorName = item.author?.nickname || item.author?.username || 'Пользователь';
-          const authorAvatar = typeof getAvatarUrl === 'function' ? getAvatarUrl(item.author?.avatar, authorName, item.author?._id) : '';
-          const dateStr = typeof formatDate === 'function' ? formatDate(item.createdAt) : new Date(item.createdAt).toLocaleDateString();
-
-          const isImage = att.mimetype?.startsWith('image/') || att.type === 'image';
-          const isAudio = att.mimetype?.startsWith('audio/') || att.type === 'audio' || att.url?.includes('/audio/');
-          const isVideo = (att.mimetype?.startsWith('video/') || att.type === 'video' || att.url?.includes('/video/')) && !isAudio;
-
-          let previewHtml = '';
-          const safeUrl = typeof resolveAttachmentUrl === 'function' ? resolveAttachmentUrl(att.url) : att.url;
-
-          if (isImage) {
-            previewHtml = `
-              <div class="room-media-card-preview image-preview" style="background-image: url('${safeUrl}');" onclick="if (window.XSS && window.XSS.openImageModal) { window.XSS.openImageModal('${safeUrl}'); } else { window.open('${safeUrl}'); }"></div>
-            `;
-          } else if (isVideo) {
-            previewHtml = `
-              <div class="room-media-card-preview">
-                <video src="${safeUrl}" controls preload="metadata"></video>
-              </div>
-            `;
-          } else if (isAudio) {
-            previewHtml = `
-              <div class="room-media-card-preview audio-preview">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="margin-bottom: 6px; color: var(--blue, #5865f2);"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                <audio src="${safeUrl}" controls style="width: 100%; height: 28px;"></audio>
-              </div>
-            `;
-          } else {
-            const filename = att.filename || att.originalName || 'Файл';
-            previewHtml = `
-              <a href="${safeUrl}" target="_blank" class="room-media-card-preview file-preview">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28" style="margin-bottom: 6px; color: var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                <span class="file-name" style="font-size: 0.8em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;" title="${filename}">${filename}</span>
-              </a>
-            `;
-          }
-
-          return `
-            <div class="room-media-card">
-              ${previewHtml}
-              <div class="room-media-card-footer" style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px;">
-                <img src="${authorAvatar}" alt="${authorName}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;">
-                <div style="display: flex; flex-direction: column; overflow: hidden;">
-                  <span style="font-size: 0.8em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${authorName}">${authorName}</span>
-                  <span style="font-size: 0.7em; color: var(--text-muted);">${dateStr}</span>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('');
+        renderRoomMediaGallery(gallery, mediaItems);
       }
 
     } catch (err) {
@@ -1208,6 +1116,90 @@
       if (titleEl) titleEl.textContent = 'Ошибка загрузки';
       if (hintEl) hintEl.textContent = 'Не удалось загрузить медиафайлы. Пожалуйста, попробуйте еще раз.';
     }
+  }
+
+  function renderRoomMediaGallery(gallery, mediaItems) {
+    gallery.replaceChildren();
+    mediaItems.forEach(item => {
+      const att = item.attachment || {};
+      const authorName = item.author?.nickname || item.author?.username || 'Пользователь';
+      const authorAvatar = typeof getAvatarUrl === 'function' ? getAvatarUrl(item.author?.avatar, authorName, item.author?._id) : '';
+      const dateStr = typeof formatDate === 'function' ? formatDate(item.createdAt) : new Date(item.createdAt).toLocaleDateString();
+      const url = typeof resolveAttachmentUrl === 'function' ? resolveAttachmentUrl(att.url) : (att.url || '');
+      const filename = att.filename || att.originalName || 'Файл';
+
+      const isImage = att.mimetype?.startsWith('image/') || att.type === 'image';
+      const isAudio = att.mimetype?.startsWith('audio/') || att.type === 'audio' || url.includes('/audio/');
+      const isVideo = (att.mimetype?.startsWith('video/') || att.type === 'video' || url.includes('/video/')) && !isAudio;
+
+      const card = document.createElement('article');
+      card.className = 'room-media-card';
+
+      let preview;
+      if (isImage) {
+        preview = document.createElement('button');
+        preview.type = 'button';
+        preview.className = 'room-media-card-preview image-preview';
+        preview.style.backgroundImage = `url("${encodeURI(url)}")`;
+        preview.addEventListener('click', () => {
+          if (window.XSS && typeof window.XSS.openImageModal === 'function') {
+            window.XSS.openImageModal(url);
+          } else {
+            window.open(url, '_blank', 'noopener');
+          }
+        });
+      } else if (isVideo) {
+        preview = document.createElement('div');
+        preview.className = 'room-media-card-preview';
+        const video = document.createElement('video');
+        video.src = url;
+        video.controls = true;
+        video.preload = 'metadata';
+        preview.appendChild(video);
+      } else if (isAudio) {
+        preview = document.createElement('div');
+        preview.className = 'room-media-card-preview audio-preview';
+        const audio = document.createElement('audio');
+        audio.src = url;
+        audio.controls = true;
+        preview.appendChild(audio);
+      } else {
+        preview = document.createElement('a');
+        preview.className = 'room-media-card-preview file-preview';
+        preview.href = url;
+        preview.target = '_blank';
+        preview.rel = 'noopener';
+        const name = document.createElement('span');
+        name.className = 'file-name';
+        name.title = filename;
+        name.textContent = filename;
+        preview.appendChild(name);
+      }
+
+      const footer = document.createElement('div');
+      footer.className = 'room-media-card-footer';
+
+      const avatar = document.createElement('img');
+      avatar.src = authorAvatar;
+      avatar.alt = authorName;
+      avatar.loading = 'lazy';
+      footer.appendChild(avatar);
+
+      const meta = document.createElement('div');
+      meta.className = 'room-media-card-meta';
+      const author = document.createElement('span');
+      author.className = 'room-media-card-author';
+      author.title = authorName;
+      author.textContent = authorName;
+      const date = document.createElement('span');
+      date.className = 'room-media-card-date';
+      date.textContent = dateStr;
+      meta.append(author, date);
+      footer.appendChild(meta);
+
+      card.append(preview, footer);
+      gallery.appendChild(card);
+    });
   }
 
   // === Voice connect / state ==============================================
@@ -1227,30 +1219,46 @@
    */
   function renderVoicePanelMode() {
     const preconnect = document.getElementById('room-voice-preconnect');
-    const controls = document.getElementById('room-voice-controls');
+    const controls = document.getElementById('room-voice-connected-bar');
     const connected = isConnectedToRoomVoice();
 
     if (preconnect) preconnect.classList.toggle('hidden', connected);
     if (controls) controls.classList.toggle('hidden', !connected);
 
     // Синхронизация состояния кнопок с voiceManager
-    const mic = document.getElementById('room-voice-mic-btn');
-    const sound = document.getElementById('room-voice-sound-btn');
-    const screen = document.getElementById('room-voice-screen-btn');
-    const leave = document.getElementById('room-voice-leave-btn');
+    const mic = document.getElementById('room-voice-btn-mic');
+    const sound = document.getElementById('room-voice-btn-sound');
+    const camera = document.getElementById('room-voice-btn-cam');
+    const screen = document.getElementById('room-voice-btn-share');
+    const leave = document.getElementById('room-voice-btn-disconnect');
     const vm = window.voiceManager;
 
     if (mic) {
       mic.disabled = !connected;
-      mic.setAttribute('data-muted', String(!!(vm && vm.isMuted)));
+      const muted = !!(vm && vm.isMuted);
+      mic.classList.toggle('muted-state', muted);
+      mic.classList.toggle('active-state', !muted);
+      mic.querySelector('.voice-icon-active')?.classList.toggle('hidden', muted);
+      mic.querySelector('.voice-icon-muted')?.classList.toggle('hidden', !muted);
     }
     if (sound) {
       sound.disabled = !connected;
-      sound.setAttribute('data-muted', String(!!(vm && vm.isDeafened)));
+      const deafened = !!(vm && vm.isDeafened);
+      sound.classList.toggle('muted-state', deafened);
+      sound.classList.toggle('active-state', !deafened);
+      sound.querySelector('.voice-icon-active')?.classList.toggle('hidden', deafened);
+      sound.querySelector('.voice-icon-muted')?.classList.toggle('hidden', !deafened);
+    }
+    if (camera) {
+      camera.disabled = !connected;
     }
     if (screen) {
       screen.disabled = !connected;
-      screen.setAttribute('data-active', String(!!(vm && vm.isScreenSharing)));
+      const sharing = !!(vm && vm.isScreenSharing);
+      screen.classList.toggle('active-state', sharing);
+      screen.classList.toggle('muted-state', !sharing);
+      screen.querySelector('.voice-icon-active')?.classList.toggle('hidden', !sharing);
+      screen.querySelector('.voice-icon-muted')?.classList.toggle('hidden', sharing);
     }
     if (leave) {
       leave.disabled = !connected;
@@ -1262,7 +1270,7 @@
     if (!room || !room.voiceChannelId) return;
     if (typeof joinVoiceChannel !== 'function') return;
 
-    const btn = document.getElementById('room-voice-connect-btn');
+    const btn = document.getElementById('room-voice-join-btn');
     if (btn) btn.disabled = true;
 
     try {
@@ -1275,9 +1283,7 @@
       // Гарантируем нашу UI-структуру даже если legacy пытался её сбить.
       enterRoomMode();
       showRoomView();
-      setHidden('room-voice-panel', false);
-      setHidden('room-chat-strip', true);
-      setHidden('room-media-panel', true);
+      showRoomPane('voice');
       const chat = document.getElementById('chat-view');
       if (chat) chat.classList.add('hidden');
       setActiveTab('voice');
@@ -1302,9 +1308,7 @@
     if (!window.currentRoom) return;
     enterRoomMode();
     showRoomView();
-    setHidden('room-voice-panel', false);
-    setHidden('room-chat-strip', true);
-    setHidden('room-media-panel', true);
+    showRoomPane('voice');
     const chat = document.getElementById('chat-view');
     if (chat) chat.classList.add('hidden');
     setActiveTab('voice');
@@ -1332,11 +1336,17 @@
     renderVoicePanelMode();
   }
 
+  function handleRoomVoiceCameraToggle() {
+    if (!isConnectedToRoomVoice()) return;
+    if (typeof toggleCamera === 'function') toggleCamera();
+    renderVoicePanelMode();
+  }
+
   // === Settings ==========================================================
   // Правая выезжающая панель. Открывается ТОЛЬКО когда текущий сервер —
   // комната (settings.kind === 'room'). Для guild-серверов панель не
   // показывается — кнопка #room-settings-btn физически живёт внутри
-  // #room-view, который виден только в room-mode.
+  // #server-room-panel, который виден только в room-mode.
 
   const VIBE_PRESETS = ['Ночной разговор', 'Играем', 'Учёба', 'Чилл'];
 
@@ -1520,7 +1530,6 @@
     setActiveSection('general');
 
     window.ModalManager.open('room-settings-panel', {
-      backdropId: 'room-settings-backdrop',
       onClose: () => {
         requestAnimationFrame(updateNavScrollEdges);
       }
@@ -2110,19 +2119,19 @@
     if (createBtn) {
       createBtn.addEventListener('click', showCreateRoomModal);
     }
-    
+
     const submit = document.getElementById('create-room-submit');
     if (submit) {
       submit.addEventListener('click', createRoom);
     }
-    
+
     const createClose = document.getElementById('create-room-close');
     if (createClose) {
       createClose.addEventListener('click', () => {
         if (typeof closeModal === 'function') closeModal('create-room-modal');
       });
     }
-    
+
     const createCancel = document.getElementById('create-room-cancel');
     if (createCancel) {
       createCancel.addEventListener('click', () => {

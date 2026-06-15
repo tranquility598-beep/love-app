@@ -857,7 +857,7 @@ function forceClearRoomOverlays() {
 window.forceClearRoomOverlays = forceClearRoomOverlays;
 
 function switchMainView(visibleId) {
-  const views = ['welcome-view', 'friends-view', 'chat-view', 'voice-view', 'room-view'];
+  const views = ['welcome-view', 'friends-view', 'chat-view', 'voice-view', 'server-room-panel'];
   views.forEach(id => {
     const el = document.getElementById(id);
     if (el) {

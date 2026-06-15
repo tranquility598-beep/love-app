@@ -40,7 +40,7 @@
       before: closeKnownOverlays
     },
     {
-      target: '#voice-panel, #mic-btn, #headset-btn, #room-voice-panel, #voice-view',
+      target: '#voice-panel, #mic-btn, #headset-btn, #room-pane-voice, #room-voice-channel-container, #voice-view',
       title: 'Voice',
       text: 'Голос, микрофон, звук, камера и демонстрация экрана управляются из voice-панелей.',
       action: 'next',
@@ -99,7 +99,7 @@
       before: closeKnownOverlays
     },
     {
-      target: '#voice-panel, #mic-btn, #headset-btn, #room-voice-panel, #voice-view',
+      target: '#voice-panel, #mic-btn, #headset-btn, #room-pane-voice, #room-voice-channel-container, #voice-view',
       title: 'Voice',
       text: 'Микрофон, звук, камера и демонстрация должны работать одинаково на телефоне и Windows.',
       action: 'next',
@@ -530,7 +530,7 @@
     const rect = target.getBoundingClientRect();
     const mobile = isMobile();
     const largeTarget = rect.width > viewportWidth * 0.74 || rect.height > viewportHeight * (mobile ? 0.34 : 0.52);
-    const containerTarget = target.matches('#dm-list, #dm-sidebar-view, #servers-sidebar, #server-list, #friends-view, #settings-modal, #settings-profile, #room-voice-panel, #voice-view');
+    const containerTarget = target.matches('#dm-list, #dm-sidebar-view, #servers-sidebar, #server-list, #friends-view, #settings-modal, #settings-profile, #room-pane-voice, #room-voice-channel-container, #voice-view');
 
     if (!largeTarget && !containerTarget) return rect;
 

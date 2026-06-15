@@ -11,11 +11,38 @@ let isLoadingMessages = false;
 let isSending = false;
 let activeChatVideo = null;
 
+function isRoomChatActive() {
+  return document.body.classList.contains('room-mode') &&
+    !document.getElementById('server-room-panel')?.classList.contains('hidden');
+}
+
+function getChatElementId(baseId) {
+  if (!isRoomChatActive()) return baseId;
+  const roomIds = {
+    'messages-list': 'room-chat-feed',
+    'message-input': 'room-message-input',
+    'send-btn': 'room-send-btn',
+    'send-btn-cooldown': 'room-send-btn-cooldown',
+    'reply-preview': 'room-reply-preview',
+    'reply-author-name': 'room-reply-author-name',
+    'reply-content-preview': 'room-reply-content-preview',
+    'typing-indicator': 'room-typing-indicator',
+    'file-preview': 'room-file-preview',
+    'file-preview-name': 'room-file-preview-name',
+    'file-input': 'room-file-input'
+  };
+  return roomIds[baseId] || baseId;
+}
+
+function getChatEl(baseId) {
+  return document.getElementById(getChatElementId(baseId)) || document.getElementById(baseId);
+}
+
 /**
  * Загрузить сообщения канала
  */
 async function loadMessages(channelId, options = {}) {
-  const list = document.getElementById('messages-list');
+  const list = getChatEl('messages-list');
   if (!list) return;
 
   list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">Загрузка...</div>';
@@ -52,7 +79,7 @@ async function loadMessages(channelId, options = {}) {
  * Отрендерить список сообщений
  */
 function renderMessages(messages, isDM) {
-  const list = document.getElementById('messages-list');
+  const list = getChatEl('messages-list');
   if (!list) return;
 
   if (messages.length === 0) {
@@ -261,7 +288,7 @@ function renderMessage(msg, isGrouped) {
 
   if (isGrouped) {
     return `
-      <div class="message-group message-continuation" data-message-id="${msg._id}" data-author-id="${authorId}">
+      <div class="message-group message-continuation ${isOwn ? 'own' : 'partner'}" data-message-id="${msg._id}" data-author-id="${authorId}">
         <span class="message-timestamp" title="${fullTime}">${time}</span>
         ${replyHtml}
         ${content}
@@ -273,7 +300,7 @@ function renderMessage(msg, isGrouped) {
   }
 
   return `
-    <div class="message-group message-with-avatar" data-message-id="${msg._id}" data-author-id="${authorId}">
+    <div class="message-group message-with-avatar ${isOwn ? 'own' : 'partner'}" data-message-id="${msg._id}" data-author-id="${authorId}">
       <img class="message-avatar" src="${authorAvatar}" alt="${authorName}">
       <div class="message-content-wrapper">
         <div class="message-header">
@@ -330,7 +357,7 @@ function escapeHtml(text) {
  * Добавить новое сообщение в DOM
  */
 function appendMessage(msg) {
-  const list = document.getElementById('messages-list');
+  const list = getChatEl('messages-list');
   if (!list) return;
 
   // Убираем заглушку если есть
@@ -756,8 +783,8 @@ function _startCooldownUiTimer(channelId) {
 
 function _refreshCooldownUi(channelId) {
   if (channelId !== window.currentChannelId) return;
-  const btn = document.getElementById('send-btn');
-  const label = document.getElementById('send-btn-cooldown');
+  const btn = getChatEl('send-btn');
+  const label = getChatEl('send-btn-cooldown');
   const { active, retryAfter } = isMessageCooldownActive(channelId);
   if (btn) {
     btn.disabled = active;
@@ -867,7 +894,7 @@ window.hideAntispamModal = hideAntispamModal;
  * Отправить сообщение
  */
 async function sendMessage() {
-  const input = document.getElementById('message-input');
+  const input = getChatEl('message-input');
   if (!input) return;
 
   if (isSending) return;
@@ -914,7 +941,7 @@ async function sendMessage() {
   }
 
   isSending = true;
-  const sendButton = document.getElementById('send-btn');
+  const sendButton = getChatEl('send-btn');
   if (sendButton) {
     sendButton.disabled = true;
     sendButton.style.opacity = '0.5';
@@ -1222,7 +1249,7 @@ function handleMentionAutocomplete(input) {
  * Выбрать упоминание из автодополнения
  */
 function selectMention(username) {
-  const input = document.getElementById('message-input');
+  const input = getChatEl('message-input');
   if (!input) return;
   
   const value = input.value;
@@ -1269,15 +1296,15 @@ function startReply(messageId) {
   
   const contentPreview = content.substring(0, 50);
 
-  const preview = document.getElementById('reply-preview');
-  const authorEl = document.getElementById('reply-author-name');
-  const contentEl = document.getElementById('reply-content-preview');
+  const preview = getChatEl('reply-preview');
+  const authorEl = getChatEl('reply-author-name');
+  const contentEl = getChatEl('reply-content-preview');
 
   if (preview) preview.classList.remove('hidden');
   if (authorEl) authorEl.textContent = authorName;
   if (contentEl) contentEl.textContent = contentPreview;
 
-  document.getElementById('message-input')?.focus();
+  getChatEl('message-input')?.focus();
 }
 
 /**
@@ -1286,7 +1313,7 @@ function startReply(messageId) {
 function cancelReply() {
   replyingTo = null;
   replyingToMessage = null;
-  const preview = document.getElementById('reply-preview');
+  const preview = getChatEl('reply-preview');
   if (preview) preview.classList.add('hidden');
 }
 
@@ -1420,7 +1447,7 @@ function hideTypingIndicator(userId) {
 }
 
 function updateTypingIndicator() {
-  const indicator = document.getElementById('typing-indicator');
+  const indicator = getChatEl('typing-indicator');
   if (!indicator) return;
 
   const now = Date.now();
@@ -1467,7 +1494,7 @@ function updateTypingIndicator() {
  * Загрузка файлов
  */
 function triggerFileUpload() {
-  const fileInput = document.getElementById('file-input');
+  const fileInput = getChatEl('file-input');
   if (!fileInput) return;
   fileInput.click();
 }
@@ -1477,8 +1504,8 @@ function handleFileSelect(event) {
   if (files.length === 0) return;
 
   pendingFiles = files;
-  const preview = document.getElementById('file-preview');
-  const previewName = document.getElementById('file-preview-name');
+  const preview = getChatEl('file-preview');
+  const previewName = getChatEl('file-preview-name');
 
   if (preview) preview.classList.remove('hidden');
   if (previewName) {
@@ -1495,7 +1522,7 @@ function handleFileSelect(event) {
   // После выбора файла возвращаем фокус в поле сообщения:
   // Enter должен отправлять выбранный файл, а не повторно активировать
   // кнопку прикрепления/открывать file picker.
-  const input = document.getElementById('message-input');
+  const input = getChatEl('message-input');
   if (input) {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
@@ -1504,7 +1531,7 @@ function handleFileSelect(event) {
 
 function cancelFile() {
   pendingFiles = [];
-  const preview = document.getElementById('file-preview');
+  const preview = getChatEl('file-preview');
   if (preview) preview.classList.add('hidden');
 }
 

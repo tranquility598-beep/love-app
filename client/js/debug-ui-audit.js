@@ -210,7 +210,7 @@
       { id: 'chat-view', name: 'Chat' },
       { id: 'voice-view', name: 'Voice' },
       { id: 'friends-view', name: 'Friends' },
-      { id: 'room-view', name: 'Room' }
+      { id: 'server-room-panel', name: 'Room' }
     ];
 
     const visibleViews = [];

@@ -38,24 +38,21 @@
   padding: 8px;
 }
 
-.voice-view.using-constellation .voice-view-grid:not(:has(.screen-share-card)),
-.room-voice-panel.using-constellation .room-voice-panel-cards:not(:has(.screen-share-card)) {
+.voice-view.using-constellation .voice-view-grid:not(:has(.screen-share-card)) {
   display: none;
 }
 
-.voice-view.using-constellation.voice-constellation-has-media .voice-view-grid,
-.room-voice-panel.using-constellation.voice-constellation-has-media .room-voice-panel-cards {
+.voice-view.using-constellation.voice-constellation-has-media .voice-view-grid {
   flex: 0 0 auto;
   max-height: 46%;
 }
 
-.voice-view.using-constellation .voice-view-grid .voice-card:not(.screen-share-card),
-.room-voice-panel.using-constellation .room-voice-panel-cards .room-voice-card:not(.screen-share-card) {
+.voice-view.using-constellation .voice-view-grid .voice-card:not(.screen-share-card) {
   display: none;
 }
 
 .voice-view.using-constellation .voice-constellation-shell,
-.room-voice-panel.using-constellation .voice-constellation-shell {
+#room-voice-channel-container.using-constellation .voice-constellation-shell {
   flex: 1 1 auto;
   min-height: 0;
 }

@@ -19,9 +19,7 @@
 /* Confirm-диалог должен всегда быть выше любых настроек/панелей.
    Используется для подтверждения удаления сервера, канала, категории и т.п.
    Слои:
-     1000 — обычные modal-overlay (settings, profile, ...)
-     1200 — room-settings-backdrop
-     1210 — room-settings-panel
+     1000 — обычные modal-overlay (settings, profile, room settings, ...)
      1300 — confirm-modal  ← всегда поверх */
 #confirm-modal.modal-overlay {
   z-index: 1300;

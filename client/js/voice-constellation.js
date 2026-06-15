@@ -41,7 +41,7 @@
       source: 'voice'
     },
     {
-      parentId: 'room-voice-panel',
+      parentId: 'room-voice-channel-container',
       shellId: 'room-voice-constellation-shell',
       gridId: 'room-voice-grid-constellation',
       linesId: 'room-voice-lines',

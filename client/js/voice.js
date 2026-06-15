@@ -803,9 +803,10 @@ class VoiceManager {
       viewBtn.classList.remove('active');
       viewBtn.title = 'Демонстрация экрана';
     }
-    const roomBtn = document.getElementById('room-voice-screen-btn');
+    const roomBtn = document.getElementById('room-voice-btn-share');
     if (roomBtn) {
-      roomBtn.setAttribute('data-active', 'false');
+      roomBtn.classList.remove('active-state');
+      roomBtn.classList.add('muted-state');
     }
 
     // Уведомляем сервер
@@ -1280,57 +1281,8 @@ function showScreenShareVideo(stream, sourceId) {
     container.classList.remove('hidden');
   }
 
-  // 3. Render in the room voice panel cards if they exist
-  const roomGridContainer = document.getElementById('room-voice-panel-cards');
-  if (roomGridContainer) {
-    const roomCardId = 'room-screen-card-' + targetUserId;
-    let roomCard = document.getElementById(roomCardId);
-    let roomVideo = document.getElementById('room-screen-share-video-' + sourceId);
-
-    if (!roomCard) {
-      roomCard = document.createElement('div');
-      roomCard.id = roomCardId;
-      roomCard.className = 'room-voice-card screen-share-card';
-      roomCard.setAttribute('data-socket-id', sourceId);
-      roomCard.innerHTML = `
-        <div class="voice-card-name-tag">📺 Экран: ${nameTag}</div>
-        <button class="fullscreen-btn" title="На весь экран" onclick="toggleTheaterMode(this)">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-        </button>
-      `;
-      roomGridContainer.appendChild(roomCard);
-    } else {
-      roomCard.setAttribute('data-socket-id', sourceId);
-      const tag = roomCard.querySelector('.voice-card-name-tag');
-      if (tag) tag.textContent = `📺 Экран: ${nameTag}`;
-    }
-
-    if (!roomVideo) {
-      roomVideo = document.createElement('video');
-      roomVideo.id = 'room-screen-share-video-' + sourceId;
-      roomVideo.autoplay = true;
-      roomVideo.playsInline = true;
-      roomVideo.setAttribute('playsinline', 'true');
-      roomVideo.className = 'voice-card-video screen-share-video';
-      if (sourceId === 'local') {
-        roomVideo.muted = true;
-      }
-      roomCard.appendChild(roomVideo);
-    }
-
-    if (roomVideo.srcObject !== stream) {
-      roomVideo.srcObject = stream;
-      roomVideo.onloadedmetadata = () => {
-        try {
-          roomVideo.play().catch(e => {
-            if (e.name !== 'AbortError') console.error('[ScreenShare] Room video play failed:', e);
-          });
-        } catch (e) {
-          console.warn('[ScreenShare] Room video play() sync error:', e);
-        }
-      };
-    }
-  }
+  // Room screen-share UI is rendered by voice-constellation.js into the
+  // new room voice structure. Do not create legacy room cards here.
 }
 
 /**

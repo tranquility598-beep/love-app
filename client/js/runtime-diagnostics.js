@@ -162,7 +162,7 @@
       { id: 'friends-view', name: 'friends' },
       { id: 'chat-view', name: 'chat' },
       { id: 'voice-view', name: 'voice' },
-      { id: 'room-view', name: 'room' }
+      { id: 'server-room-panel', name: 'room' }
     ];
 
     const visibleViews = views.filter(v => {

@@ -202,9 +202,10 @@ async function startScreenShareWithSource(sourceId, quality = 'medium') {
       viewBtn.classList.add('active');
       viewBtn.title = 'Остановить демонстрацию';
     }
-    const roomBtn = document.getElementById('room-voice-screen-btn');
+    const roomBtn = document.getElementById('room-voice-btn-share');
     if (roomBtn) {
-      roomBtn.setAttribute('data-active', 'true');
+      roomBtn.classList.add('active-state');
+      roomBtn.classList.remove('muted-state');
     }
   }
 }

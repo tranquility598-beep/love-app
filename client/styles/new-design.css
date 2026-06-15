@@ -17,9 +17,9 @@
     --text-muted: #646464;
 
     /* Шрифты */
-    --font-sans: 'Outfit', sans-serif;
-    --font-serif: 'Lora', serif;
-    --font-mono: 'Fira Mono', monospace;
+    --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-serif: Georgia, 'Times New Roman', serif;
+    --font-mono: 'Consolas', 'Cascadia Mono', 'Courier New', monospace;
 
     /* Унифицированные радиусы скруглений (Design Consistency) */
     --radius-sm: 8px;     /* Мелкие кнопки, бейджи */

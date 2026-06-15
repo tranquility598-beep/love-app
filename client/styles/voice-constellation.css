@@ -539,8 +539,10 @@
 .call-mini-bar {
   --call-mini-transform: translateX(-50%);
   position: fixed;
-  left: 50%;
-  bottom: 22px;
+  left: var(--call-mini-left, 50%);
+  top: var(--call-mini-top, auto);
+  right: auto;
+  bottom: var(--call-mini-bottom, 22px);
   z-index: 1300;
   display: inline-flex;
   align-items: center;
@@ -567,12 +569,14 @@
 .dm-call-mini-bar.is-moved,
 .call-mini-bar.is-moved {
   --call-mini-transform: none;
+  bottom: auto;
 }
 
 .dm-call-mini-bar.dragging,
 .call-mini-bar.dragging {
   cursor: grabbing;
   user-select: none;
+  transition: none;
 }
 
 .dm-call-mini-bar.is-leaving,
@@ -590,6 +594,28 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.call-mini-bar-text {
+  min-width: 0;
+}
+
+.dm-call-mini-bar .caller-avatar-mini {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+}
+
+.dm-call-mini-bar .call-overlay-name,
+.dm-call-mini-bar .call-overlay-status {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-call-overlay.is-minimizing {
+  pointer-events: none;
 }
 
 .create-space-type-selector {

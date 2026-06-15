@@ -17,8 +17,12 @@
     roomMembers: null,
     speaking: new Set(),
     screenShares: new Map(),
+    miniBarDrag: null,
     renderQueued: false
   };
+
+  const EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
+  const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
   const targets = [
     {
@@ -304,6 +308,16 @@
     };
   }
 
+  function installReplaceWrapper(name, replacementFactory) {
+    const original = window[name];
+    if (typeof original !== 'function' || original.__voiceConstellationWrapped) return;
+
+    const wrapped = replacementFactory(original);
+    if (typeof wrapped !== 'function') return;
+    wrapped.__voiceConstellationWrapped = true;
+    window[name] = wrapped;
+  }
+
   function installWrappers() {
     installWrapper('updateVoiceChannelMembersUI', (channelId, members) => {
       setMembers(channelId, members);
@@ -343,6 +357,220 @@
     });
   }
 
+  function getCallMiniElements() {
+    return {
+      overlay: document.getElementById('dm-call-overlay'),
+      overlayContent: document.querySelector('#dm-call-overlay .call-overlay-content'),
+      mini: document.getElementById('dm-call-mini-bar'),
+      miniAvatar: document.getElementById('dm-call-mini-avatar-img'),
+      miniName: document.getElementById('dm-call-mini-name'),
+      miniStatus: document.getElementById('dm-call-mini-status')
+    };
+  }
+
+  function syncCallMiniInfo() {
+    const { miniAvatar, miniName, miniStatus } = getCallMiniElements();
+    const peerName = document.getElementById('call-overlay-peer-name');
+    const status = document.getElementById('call-overlay-status');
+    const peerImg = document.getElementById('caller-mini-peer-img');
+
+    if (miniName && peerName) miniName.textContent = peerName.textContent || 'Звонок';
+    if (miniStatus && status) miniStatus.textContent = status.textContent || 'В трее';
+    if (miniAvatar && peerImg) miniAvatar.src = peerImg.src || '';
+  }
+
+  function showCallMiniBar() {
+    const { mini } = getCallMiniElements();
+    if (!mini) return;
+
+    syncCallMiniInfo();
+    mini.classList.remove('hidden', 'is-leaving', 'is-ending');
+    mini.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideCallMiniBar(className = 'is-leaving') {
+    const { mini } = getCallMiniElements();
+    if (!mini || mini.classList.contains('hidden')) return Promise.resolve();
+
+    mini.classList.remove('is-leaving', 'is-ending');
+    mini.classList.add(className);
+    const animation = mini.animate([
+      { opacity: 1, filter: 'blur(0)' },
+      { opacity: 0, filter: 'blur(6px)' }
+    ], { duration: 220, easing: EASE_IN, fill: 'both' });
+
+    return animation.finished.finally(() => {
+      mini.classList.add('hidden');
+      mini.classList.remove('is-leaving', 'is-ending');
+      mini.setAttribute('aria-hidden', 'true');
+    }).catch(() => {});
+  }
+
+  function animateOverlayToMini() {
+    const { overlay, overlayContent, mini } = getCallMiniElements();
+    if (!overlay || !overlayContent || !mini || overlay.classList.contains('hidden')) return;
+
+    syncCallMiniInfo();
+    overlay.classList.add('is-minimizing');
+    overlay.style.pointerEvents = 'none';
+    mini.classList.remove('hidden', 'is-leaving', 'is-ending');
+    mini.setAttribute('aria-hidden', 'false');
+
+    const from = overlayContent.getBoundingClientRect();
+    const to = mini.getBoundingClientRect();
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    const scaleX = Math.max(0.18, to.width / Math.max(from.width, 1));
+    const scaleY = Math.max(0.18, to.height / Math.max(from.height, 1));
+
+    const overlayAnim = overlayContent.animate([
+      { transform: 'translate(0, 0) scale(1)', opacity: 1, filter: 'blur(0)' },
+      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, opacity: 0, filter: 'blur(8px)' }
+    ], { duration: 340, easing: EASE_IN, fill: 'forwards' });
+
+    mini.animate([
+      { opacity: 0, filter: 'blur(6px)' },
+      { opacity: 1, filter: 'blur(0)' }
+    ], { duration: 300, easing: EASE_OUT, fill: 'both' }).finished.catch(() => {});
+
+    overlayAnim.finished.finally(() => {
+      overlay.classList.add('hidden');
+      overlay.classList.remove('minimized', 'is-minimizing');
+      overlay.style.pointerEvents = '';
+      overlayContent.style.transform = '';
+      overlayContent.style.opacity = '';
+      overlayContent.style.filter = '';
+    }).catch(() => {});
+  }
+
+  function animateMiniToOverlay() {
+    const { overlay, overlayContent, mini } = getCallMiniElements();
+    if (!overlay || !overlayContent || !mini) return;
+
+    const from = mini.getBoundingClientRect();
+    overlay.classList.remove('hidden', 'minimized');
+    overlay.style.pointerEvents = 'none';
+    overlayContent.style.opacity = '0';
+    const to = overlayContent.getBoundingClientRect();
+    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+    const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+    const scaleX = Math.max(0.18, from.width / Math.max(to.width, 1));
+    const scaleY = Math.max(0.18, from.height / Math.max(to.height, 1));
+
+    hideCallMiniBar('is-leaving');
+
+    overlayContent.animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, opacity: 0, filter: 'blur(8px)' },
+      { transform: 'translate(0, 0) scale(1)', opacity: 1, filter: 'blur(0)' }
+    ], { duration: 360, easing: EASE_OUT, fill: 'both' }).finished.finally(() => {
+      overlay.style.pointerEvents = '';
+      overlayContent.style.opacity = '';
+    }).catch(() => {});
+  }
+
+  function installCallWrappers() {
+    installReplaceWrapper('toggleCallOverlay', original => function wrappedToggleCallOverlay() {
+      const { overlay, mini } = getCallMiniElements();
+      if (overlay && !overlay.classList.contains('hidden')) {
+        animateOverlayToMini();
+        return;
+      }
+      if (mini && !mini.classList.contains('hidden')) {
+        animateMiniToOverlay();
+        return;
+      }
+      original.apply(this, arguments);
+    });
+
+    installReplaceWrapper('showDMCallOverlay', original => function wrappedShowDMCallOverlay() {
+      const result = original.apply(this, arguments);
+      const { overlay, mini } = getCallMiniElements();
+      if (overlay) overlay.classList.remove('minimized');
+      if (mini) {
+        mini.classList.add('hidden');
+        mini.setAttribute('aria-hidden', 'true');
+      }
+      syncCallMiniInfo();
+      return result;
+    });
+
+    installReplaceWrapper('handleDMCallEnd', original => function wrappedHandleDMCallEnd() {
+      hideCallMiniBar('is-ending');
+      return original.apply(this, arguments);
+    });
+
+    installReplaceWrapper('endDMCall', original => function wrappedEndDMCall() {
+      const { overlayContent } = getCallMiniElements();
+      if (overlayContent) {
+        overlayContent.animate([
+          { transform: 'scale(1)', opacity: 1, filter: 'blur(0)' },
+          { transform: 'scale(0.88)', opacity: 0, filter: 'blur(8px)' }
+        ], { duration: 220, easing: EASE_IN, fill: 'both' }).finished.catch(() => {});
+      }
+      hideCallMiniBar('is-ending');
+      return original.apply(this, arguments);
+    });
+  }
+
+  function startMiniDrag(mini, clientX, clientY) {
+    const rect = mini.getBoundingClientRect();
+    state.miniBarDrag = {
+      el: mini,
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
+      renderX: rect.left,
+      renderY: rect.top,
+      targetX: rect.left,
+      targetY: rect.top,
+      rafId: null
+    };
+    mini.classList.add('dragging', 'is-moved');
+    mini.style.setProperty('--call-mini-transform', 'none');
+    mini.style.setProperty('--call-mini-left', `${rect.left}px`);
+    mini.style.setProperty('--call-mini-top', `${rect.top}px`);
+  }
+
+  function moveMiniDrag(clientX, clientY) {
+    const drag = state.miniBarDrag;
+    if (!drag) return;
+
+    const { el } = drag;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    drag.targetX = Math.max(8, Math.min(clientX - drag.offsetX, window.innerWidth - w - 8));
+    drag.targetY = Math.max(8, Math.min(clientY - drag.offsetY, window.innerHeight - h - 8));
+
+    if (drag.rafId) return;
+    const tick = () => {
+      const current = state.miniBarDrag;
+      if (!current) return;
+      current.renderX += (current.targetX - current.renderX) * 0.25;
+      current.renderY += (current.targetY - current.renderY) * 0.25;
+      current.el.style.setProperty('--call-mini-left', `${current.renderX}px`);
+      current.el.style.setProperty('--call-mini-top', `${current.renderY}px`);
+
+      if (Math.abs(current.targetX - current.renderX) > 0.3 || Math.abs(current.targetY - current.renderY) > 0.3) {
+        current.rafId = requestAnimationFrame(tick);
+      } else {
+        current.renderX = current.targetX;
+        current.renderY = current.targetY;
+        current.el.style.setProperty('--call-mini-left', `${current.renderX}px`);
+        current.el.style.setProperty('--call-mini-top', `${current.renderY}px`);
+        current.rafId = null;
+      }
+    };
+    drag.rafId = requestAnimationFrame(tick);
+  }
+
+  function finishMiniDrag() {
+    const drag = state.miniBarDrag;
+    if (!drag) return;
+    if (drag.rafId) cancelAnimationFrame(drag.rafId);
+    drag.el.classList.remove('dragging');
+    drag.el.classList.add('is-moved');
+    state.miniBarDrag = null;
+  }
+
   function makeMiniBarPassive() {
     const mini = document.getElementById('dm-call-mini-bar');
     if (!mini || mini.dataset.voiceConstellationBound === 'true') return;
@@ -352,9 +580,7 @@
     const end = document.getElementById('dm-call-mini-end');
     if (expand) {
       expand.addEventListener('click', () => {
-        const overlay = document.getElementById('dm-call-overlay');
-        if (overlay) overlay.classList.remove('minimized', 'hidden');
-        mini.classList.add('hidden');
+        animateMiniToOverlay();
       });
     }
     if (end) {
@@ -362,11 +588,37 @@
         if (typeof window.endDMCall === 'function') window.endDMCall();
       });
     }
+
+    mini.addEventListener('mousedown', event => {
+      if (event.target.closest('button')) return;
+      startMiniDrag(mini, event.clientX, event.clientY);
+      event.preventDefault();
+    });
+
+    mini.addEventListener('touchstart', event => {
+      if (event.target.closest('button')) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      startMiniDrag(mini, touch.clientX, touch.clientY);
+      event.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('mousemove', event => moveMiniDrag(event.clientX, event.clientY));
+    document.addEventListener('mouseup', finishMiniDrag);
+    document.addEventListener('touchmove', event => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      moveMiniDrag(touch.clientX, touch.clientY);
+      if (state.miniBarDrag) event.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchend', finishMiniDrag);
+    document.addEventListener('touchcancel', finishMiniDrag);
   }
 
   function init() {
     installWrappers();
     makeMiniBarPassive();
+    installCallWrappers();
     syncVisibility();
     queueRender();
   }
@@ -379,6 +631,8 @@
     setSpeaking,
     updateMemberVoiceState,
     syncVisibility,
+    animateOverlayToMini,
+    animateMiniToOverlay,
     getState: () => ({
       channelId: state.channelId,
       members: getVoiceMembers().slice(),

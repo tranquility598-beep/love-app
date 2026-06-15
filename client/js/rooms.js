@@ -321,6 +321,10 @@
   function renderVoicePanelCards(members) {
     const wrap = document.getElementById('room-voice-panel-cards');
     if (!wrap) return;
+
+    if (window.LoveVoiceConstellation && typeof window.LoveVoiceConstellation.setRoomMembers === 'function') {
+      window.LoveVoiceConstellation.setRoomMembers(window.currentRoom?.voiceChannelId, members);
+    }
     
     // Detach active screenshare cards to keep video players active
     const activeScreenCards = Array.from(wrap.querySelectorAll('.screen-share-card'));

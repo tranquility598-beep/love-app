@@ -12,7 +12,9 @@
 
   const state = {
     channelId: null,
-    members: [],
+    members: null,
+    roomChannelId: null,
+    roomMembers: null,
     speaking: new Set(),
     screenShares: new Map(),
     renderQueued: false
@@ -20,28 +22,46 @@
 
   const targets = [
     {
+      parentId: 'voice-panel',
       shellId: 'server-voice-constellation-shell',
       gridId: 'server-voice-grid-constellation',
-      linesId: 'server-voice-lines'
+      linesId: 'server-voice-lines',
+      source: 'voice',
+      compact: true
     },
     {
+      parentId: 'voice-view',
       shellId: 'voice-view-constellation-shell',
       gridId: 'voice-view-grid-constellation',
-      linesId: 'voice-view-lines'
+      linesId: 'voice-view-lines',
+      source: 'voice'
     },
     {
+      parentId: 'room-voice-panel',
       shellId: 'room-voice-constellation-shell',
       gridId: 'room-voice-grid-constellation',
-      linesId: 'room-voice-lines'
+      linesId: 'room-voice-lines',
+      source: 'room'
     }
   ];
 
+  function getMemberUser(member) {
+    return member?.user || member || {};
+  }
+
   function getUserId(member) {
-    return String(member?.userId || member?._id || member?.id || member?.socketId || '');
+    const user = getMemberUser(member);
+    return String(member?.userId || user?.userId || user?._id || user?.id || member?.socketId || '');
+  }
+
+  function getSocketId(member) {
+    const user = getMemberUser(member);
+    return String(member?.socketId || user?.socketId || '');
   }
 
   function getDisplayName(member) {
-    return member?.nickname || member?.username || member?.name || 'User';
+    const user = getMemberUser(member);
+    return user?.nickname || user?.username || user?.name || member?.nickname || member?.username || member?.name || 'User';
   }
 
   function getInitials(name) {
@@ -51,16 +71,26 @@
 
   function getAvatarSrc(member) {
     const name = getDisplayName(member);
+    const user = getMemberUser(member);
     if (typeof window.getAvatarUrl === 'function') {
-      return window.getAvatarUrl(member?.avatar, name, getUserId(member));
+      return window.getAvatarUrl(user?.avatar || member?.avatar, name, getUserId(member));
     }
-    return member?.avatar || '';
+    return user?.avatar || member?.avatar || '';
   }
 
-  function getMembers() {
-    if (Array.isArray(state.members) && state.members.length > 0) return state.members;
+  function getVoiceMembers() {
+    if (Array.isArray(state.members)) return state.members;
     if (Array.isArray(window.voiceManager?.channelMembers)) return window.voiceManager.channelMembers;
     return [];
+  }
+
+  function getRoomMembers() {
+    if (Array.isArray(state.roomMembers)) return state.roomMembers;
+    return getVoiceMembers();
+  }
+
+  function getMembersForTarget(target) {
+    return target?.source === 'room' ? getRoomMembers() : getVoiceMembers();
   }
 
   function setMembers(channelId, members) {
@@ -69,18 +99,27 @@
     queueRender();
   }
 
+  function setRoomMembers(channelId, members) {
+    state.roomChannelId = channelId || window.currentRoom?.voiceChannelId || null;
+    state.roomMembers = Array.isArray(members) ? members.slice() : [];
+    queueRender();
+  }
+
   function updateMemberVoiceState(userId, muted, deafened) {
     const id = String(userId || '');
     if (!id) return;
 
-    state.members = getMembers().map(member => {
+    const applyState = member => {
       if (getUserId(member) !== id) return member;
       return {
         ...member,
         muted: muted === undefined ? member.muted : !!muted,
         deafened: deafened === undefined ? member.deafened : !!deafened
       };
-    });
+    };
+
+    state.members = getVoiceMembers().map(applyState);
+    state.roomMembers = getRoomMembers().map(applyState);
     queueRender();
   }
 
@@ -102,7 +141,8 @@
   function createAvatar(member) {
     const wrap = document.createElement('div');
     const userId = getUserId(member);
-    const hasStream = state.screenShares.has(userId) || state.screenShares.has(member?.socketId);
+    const socketId = getSocketId(member);
+    const hasStream = state.screenShares.has(userId) || state.screenShares.has(socketId);
     wrap.className = hasStream ? 'collapsed-stream' : 'voice-member-avatar-wrap';
 
     if (hasStream) {
@@ -128,7 +168,7 @@
     return wrap;
   }
 
-  function createMemberCard(member) {
+  function createMemberCard(member, target) {
     const userId = getUserId(member);
     const card = document.createElement('button');
     card.type = 'button';
@@ -142,14 +182,17 @@
     if (state.speaking.has(userId)) {
       card.classList.add('speaking');
     }
+    if (target?.compact) {
+      card.classList.add('compact');
+    }
 
     const avatar = createAvatar(member);
     card.appendChild(avatar);
 
-    if (member?.muted) {
+    if (member?.muted || getMemberUser(member)?.muted) {
       avatar.appendChild(createStatusBadge('mic-muted', MIC_MUTED_SVG));
     }
-    if (member?.deafened) {
+    if (member?.deafened || getMemberUser(member)?.deafened) {
       avatar.appendChild(createStatusBadge('sound-muted', SOUND_MUTED_SVG));
     }
 
@@ -161,6 +204,21 @@
     return card;
   }
 
+  function syncTargetVisibility(target) {
+    const shell = document.getElementById(target.shellId);
+    const parent = document.getElementById(target.parentId);
+    if (!shell || !parent) return;
+
+    shell.classList.remove('hidden');
+    shell.setAttribute('aria-hidden', 'false');
+    parent.classList.add('using-constellation');
+    parent.classList.toggle('voice-constellation-has-media', state.screenShares.size > 0);
+  }
+
+  function syncVisibility() {
+    targets.forEach(syncTargetVisibility);
+  }
+
   function renderTarget(target, members) {
     const shell = document.getElementById(target.shellId);
     const grid = document.getElementById(target.gridId);
@@ -170,7 +228,7 @@
     grid.querySelectorAll('.voice-pcard').forEach(node => node.remove());
 
     members.forEach(member => {
-      grid.appendChild(createMemberCard(member));
+      grid.appendChild(createMemberCard(member, target));
     });
 
     if (lineSvg) {
@@ -207,8 +265,8 @@
 
   function renderAll() {
     state.renderQueued = false;
-    const members = getMembers();
-    targets.forEach(target => renderTarget(target, members));
+    syncVisibility();
+    targets.forEach(target => renderTarget(target, getMembersForTarget(target)));
   }
 
   function queueRender() {
@@ -227,6 +285,7 @@
 
   function hideAllScreenShares() {
     state.screenShares.clear();
+    syncVisibility();
     queueRender();
   }
 
@@ -276,8 +335,10 @@
 
     installWrapper('hideVoicePanel', () => {
       state.members = [];
+      state.roomMembers = [];
       state.speaking.clear();
       state.screenShares.clear();
+      syncVisibility();
       queueRender();
     });
   }
@@ -306,6 +367,7 @@
   function init() {
     installWrappers();
     makeMiniBarPassive();
+    syncVisibility();
     queueRender();
   }
 
@@ -313,11 +375,15 @@
     render: renderAll,
     queueRender,
     setMembers,
+    setRoomMembers,
     setSpeaking,
     updateMemberVoiceState,
+    syncVisibility,
     getState: () => ({
       channelId: state.channelId,
-      members: getMembers().slice(),
+      members: getVoiceMembers().slice(),
+      roomChannelId: state.roomChannelId,
+      roomMembers: getRoomMembers().slice(),
       speaking: Array.from(state.speaking),
       screenShares: Array.from(state.screenShares.keys())
     })

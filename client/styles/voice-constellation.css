@@ -17,6 +17,49 @@
   display: none;
 }
 
+.voice-panel.using-constellation {
+  min-height: 220px;
+}
+
+.voice-panel.using-constellation .voice-panel-members {
+  display: none;
+}
+
+.voice-panel.using-constellation .voice-constellation-shell {
+  min-height: 124px;
+  border-radius: var(--radius-xl);
+}
+
+.voice-panel.using-constellation .voice-constellation {
+  min-height: 124px;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  grid-auto-rows: minmax(82px, auto);
+  gap: 6px;
+  padding: 8px;
+}
+
+.voice-view.using-constellation .voice-view-grid:not(:has(.screen-share-card)),
+.room-voice-panel.using-constellation .room-voice-panel-cards:not(:has(.screen-share-card)) {
+  display: none;
+}
+
+.voice-view.using-constellation.voice-constellation-has-media .voice-view-grid,
+.room-voice-panel.using-constellation.voice-constellation-has-media .room-voice-panel-cards {
+  flex: 0 0 auto;
+  max-height: 46%;
+}
+
+.voice-view.using-constellation .voice-view-grid .voice-card:not(.screen-share-card),
+.room-voice-panel.using-constellation .room-voice-panel-cards .room-voice-card:not(.screen-share-card) {
+  display: none;
+}
+
+.voice-view.using-constellation .voice-constellation-shell,
+.room-voice-panel.using-constellation .voice-constellation-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .voice-constellation {
   position: relative;
   flex: 1 1 auto;

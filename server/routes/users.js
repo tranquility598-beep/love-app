@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
-const { validateBio, validateCustomStatus, validateUsername, validateEmail, sanitizeBody } = require('../middleware/validation');
+const { validateBio, validateCustomStatus, validateUsername, validateEmail, sanitizeBody, sanitizeString } = require('../middleware/validation');
 const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
@@ -77,10 +77,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
  */
 router.put('/profile', authMiddleware, sanitizeBody, async (req, res) => {
   try {
-    const { nickname, bio, customStatus, profileColor } = req.body;
-    
+    const { nickname, bio, customStatus, mood, hobbies, listening, music } = req.body;
+
     const updateData = {};
-    
+
     if (nickname !== undefined) {
       const nextNickname = String(nickname).trim();
       if (nextNickname.length > 32) {
@@ -88,24 +88,49 @@ router.put('/profile', authMiddleware, sanitizeBody, async (req, res) => {
       }
       updateData.nickname = nextNickname;
     }
-    
+
     if (bio !== undefined) updateData.bio = bio;
     if (customStatus !== undefined) updateData.customStatus = customStatus;
 
-    // Цвет баннера/профиля — принимаем ТОЛЬКО hex #RRGGBB или #RGB.
-    // Никаких url(), gradient, expression, var() и т.п. — защита от
-    // CSS-инъекций, т.к. это значение потом подставляется в стили на UI.
-    if (profileColor !== undefined) {
-      const c = String(profileColor).trim();
-      if (c === '') {
-        updateData.profileColor = '#5865F2'; // дефолт
-      } else if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) {
-        updateData.profileColor = c;
-      } else {
-        return res.status(400).json({ message: 'Некорректный цвет профиля' });
+    // Настроение (mood) — короткая строка-идентификатор иконки настроения
+    if (mood !== undefined) {
+      updateData.mood = sanitizeString(String(mood)).slice(0, 32);
+    }
+
+    // Сейчас слушает (listening) — строка "Исполнитель - Трек"
+    if (listening !== undefined) {
+      updateData.listening = sanitizeString(String(listening)).slice(0, 120);
+    }
+
+    // Музыка профиля: { url (Cloudinary), title }. Пустой объект сбрасывает.
+    if (music !== undefined) {
+      if (music === null || music === '') {
+        updateData.music = { url: '', title: '' };
+      } else if (typeof music === 'object') {
+        const url = sanitizeString(String(music.url || '')).slice(0, 500);
+        // Принимаем только https-ссылки (Cloudinary) — без javascript:/data: и пр.
+        const safeUrl = /^https:\/\//i.test(url) ? url : '';
+        updateData.music = {
+          url: safeUrl,
+          title: sanitizeString(String(music.title || '')).slice(0, 120)
+        };
       }
     }
-    
+
+    // Увлечения (hobbies) — максимум 5, каждое { text (≤20), icon }
+    if (hobbies !== undefined) {
+      if (!Array.isArray(hobbies)) {
+        return res.status(400).json({ message: 'Некорректный формат увлечений' });
+      }
+      updateData.hobbies = hobbies
+        .slice(0, 5)
+        .map(h => ({
+          text: sanitizeString(String(h?.text ?? '')).trim().slice(0, 20),
+          icon: sanitizeString(String(h?.icon ?? '')).slice(0, 32)
+        }))
+        .filter(h => h.text.length > 0);
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user._id,
       updateData,

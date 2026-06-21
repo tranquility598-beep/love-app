@@ -3,12 +3,41 @@
  * Управляет peer-to-peer аудио соединениями и демонстрацией экрана
  */
 
+window.getAvatarUrl = function(avatar, name, userId) {
+  if (!avatar) return 'assets/default-avatar.png';
+  if (avatar.startsWith('http')) return avatar;
+  
+  let isPackaged = false;
+  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+    isPackaged = window.electronAPI.isPackagedSync();
+  }
+  
+  const BASE_URL = window.BASE_URL || (isPackaged ? 'https://api.loveapp.chat' : 'http://localhost:5555'); 
+  return `${BASE_URL}/api/users/avatar/${avatar}`;
+};
+
+window._callDisconnectSoundPlayed = false;
+
+window.playCallDisconnectSound = function() {
+  if (window._callDisconnectSoundPlayed) return;
+  window._callDisconnectSoundPlayed = true;
+  if (window.SoundManager) {
+    window.SoundManager.stop('call_outgoing');
+    window.SoundManager.stop('call_incoming');
+    window.SoundManager.play('user_leave');
+  }
+};
+
 class VoiceManager {
   constructor() {
     this.localStream = null;
     this.screenStream = null;
+    this.cameraStream = null;
+    this.isCameraOn = false;
     this.peerConnections = new Map(); // socketId -> RTCPeerConnection
     this.audioElements = new Map(); // socketId -> HTMLAudioElement
+    this.remoteVideoStreams = new Map(); // socketId -> MediaStream (камера или экран)
+    this.screenActiveSockets = new Set(); // socketId с активной демонстрацией экрана (для различения камера/экран)
     this.channelId = null;
     this.isMuted = false;
     this.isDeafened = false;
@@ -122,6 +151,15 @@ class VoiceManager {
       this.isScreenSharing = false;
     }
 
+    // Останавливаем камеру
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(track => track.stop());
+      this.cameraStream = null;
+    }
+    this.isCameraOn = false;
+    this.remoteVideoStreams.clear();
+    this.screenActiveSockets.clear();
+
     // Останавливаем локальный поток
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
@@ -198,6 +236,9 @@ class VoiceManager {
         });
       }
 
+      // Оптимизация: ограничиваем битрейт аудио (речи хватает ~32 кбит/с)
+      this._optimizeAudioBitrate(pc);
+
       // Создаем offer
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
@@ -213,6 +254,27 @@ class VoiceManager {
 
     } catch (error) {
       console.error('Error initiating WebRTC connection:', error);
+    }
+  }
+
+  /**
+   * Оптимизация битрейта аудио: ~32 кбит/с достаточно для речи Opus.
+   * Снижает нагрузку на сеть и CPU. Без SDP-munging — через RTCRtpSender.setParameters.
+   */
+  async _optimizeAudioBitrate(pc) {
+    try {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+      if (!sender) return;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      params.encodings[0].maxBitrate = 32000;   // 32 кбит/с — речь
+      params.encodings[0].priority = 'high';     // голос важнее видео
+      await sender.setParameters(params);
+    } catch (e) {
+      // setParameters не критичен — если не вышло, звук всё равно работает
+      console.warn('[Voice] audio bitrate optimize skipped:', e && e.message);
     }
   }
 
@@ -311,6 +373,9 @@ class VoiceManager {
 
       // Flush any ICE candidates that arrived before we set remote desc
       await this._flushIceCandidates(fromSocketId);
+
+      // Оптимизация: ограничиваем битрейт аудио и на стороне отвечающего
+      this._optimizeAudioBitrate(pc);
 
       // Создаем answer
       const answer = await pc.createAnswer();
@@ -445,10 +510,24 @@ class VoiceManager {
       if (track.kind === 'audio') {
         this.playRemoteAudio(socketId, stream);
       } else if (track.kind === 'video') {
-        // Демонстрация экрана от другого пользователя
-        // Always call showScreenShareVideo — it handles both creating new and
-        // updating existing elements (needed after renegotiation with new stream)
-        showScreenShareVideo(stream, socketId);
+        // Камера и демонстрация взаимоисключающие, поэтому различаем по тому,
+        // была ли активна демонстрация экрана от этого участника (screen:started).
+        this.remoteVideoStreams.set(socketId, stream);
+        const isScreen = this.screenActiveSockets.has(socketId);
+        if (isScreen) {
+          // Демонстрация экрана от другого пользователя.
+          // showScreenShareVideo handles both creating new and updating existing
+          // elements (needed after renegotiation with new stream).
+          showScreenShareVideo(stream, socketId);
+        } else if (typeof showRemoteCameraVideo === 'function') {
+          // Камера другого пользователя — рисуем в превью-камеру.
+          showRemoteCameraVideo(stream, socketId);
+        }
+        // Когда трек завершается (камера/экран выключены удалённо) — чистим превью.
+        track.addEventListener('ended', () => {
+          this.remoteVideoStreams.delete(socketId);
+          if (typeof hideRemoteCameraVideo === 'function') hideRemoteCameraVideo(socketId);
+        });
       }
     };
 
@@ -731,6 +810,8 @@ class VoiceManager {
 
       // Показываем свой экран локально (превью)
       showScreenShareVideo(this.screenStream, 'local');
+      // Перерисовываем констелляцию нового дизайна — теперь screenStream готов
+      if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 
       // Уведомляем сервер
       if (socket) {
@@ -814,7 +895,108 @@ class VoiceManager {
       socket.emit('screen:stop', { channelId: this.channelId });
     }
 
+    // Синхронизируем визуальное состояние нового дизайна (например, если
+    // демонстрация остановлена системным UI, а не нашей кнопкой).
+    if (window.voiceState) window.voiceState.shareActive = false;
+    if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
+
     console.log('[Voice] Screen share stopped');
+  }
+
+  /**
+   * Включить камеру
+   */
+  async startCamera() {
+    if (this.isCameraOn) return true;
+
+    // Камера и демонстрация взаимоисключающие — если идёт показ экрана, останавливаем его
+    if (this.isScreenSharing) {
+      await this.stopScreenShare();
+    }
+
+    try {
+      this.cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 24 }
+        },
+        audio: false
+      });
+    } catch (error) {
+      console.error('[Voice] Error starting camera:', error);
+      this.cameraStream = null;
+      return false;
+    }
+
+    this.isCameraOn = true;
+
+    const videoTrack = this.cameraStream.getVideoTracks()[0];
+
+    // Добавляем видеотрек во все существующие peer connections (sequential to avoid glare)
+    for (const [socketId, pc] of this.peerConnections) {
+      try {
+        const senders = pc.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(videoTrack);
+        } else {
+          pc.addTrack(videoTrack, this.cameraStream);
+        }
+        await this.renegotiate(socketId);
+      } catch (err) {
+        console.error('[Voice] Error adding camera track:', err);
+      }
+    }
+
+    // Показываем свою камеру локально (превью)
+    if (typeof showLocalCameraVideo === 'function') {
+      showLocalCameraVideo(this.cameraStream);
+    }
+
+    // Если камеру выключили на уровне ОС/драйвера — гасим состояние
+    videoTrack.onended = () => {
+      console.warn('[Voice] camera videoTrack.onended fired');
+      this.stopCamera();
+    };
+
+    console.log('[Voice] Camera started');
+    return true;
+  }
+
+  /**
+   * Выключить камеру
+   */
+  async stopCamera() {
+    if (!this.isCameraOn || !this.cameraStream) return;
+
+    const renegotiateList = [];
+    for (const [socketId, pc] of this.peerConnections) {
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        pc.removeTrack(videoSender);
+        renegotiateList.push(socketId);
+      }
+    }
+
+    for (const socketId of renegotiateList) {
+      try {
+        await this.renegotiate(socketId);
+      } catch (err) {
+        console.error('[Voice] Renegotiate failed on camera stop for:', socketId, err);
+      }
+    }
+
+    this.cameraStream.getTracks().forEach(track => track.stop());
+    this.cameraStream = null;
+    this.isCameraOn = false;
+
+    if (typeof hideLocalCameraVideo === 'function') {
+      hideLocalCameraVideo();
+    }
+
+    console.log('[Voice] Camera stopped');
   }
 
   /**
@@ -929,7 +1111,9 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
     const success = await window.voiceManager.joinChannel(channelId);
 
     if (success) {
+      window.voiceChannelName = channelName;
       showVoicePanel(channelName, serverName);
+      if (typeof updateVoiceMiniBar === 'function') setTimeout(updateVoiceMiniBar, 0);
       console.log(`[Voice] Connected to channel "${channelName}"`);
     } else {
       // Roll back so subsequent updates aren't routed to a non-joined channel
@@ -958,6 +1142,8 @@ async function leaveVoiceChannel() {
     window.NavigationController._commitState({ currentVoiceChannel: null }, 'leaveVoiceChannel');
   }
   hideVoicePanel();
+  window.voiceChannelName = null;
+  if (typeof updateVoiceMiniBar === 'function') setTimeout(updateVoiceMiniBar, 0);
 
   // Если открыт полноэкранный интерфейс, закрываем его
   const voiceView = document.getElementById('voice-view');
@@ -1074,21 +1260,6 @@ function toggleVoiceDeafen() {
     if (typeof updateUserVoiceState === 'function') {
       updateUserVoiceState(window.currentUser?._id, deafened ? true : undefined, deafened);
     }
-  }
-}
-
-/**
- * Переключить камеру (заглушка)
- */
-function toggleCamera() {
-  const btn = document.getElementById('voice-view-camera-btn');
-  if (!btn) return;
-  
-  const isActive = btn.classList.toggle('active');
-  btn.title = isActive ? 'Выключить камеру' : 'Включить камеру';
-  
-  if (isActive) {
-    console.log('[Voice] Camera feature is under development');
   }
 }
 
@@ -1343,6 +1514,33 @@ function hideScreenShareVideoForUser(socketId) {
       container.classList.add('hidden');
     }
   }
+}
+
+// ── Хуки камеры ────────────────────────────────────────────────
+// Рендер живого видео живёт внутри renderVoiceChannel (единый источник истины),
+// поэтому эти функции лишь триггерят перерисовку констелляции.
+function _triggerVoiceRerender() {
+  if (typeof queueRenderVoiceChannel === 'function') {
+    queueRenderVoiceChannel();
+  } else if (typeof renderVoiceChannel === 'function') {
+    renderVoiceChannel();
+  }
+}
+
+function showLocalCameraVideo(stream) {
+  _triggerVoiceRerender();
+}
+
+function hideLocalCameraVideo() {
+  _triggerVoiceRerender();
+}
+
+function showRemoteCameraVideo(stream, socketId) {
+  _triggerVoiceRerender();
+}
+
+function hideRemoteCameraVideo(socketId) {
+  _triggerVoiceRerender();
 }
 
 /**
@@ -1606,18 +1804,40 @@ window.updateUserVoiceState = updateUserVoiceState;
 // Звуковое сопровождение интегрировано через SoundManager
 
 function showIncomingDMCallOverlay(call) {
+  window.pendingDMCall = call;
+  window.currentCallPartnerId = call?.from?._id;
+  if (window.SoundManager) {
+    window.SoundManager.play('call_incoming');
+  }
   const overlay = document.getElementById('incoming-call-overlay');
   if (!overlay || !call?.from) return;
   const avatar = document.getElementById('incoming-call-avatar');
   const name = document.getElementById('incoming-call-name');
+  const displayName = call.from.nickname || call.from.username || 'Входящий звонок';
   window.pendingDMCall = call;
-  if (avatar) avatar.src = getAvatarUrl(call.from.avatar, call.from.nickname || call.from.username, call.from._id);
-  if (name) name.textContent = call.from.nickname || call.from.username || 'Входящий звонок';
+  if (avatar) {
+    if (avatar.tagName === 'IMG') {
+      avatar.src = getAvatarUrl(call.from.avatar, displayName, call.from._id);
+    } else if (call.from.avatar) {
+      // div-аватар: показываем фото фоном
+      avatar.style.backgroundImage = `url("${call.from.avatar}")`;
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.backgroundPosition = 'center';
+      avatar.textContent = '';
+    } else {
+      // буква-заглушка
+      avatar.style.backgroundImage = '';
+      avatar.textContent = (displayName.charAt(0) || '?').toUpperCase();
+    }
+  }
+  if (name) name.textContent = displayName;
   overlay.classList.remove('hidden');
-  if (window.SoundManager) window.SoundManager.play('call_incoming');
 }
 
 function hideIncomingDMCallOverlay() {
+  if (window.electronAPI && typeof window.electronAPI.closeIncomingCall === 'function') {
+    window.electronAPI.closeIncomingCall();
+  }
   const overlay = document.getElementById('incoming-call-overlay');
   if (overlay) overlay.classList.add('hidden');
   if (window.SoundManager) window.SoundManager.stop('call_incoming');
@@ -1705,6 +1925,8 @@ function showDMCallOverlay(peer) {
  * Обработка ответа на наш звонок
  */
 async function handleDMCallResponse(accepted, responderId, meta = {}) {
+  // Старый оверлей звонка (может отсутствовать в новом дизайне) — все обращения
+  // защищены проверками на null, чтобы НЕ сорвать запуск WebRTC.
   const overlay = document.getElementById('dm-call-overlay');
   const status = document.getElementById('call-overlay-status');
   const peerContainer = document.getElementById('caller-mini-peer');
@@ -1716,30 +1938,33 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   }
 
   if (!accepted) {
-    status.textContent = 'ВЫЗОВ ОТКЛОНЕН';
-    peerContainer.classList.remove('peer-ringing');
-
-    // Визуальный эффект Бульк
-    const ripple = document.getElementById('dm-bulk-ripple');
-    if (ripple) ripple.classList.add('bulk-animate');
-
-    // Анимация уменьшения
-    peerContainer.classList.add('shrinking');
-    if (window.SoundManager) window.SoundManager.play('user_leave');
-
-    setTimeout(() => {
-      overlay.classList.add('hidden');
-      peerContainer.classList.remove('shrinking');
-      if (ripple) ripple.classList.remove('bulk-animate');
-    }, 1000);
+    if (typeof window.onDirectCallEnded === 'function') {
+      window.onDirectCallEnded('rejected');
+    }
+    if (status) status.textContent = 'ВЫЗОВ ОТКЛОНЕН';
+    if (peerContainer) {
+      peerContainer.classList.remove('peer-ringing');
+      const ripple = document.getElementById('dm-bulk-ripple');
+      if (ripple) ripple.classList.add('bulk-animate');
+      peerContainer.classList.add('shrinking');
+      if (window.SoundManager) window.SoundManager.play('user_leave');
+      setTimeout(() => {
+        if (overlay) overlay.classList.add('hidden');
+        peerContainer.classList.remove('shrinking');
+        if (ripple) ripple.classList.remove('bulk-animate');
+      }, 1000);
+    }
     return;
   }
 
-  // Принято!
-  status.textContent = 'В ЭФИРЕ';
-  peerContainer.classList.remove('peer-ringing');
+  // Принято! Сначала уведомляем UI, затем запускаем WebRTC.
+  if (typeof window.onDirectCallAccepted === 'function') {
+    window.onDirectCallAccepted(meta);
+  }
+  if (status) status.textContent = 'В ЭФИРЕ';
+  if (peerContainer) peerContainer.classList.remove('peer-ringing');
   if (window.SoundManager) window.SoundManager.play('user_join');
-  
+
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || responderId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
   if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
@@ -1755,14 +1980,15 @@ window.handleDMCallResponse = handleDMCallResponse;
  * Завершение звонка (очистка)
  */
 function handleDMCallEnd() {
+  if (typeof window.onDirectCallEnded === 'function') {
+    window.onDirectCallEnded('terminated');
+  }
   const overlay = document.getElementById('dm-call-overlay');
   if (overlay) overlay.classList.add('hidden');
   
   hideIncomingDMCallOverlay();
-  if (window.SoundManager) {
-    window.SoundManager.stop('call_outgoing');
-    window.SoundManager.stop('call_incoming');
-    window.SoundManager.play('user_leave');
+  if (typeof window.playCallDisconnectSound === 'function') {
+    window.playCallDisconnectSound();
   }
 
   if (window.voiceManager) {
@@ -1779,6 +2005,7 @@ window.handleDMCallEnd = handleDMCallEnd;
  * Функция для получателя: войти в WebRTC после нажатия "Принять"
  */
 async function startWebRTCCall(callerId, meta = {}) {
+  window._callDisconnectSoundPlayed = false;
   // Останавливаем все звуки вызова (если были)
   if (window.SoundManager) {
     window.SoundManager.stop('call_outgoing');
@@ -1787,11 +2014,11 @@ async function startWebRTCCall(callerId, meta = {}) {
 
   const caller = window.pendingDMCall?.from;
   if (caller) {
-    showDMCallOverlay(caller);
-    const status = document.getElementById('call-overlay-status');
-    const peerContainer = document.getElementById('caller-mini-peer');
-    if (status) status.textContent = 'В ЭФИРЕ';
-    if (peerContainer) peerContainer.classList.remove('peer-ringing');
+    // Open the real call modal interface for the receiver!
+    if (typeof window.startDirectCall === 'function') {
+      const avatarVal = caller.avatar ? caller.avatar.charAt(0).toUpperCase() : (caller.username ? caller.username.charAt(0).toUpperCase() : 'C');
+      window.startDirectCall(caller.nickname || caller.username, avatarVal, false, caller._id, true);
+    }
   }
 
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || callerId}`;

@@ -169,6 +169,17 @@ const sanitizeString = (str) => {
 };
 
 /**
+ * Нормализация текстового контента: отсечение control-символов,
+ * trim и жёсткий лимит длины. Используется и в REST, и в сокете —
+ * чтобы живой чат не шёл мимо защиты. HTML НЕ экранируется здесь:
+ * данные хранятся в БД в сыром виде, экранирование — на выходе (клиент).
+ */
+const normalizeContent = (str, maxLen = 2000) => {
+  if (typeof str !== 'string') return '';
+  return sanitizeString(str).trim().slice(0, maxLen);
+};
+
+/**
  * Middleware для санитизации всех строковых полей в body
  */
 const sanitizeBody = (req, res, next) => {
@@ -193,5 +204,6 @@ module.exports = {
   validateBio,
   validateCustomStatus,
   sanitizeBody,
-  sanitizeString
+  sanitizeString,
+  normalizeContent
 };

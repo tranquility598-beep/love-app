@@ -104,7 +104,29 @@ const userSchema = new mongoose.Schema({
     maxlength: 128,
     default: ''
   },
-  
+
+  // Выразительные поля профиля (новый дизайн «Wabi-Sabi»)
+  mood: {
+    type: String,
+    maxlength: 32,
+    default: ''
+  },
+  hobbies: [{
+    text: { type: String, maxlength: 20 },
+    icon: { type: String, maxlength: 32 }
+  }],
+  listening: {
+    type: String,
+    maxlength: 120,
+    default: ''
+  },
+  // Музыка профиля. url — сжатая копия на Cloudinary для других слушателей;
+  // title — отображаемое название «Исполнитель - Трек».
+  music: {
+    url:   { type: String, default: '' },
+    title: { type: String, default: '', maxlength: 120 }
+  },
+
   // Серверы пользователя
   servers: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -252,10 +274,12 @@ userSchema.methods.toPublicJSON = function() {
     nickname: this.nickname || this.username,
     role: this.role,
     avatar: this.avatar,
-    banner: this.banner,
     bio: this.bio,
     badges: this.badges,
-    profileColor: this.profileColor,
+    mood: this.mood,
+    hobbies: this.hobbies || [],
+    listening: this.listening,
+    music: this.music || { url: '', title: '' },
     connectedAccounts: this.connectedAccounts,
     hasPassword: Boolean(this.password),
     hasGoogle: Boolean(this.googleId),

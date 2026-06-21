@@ -106,7 +106,7 @@ app.use(hpp());
 // CORS настройка с whitelist
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:5555', 'http://26.237.63.189:5555', 'http://localhost:5173', 'https://loveapp.chat', 'https://loveapp-landing.onrender.com'];
+  : ['http://localhost:5555', 'http://26.237.63.189:5555', 'http://localhost:5173', 'https://loveapp.chat', 'https://api.loveapp.chat', 'https://loveapp-landing.onrender.com'];
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -170,6 +170,7 @@ const uploadRoutes = require('./routes/upload');
 const adminRoutes = require('./routes/admin');
 const updatesRoutes = require('./routes/updates');
 const earlyAccessRoutes = require('./routes/earlyAccess');
+const notificationRoutes = require('./routes/notifications');
 
 // Rate Limiting для всех API роутов
 const { generalLimiter } = require('./middleware/rateLimiter');
@@ -187,6 +188,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/early-access', earlyAccessRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Базовый роут для проверки работы сервера
 app.get('/api/health', (req, res) => {

@@ -181,6 +181,15 @@ async function startScreenShareWithSource(sourceId, quality = 'medium') {
       showScreenShareVideo(stream, 'local');
     }
 
+    // Синхронизируем новый дизайн: отмечаем демонстрацию активной и перерисовываем
+    // констелляцию, чтобы превью показало живой screenStream вместо заглушки.
+    if (window.voiceState) window.voiceState.shareActive = true;
+    if (typeof _triggerVoiceRerender === 'function') {
+      _triggerVoiceRerender();
+    } else if (typeof renderVoiceChannel === 'function') {
+      renderVoiceChannel();
+    }
+
     // Notify signalling server
     if (typeof socket !== 'undefined' && socket) {
       socket.emit('screen:start', { channelId: window.voiceManager.channelId });

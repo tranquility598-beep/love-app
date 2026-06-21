@@ -1,0 +1,178 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   FRAMELESS WINDOW TITLEBAR & CONTROLS
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.window-titlebar {
+  display: none; /* Hidden on web browser / mobile */
+}
+
+body.is-electron {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0 !important;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+body.is-electron .app-container {
+  min-height: 0 !important;
+}
+
+body.is-electron .window-titlebar {
+  display: flex;
+  height: 32px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-primary, #080808);
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.04));
+  -webkit-app-region: drag;
+  user-select: none;
+  z-index: 9999;
+  box-sizing: border-box;
+}
+
+body.is-electron .app-container {
+  height: calc(100vh - 32px) !important;
+  height: calc(100dvh - 32px) !important;
+}
+
+body.is-electron .auth-screen {
+  top: 32px !important;
+  height: calc(100vh - 32px) !important;
+}
+
+.window-titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 12px;
+}
+
+.window-titlebar-right {
+  display: flex;
+  align-items: center;
+}
+
+.window-titlebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--text-secondary, #a2a2a2);
+}
+
+.window-titlebar-logo svg {
+  width: 11px;
+  height: 11px;
+  color: var(--text-primary, #f5f5f5);
+}
+
+/* MacOS Controls */
+.macos-controls {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+body.platform-macos .macos-controls {
+  display: flex;
+}
+
+body.platform-macos .windows-controls {
+  display: none;
+}
+
+body.platform-macos .window-titlebar-logo {
+  margin-left: 6px;
+}
+
+.mac-control-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mac-control-btn.close { background: #ff5f56; }
+.mac-control-btn.minimize { background: #ffbd2e; }
+.mac-control-btn.maximize { background: #27c93f; }
+
+.macos-controls:hover .mac-control-btn::after {
+  position: absolute;
+  font-size: 8px;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: bold;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.macos-controls:hover .mac-control-btn.close::after {
+  content: '×';
+  font-size: 10px;
+  margin-top: -1px;
+}
+
+.macos-controls:hover .mac-control-btn.minimize::after {
+  content: '−';
+  font-size: 9px;
+  margin-top: -1px;
+}
+
+.macos-controls:hover .mac-control-btn.maximize::after {
+  content: '+';
+  font-size: 7px;
+}
+
+/* Windows Controls */
+.windows-controls {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  -webkit-app-region: no-drag;
+}
+
+body.platform-windows .windows-controls {
+  display: flex;
+}
+
+.win-control-btn {
+  width: 46px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-secondary, #a2a2a2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.win-control-btn svg {
+  width: 10px;
+  height: 10px;
+}
+
+.win-control-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f5f5f5);
+}
+
+.win-control-btn.close:hover {
+  background: #e81123;
+  color: #ffffff;
+}

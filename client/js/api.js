@@ -20,7 +20,7 @@ try {
 // Если же это не упакованный Electron или обычный браузер на localhost/ngrok — используем текущий хост
 const currentHost = window.location.origin;
 const isNgrokHost = window.location.hostname.includes('ngrok');
-window.BASE_URL = isPackaged ? 'https://love-app-2ou3.onrender.com' : (isNgrokHost ? currentHost : 'http://localhost:5555');
+window.BASE_URL = isPackaged ? 'https://api.loveapp.chat' : (isNgrokHost ? currentHost : 'http://localhost:5555');
 let API_BASE = window.BASE_URL + '/api';
 window.API_BASE = API_BASE;
 
@@ -369,6 +369,13 @@ const UsersAPI = {
     const formData = new FormData();
     formData.append('avatar', file);
     return apiUpload('/users/avatar', formData, 'PUT');
+  },
+
+  // Загрузка музыки профиля на Cloudinary (сжатая копия для других слушателей)
+  uploadMusic: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiUpload('/upload', formData, 'POST');
   }
 };
 
@@ -543,4 +550,20 @@ const DMAPI = {
 
   delete: (conversationId) =>
     apiFetch(`/dm/${conversationId}`, { method: 'DELETE' })
+};
+
+// ===== NOTIFICATIONS API =====
+const NotificationsAPI = {
+  getAll: () =>
+    apiFetch('/notifications'),
+
+  // markRead() — все; markRead(id) — одно
+  markRead: (id) =>
+    apiFetch('/notifications/read', { method: 'POST', body: JSON.stringify(id ? { id } : {}) }),
+
+  remove: (id) =>
+    apiFetch(`/notifications/${id}`, { method: 'DELETE' }),
+
+  clearAll: () =>
+    apiFetch('/notifications', { method: 'DELETE' })
 };

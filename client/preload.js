@@ -13,13 +13,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow: () => ipcRenderer.send('window-close'),
   
   // Уведомления
-  showNotification: (title, body) => ipcRenderer.send('show-notification', { title, body }),
+  showNotification: (title, body, payload) => ipcRenderer.send('show-notification', { title, body, payload }),
+  onNotificationClick: (callback) => ipcRenderer.on('notification-clicked', (_event, payload) => callback(payload)),
   
   // Пути
   getDownloadsPath: () => ipcRenderer.invoke('get-downloads-path'),
   
   // Версия приложения
-  getVersion: () => process.env.npm_package_version || '1.0.0',
+  getVersion: () => {
+    try {
+      return require('../package.json').version;
+    } catch (e) {
+      return process.env.npm_package_version || '1.7.2';
+    }
+  },
   
   // Режим (разработка/продакшн)
   isPackaged: () => ipcRenderer.invoke('get-is-packaged'),
@@ -32,7 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => ipcRenderer.send('install-update'),
 
   // Голосовые звонки
-  showIncomingCall: (caller) => ipcRenderer.send('show-incoming-call', { caller }),
+  showIncomingCall: (caller, conversationId, channelId) => ipcRenderer.send('show-incoming-call', { caller, conversationId, channelId }),
   closeIncomingCall: () => ipcRenderer.send('close-incoming-call'),
   setBadgeCount: (n) => ipcRenderer.send('set-badge-count', n),
   onIncomingCallData: (callback) => ipcRenderer.on('incoming-call-data', (_event, data) => callback(data)),
@@ -53,5 +60,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Прокси для безопасных API запросов (токен подставляется в main process)
   // Renderer НИКОГДА не получает raw token - все запросы идут через IPC
   apiRequest: (options) => ipcRenderer.invoke('api-request', options),
-  apiUpload: (options) => ipcRenderer.invoke('api-upload', options)
+  apiUpload: (options) => ipcRenderer.invoke('api-upload', options),
+
+  // Локальный файл музыки профиля (владелец слушает со своего диска)
+  checkLocalFile: (filePath) => ipcRenderer.invoke('check-local-file', filePath),
+  readLocalFile: (filePath) => ipcRenderer.invoke('read-local-file', filePath)
 });

@@ -12,6 +12,8 @@ const Server = require('../models/Server');
 const DirectMessage = require('../models/DirectMessage');
 const { isFounderUser } = require('../utils/founder');
 const { checkAndRecord: checkMessageAntiSpam } = require('../middleware/messageAntiSpam');
+const { createNotification } = require('../utils/notify');
+const { normalizeContent } = require('../middleware/validation');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
 
@@ -163,6 +165,7 @@ module.exports = (io) => {
     socket.on('message:send', async (data) => {
       try {
         let { channelId, content, replyTo, attachments, tempId } = data;
+        content = normalizeContent(content, 2000);
         const normalizedAttachments = normalizeMessageAttachments(attachments);
 
         if (!channelId || (!content && normalizedAttachments.length === 0)) {
@@ -337,7 +340,7 @@ module.exports = (io) => {
                   arrayFilters: [{ 'elem.user': otherParticipant }]
                 });
                 
-                // Уведомляем другого участника
+                // Live-доставка сообщения, если получатель онлайн
                 const otherSocketId = connectedUsers.get(otherParticipant.toString());
                 if (otherSocketId) {
                   io.to(`user:${otherParticipant}`).emit('dm:new_message', {
@@ -345,6 +348,20 @@ module.exports = (io) => {
                     message
                   });
                 }
+                // Персистентное уведомление в ленту — ВСЕГДА (и онлайн, и офлайн).
+                // Онлайн-получатель увидит запись в окне уведомлений (createNotification
+                // сам шлёт notification:new, type new_dm → клиент кладёт в ленту без
+                // дублирующего тоста), а живой тост придёт через dm:new_message выше.
+                createNotification(io, {
+                  user: otherParticipant,
+                  type: 'new_dm',
+                  actor: userId,
+                  actorName: socket.user.username,
+                  actorAvatar: socket.user.avatar,
+                  preview: (content || '').toString().slice(0, 200),
+                  conversationId: dm._id,
+                  channelId
+                });
               }
               
               // Отправляем обновление сообщения обоим участникам
@@ -375,6 +392,16 @@ module.exports = (io) => {
                   channelId,
                   messageId: message._id,
                   content: content.substring(0, 100)
+                });
+                createNotification(io, {
+                  user: mentionedUser._id,
+                  type: 'mention',
+                  actor: userId,
+                  actorName: socket.user.username,
+                  actorAvatar: socket.user.avatar,
+                  preview: content.substring(0, 200),
+                  channelId,
+                  serverId: message.server || null
                 });
               }
             }
@@ -929,6 +956,14 @@ module.exports = (io) => {
           discriminator: socket.user.discriminator
         }
       });
+      createNotification(io, {
+        user: targetUserId,
+        type: 'friend_request',
+        actor: userId,
+        actorName: socket.user.username,
+        actorAvatar: socket.user.avatar,
+        preview: `${socket.user.username} отправил вам запрос в друзья`
+      });
     });
     
     /**
@@ -945,6 +980,14 @@ module.exports = (io) => {
           discriminator: socket.user.discriminator,
           status: socket.user.status
         }
+      });
+      createNotification(io, {
+        user: targetUserId,
+        type: 'friend_accepted',
+        actor: userId,
+        actorName: socket.user.username,
+        actorAvatar: socket.user.avatar,
+        preview: `${socket.user.username} принял вашу заявку в друзья`
       });
     });
 
@@ -989,6 +1032,15 @@ module.exports = (io) => {
         });
       } else {
         socket.emit('call:error', { message: 'Пользователь не в сети (Socket connection not found)' });
+        // Получатель офлайн — фиксируем пропущенный звонок
+        createNotification(io, {
+          user: targetIdStr,
+          type: 'missed_call',
+          actor: userId,
+          actorName: socket.user.username,
+          actorAvatar: socket.user.avatar,
+          preview: `Пропущенный звонок от ${socket.user.username}`
+        });
       }
     });
 

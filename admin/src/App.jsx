@@ -14,7 +14,7 @@ import {
 // Auto-detect backend URL
 const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5555'
-  : 'https://love-app-2ou3.onrender.com';
+  : 'https://api.loveapp.chat';
 
 // Axios Instance with request interceptor for JWT
 const API = axios.create({

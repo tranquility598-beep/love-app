@@ -249,10 +249,19 @@ ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
 });
 
-// Обработчик для показа уведомлений
-ipcMain.on('show-notification', (event, { title, body }) => {
+// Обработчик для показа уведомлений (с опциональным payload для перехода по клику)
+ipcMain.on('show-notification', (event, { title, body, payload }) => {
   if (Notification.isSupported()) {
-    new Notification({ title, body }).show();
+    const n = new Notification({ title, body });
+    n.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.webContents.send('notification-clicked', payload || null);
+      }
+    });
+    n.show();
   }
 });
 
@@ -330,7 +339,7 @@ ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null,
     // fetch резолвит localhost в ::1 (IPv6), а сервер слушает только 0.0.0.0 (IPv4) →
     // ECONNREFUSED. Это даёт "transport error" на всех запросах в dev-режиме.
     const isPackaged = app.isPackaged;
-    const backendOrigin = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://127.0.0.1:5555';
+    const backendOrigin = isPackaged ? 'https://api.loveapp.chat' : 'http://127.0.0.1:5555';
     const url = `${backendOrigin}/api${path}`;
 
     // 3. Формируем заголовки
@@ -413,7 +422,7 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
     
     // Тот же fix IPv4 для api-upload (см. комментарий выше).
     const isPackaged = app.isPackaged;
-    const backendOrigin = isPackaged ? 'https://love-app-2ou3.onrender.com' : 'http://127.0.0.1:5555';
+    const backendOrigin = isPackaged ? 'https://api.loveapp.chat' : 'http://127.0.0.1:5555';
     // Для загрузки иногда /api/upload, а иногда /api/servers/...
     const url = `${backendOrigin}${path.startsWith('/api') ? path : '/api' + path}`;
 
@@ -475,6 +484,11 @@ ipcMain.handle('get-is-packaged', () => {
   return app.isPackaged;
 });
 
+// Обработчик для получения версии приложения
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('get-screen-sources', async () => {
   const sources = await desktopCapturer.getSources({
     types: ['window', 'screen'],
@@ -501,6 +515,40 @@ ipcMain.on('get-is-packaged-sync', (event) => {
 // Обработчик для получения пути к папке загрузок
 ipcMain.handle('get-downloads-path', () => {
   return app.getPath('downloads');
+});
+
+// ── Локальный файл музыки профиля (владелец слушает со своего диска) ──
+ipcMain.handle('check-local-file', (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return false;
+    return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+  } catch (e) {
+    return false;
+  }
+});
+
+ipcMain.handle('read-local-file', (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return { ok: false };
+    if (!fs.existsSync(filePath)) return { ok: false };
+    const stat = fs.statSync(filePath);
+    // Ограничение 20 МБ — чтобы не читать гигантские файлы в память
+    if (stat.size > 20 * 1024 * 1024) return { ok: false, tooLarge: true };
+    const buffer = fs.readFileSync(filePath);
+    const ext = (path.extname(filePath) || '').toLowerCase();
+    const mimeMap = {
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+      '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac',
+      '.webm': 'audio/webm', '.opus': 'audio/opus'
+    };
+    return {
+      ok: true,
+      data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+      mime: mimeMap[ext] || 'audio/mpeg'
+    };
+  } catch (e) {
+    return { ok: false };
+  }
 });
 
 // Обработчики автообновлений
@@ -571,7 +619,7 @@ ipcMain.on('install-update', () => {
 /**
  * Управление окном Входящего Звонка
  */
-ipcMain.on('show-incoming-call', (event, { caller }) => {
+ipcMain.on('show-incoming-call', (event, { caller, conversationId, channelId }) => {
   if (incomingCallWindow) return; // Уже открыто
 
   incomingCallWindow = new BrowserWindow({
@@ -595,7 +643,7 @@ ipcMain.on('show-incoming-call', (event, { caller }) => {
   incomingCallWindow.once('ready-to-show', () => {
     incomingCallWindow.show();
     // Отправляем данные вызывающего в попап
-    incomingCallWindow.webContents.send('incoming-call-data', { caller });
+    incomingCallWindow.webContents.send('incoming-call-data', { caller, conversationId, channelId });
   });
 
   incomingCallWindow.on('closed', () => {
@@ -756,7 +804,7 @@ function handleDeepLink(url) {
 ipcMain.on('google-login', (event) => {
   // В разработке используем локалхост, в билде — продакшн
   const authUrl = app.isPackaged 
-    ? 'https://love-app-2ou3.onrender.com/api/auth/google'
+    ? 'https://api.loveapp.chat/api/auth/google'
     : 'http://localhost:5555/api/auth/google';
 
   // Открываем браузер по умолчанию (Chrome/Safari/etc)

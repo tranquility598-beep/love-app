@@ -531,20 +531,21 @@ router.post('/:id/invite', authMiddleware, async (req, res) => {
     if (!isMember) {
       return res.status(403).json({ message: 'Вы не являетесь участником этого сервера' });
     }
-    
-    const inviteCode = uuidv4().substring(0, 8).toUpperCase();
-    
-    server.invites.push({
-      code: inviteCode,
-      createdBy: req.user._id
-    });
-    
-    await server.save();
-    
-    res.json({ 
-      inviteCode,
-      inviteUrl: `love-app://invite/${inviteCode}`,
-      message: 'Инвайт создан'
+
+    // Постоянный уникальный код: возвращаем существующий, если он есть,
+    // иначе создаём один раз. Код не «обновляется» при повторных вызовах.
+    let invite = (server.invites && server.invites.length) ? server.invites[0] : null;
+    if (!invite) {
+      const inviteCode = uuidv4().substring(0, 8).toUpperCase();
+      server.invites = [{ code: inviteCode, createdBy: req.user._id }];
+      await server.save();
+      invite = server.invites[0];
+    }
+
+    res.json({
+      inviteCode: invite.code,
+      inviteUrl: `love-app://invite/${invite.code}`,
+      message: 'Инвайт получен'
     });
     
   } catch (error) {
@@ -723,10 +724,7 @@ router.put('/:id/banner', authMiddleware, async (req, res) => {
     if (server.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Недостаточно прав' });
     }
-    // Жёстко ограничиваем баннер только комнатами — чтобы не менять поведение guild.
-    if (!server.settings || server.settings.kind !== 'room') {
-      return res.status(400).json({ message: 'Баннер доступен только для комнат' });
-    }
+    // Баннер доступен и сферам, и комнатам.
 
     if (!req.files || !req.files.banner) {
       return res.status(400).json({ message: 'Файл баннера не предоставлен' });
@@ -802,9 +800,6 @@ router.delete('/:id/banner', authMiddleware, async (req, res) => {
     if (!server) return res.status(404).json({ message: 'Сервер не найден' });
     if (server.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Недостаточно прав' });
-    }
-    if (!server.settings || server.settings.kind !== 'room') {
-      return res.status(400).json({ message: 'Баннер доступен только для комнат' });
     }
 
     // Удаляем файл с диска, если он лежит в наших uploads.

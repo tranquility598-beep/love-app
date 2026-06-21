@@ -23,9 +23,11 @@
  */
 
 // === Единые константы лимита ===
-const BASE_MAX_MESSAGES = 10;
-const STRICT_MAX_MESSAGES = 5;
-const WINDOW_MS = 5000;
+// Порог рассчитан на живую переписку: до 12 сообщений за 6 секунд — норма,
+// блокировка включается только при явном спаме (быстрый зажим).
+const BASE_MAX_MESSAGES = 12;
+const STRICT_MAX_MESSAGES = 6;
+const WINDOW_MS = 6000;
 const FIRST_COOLDOWN_MS = 2000;
 const STRICT_COOLDOWN_MS = 3000;
 const RESET_AFTER_MS = 10000;

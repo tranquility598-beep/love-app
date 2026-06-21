@@ -544,8 +544,8 @@
     const tick = () => {
       const current = state.miniBarDrag;
       if (!current) return;
-      current.renderX += (current.targetX - current.renderX) * 0.25;
-      current.renderY += (current.targetY - current.renderY) * 0.25;
+      current.renderX += (current.targetX - current.renderX) * 0.16;
+      current.renderY += (current.targetY - current.renderY) * 0.16;
       current.el.style.setProperty('--call-mini-left', `${current.renderX}px`);
       current.el.style.setProperty('--call-mini-top', `${current.renderY}px`);
 

@@ -164,12 +164,14 @@ function handleConnectError(error) {
 
 function handleReconnect(attemptNumber) {
   console.log('🔄 Socket reconnected after', attemptNumber, 'attempts');
-  
-  // КРИТИЧНО: при reconnect защищаемся от дублирования listeners
-  // Очищаем все существующие listeners и заново подписываемся ТОЛЬКО на global scope
-  console.log('[socket-lifecycle] Reconnect detected - reinitializing global listeners');
+
+  // КРИТИЧНО: при reconnect защищаемся от дублирования listeners.
+  // Очищаем ВСЕ и заново подписываемся на ВСЕ scopes — иначе context-слушатели
+  // (dm:new_message, message:new, notification:mention) теряются после реконнекта,
+  // и личные сообщения перестают приходить (ни тоста, ни ленты).
+  console.log('[socket-lifecycle] Reconnect detected - reinitializing all listeners');
   detachAllListeners();
-  attachGlobalSocketListeners();
+  attachAllSocketListeners();
 }
 
 function handleUserStatus(data) {
@@ -179,13 +181,37 @@ function handleUserStatus(data) {
 
 function handleFriendRequestReceived(data) {
   const { from } = data;
-  showNotification('info', `${from.username} отправил вам запрос в друзья`);
+  // Показываем красивый кликабельный тост (перенаправляет в раздел друзей)
+  if (typeof window.showAppNotification === 'function') {
+    window.showAppNotification({
+      title: 'Запрос в друзья',
+      text: `${from.username} хочет добавить вас в друзья`,
+      avatar: (from.username || '?').charAt(0).toUpperCase(),
+      onClick: () => {
+        const btn = document.querySelector('[data-target="view-contacts"]');
+        if (btn) btn.click();
+      }
+    });
+  } else {
+    showNotification('info', `${from.username} отправил вам запрос в друзья`);
+  }
+  // Реальное время: обновляем список друзей без перезагрузки
   if (window.loadFriends) window.loadFriends();
 }
 
 function handleFriendRequestAccepted(data) {
   const { by } = data;
-  // showNotification('success', `${by.username} принял ваш запрос в друзья`);
+  if (typeof window.showAppNotification === 'function') {
+    window.showAppNotification({
+      title: 'Запрос принят',
+      text: `${by.username} принял ваш запрос в друзья`,
+      avatar: (by.username || '?').charAt(0).toUpperCase(),
+      onClick: () => {
+        const btn = document.querySelector('[data-target="view-contacts"]');
+        if (btn) btn.click();
+      }
+    });
+  }
   if (window.loadFriends) window.loadFriends();
 }
 
@@ -218,6 +244,21 @@ function handleFounderLogs(data) {
 function handleSocketError(data) {
   console.error('Socket error:', data.message);
   showNotification('error', data.message);
+
+  if (data.message && data.message.includes('удалил вас из друзей')) {
+    const state = typeof window._getActiveState === 'function' ? window._getActiveState() : null;
+    if (state && state.activeConversationId) {
+      const convs = window._mockConversations;
+      if (convs) {
+        const conv = convs.find(c => c.id === state.activeConversationId);
+        if (conv && conv._otherUser) {
+          if (typeof window.showProfileModal === 'function') {
+            window.showProfileModal(conv.name, conv._otherUser._id);
+          }
+        }
+      }
+    }
+  }
 }
 
 function getOwnerIdForServer(serverId) {
@@ -240,13 +281,22 @@ function handleMessageNew(data) {
   const { channelId, message } = data;
   const currentCh = window.currentChannelId?.toString();
   const msgCh = channelId?.toString();
+  const isOwn = message.author?._id === window.currentUser?._id ||
+                String(message.author) === String(window.currentUser?._id);
+
+  // DM-каналы (без server) обрабатываются через dm:new_message.
+  // Здесь реагируем только если это СВОЁ сообщение (мёрж temp→real)
+  // или серверный канал.
+  const isDM = !message.server;
+  if (isDM && !isOwn) {
+    // Чужое DM — придёт отдельно через dm:new_message, пропускаем
+    return;
+  }
+
   if (currentCh && currentCh === msgCh) {
-    const isOwn = message.author?._id === window.currentUser?._id;
-    const alreadyRendered = message._id && document.querySelector(`[data-message-id="${message._id}"]`);
-    if (!isOwn || !alreadyRendered) {
-      appendMessage(message);
-      scrollToBottom();
-    }
+    // Своё сообщение: appendMessage смёржит pending→real; чужое серверное — добавляет
+    appendMessage(message);
+    scrollToBottom();
   }
   
   if (!currentCh || currentCh !== msgCh) {
@@ -267,7 +317,6 @@ function handleMessageNew(data) {
   }
 
   // Счётчик непрочитанных при неактивном окне или другом канале
-  const isOwn = message.author?._id === window.currentUser?._id;
   const isCurrentChannel = currentCh && currentCh === msgCh;
   const isWindowFocused = document.hasFocus() && !document.hidden;
 
@@ -363,16 +412,31 @@ function handleTypingStop(data) {
 
 function handleDMNewMessage(data) {
   const { conversationId, message } = data;
+  const isOwn = message.author?._id === window.currentUser?._id ||
+                String(message.author) === String(window.currentUser?._id);
+
+  const isCurrentChannel = (window.currentDMConversation && window.currentDMConversation._id === conversationId) ||
+                            window.currentDMConversationId === conversationId;
+
+  // Обновляем список диалогов (превью последнего сообщения, сортировка)
+  // Но не трогаем messages активного диалога — appendMessage сделает это ниже
   if (window.loadDMConversations) window.loadDMConversations();
-  if (!window.currentDMConversation || window.currentDMConversationId !== conversationId) {
-    showMessageNotification(message.author?.username, message.content, conversationId);
+
+  if (isCurrentChannel) {
+    // Своё сообщение уже добавлено оптимистично — appendMessage смёржит pending→real _id
+    // Чужое — добавляем как новое
+    appendMessage(message);
+    scrollToBottom();
+  }
+
+  if (!isCurrentChannel) {
+    if (!isOwn) {
+      showMessageNotification(message.author?.username, message.content, conversationId);
+    }
   }
 
   // Счётчик непрочитанных при неактивном окне или другом DM
-  const isOwn = message.author?._id === window.currentUser?._id;
-  const isCurrentChannel = window.currentDMConversation?._id === conversationId;
   const isWindowFocused = document.hasFocus() && !document.hidden;
-
   if (!isOwn && !(isCurrentChannel && isWindowFocused)) {
     unreadCount++;
     if (window.electronAPI?.setBadgeCount) {
@@ -461,6 +525,14 @@ function handleScreenStarted(data) {
     const container = document.getElementById('screen-share-container');
     if (container) container.classList.remove('hidden');
   }
+  // Помечаем сокет участника как активную демонстрацию, чтобы pc.ontrack
+  // различал входящий video-трек как экран, а не камеру.
+  if (window.voiceManager && window.voiceManager.channelMembers) {
+    const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
+    if (member && member.socketId) {
+      window.voiceManager.screenActiveSockets.add(member.socketId);
+    }
+  }
 }
 
 function handleScreenStopped(data) {
@@ -473,6 +545,9 @@ function handleScreenStopped(data) {
       const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
       if (member) {
         hideScreenShareVideoForUser(member.socketId);
+        // Снимаем пометку демонстрации, чтобы следующий video-трек
+        // от этого участника распознавался как камера.
+        if (member.socketId) window.voiceManager.screenActiveSockets.delete(member.socketId);
       }
     }
     hideScreenShareVideoForUser(userId);
@@ -952,6 +1027,15 @@ async function initSocket() {
     console.log('[socket-auth] refreshed token and detached context scope for reconnect_attempt');
   });
 
+  // socket.io v4: событие 'reconnect' приходит на МЕНЕДЖЕР (socket.io), а не на сокет.
+  // Здесь восстанавливаем ВСЕ слушатели — иначе context (dm:new_message, message:new)
+  // остаётся отцеплённым после reconnect_attempt, и личные сообщения не приходят.
+  socket.io.on('reconnect', () => {
+    console.log('[socket-lifecycle] Manager reconnect — reattaching all listeners');
+    detachAllListeners();
+    attachAllSocketListeners();
+  });
+
   // Экспортируем в глобальную область
   window.socket = socket;
 
@@ -1204,8 +1288,13 @@ if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
         window.startWebRTCCall(callerId, { conversationId, channelId });
       }
     }
-    if (!accepted && window.pendingDMCall?.from?._id === callerId) {
-      window.pendingDMCall = null;
+    if (!accepted) {
+      if (window.pendingDMCall?.from?._id === callerId) {
+        window.pendingDMCall = null;
+      }
+      if (typeof window.hideIncomingDMCallOverlay === 'function') {
+        window.hideIncomingDMCallOverlay();
+      }
     }
   });
 }
@@ -1231,6 +1320,11 @@ function navigateToChannel(targetChannelId) {
 }
 
 function showMessageNotification(username, text, targetChannelId) {
+  // Если init-app переопределил функцию — используем новый красивый тост
+  if (typeof window.showMessageNotification === 'function') {
+    window.showMessageNotification(username, text, targetChannelId);
+    return;
+  }
   if (document.hasFocus()) return;
   const container = document.getElementById('notifications-container') || (function() {
     const c = document.createElement('div');

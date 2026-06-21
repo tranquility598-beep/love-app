@@ -1,0 +1,27 @@
+name: Deploy Backend to VDSina
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - 'package.json'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }} # Использует SSH-ключ. Если настроили пароль, замените на 'password: secrets.SSH_PASSWORD'
+          port: 22
+          script: |
+            cd /var/www/love-app
+            git pull origin main
+            npm install --production
+            pm2 reload love-backend --update-env

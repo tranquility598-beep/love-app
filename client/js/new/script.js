@@ -102,6 +102,9 @@ navButtons.forEach(btn => {
             window.currentDMConversationId = null;
             window.currentDMConversation = null;
             window.currentChannelId = null;
+            document.querySelectorAll('.message-attachments video, .message-attachments audio').forEach(el => {
+                el.pause();
+            });
         }
 
         // Индивидуальная загрузка для конкретных вью
@@ -585,18 +588,6 @@ function renderChatMessages(conv) {
 
         const isOwn = msg.sender === 'own';
         let actionsHtml = '';
-        if (isOwn && msg._id) {
-            actionsHtml = `
-                <div class="msg-actions-overlay">
-                    <button class="msg-action-btn edit-btn" title="Редактировать">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="msg-action-btn delete-btn delete" title="Удалить">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    </button>
-                </div>
-            `;
-        }
 
         const bubbleText = msg.text ? `<div class="message-bubble">${escHTML(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
@@ -649,10 +640,13 @@ function renderChatMessages(conv) {
             if (deleteBtn) {
                 deleteBtn.addEventListener("click", () => {
                     if (confirm("Удалить это сообщение?")) {
-                        if (window.socket) {
-                            window.socket.emit("message:delete", { messageId: msg._id });
-                        } else if (typeof MessagesAPI !== 'undefined') {
-                            MessagesAPI.delete(msg._id);
+                        const id = msg._id;
+                        if (id && !String(id).startsWith('temp-') && !String(id).startsWith('temp_')) {
+                            if (window.socket) {
+                                window.socket.emit("message:delete", { messageId: id });
+                            } else if (typeof MessagesAPI !== 'undefined') {
+                                MessagesAPI.delete(id);
+                            }
                         }
                         const idx = conv.messages.indexOf(msg);
                         if (idx !== -1) {
@@ -666,6 +660,7 @@ function renderChatMessages(conv) {
 
         if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
         if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
+        if (typeof window._attachMsgContextData === 'function') window._attachMsgContextData(bubbleWrap, msg);
 
         groupContent.appendChild(bubbleWrap);
     });
@@ -2837,7 +2832,7 @@ function renderRoomChat() {
     const messages = (channel && channel.messages) ? channel.messages : mockRoomMessages;
 
     messages.forEach(msg => {
-        const isOwn = msg.sender === "Founder" || msg.sender === "own" || msg.sender.includes("Вы");
+        const isOwn = String(msg.author) === String(window.currentUser?._id);
         const senderClass = isOwn ? 'own' : 'partner';
 
         if (msg.sender !== lastSender) {
@@ -2881,6 +2876,7 @@ function renderRoomChat() {
         `;
         if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
         if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
+        if (typeof window._attachMsgContextData === 'function') window._attachMsgContextData(bubbleWrap, msg);
         groupContent.appendChild(bubbleWrap);
     });
     _restoreVideoStates(roomChatFeed);
@@ -3218,7 +3214,7 @@ function renderServerChat() {
     let groupContent = null;
 
     channel.messages.forEach(msg => {
-        const isOwn = msg.sender === 'Founder' || msg.sender === 'own';
+        const isOwn = String(msg.author) === String(window.currentUser?._id);
         const senderClass = isOwn ? 'own' : 'partner';
 
         if (msg.sender !== lastSender) {
@@ -3265,26 +3261,6 @@ function renderServerChat() {
         const canDelete = isMsgOwn || isOwner || isAdminMode;
 
         let actionsHtml = '';
-        const editBtnHtml = isMsgOwn ? `
-            <button class="msg-action-btn edit-btn" title="Редактировать">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-        ` : '';
-
-        const deleteBtnHtml = canDelete ? `
-            <button class="msg-action-btn delete-btn delete" title="Удалить">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            </button>
-        ` : '';
-
-        if (editBtnHtml || deleteBtnHtml) {
-            actionsHtml = `
-                <div class="msg-actions-overlay">
-                    ${editBtnHtml}
-                    ${deleteBtnHtml}
-                </div>
-            `;
-        }
 
         const srvBubbleText = msg.text ? `<div class="message-bubble">${escHTML(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
@@ -3339,11 +3315,12 @@ function renderServerChat() {
             deleteBtn.addEventListener("click", () => {
                 const confirmText = isMsgOwn ? "Удалить это сообщение?" : "Удалить это сообщение как модератор/владелец?";
                 if (confirm(confirmText)) {
-                    if (msg._id) {
+                    const id = msg._id;
+                    if (id && !String(id).startsWith('temp-') && !String(id).startsWith('temp_')) {
                         if (window.socket) {
-                            window.socket.emit("message:delete", { messageId: msg._id });
+                            window.socket.emit("message:delete", { messageId: id });
                         } else if (typeof MessagesAPI !== 'undefined') {
-                            MessagesAPI.delete(msg._id);
+                            MessagesAPI.delete(id);
                         }
                     }
                     const idx = channel.messages.indexOf(msg);
@@ -3356,6 +3333,7 @@ function renderServerChat() {
         }
         if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
         if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
+        if (typeof window._attachMsgContextData === 'function') window._attachMsgContextData(bubbleWrap, msg);
         groupContent.appendChild(bubbleWrap);
     });
 
@@ -8066,3 +8044,112 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 });
+
+// ─── Контекстное меню для сообщений (ПКМ / долгий тап) ─────────────────
+(function initMessageContextMenu() {
+    let menu = null;
+    let longPressTimer = null;
+
+    function createMenu() {
+        if (menu) return menu;
+        menu = document.createElement('div');
+        menu.className = 'msg-context-menu';
+        menu.innerHTML = `
+            <button class="msg-context-item" data-action="copy">Копировать текст</button>
+            <button class="msg-context-item" data-action="edit">Редактировать</button>
+            <button class="msg-context-item danger" data-action="delete">Удалить</button>
+        `;
+        document.body.appendChild(menu);
+
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.msg-context-item');
+            if (!item) return;
+            const action = item.dataset.action;
+            const target = menu._targetBubble;
+            if (!target) return;
+
+            if (action === 'copy') {
+                const bubble = target.querySelector('.message-bubble');
+                if (bubble) {
+                    navigator.clipboard.writeText(bubble.textContent).catch(() => {});
+                }
+            } else if (action === 'edit') {
+                const editBtn = target.querySelector('.edit-btn');
+                if (editBtn) editBtn.click();
+            } else if (action === 'delete') {
+                const deleteBtn = target.querySelector('.delete-btn');
+                if (deleteBtn) deleteBtn.click();
+            }
+            closeMenu();
+        });
+        return menu;
+    }
+
+    function closeMenu() {
+        if (menu) menu.classList.remove('visible');
+        document.removeEventListener('click', closeMenu);
+        document.removeEventListener('contextmenu', closeMenu);
+    }
+
+    function showMenu(x, y, bubbleWrap, msg) {
+        createMenu();
+        const isMsgOwn = msg && (
+            String(msg.sender) === 'own' ||
+            String(msg.author) === String(window.currentUser?._id)
+        );
+        const canEdit = isMsgOwn && msg._id && !String(msg._id).startsWith('temp-');
+        const canDelete = msg && msg._id;
+
+        menu.querySelector('[data-action="edit"]').style.display = canEdit ? '' : 'none';
+        menu.querySelector('[data-action="delete"]').style.display = canDelete ? '' : 'none';
+        menu._targetBubble = bubbleWrap;
+
+        menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+        menu.style.top = Math.min(y, window.innerHeight - 120) + 'px';
+        menu.classList.add('visible');
+
+        setTimeout(() => {
+            document.addEventListener('click', closeMenu, { once: true });
+            document.addEventListener('contextmenu', closeMenu, { once: true });
+        }, 10);
+    }
+
+    document.addEventListener('contextmenu', (e) => {
+        const wrap = e.target.closest('.message-bubble-wrap');
+        if (!wrap) return;
+        e.preventDefault();
+        const msg = wrap._msgData;
+        showMenu(e.clientX, e.clientY, wrap, msg);
+    });
+
+    document.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        const wrap = e.target.closest('.message-bubble-wrap');
+        if (!wrap) return;
+        longPressTimer = setTimeout(() => {
+            const msg = wrap._msgData;
+            showMenu(e.clientX, e.clientY, wrap, msg);
+        }, 500);
+    });
+    document.addEventListener('mouseup', () => { clearTimeout(longPressTimer); });
+    document.addEventListener('mousemove', () => { clearTimeout(longPressTimer); });
+
+    document.querySelectorAll('.chat-feed, #server-chat-feed, #room-chat-feed').forEach(feed => {
+        if (!feed) return;
+        feed.addEventListener('touchstart', (e) => {
+            const wrap = e.target.closest('.message-bubble-wrap');
+            if (!wrap) return;
+            longPressTimer = setTimeout(() => {
+                const msg = wrap._msgData;
+                const touch = e.touches[0];
+                showMenu(touch.clientX, touch.clientY, wrap, msg);
+            }, 500);
+        }, { passive: true });
+        feed.addEventListener('touchend', () => { clearTimeout(longPressTimer); });
+        feed.addEventListener('touchmove', () => { clearTimeout(longPressTimer); });
+    });
+
+    window._attachMsgContextData = function(bubbleWrap, msg) {
+        bubbleWrap._msgData = msg;
+    };
+})();

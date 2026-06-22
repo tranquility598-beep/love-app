@@ -14165,3 +14165,37 @@ textarea.s-input {
         max-width: 32vw;
     }
 }
+
+/* Контекстное меню сообщений */
+.msg-context-menu {
+    position: fixed;
+    z-index: 9999;
+    background: rgba(18, 18, 18, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 6px;
+    min-width: 160px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: none;
+    backdrop-filter: blur(20px);
+}
+.msg-context-menu.visible { display: block; }
+.msg-context-item {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary, #e0e0e0);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.15s;
+}
+.msg-context-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+.msg-context-item.danger { color: #ff4d4d; }
+.msg-context-item.danger:hover { background: rgba(255, 77, 77, 0.12); }

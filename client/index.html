@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:* https:; connect-src 'self' http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; media-src 'self' blob: data: https: http://localhost:*;">
+    <!-- CSP managed by Electron main.js onHeadersReceived -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:* http://127.0.0.1:* https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: wss:; font-src 'self' data:; media-src 'self' blob: data: https: http: http://localhost:* http://127.0.0.1:*;">
     <title>Love — Full UX Prototype Sandbox</title>
     <link rel="stylesheet" href="styles/fonts.css">
     <link rel="stylesheet" href="styles/titlebar.css">
@@ -12,6 +13,15 @@
     <link rel="stylesheet" href="styles/auth.css">
 </head>
 <body>
+    <!-- ════════════════ ЗАГРУЗОЧНЫЙ ЭКРАН ════════════════ -->
+    <div id="app-splash" class="app-splash">
+        <div class="app-splash-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </div>
+        <div class="app-splash-title">Love</div>
+        <div class="app-splash-spinner"></div>
+    </div>
+
     <!-- ════════════════ КАСТОМНЫЙ ТАЙТЛБАР ════════════════ -->
     <div class="window-titlebar">
       <div class="window-titlebar-left">
@@ -2260,6 +2270,21 @@
         </div>
     </div>
 
+    <!-- Модалка добавления друга (ПК) -->
+    <div class="modal-backdrop hidden" id="add-friend-modal">
+        <div class="profile-card" style="width:420px; padding:28px; box-sizing:border-box;">
+            <button class="profile-close-btn" id="add-friend-close" title="Закрыть" style="top:20px; right:20px; z-index:10;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <h3 style="margin-bottom:6px;">Добавить друга</h3>
+            <p style="font-size:13px;color:rgba(255,255,255,0.5);margin:0 0 18px;">Введите точный никнейм пользователя.</p>
+            <form id="add-friend-modal-form">
+                <input type="text" id="add-friend-modal-input" placeholder="Введите никнейм..." autocomplete="off" required style="width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;box-sizing:border-box;">
+                <button type="submit" class="submit-action-btn" style="width:100%;margin-top:18px;height:46px;font-size:15px;font-weight:600;border-radius:12px;">Отправить запрос</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Модалка создания сферы/комнаты -->
     <div class="modal-backdrop hidden" id="create-space-modal">
         <div class="profile-card" style="width:440px; padding:28px; box-sizing:border-box;">
@@ -2279,10 +2304,22 @@
                     <span>Комната</span>
                     <small>Общение с друзьями</small>
                 </button>
+                <button type="button" class="create-space-type-btn" data-type="join">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <span>Войти</span>
+                    <small>По ссылке-приглашению</small>
+                </button>
             </div>
 
-            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin:16px 0 6px;">Название</label>
-            <input type="text" id="create-space-name" placeholder="Моя новая сфера..." style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;" autocomplete="off">
+            <div id="create-name-field">
+                <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin:16px 0 6px;">Название</label>
+                <input type="text" id="create-space-name" placeholder="Моя новая сфера..." style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;" autocomplete="off">
+            </div>
+
+            <div id="create-join-field" class="hidden">
+                <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin:16px 0 6px;">Ссылка-приглашение</label>
+                <input type="text" id="join-invite-input" placeholder="https://loveapp.chat/invite/ABC12345" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;" autocomplete="off">
+            </div>
 
             <button type="button" class="submit-action-btn" id="create-space-submit" style="width:100%;margin-top:24px;height:46px;font-size:15px;font-weight:600;border-radius:12px;">Создать</button>
         </div>
@@ -2338,6 +2375,14 @@
 
             <main class="settings-content">
                 <div class="settings-content-scroll">
+                    <!-- Мобильный заголовок с кнопкой "Назад" (виден только на мобиле) -->
+                    <div class="settings-mobile-header">
+                        <button class="settings-back-btn" id="space-settings-back" aria-label="Назад">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        </button>
+                        <span class="settings-mobile-title" id="space-mobile-title">Обзор</span>
+                    </div>
+
                     <!-- Обзор -->
                     <section class="settings-section active" data-space-section="overview">
                         <header class="lvs-section-head">
@@ -2393,17 +2438,17 @@
                     <section class="settings-section" data-space-section="invite">
                         <header class="lvs-section-head">
                             <h1 class="lvs-section-title">Приглашение</h1>
-                            <p class="lvs-section-desc">Поделитесь кодом, чтобы пригласить других</p>
+                            <p class="lvs-section-desc">Поделитесь ссылкой, чтобы пригласить других</p>
                         </header>
                         <div class="lvs-card">
                             <div class="lvs-field">
-                                <label class="lvs-label" for="space-invite-code">Код приглашения</label>
+                                <label class="lvs-label" for="space-invite-code">Ссылка-приглашение</label>
                                 <div class="space-invite-row">
-                                    <input type="text" class="lvs-input" id="space-invite-code" readonly placeholder="Нажмите «Создать код»">
+                                    <input type="text" class="lvs-input" id="space-invite-code" readonly placeholder="Нажмите «Обновить ссылку»">
                                     <button type="button" class="lvs-btn lvs-btn--ghost" id="space-invite-copy">Копировать</button>
                                 </div>
                             </div>
-                            <button type="button" class="lvs-btn" id="space-invite-create">Создать код</button>
+                            <button type="button" class="lvs-btn" id="space-invite-create">Обновить ссылку</button>
                         </div>
                     </section>
 

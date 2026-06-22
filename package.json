@@ -1,6 +1,6 @@
 {
   "name": "love-app",
-  "version": "1.7.2",
+  "version": "2.0.0",
   "description": "Love - A beautiful chat application",
   "main": "client/main.js",
   "scripts": {
@@ -59,6 +59,8 @@
     ],
     "mac": {
       "category": "public.app-category.social-networking",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
       "target": [
         {
           "target": "dmg",
@@ -121,6 +123,9 @@
     "wait-on": "^7.2.0"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "canvas": "^3.2.3",

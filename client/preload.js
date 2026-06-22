@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     try {
       return require('../package.json').version;
     } catch (e) {
-      return process.env.npm_package_version || '1.7.2';
+      return process.env.npm_package_version || '2.0.0';
     }
   },
   

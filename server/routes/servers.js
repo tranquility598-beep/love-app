@@ -40,7 +40,7 @@ const upload = multer({
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -48,6 +48,28 @@ const upload = multer({
     }
   }
 });
+
+/**
+ * Разослать всем онлайн-участникам сервера событие об изменении его
+ * метаданных (название/описание/иконка/баннер), чтобы UI обновился без
+ * перезагрузки. io выставлен в server/index.js через app.set('io', io).
+ */
+function emitServerUpdated(req, server) {
+  try {
+    const io = req.app && req.app.get('io');
+    if (!io) return;
+    io.to(`server:${server._id}`).emit('server:updated', {
+      serverId: server._id.toString(),
+      name: server.name,
+      description: server.description,
+      icon: server.icon,
+      banner: server.banner,
+      kind: server.settings && server.settings.kind
+    });
+  } catch (e) {
+    console.warn('[server:updated] emit failed:', e.message);
+  }
+}
 
 /**
  * GET /api/servers
@@ -388,6 +410,38 @@ router.post('/rooms', authMiddleware, sanitizeBody, validateServerName, async (r
 });
 
 /**
+ * GET /api/servers/invite/:code/preview
+ * Публичное превью сервера/сферы по инвайт-коду — для карточки в чате
+ * и экрана входа по ссылке. БЕЗ авторизации: отдаём только безопасный
+ * минимум (название, описание, иконку, баннер, тип, число участников).
+ */
+router.get('/invite/:code/preview', async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+    if (!code) return res.status(400).json({ message: 'Код не указан' });
+
+    const server = await Server.findOne({ 'invites.code': code })
+      .select('name description icon banner settings members');
+    if (!server) {
+      return res.status(404).json({ message: 'Приглашение не найдено или истекло' });
+    }
+
+    res.json({
+      code,
+      name: server.name,
+      description: server.description || '',
+      icon: server.icon || '',
+      banner: server.banner || '',
+      kind: (server.settings && server.settings.kind) || 'guild',
+      memberCount: Array.isArray(server.members) ? server.members.length : 0
+    });
+  } catch (error) {
+    console.error('Invite preview error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
  * GET /api/servers/:id
  * Получить данные сервера
  */
@@ -471,7 +525,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     await server.save();
-    
+    emitServerUpdated(req, server);
+
     res.json({ server, message: 'Сервер обновлен' });
     
   } catch (error) {
@@ -532,20 +587,22 @@ router.post('/:id/invite', authMiddleware, async (req, res) => {
       return res.status(403).json({ message: 'Вы не являетесь участником этого сервера' });
     }
 
-    // Постоянный уникальный код: возвращаем существующий, если он есть,
-    // иначе создаём один раз. Код не «обновляется» при повторных вызовах.
-    let invite = (server.invites && server.invites.length) ? server.invites[0] : null;
-    if (!invite) {
-      const inviteCode = uuidv4().substring(0, 8).toUpperCase();
-      server.invites = [{ code: inviteCode, createdBy: req.user._id }];
-      await server.save();
-      invite = server.invites[0];
-    }
+    // Генерируем НОВЫЙ уникальный код, гарантированно не совпадающий с кодом
+    // любого другого сервера/комнаты. Заменяем существующий — обновление кода.
+    let inviteCode;
+    let attempts = 0;
+    do {
+      inviteCode = uuidv4().substring(0, 8).toUpperCase();
+      attempts++;
+    } while (await Server.findOne({ 'invites.code': inviteCode }) && attempts < 10);
+
+    server.invites = [{ code: inviteCode, createdBy: req.user._id }];
+    await server.save();
 
     res.json({
-      inviteCode: invite.code,
-      inviteUrl: `love-app://invite/${invite.code}`,
-      message: 'Инвайт получен'
+      inviteCode,
+      inviteUrl: `love-app://invite/${inviteCode}`,
+      message: 'Код приглашения обновлён'
     });
     
   } catch (error) {
@@ -612,7 +669,25 @@ router.post('/join/:code', authMiddleware, async (req, res) => {
       .populate('channels', 'name type position topic category')
       .populate('members.user', 'username nickname avatar status discriminator')
       .populate('owner', 'username nickname avatar');
-    
+
+    // Реалтайм: сообщаем остальным участникам о новом члене, чтобы у них
+    // обновился список/счётчик без перезагрузки.
+    try {
+      const io = req.app && req.app.get('io');
+      if (io) {
+        const joined = populatedServer.members.find(
+          m => m.user && m.user._id.toString() === req.user._id.toString()
+        );
+        io.to(`server:${server._id}`).emit('server:member_joined', {
+          serverId: server._id.toString(),
+          memberCount: populatedServer.members.length,
+          member: joined ? joined.user : null
+        });
+      }
+    } catch (e) {
+      console.warn('[server:member_joined] emit failed:', e.message);
+    }
+
     res.json({ server: populatedServer, message: `Вы присоединились к серверу ${server.name}` });
     
   } catch (error) {
@@ -702,7 +777,8 @@ router.put('/:id/icon', authMiddleware, async (req, res) => {
     
     server.icon = `/uploads/avatars/${filename}`;
     await server.save();
-    
+    emitServerUpdated(req, server);
+
     res.json({ server, message: 'Иконка обновлена' });
     
   } catch (error) {
@@ -742,6 +818,7 @@ router.put('/:id/banner', authMiddleware, async (req, res) => {
 
     server.banner = `/uploads/images/${filename}`;
     await server.save();
+    emitServerUpdated(req, server);
 
     res.json({ server, message: 'Баннер обновлён' });
   } catch (error) {
@@ -780,6 +857,7 @@ router.delete('/:id/icon', authMiddleware, async (req, res) => {
 
     server.icon = '';
     await server.save();
+    emitServerUpdated(req, server);
     res.json({ server, message: 'Иконка удалена' });
   } catch (error) {
     console.error('Delete server icon error:', error);
@@ -824,6 +902,7 @@ router.delete('/:id/banner', authMiddleware, async (req, res) => {
 
     server.banner = '';
     await server.save();
+    emitServerUpdated(req, server);
     res.json({ server, message: 'Баннер удалён' });
   } catch (error) {
     console.error('Delete server banner error:', error);

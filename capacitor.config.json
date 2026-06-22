@@ -1,0 +1,16 @@
+{
+  "appId": "com.love.app",
+  "appName": "Love",
+  "webDir": "client",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "backgroundColor": "#0d0d0d",
+      "showSpinner": false
+    }
+  }
+}

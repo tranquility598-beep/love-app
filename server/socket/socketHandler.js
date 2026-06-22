@@ -426,8 +426,12 @@ module.exports = (io) => {
         const { messageId, content } = data;
         
         // Проверяем что это не временный ID
-        if (!messageId || messageId.startsWith('temp_')) {
+        if (!messageId || messageId.startsWith('temp_') || messageId.startsWith('temp-')) {
           return socket.emit('error', { message: 'Нельзя редактировать сообщение до его сохранения' });
+        }
+        
+        if (!/^[0-9a-fA-F]{24}$/.test(messageId)) {
+          return socket.emit('error', { message: 'Некорректный ID сообщения' });
         }
         
         const message = await Message.findById(messageId);
@@ -478,9 +482,12 @@ module.exports = (io) => {
       try {
         const { messageId } = data;
         
-        // Проверяем что это не временный ID
-        if (!messageId || messageId.startsWith('temp_')) {
+        if (!messageId || messageId.startsWith('temp_') || messageId.startsWith('temp-')) {
           return socket.emit('error', { message: 'Нельзя удалить сообщение до его сохранения' });
+        }
+        
+        if (!/^[0-9a-fA-F]{24}$/.test(messageId)) {
+          return socket.emit('error', { message: 'Некорректный ID сообщения' });
         }
         
         const message = await Message.findById(messageId);

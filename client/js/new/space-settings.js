@@ -127,9 +127,9 @@
     const bannerPrev = document.getElementById('space-banner-preview');
     if (bannerPrev) bannerPrev.style.backgroundImage = data._banner ? `url("${mediaUrl(data._banner)}")` : '';
 
-    // Сброс инвайта
+    // Показываем текущую ССЫЛКУ приглашения из данных. Обновление — по кнопке.
     const inviteCode = document.getElementById('space-invite-code');
-    if (inviteCode) inviteCode.value = '';
+    if (inviteCode) inviteCode.value = data._inviteCode ? inviteLink(data._inviteCode) : '';
 
     // Владелец не может «выйти» (только удалить) — прячем строку выхода для него.
     const leaveRow = document.getElementById('space-leave-row');
@@ -139,6 +139,9 @@
 
     renderMembers(data);
     showTab('overview');
+
+    // На мобиле открываемся со списка разделов (панель раздела убрана за край).
+    document.querySelector('#space-settings-modal .space-settings-shell')?.classList.remove('section-open');
 
     const modal = document.getElementById('space-settings-modal');
     if (modal) modal.classList.remove('hidden');
@@ -152,12 +155,18 @@
 
   // ── Вкладки ────────────────────────────────────────────────
   function showTab(tab) {
+    let navLabel = '';
     document.querySelectorAll('#space-settings-modal [data-space-tab]').forEach(t => {
-      t.classList.toggle('active', t.dataset.spaceTab === tab);
+      const active = t.dataset.spaceTab === tab;
+      t.classList.toggle('active', active);
+      if (active) navLabel = t.textContent.trim();
     });
     document.querySelectorAll('#space-settings-modal [data-space-section]').forEach(s => {
       s.classList.toggle('active', s.dataset.spaceSection === tab);
     });
+    // Заголовок мобильной панели (кнопка «Назад») — название открытого раздела.
+    const mobileTitle = document.getElementById('space-mobile-title');
+    if (mobileTitle && navLabel) mobileTitle.textContent = navLabel;
   }
 
   // ── Участники ──────────────────────────────────────────────
@@ -282,18 +291,23 @@
   }
 
   // ── Приглашение ────────────────────────────────────────────
-  async function createInvite() {
+  // Сгенерировать НОВЫЙ уникальный код приглашения (обновление). Сервер
+  // гарантирует, что код не совпадёт с кодом другого сервера/комнаты.
+  async function regenerateInvite() {
     const data = srv();
     if (!data || !data._realId) return;
     try {
       const res = await ServersAPI.createInvite(data._realId);
-      const code = res && (res.code || res.invite || res.inviteCode);
-      const input = document.getElementById('space-invite-code');
-      if (input) input.value = code || '';
-      toast('Готово', 'Код приглашения создан.');
+      const code = res && (res.inviteCode || res.code || res.invite);
+      if (code) {
+        data._inviteCode = code;
+        const input = document.getElementById('space-invite-code');
+        if (input) input.value = inviteLink(code);
+        toast('Готово', 'Ссылка приглашения обновлена.');
+      }
     } catch (err) {
       console.error('[space-settings] invite failed:', err);
-      toast('Ошибка', 'Не удалось создать код.');
+      toast('Ошибка', 'Не удалось обновить код.');
     }
   }
 
@@ -302,13 +316,13 @@
     if (!input || !input.value) return;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(input.value).then(
-        () => toast('Скопировано', 'Код в буфере обмена.'),
+        () => toast('Скопировано', 'Ссылка в буфере обмена.'),
         () => { input.select(); document.execCommand('copy'); }
       );
     } else {
       input.select();
       document.execCommand('copy');
-      toast('Скопировано', 'Код в буфере обмена.');
+      toast('Скопировано', 'Ссылка в буфере обмена.');
     }
   }
 
@@ -375,18 +389,19 @@
     const modal = document.getElementById('space-settings-modal');
     if (modal && e.target === modal) { closeSpaceSettings(); return; }
 
+    // Назад (мобайл) — вернуться к списку разделов
+    if (e.target.closest('#space-settings-back')) {
+      document.querySelector('#space-settings-modal .space-settings-shell')?.classList.remove('section-open');
+      return;
+    }
+
     // Вкладки
     const tab = e.target.closest('#space-settings-modal [data-space-tab]');
     if (tab) {
       showTab(tab.dataset.spaceTab);
-      // При открытии вкладки приглашения — сразу создаём код, если его нет
-      if (tab.dataset.spaceTab === 'invite') {
-        const input = document.getElementById('space-invite-code');
-        const data = srv();
-        if (input && !input.value && data && isOwner(data)) {
-          const createBtn = document.getElementById('space-invite-create');
-          withBusy(createBtn, 'Создаём…', createInvite);
-        }
+      // На мобиле панель раздела выезжает поверх списка разделов.
+      if (window.innerWidth <= 768) {
+        document.querySelector('#space-settings-modal .space-settings-shell')?.classList.add('section-open');
       }
       return;
     }
@@ -399,7 +414,7 @@
     if (e.target.closest('#space-banner-upload')) { document.getElementById('space-banner-file')?.click(); return; }
     if (e.target.closest('#space-banner-delete')) { deleteImage('banner'); return; }
     const inviteBtn = e.target.closest('#space-invite-create');
-    if (inviteBtn) { withBusy(inviteBtn, 'Создаём…', createInvite); return; }
+    if (inviteBtn) { withBusy(inviteBtn, 'Обновляем…', regenerateInvite); return; }
     if (e.target.closest('#space-invite-copy')) { copyInvite(); return; }
     const leaveBtn = e.target.closest('#space-leave-btn');
     if (leaveBtn) { confirmTwoStep(leaveBtn, 'Точно выйти?', () => withBusy(leaveBtn, 'Выходим…', leaveSpace)); return; }

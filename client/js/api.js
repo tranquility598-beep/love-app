@@ -399,6 +399,11 @@ const ServersAPI = {
   createInvite: (serverId) =>
     apiFetch(`/servers/${serverId}/invite`, { method: 'POST' }),
 
+  // Публичное превью сервера/сферы по инвайт-коду (для карточки в чате
+  // и экрана входа по ссылке). Роут на бэкенде без авторизации.
+  invitePreview: (code) =>
+    apiFetch(`/servers/invite/${encodeURIComponent(code)}/preview`),
+
   join: (code) =>
     apiFetch(`/servers/join/${code}`, { method: 'POST' }),
 
@@ -434,6 +439,38 @@ const ServersAPI = {
       method: 'DELETE'
     })
 };
+
+// ===== INVITE LINK HELPERS =====
+// Приглашение — это ссылка вида https://loveapp.chat/invite/КОД.
+// Базовый домен фиксирован (это публичный сайт-лендинг), а не BASE_URL API.
+const INVITE_BASE = 'https://loveapp.chat/invite/';
+
+// Собрать полную ссылку-приглашение из кода.
+function inviteLink(code) {
+  return INVITE_BASE + String(code || '').trim();
+}
+
+// Извлечь инвайт-код из строки: полной ссылки (https://loveapp.chat/invite/КОД
+// или love-app://invite/КОД) либо «голого» кода. Возвращает код или null.
+function parseInviteCode(text) {
+  if (!text) return null;
+  const s = String(text).trim();
+  // Сначала пробуем полноценную ссылку (web или deep-link).
+  const linkMatch = s.match(/(?:https?:\/\/[^\s/]*loveapp\.chat\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9]{4,})/i);
+  if (linkMatch) return linkMatch[1].toUpperCase();
+  // Иначе — «голый» код целиком (8 символов как генерит бэкенд, допускаем 4–16).
+  const bare = s.match(/^([A-Za-z0-9]{4,16})$/);
+  if (bare) return bare[1].toUpperCase();
+  return null;
+}
+
+// Регекс для поиска инвайт-ССЫЛКИ внутри текста сообщения (строгий —
+// только полная ссылка, чтобы не превращать любое слово в карточку).
+const INVITE_LINK_REGEX = /(?:https?:\/\/[^\s/]*loveapp\.chat\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9]{4,})/i;
+
+window.inviteLink = inviteLink;
+window.parseInviteCode = parseInviteCode;
+window.INVITE_LINK_REGEX = INVITE_LINK_REGEX;
 
 // ===== ROOMS API =====
 // Тонкая обёртка поверх ServersAPI. Не дублирует функциональность,

@@ -730,7 +730,20 @@
     }
 
     /* ─────── Вход в приложение ─────── */
+    // Скрыть загрузочный экран (не раньше минимального времени показа, чтобы не мигал).
+    const _splashStart = Date.now();
+    function hideSplash() {
+      const splash = document.getElementById('app-splash');
+      if (!splash || splash.classList.contains('is-hiding')) return;
+      const wait = Math.max(0, 600 - (Date.now() - _splashStart));
+      setTimeout(() => {
+        splash.classList.add('is-hiding');
+        setTimeout(() => splash.remove(), 450);
+      }, wait);
+    }
+
     function enterApp(msg) {
+      hideSplash();
       screen.classList.add('auth-hidden');
       if (typeof window.showToast === 'function' && msg) {
         setTimeout(() => window.showToast('Love', msg), 350);
@@ -740,6 +753,7 @@
       }
     }
     function openAuth() {
+      hideSplash();
       screen.classList.remove('auth-hidden');
       showForm('auth-form-login');
       if (oauthStep) oauthStep.classList.remove('is-visible');
@@ -761,6 +775,7 @@
       } catch (err) {
         console.log('Нет активной сессии:', err.message);
         // Показываем форму логина
+        hideSplash();
         showForm('auth-form-login');
       }
     }
@@ -1211,5 +1226,7 @@
 
     // Запускаем проверку сессии на старте
     checkExistingSession();
+    // Страховка: не оставляем сплеш висеть, если ветки выше не сработали.
+    setTimeout(hideSplash, 8000);
   }
 })();

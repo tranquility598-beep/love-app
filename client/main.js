@@ -724,12 +724,12 @@ if (!gotTheLock) {
           ...details.responseHeaders,
           'Content-Security-Policy': [
             "default-src 'self';" +
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io;" + 
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io;" +
             "style-src 'self' 'unsafe-inline';" +
-            "img-src 'self' data: blob: http://localhost:* https:;" +
-            "connect-src 'self' http://localhost:* ws://localhost:* https: wss:;" +
+            "img-src 'self' data: blob: http://localhost:* http://127.0.0.1:* https:;" +
+            "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: wss:;" +
             "font-src 'self' data:;" +
-            "media-src 'self' blob: data: https:;"
+            "media-src 'self' blob: data: https: http: http://localhost:* http://127.0.0.1:*;"
           ]
         }
       });

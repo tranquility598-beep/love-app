@@ -12,7 +12,6 @@ permissions:
 jobs:
   release:
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -30,38 +29,60 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Create Release Notes
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          cat > release-notes.md <<EOF
-          # Love v${VERSION} ✨
-
-          Мы рады представить вам обновление **Love v${VERSION}**! В этой версии мы исправили критические ошибки в отправке медиафайлов и повысили стабильность голосовой связи в релизной сборке. 
-
-          ## 🚀 Что нового
-
-          ### 📁 Загрузка медиа и файлов
-          - **Ускоренная загрузка .mp4:** Устранена ошибка загрузки видеофайлов. Мы отключили тяжелое синхронное перекодирование видео на сервере во время загрузки, что предотвращает разрывы соединения и таймауты. Теперь видео файлы загружаются мгновенно и без сбоев.
-          - **Детальные логи ошибок:** В случае возникновения сбоев при загрузке медиафайлов, приложение теперь выводит точную причину ошибки вместо общего сообщения.
-
-          ### 🎙️ Голосовая связь и демонстрация экрана (WebRTC)
-          - **Стабильный TURN-сервер:** Перенастроили инфраструктуру обхода блокировок NAT и брандмауэров. Теперь для голосовой связи и трансляций экрана используются надежные серверы ExpressTURN с выделенными лимитами трафика и поддержкой защищенного TLS-соединения (TURNS) на порту 443. Это решает проблему со стабильностью связи у пользователей через интернет.
-
-          ---
-          *Спасибо, что продолжаете пользоваться нашим приложением и помогаете делать Love лучше! ❤️*
-          EOF
-
-      - name: Publish Release Description
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Love ${{ github.ref_name }}
-          body_path: release-notes.md
-          draft: false
-          prerelease: false
-
       - name: Build and Publish
         run: npm run build:server && npx electron-builder build --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  build-android:
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Build Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Upload Debug APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Release APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: android/app/build/outputs/apk/release/app-release-unsigned.apk

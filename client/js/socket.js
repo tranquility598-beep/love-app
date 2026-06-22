@@ -642,6 +642,17 @@ function handleUserUnblocked(data) {
   // }
 }
 
+// Метаданные сервера/сферы изменились (название/описание/иконка/баннер) —
+// обновляем UI без перезагрузки. Логика обновления состояния — в init-app.js.
+function handleServerUpdated(data) {
+  if (typeof window.applyServerUpdated === 'function') window.applyServerUpdated(data);
+}
+
+// В сервер вошёл новый участник — обновляем счётчик/список.
+function handleServerMemberJoined(data) {
+  if (typeof window.applyServerMemberJoined === 'function') window.applyServerMemberJoined(data);
+}
+
 // ===== ROLES SCOPE HANDLERS =====
 
 function handleRoleCreated(data) {
@@ -887,6 +898,11 @@ function attachGlobalSocketListeners() {
   attachListener('global', 'profile:updated', handleProfileUpdated);
   attachListener('global', 'user:blocked', handleUserBlocked);
   attachListener('global', 'user:unblocked', handleUserUnblocked);
+
+  // SERVER META SCOPE (GLOBAL — обновления приходят для любых серверов
+  // пользователя, не только активного, поэтому переживают смену контекста)
+  attachListener('global', 'server:updated', handleServerUpdated);
+  attachListener('global', 'server:member_joined', handleServerMemberJoined);
 }
 
 /**

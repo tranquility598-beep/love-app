@@ -260,6 +260,7 @@
             pendingMsg._id = msg._id;
             delete pendingMsg._pending;
             pendingMsg.text = msg.content || pendingMsg.text;
+            if (msg.attachments && msg.attachments.length) pendingMsg.attachments = msg.attachments;
             if (state.activeView === 'view-chats' && state.activeConversationId === dmConv.id) {
               if (typeof renderChatMessages === 'function') {
                 renderChatMessages(dmConv);
@@ -273,7 +274,8 @@
           sender: isOwn ? 'own' : 'partner',
           text: msg.content || '',
           time: _formatTime(msg.createdAt || new Date().toISOString()),
-          _id: msg._id
+          _id: msg._id,
+          attachments: msg.attachments || []
         };
         dmConv.messages.push(msgObj);
 
@@ -311,6 +313,7 @@
               pendingMsg._id = msg._id;
               delete pendingMsg._pending;
               pendingMsg.text = msg.content || pendingMsg.text;
+              if (msg.attachments && msg.attachments.length) pendingMsg.attachments = msg.attachments;
               if (state.activeView === 'view-servers' && state.activeServerId === srvId && String(ch._realId) === String(msgChannelId)) {
                 if (typeof renderServerChat === 'function') {
                   renderServerChat();
@@ -325,7 +328,8 @@
             text: msg.content || '',
             time: _formatTime(msg.createdAt || new Date().toISOString()),
             _id: msg._id,
-            author: msg.author?._id || msg.author
+            author: msg.author?._id || msg.author,
+            attachments: msg.attachments || []
           });
 
           // If this is the active channel, re-render
@@ -869,7 +873,8 @@
           _icon:       server.icon,
           _banner:     server.banner,
           _members:    server.members || [],
-          _ownerId:    server.owner || server.ownerId
+          _ownerId:    server.owner || server.ownerId,
+          _inviteCode: (server.invites && server.invites[0]) ? server.invites[0].code : ''
         };
 
         const channelMap = new Map();
@@ -990,7 +995,8 @@
           sender: isOwn ? 'own' : 'partner',
           text:   msg.content || '',
           time:   _formatTime(msg.createdAt),
-          _id:    msg._id
+          _id:    msg._id,
+          attachments: msg.attachments || []
         };
       });
 
@@ -1030,7 +1036,9 @@
         sender: msg.author?.username || msg.author?.nickname || 'User',
         text:   msg.content || '',
         time:   _formatTime(msg.createdAt),
-        _id:    msg._id
+        _id:    msg._id,
+        author: msg.author?._id || msg.author,
+        attachments: msg.attachments || []
       }));
 
       // Перерисовываем чат после ленивой загрузки. Для комнаты — её внутренний
@@ -1154,29 +1162,25 @@
   //    Intercepts form submits to send via real socket when applicable
   // ══════════════════════════════════════════════════════════════════════
 
-  window._sendRealDMMessage = function (conv, text) {
+  window._sendRealDMMessage = function (conv, text, attachments) {
     if (!conv?._channelId || !window.socket) return false;
 
-    // Emit via socket
+    // Emit via socket. attachments — массив объектов вложений (image/file/video/audio).
     const tempId = 'temp-' + Date.now();
-    window.socket.emit('message:send', {
-      channelId: conv._channelId,
-      content:   text,
-      tempId:    tempId
-    });
+    const payload = { channelId: conv._channelId, content: text || '', tempId };
+    if (attachments && attachments.length) payload.attachments = attachments;
+    window.socket.emit('message:send', payload);
 
     return true; // signal that message was sent via real socket
   };
 
-  window._sendRealChannelMessage = function (channelRealId, text) {
+  window._sendRealChannelMessage = function (channelRealId, text, attachments) {
     if (!channelRealId || !window.socket) return false;
 
     const tempId = 'temp-' + Date.now();
-    window.socket.emit('message:send', {
-      channelId: channelRealId,
-      content:   text,
-      tempId:    tempId
-    });
+    const payload = { channelId: channelRealId, content: text || '', tempId };
+    if (attachments && attachments.length) payload.attachments = attachments;
+    window.socket.emit('message:send', payload);
 
     return true;
   };
@@ -1432,9 +1436,16 @@
       const member = list.find(m => String(m.userId || m.name) === String(userId));
       if (member) {
         member.speaking = effectiveSpeaking;
-        if (typeof renderVoiceChannel === 'function') {
-          renderVoiceChannel();
-        }
+        // Direct DOM update instead of full renderVoiceChannel() to prevent video stream resets
+        const targetId = member.isOwn ? 'own' : member.name;
+        const cards = document.querySelectorAll(`.voice-pcard[data-user-id="${targetId}"]`);
+        cards.forEach(card => {
+          if (effectiveSpeaking) {
+            card.classList.add("speaking");
+          } else {
+            card.classList.remove("speaking");
+          }
+        });
       }
     }
   };
@@ -1465,8 +1476,13 @@
           }
         }
 
-        if (typeof renderVoiceChannel === 'function') {
-          renderVoiceChannel();
+        const targetId = member.isOwn ? 'own' : member.name;
+        const card = document.querySelector(`.voice-pcard[data-user-id="${targetId}"]`);
+        if (card) {
+          const micBadge = card.querySelector('.voice-status-badge.mic-muted');
+          const soundBadge = card.querySelector('.voice-status-badge.sound-muted');
+          if (micBadge) micBadge.style.display = isMicMuted ? '' : 'none';
+          if (soundBadge) soundBadge.style.display = isSoundMuted ? '' : 'none';
         }
       }
     }
@@ -1628,6 +1644,506 @@
     } else if (typeof originalShowNotification === 'function') {
       originalShowNotification(type, message, title);
     }
+  };
+
+  // ── Реалтайм: метаданные сервера/сферы (название/описание/иконка/баннер) ──
+  // Приходит по сокету server:updated. Обновляем локальное состояние и UI
+  // без перезагрузки приложения.
+  function _media(u) {
+    if (!u) return '';
+    return /^https?:|^data:|^blob:/.test(u) ? u : (window.BASE_URL || '') + u;
+  }
+
+  window.applyServerUpdated = function (data) {
+    if (!data || !data.serverId) return;
+    const realId = String(data.serverId);
+    const localId = 'srv-' + realId;
+    const map = window._mockServers || (typeof mockServers !== 'undefined' ? mockServers : null);
+    const local = map ? map[localId] : null;
+
+    if (local) {
+      if (data.name !== undefined) local.name = data.name;
+      if (data.description !== undefined) local.description = data.description;
+      if (data.icon !== undefined) local._icon = data.icon;
+      if (data.banner !== undefined) local._banner = data.banner;
+    }
+    // Синхронизируем «сырой» объект сервера, которым пользуются другие части UI.
+    if (Array.isArray(window.servers)) {
+      const raw = window.servers.find(s => String(s._id) === realId);
+      if (raw) {
+        if (data.name !== undefined) raw.name = data.name;
+        if (data.description !== undefined) raw.description = data.description;
+        if (data.icon !== undefined) raw.icon = data.icon;
+        if (data.banner !== undefined) raw.banner = data.banner;
+      }
+    }
+
+    if (typeof renderUnifiedSidebar === 'function') renderUnifiedSidebar();
+
+    const isActive = (typeof activeServerId !== 'undefined') && activeServerId === localId;
+    if (isActive && local) {
+      // Шапка комнаты
+      const roomTitle = document.querySelector('#server-room-panel .room-header-title');
+      if (roomTitle) roomTitle.textContent = local.name || '';
+      const roomIcon = document.querySelector('#server-room-panel .room-header-icon');
+      if (roomIcon) {
+        if (local._icon) { roomIcon.style.backgroundImage = `url("${_media(local._icon)}")`; roomIcon.classList.add('has-avatar'); }
+        else { roomIcon.style.backgroundImage = ''; roomIcon.classList.remove('has-avatar'); }
+      }
+      // Шапка сферы
+      const titleEl = document.getElementById('server-title-display');
+      if (titleEl) titleEl.textContent = local.name || '';
+
+      // Превью в открытых настройках (только превью, поля ввода не трогаем).
+      const settingsModal = document.getElementById('space-settings-modal');
+      if (settingsModal && !settingsModal.classList.contains('hidden')) {
+        const avatarPrev = document.getElementById('space-avatar-preview');
+        if (avatarPrev) { avatarPrev.style.backgroundImage = local._icon ? `url("${_media(local._icon)}")` : ''; if (local._icon) avatarPrev.textContent = ''; }
+        const bannerPrev = document.getElementById('space-banner-preview');
+        if (bannerPrev) bannerPrev.style.backgroundImage = local._banner ? `url("${_media(local._banner)}")` : '';
+      }
+    }
+  };
+
+  // Новый участник вошёл в сервер — обновляем счётчик/список (server:member_joined).
+  window.applyServerMemberJoined = function (data) {
+    if (!data || !data.serverId) return;
+    const localId = 'srv-' + String(data.serverId);
+    const map = window._mockServers || (typeof mockServers !== 'undefined' ? mockServers : null);
+    const local = map ? map[localId] : null;
+    if (local && data.member && Array.isArray(local._members)) {
+      const exists = local._members.some(m => {
+        const uid = m && (m.user && (m.user._id || m.user) || m._id);
+        return String(uid) === String(data.member._id);
+      });
+      if (!exists) local._members.push({ user: data.member });
+    }
+    const isActive = (typeof activeServerId !== 'undefined') && activeServerId === localId;
+    if (isActive && typeof data.memberCount === 'number') {
+      const onlineTextEl = document.querySelector('#server-room-panel .room-header-online-text');
+      if (onlineTextEl) onlineTextEl.textContent = `${data.memberCount} участников`;
+    }
+  };
+
+  // ── Карточка приглашения в чате ──
+  // Если в тексте сообщения есть инвайт-ссылка (https://loveapp.chat/invite/КОД),
+  // под сообщением показываем карточку сервера с кнопкой «Присоединиться».
+  const _invitePreviewCache = new Map(); // code -> preview | Promise
+
+  function _esc(s) {
+    if (typeof escHTML === 'function') return escHTML(s);
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function _fetchInvitePreview(code) {
+    if (_invitePreviewCache.has(code)) return Promise.resolve(_invitePreviewCache.get(code));
+    if (typeof ServersAPI === 'undefined' || !ServersAPI.invitePreview) return Promise.resolve(null);
+    const p = ServersAPI.invitePreview(code)
+      .then(res => { _invitePreviewCache.set(code, res); return res; })
+      .catch(() => { _invitePreviewCache.set(code, null); return null; });
+    _invitePreviewCache.set(code, p); // временно кладём промис, чтобы не дублировать запрос
+    return p;
+  }
+
+  window.attachInviteCard = function (bubbleWrap, text) {
+    if (!bubbleWrap || !text) return;
+    const re = window.INVITE_LINK_REGEX;
+    const code = (typeof parseInviteCode === 'function' && re) ? (re.test(text) ? parseInviteCode(text) : null) : null;
+    if (!code) return;
+    if (bubbleWrap.querySelector('.invite-card')) return; // уже отрисована
+
+    const card = document.createElement('div');
+    card.className = 'invite-card is-loading';
+    card.innerHTML = '<div class="invite-card-body"><div class="invite-card-info"><div class="invite-card-label">Приглашение</div><div class="invite-card-name">Загрузка…</div></div></div>';
+    bubbleWrap.appendChild(card);
+
+    Promise.resolve(_fetchInvitePreview(code)).then(preview => {
+      if (!preview || !preview.name) {
+        card.classList.remove('is-loading');
+        card.innerHTML = '<div class="invite-card-body"><div class="invite-card-info"><div class="invite-card-label">Приглашение</div><div class="invite-card-name">Недействительная ссылка</div></div></div>';
+        return;
+      }
+      const kindLabel = preview.kind === 'room' ? 'комнату' : 'сферу';
+      const initial = (preview.name || '?').trim().charAt(0).toUpperCase();
+      const bannerHtml = preview.banner
+        ? `<div class="invite-card-banner" style="background-image:url('${_media(preview.banner)}')"></div>` : '';
+      const avatarHtml = preview.icon
+        ? `<div class="invite-card-avatar" style="background-image:url('${_media(preview.icon)}')"></div>`
+        : `<div class="invite-card-avatar">${_esc(initial)}</div>`;
+
+      card.classList.remove('is-loading');
+      card.classList.toggle('has-banner', !!preview.banner);
+      card.innerHTML = `
+        ${bannerHtml}
+        <div class="invite-card-body">
+          ${avatarHtml}
+          <div class="invite-card-info">
+            <div class="invite-card-label">Приглашение в ${kindLabel}</div>
+            <div class="invite-card-name">${_esc(preview.name)}</div>
+            <div class="invite-card-meta">${preview.memberCount || 1} участников</div>
+          </div>
+          <button type="button" class="lvs-btn invite-card-join">Присоединиться</button>
+        </div>`;
+
+      const joinBtn = card.querySelector('.invite-card-join');
+      if (joinBtn) {
+        joinBtn.addEventListener('click', async () => {
+          joinBtn.disabled = true;
+          joinBtn.textContent = 'Входим…';
+          const id = (typeof window.joinSpaceByCode === 'function') ? await window.joinSpaceByCode(code) : null;
+          if (id) {
+            joinBtn.textContent = 'Открыто';
+          } else {
+            joinBtn.disabled = false;
+            joinBtn.textContent = 'Присоединиться';
+          }
+        });
+      }
+    });
+  };
+
+  // ── Рендер вложений сообщения (image/video/audio/file) ──
+  const _FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  const _DL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+
+  function _attType(att) {
+    // Сначала по mimetype, потом по расширению — надёжнее, чем att.type
+    // (сервер иногда отдаёт type:'file' для видео/аудио, и тогда плеер не строился).
+    const m = (att.mimetype || '').toLowerCase();
+    if (m.startsWith('image/')) return 'image';
+    if (m.startsWith('video/')) return 'video';
+    if (m.startsWith('audio/')) return 'audio';
+    const name = String(att.url || att.filename || att.originalName || '').toLowerCase();
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/.test(name)) return 'image';
+    if (/\.(mp4|mov|mkv|avi|m4v)(\?|$)/.test(name)) return 'video';
+    if (/\.(mp3|wav|ogg|m4a|aac|flac|opus|weba|webm)(\?|$)/.test(name)) return 'audio';
+    if (att.type && ['image', 'video', 'audio'].includes(att.type)) return att.type;
+    return 'file';
+  }
+  function _bytes(n) {
+    n = +n || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+
+  // ── Медиа-плееры: громкость 40%, пауза вне видимости, лайтбокс ──
+  const DEFAULT_MEDIA_VOLUME = 0.4;
+
+  // Пауза видео/аудио при уходе из видимости (скролл или выход из чата).
+  const _mediaIO = (typeof IntersectionObserver !== 'undefined')
+    ? new IntersectionObserver((entries) => {
+        entries.forEach(en => {
+          if (!en.isIntersecting || en.intersectionRatio < 0.2) {
+            const m = en.target;
+            if ((m.tagName === 'VIDEO' || m.tagName === 'AUDIO') && !m.paused) m.pause();
+          }
+        });
+      }, { threshold: [0, 0.2] })
+    : null;
+  function _observeMedia(el) { if (_mediaIO && el) _mediaIO.observe(el); }
+
+  function _fmtT(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  // Корректная длительность для WebM от MediaRecorder: до проигрывания
+  // duration приходит Infinity/NaN. Форсим перемоткой в «конец» — браузер
+  // дочитывает метаданные и выставляет реальный duration. onReady(dur) — колбэк.
+  // useSeekTrick=false для видео: там seek в конец грузил бы весь файл, а у
+  // настоящих mp4 длительность и так известна из метаданных.
+  function _resolveDuration(media, onReady, useSeekTrick = true) {
+    const ok = (d) => isFinite(d) && d > 0;
+    if (ok(media.duration)) { onReady(media.duration); return; }
+    let done = false;
+    const finish = (d) => { if (done) return; done = true; try { media.currentTime = 0; } catch (_) {} onReady(d); };
+    const onMeta = () => {
+      if (ok(media.duration)) { finish(media.duration); return; }
+      if (!useSeekTrick) { finish(0); return; }
+      // Трюк: перемотка в заведомо большую позицию заставляет дочитать метаданные.
+      const onSeeked = () => {
+        media.removeEventListener('seeked', onSeeked);
+        finish(isFinite(media.duration) ? media.duration : 0);
+      };
+      media.addEventListener('seeked', onSeeked);
+      try { media.currentTime = 1e7; } catch (_) { finish(0); }
+    };
+    if (media.readyState >= 1) onMeta();
+    else media.addEventListener('loadedmetadata', onMeta, { once: true });
+  }
+
+  // Безопасный показ длительности (Infinity/NaN → пусто).
+  function _durStr(d) { return (isFinite(d) && d > 0) ? _fmtT(d) : '--:--'; }
+
+  const _PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const _PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+  const _FS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+  const _PIP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor"/></svg>';
+  const _VOL_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg>';
+
+  // Кнопка-ссылка «скачать» для медиа.
+  function _downloadAnchor(url, name, cls) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.className = cls || '';
+    a.title = 'Скачать';
+    a.setAttribute('download', name || '');
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.innerHTML = _DL_SVG;
+    return a;
+  }
+
+  // Лайтбокс изображения: кнопки зума сверху, колесо мыши, перетаскивание при зуме.
+  function openImageLightbox(url) {
+    const ov = document.createElement('div');
+    ov.className = 'img-lightbox';
+    const stage = document.createElement('div');
+    stage.className = 'img-lightbox-stage';
+    const img = document.createElement('img');
+    img.className = 'img-lightbox-img';
+    img.src = url;
+    img.draggable = false;
+    stage.appendChild(img);
+    ov.appendChild(stage);
+
+    const bar = document.createElement('div');
+    bar.className = 'img-lightbox-bar';
+    bar.innerHTML = `
+      <button class="ilb-btn ilb-zoom-out" title="Уменьшить">−</button>
+      <span class="ilb-zoom-label">100%</span>
+      <button class="ilb-btn ilb-zoom-in" title="Увеличить">+</button>
+      <button class="ilb-btn ilb-reset" title="Сбросить">⟲</button>
+      <button class="ilb-btn ilb-close" title="Закрыть">✕</button>`;
+    ov.appendChild(bar);
+
+    let scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0;
+    const label = bar.querySelector('.ilb-zoom-label');
+    const apply = () => {
+      img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      img.style.cursor = scale > 1 ? 'grab' : 'default';
+      label.textContent = Math.round(scale * 100) + '%';
+    };
+    const setScale = (ns) => { scale = Math.min(8, Math.max(0.2, ns)); if (scale <= 1) { tx = 0; ty = 0; } apply(); };
+
+    function onWheel(e) { e.preventDefault(); setScale(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }
+    function onDown(e) { if (scale <= 1) return; dragging = true; sx = e.clientX - tx; sy = e.clientY - ty; img.style.cursor = 'grabbing'; e.preventDefault(); }
+    function onMove(e) { if (!dragging) return; tx = e.clientX - sx; ty = e.clientY - sy; apply(); }
+    function onUp() { dragging = false; img.style.cursor = scale > 1 ? 'grab' : 'default'; }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    function close() {
+      ov.remove();
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    img.addEventListener('wheel', onWheel, { passive: false });
+    img.addEventListener('mousedown', onDown);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('keydown', onKey);
+    bar.querySelector('.ilb-zoom-in').addEventListener('click', () => setScale(scale * 1.25));
+    bar.querySelector('.ilb-zoom-out').addEventListener('click', () => setScale(scale / 1.25));
+    bar.querySelector('.ilb-reset').addEventListener('click', () => { scale = 1; tx = 0; ty = 0; apply(); });
+    bar.querySelector('.ilb-close').addEventListener('click', close);
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target === stage) close(); });
+
+    apply();
+    document.body.appendChild(ov);
+  }
+  window.openImageLightbox = openImageLightbox;
+
+  // Кастомный видеоплеер: play/seek/время/громкость(40%)/фуллскрин/PiP-сворачивание.
+  function _buildVideoPlayer(url, name) {
+    const wrap = document.createElement('div');
+    wrap.className = 'media-video-wrapper';
+    const video = document.createElement('video');
+    video.src = url; video.playsInline = true; video.preload = 'metadata';
+    video.volume = DEFAULT_MEDIA_VOLUME;
+    wrap.appendChild(video);
+
+    const bigPlay = document.createElement('button');
+    bigPlay.className = 'media-video-play-btn';
+    bigPlay.innerHTML = _PLAY_SVG;
+    wrap.appendChild(bigPlay);
+
+    const controls = document.createElement('div');
+    controls.className = 'media-video-controls';
+    controls.innerHTML = `
+      <button class="mv-btn mv-play">${_PLAY_SVG}</button>
+      <div class="media-video-timeline"><div class="media-video-timeline-fill"></div></div>
+      <span class="mv-time">0:00</span>
+      <button class="mv-btn mv-vol-btn">${_VOL_SVG}</button>
+      <input class="mv-vol" type="range" min="0" max="1" step="0.05" value="${DEFAULT_MEDIA_VOLUME}">
+      <button class="mv-btn mv-pip" title="Свернуть в окошко">${_PIP_SVG}</button>
+      <button class="mv-btn mv-fs" title="Во весь экран">${_FS_SVG}</button>`;
+    wrap.appendChild(controls);
+
+    const playBtn = controls.querySelector('.mv-play');
+    const fill = controls.querySelector('.media-video-timeline-fill');
+    const timeline = controls.querySelector('.media-video-timeline');
+    const timeEl = controls.querySelector('.mv-time');
+    const vol = controls.querySelector('.mv-vol');
+
+    let realDur = 0;
+    const dur = () => (isFinite(video.duration) && video.duration > 0) ? video.duration : realDur;
+    const paint = () => {
+      const d = dur();
+      fill.style.width = (d ? Math.min(100, video.currentTime / d * 100) : 0) + '%';
+      timeEl.textContent = _fmtT(video.currentTime) + ' / ' + _durStr(d);
+    };
+    _resolveDuration(video, (d) => { realDur = d || 0; paint(); });
+
+    const setUI = () => { playBtn.innerHTML = video.paused ? _PLAY_SVG : _PAUSE_SVG; bigPlay.style.display = video.paused ? 'flex' : 'none'; };
+    const toggle = () => { if (video.paused) video.play().catch(() => {}); else video.pause(); };
+    bigPlay.addEventListener('click', toggle);
+    playBtn.addEventListener('click', toggle);
+    video.addEventListener('click', toggle);
+    video.addEventListener('play', setUI);
+    video.addEventListener('pause', setUI);
+    video.addEventListener('timeupdate', paint);
+    timeline.addEventListener('click', (e) => {
+      const r = timeline.getBoundingClientRect();
+      const d = dur();
+      if (d) video.currentTime = ((e.clientX - r.left) / r.width) * d;
+    });
+    vol.addEventListener('input', () => { video.muted = false; video.volume = parseFloat(vol.value); });
+    controls.querySelector('.mv-vol-btn').addEventListener('click', () => { video.muted = !video.muted; vol.value = video.muted ? 0 : video.volume; });
+    controls.querySelector('.mv-fs').addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (wrap.requestFullscreen) wrap.requestFullscreen();
+    });
+    controls.querySelector('.mv-pip').addEventListener('click', async () => {
+      try {
+        if (document.pictureInPictureElement) await document.exitPictureInPicture();
+        else if (video.requestPictureInPicture) await video.requestPictureInPicture();
+      } catch (_) {}
+    });
+    // Кнопка скачивания — в конце, чтобы не вытеснять «во весь экран»
+    controls.appendChild(_downloadAnchor(url, name, 'mv-btn mv-dl'));
+    // Если видео не удалось загрузить — показываем понятную заглушку со скачиванием.
+    video.addEventListener('error', () => {
+      wrap.classList.add('media-video-error');
+      bigPlay.style.display = 'none';
+    });
+    setUI();
+    _observeMedia(video);
+    return wrap;
+  }
+
+  // Кастомный аудио/музыка плеер: play/seek/время/громкость(40%).
+  function _buildAudioPlayer(url, name) {
+    const wrap = document.createElement('div');
+    wrap.className = 'media-audio-attachment media-audio-player';
+    wrap.innerHTML = `
+      <button class="ma-play media-audio-icon">${_PLAY_SVG}</button>
+      <div class="media-audio-info">
+        <div class="ma-timeline"><div class="ma-fill"></div></div>
+        <div class="ma-time">0:00</div>
+      </div>
+      <button class="mv-btn ma-vol-btn">${_VOL_SVG}</button>
+      <input class="ma-vol" type="range" min="0" max="1" step="0.05" value="${DEFAULT_MEDIA_VOLUME}">`;
+    const audio = document.createElement('audio');
+    audio.src = url; audio.preload = 'metadata'; audio.volume = DEFAULT_MEDIA_VOLUME;
+    wrap.appendChild(audio);
+
+    const playBtn = wrap.querySelector('.ma-play');
+    const fill = wrap.querySelector('.ma-fill');
+    const timeline = wrap.querySelector('.ma-timeline');
+    const timeEl = wrap.querySelector('.ma-time');
+    const vol = wrap.querySelector('.ma-vol');
+
+    let realDur = 0;
+    const dur = () => (isFinite(audio.duration) && audio.duration > 0) ? audio.duration : realDur;
+    const paint = () => {
+      const d = dur();
+      fill.style.width = (d ? Math.min(100, audio.currentTime / d * 100) : 0) + '%';
+      timeEl.textContent = _fmtT(audio.currentTime) + ' / ' + _durStr(d);
+    };
+    _resolveDuration(audio, (d) => { realDur = d || 0; paint(); });
+
+    const setUI = () => { playBtn.innerHTML = audio.paused ? _PLAY_SVG : _PAUSE_SVG; };
+    playBtn.addEventListener('click', () => { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); });
+    audio.addEventListener('play', setUI);
+    audio.addEventListener('pause', setUI);
+    audio.addEventListener('timeupdate', paint);
+    timeline.addEventListener('click', (e) => {
+      const r = timeline.getBoundingClientRect();
+      const d = dur();
+      if (d) audio.currentTime = ((e.clientX - r.left) / r.width) * d;
+    });
+    vol.addEventListener('input', () => { audio.muted = false; audio.volume = parseFloat(vol.value); });
+    wrap.querySelector('.ma-vol-btn').addEventListener('click', () => { audio.muted = !audio.muted; vol.value = audio.muted ? 0 : audio.volume; });
+    wrap.appendChild(_downloadAnchor(url, name, 'mv-btn ma-dl'));
+    setUI();
+    _observeMedia(audio);
+    return wrap;
+  }
+
+  window.renderMessageAttachments = function (bubbleWrap, attachments) {
+    if (!bubbleWrap || !attachments || !attachments.length) return;
+    if (bubbleWrap.querySelector('.message-attachments')) return;
+    const box = document.createElement('div');
+    box.className = 'message-attachments';
+
+    // Имя файла без «tmp/служебных»: предпочитаем originalName, затем filename;
+    // если выглядит как сгенерированное (tmp..., длинный hex) — даём дружелюбное.
+    const niceName = (att) => {
+      const cand = att.originalName || att.filename || '';
+      if (!cand || /^tmp[-_.]/i.test(cand) || /^[a-f0-9]{16,}$/i.test(cand.replace(/\.[^.]+$/, ''))) {
+        const ext = (cand.match(/\.[^.]+$/) || [''])[0];
+        return 'Файл' + ext;
+      }
+      return cand;
+    };
+
+    attachments.forEach(att => {
+      try {
+        if (!att || !att.url) return;
+        const url = _media(att.url);
+        const type = _attType(att);
+
+        if (type === 'image') {
+          const w = document.createElement('div');
+          w.className = 'media-image-wrapper';
+          const img = document.createElement('img');
+          img.src = url; img.loading = 'lazy'; img.alt = att.originalName || '';
+          img.style.width = '100%'; img.style.display = 'block'; img.style.cursor = 'zoom-in';
+          img.addEventListener('click', () => openImageLightbox(url));
+          w.appendChild(img);
+          const dl = _downloadAnchor(url, niceName(att), 'media-img-dl');
+          dl.addEventListener('click', (ev) => ev.stopPropagation());
+          w.appendChild(dl);
+          box.appendChild(w);
+        } else if (type === 'video') {
+          box.appendChild(_buildVideoPlayer(url, niceName(att)));
+        } else if (type === 'audio') {
+          box.appendChild(_buildAudioPlayer(url, niceName(att)));
+        } else {
+          const chip = document.createElement('a');
+          chip.className = 'media-audio-attachment';
+          chip.href = url; chip.target = '_blank'; chip.rel = 'noopener';
+          chip.setAttribute('download', niceName(att));
+          chip.style.textDecoration = 'none';
+          chip.innerHTML = `<div class="media-audio-icon">${_FILE_SVG}</div>
+            <div class="media-audio-info">
+              <div class="media-audio-name">${_esc(niceName(att))}</div>
+              <div class="media-audio-size">${_bytes(att.size)}</div>
+            </div>
+            <div class="media-download-btn">${_DL_SVG}</div>`;
+          box.appendChild(chip);
+        }
+      } catch (err) {
+        console.error('[attachments] render failed:', err, att);
+      }
+    });
+
+    if (box.children.length) bubbleWrap.appendChild(box);
   };
 
 })();

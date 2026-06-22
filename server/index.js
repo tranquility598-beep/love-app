@@ -84,7 +84,10 @@ app.use(helmet({
       connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
+      // Видео/аудио вложения отдаются с локального сервера (http://127.0.0.1:5555)
+      // и с Cloudinary (https) — разрешаем так же широко, как imgSrc, иначе
+      // media-src 'self' блокирует видео ("Refused to load media...").
+      mediaSrc: ["'self'", "data:", "blob:", "https:", "http:"],
       frameSrc: ["'none'"]
     }
   },

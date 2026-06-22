@@ -508,7 +508,30 @@ function selectConversation(id) {
     }
 }
 
+const _videoStates = new Map();
+
+function _saveVideoStates(container) {
+    container.querySelectorAll('video').forEach(v => {
+        if (v.src && (v.currentTime > 0 || !v.paused)) {
+            _videoStates.set(v.src, { time: v.currentTime, paused: v.paused, volume: v.volume });
+        }
+    });
+}
+
+function _restoreVideoStates(container) {
+    container.querySelectorAll('video').forEach(v => {
+        const st = _videoStates.get(v.src);
+        if (st) {
+            v.currentTime = st.time;
+            v.volume = st.volume;
+            if (!st.paused) v.play().catch(() => {});
+            _videoStates.delete(v.src);
+        }
+    });
+}
+
 function renderChatMessages(conv) {
+    _saveVideoStates(chatFeedContainer);
     chatFeedContainer.innerHTML = "";
     
     let lastSender = null;
@@ -575,8 +598,9 @@ function renderChatMessages(conv) {
             `;
         }
 
+        const bubbleText = msg.text ? `<div class="message-bubble">${escHTML(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
-            <div class="message-bubble">${escHTML(msg.text)}</div>
+            ${bubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
             ${actionsHtml}
         `;
@@ -587,7 +611,12 @@ function renderChatMessages(conv) {
 
             if (editBtn) {
                 editBtn.addEventListener("click", () => {
-                    const bubble = bubbleWrap.querySelector(".message-bubble");
+                    let bubble = bubbleWrap.querySelector(".message-bubble");
+                    if (!bubble) {
+                        bubble = document.createElement('div');
+                        bubble.className = 'message-bubble';
+                        bubbleWrap.prepend(bubble);
+                    }
                     const oldText = msg.text;
                     bubbleWrap.classList.add("editing");
                     bubble.innerHTML = `
@@ -635,8 +664,13 @@ function renderChatMessages(conv) {
             }
         }
 
+        if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
+        if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
+
         groupContent.appendChild(bubbleWrap);
     });
+
+    _restoreVideoStates(chatFeedContainer);
 
     if (typeof window.scrollToBottom === 'function') {
         window.scrollToBottom(chatFeedContainer);
@@ -1421,6 +1455,7 @@ function renderUnifiedSidebar() {
                 () => {
                     const modal = document.getElementById("create-space-modal");
                     if (modal) modal.classList.remove("hidden");
+                    if (typeof window._resetCreateSpaceModal === 'function') window._resetCreateSpaceModal();
                 }
             ));
             return;
@@ -1550,6 +1585,7 @@ function renderUnifiedSidebar() {
         addBtnContainer.querySelector("button").addEventListener("click", () => {
             const modal = document.getElementById("create-space-modal");
             if (modal) modal.classList.remove("hidden");
+            if (typeof window._resetCreateSpaceModal === 'function') window._resetCreateSpaceModal();
         });
         accordion.appendChild(addBtnContainer);
     }
@@ -2789,6 +2825,7 @@ const mockRoomMessages = [];
 const roomChatFeed = document.getElementById("room-chat-feed");
 function renderRoomChat() {
     if (!roomChatFeed) return;
+    _saveVideoStates(roomChatFeed);
     roomChatFeed.innerHTML = "";
     
     let lastSender = null;
@@ -2837,12 +2874,16 @@ function renderRoomChat() {
         
         const bubbleWrap = document.createElement("div");
         bubbleWrap.className = "message-bubble-wrap";
+        const roomBubbleText = msg.text ? `<div class="message-bubble">${escHTML(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
-            <div class="message-bubble">${escHTML(msg.text)}</div>
+            ${roomBubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
         `;
+        if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
+        if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
         groupContent.appendChild(bubbleWrap);
     });
+    _restoreVideoStates(roomChatFeed);
     if (typeof window.scrollToBottom === 'function') {
         window.scrollToBottom(roomChatFeed);
     } else {
@@ -2923,8 +2964,88 @@ if (addServerBtn) {
     addServerBtn.addEventListener("click", () => {
         const modal = document.getElementById("create-space-modal");
         if (modal) modal.classList.remove("hidden");
+        if (typeof window._resetCreateSpaceModal === 'function') window._resetCreateSpaceModal();
     });
 }
+
+// Интегрировать сервер/комнату (объект из API) в UI: добавить в mockServers,
+// window.servers, _srvReverseMap, подключить сокет и перерисовать сайдбар.
+// Возвращает локальный id ('srv-<_id>'). Переиспользуется при создании,
+// входе по ссылке и из карточки приглашения в чате.
+function integrateServerIntoUI(realServer, doSelect = true) {
+    if (!realServer || !realServer._id) return null;
+    const id = 'srv-' + realServer._id;
+    const kind = realServer.settings?.kind === 'room' ? 'room' : 'server';
+    const channels = (realServer.channels || []).map(ch => ({
+        id: 'ch-' + ch._id,
+        name: ch.name || 'general',
+        type: ch.type || 'text',
+        messages: [],
+        _realId: ch._id
+    }));
+
+    mockServers[id] = {
+        name: realServer.name,
+        description: realServer.description || '',
+        channels: channels,
+        _realId: realServer._id,
+        _kind: kind,
+        _icon: realServer.icon,
+        _banner: realServer.banner,
+        _members: realServer.members || [],
+        _ownerId: realServer.owner || realServer.ownerId,
+        _inviteCode: (realServer.invites && realServer.invites[0]) ? realServer.invites[0].code : ''
+    };
+
+    if (window.servers && !window.servers.find(s => s._id === realServer._id)) {
+        window.servers.push(realServer);
+    }
+    if (typeof window.socketJoinServer === 'function') {
+        window.socketJoinServer(realServer._id);
+    }
+    if (window._srvReverseMap) {
+        const channelMap = new Map();
+        channels.forEach(ch => channelMap.set(ch.id, ch._realId));
+        window._srvReverseMap.set(id, { realServerId: realServer._id, channels: channelMap, kind });
+    }
+
+    const accordion = document.getElementById("spaces-accordion-container");
+    if (accordion) accordion.innerHTML = "";
+    renderUnifiedSidebar();
+
+    if (doSelect) selectServerOrRoom(id, kind);
+    return id;
+}
+window.integrateServerIntoUI = integrateServerIntoUI;
+
+// Войти в сервер/сферу по инвайт-коду: вызвать API, интегрировать в UI и
+// открыть. Переиспользуется модалкой «Войти» и кнопкой в карточке чата.
+// Возвращает локальный id или null. forceSelect — открыть после входа.
+async function joinSpaceByCode(code, { silent = false } = {}) {
+    if (!code || typeof ServersAPI === 'undefined') return null;
+    try {
+        const res = await ServersAPI.join(code);
+        const realServer = res && (res.server || res);
+        if (!realServer || !realServer._id) {
+            if (!silent) showToast('Ошибка', 'Не удалось войти по ссылке.');
+            return null;
+        }
+        const id = integrateServerIntoUI(realServer, true);
+        if (!silent) {
+            showToast('Готово', `Вы присоединились: «${realServer.name}».`);
+        }
+        return id;
+    } catch (err) {
+        console.error('[join] failed:', err);
+        const msg = (err && err.message) || '';
+        if (!silent) {
+            showToast('Ошибка', /уже являетесь/i.test(msg) ? 'Вы уже участник.' : 'Ссылка недействительна или истекла.');
+        }
+        // Если уже участник — попробуем просто открыть существующий сервер.
+        return null;
+    }
+}
+window.joinSpaceByCode = joinSpaceByCode;
 
 (function initCreateSpaceModal() {
     const modal = document.getElementById("create-space-modal");
@@ -2932,26 +3053,66 @@ if (addServerBtn) {
     const closeBtn = document.getElementById("create-space-close");
     const typeBtns = modal.querySelectorAll(".create-space-type-btn");
     const nameInput = document.getElementById("create-space-name");
+    const joinInput = document.getElementById("join-invite-input");
+    const nameField = document.getElementById("create-name-field");
+    const joinField = document.getElementById("create-join-field");
     const submitBtn = document.getElementById("create-space-submit");
     let selectedType = "server";
 
     if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
     modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
 
+    // Сброс модалки в исходное состояние (режим «Сфера») при каждом открытии,
+    // чтобы режим «Войти» не залипал между вызовами.
+    function resetCreateSpaceModal() {
+        selectedType = "server";
+        typeBtns.forEach(b => b.classList.toggle("active", b.dataset.type === "server"));
+        if (nameField) nameField.classList.remove("hidden");
+        if (joinField) joinField.classList.add("hidden");
+        if (nameInput) { nameInput.value = ""; nameInput.placeholder = "Моя новая сфера..."; }
+        if (joinInput) joinInput.value = "";
+        if (submitBtn) submitBtn.textContent = "Создать";
+    }
+    window._resetCreateSpaceModal = resetCreateSpaceModal;
+
     typeBtns.forEach(btn => {
         btn.addEventListener("click", () => {
             typeBtns.forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             selectedType = btn.dataset.type;
-            nameInput.placeholder = selectedType === "server" ? "Моя новая сфера..." : "Моя новая комната...";
+            const isJoin = selectedType === "join";
+            // Переключаем поля: создание показывает «Название», вход — ссылку.
+            if (nameField) nameField.classList.toggle("hidden", isJoin);
+            if (joinField) joinField.classList.toggle("hidden", !isJoin);
+            if (!isJoin && nameInput) {
+                nameInput.placeholder = selectedType === "server" ? "Моя новая сфера..." : "Моя новая комната...";
+            }
+            if (submitBtn) submitBtn.textContent = isJoin ? "Войти" : "Создать";
         });
     });
 
     if (submitBtn) {
         submitBtn.addEventListener("click", async () => {
+            // ── Вход по ссылке-приглашению ──────────────────────────
+            if (selectedType === "join") {
+                const raw = joinInput ? joinInput.value.trim() : '';
+                const code = (typeof parseInviteCode === 'function') ? parseInviteCode(raw) : null;
+                if (!code) {
+                    showToast('Ошибка', 'Вставьте корректную ссылку-приглашение.');
+                    return;
+                }
+                const id = await joinSpaceByCode(code);
+                if (id) {
+                    modal.classList.add("hidden");
+                    if (joinInput) joinInput.value = "";
+                }
+                return;
+            }
+
+            // ── Создание сферы/комнаты ──────────────────────────────
             const name = nameInput.value.trim();
             if (!name) return;
-            
+
             let id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-zа-яё0-9-]/gi, '') + '-' + Date.now().toString(36);
             let realServer = null;
 
@@ -2961,61 +3122,25 @@ if (addServerBtn) {
                     realServer = res.server || res;
                 } else if (selectedType === "room" && typeof RoomsAPI !== 'undefined') {
                     const res = await RoomsAPI.create(name, "Моя новая комната");
-                    realServer = res.server || res;
+                    // Роут /rooms возвращает { room: populatedRoom } (с populated owner).
+                    // Без res.room брался весь ответ без _id/owner → овнер не
+                    // определялся до перезагрузки приложения.
+                    realServer = res.room || res.server || res;
                 }
             } catch (err) {
                 console.error("API Error creating space:", err);
             }
 
             if (realServer && realServer._id) {
-                id = 'srv-' + realServer._id;
-                const kind = realServer.settings?.kind === 'room' ? 'room' : 'server';
-                const channels = (realServer.channels || []).map(ch => ({
-                    id: 'ch-' + ch._id,
-                    name: ch.name || 'general',
-                    type: ch.type || 'text',
-                    messages: [],
-                    _realId: ch._id
-                }));
-
-                mockServers[id] = {
-                    name: realServer.name,
-                    description: realServer.description || '',
-                    channels: channels,
-                    _realId: realServer._id,
-                    _kind: kind,
-                    _icon: realServer.icon,
-                    _banner: realServer.banner,
-                    _members: realServer.members || [],
-                    _ownerId: realServer.owner || realServer.ownerId
-                };
-
-                if (window.servers && !window.servers.find(s => s._id === realServer._id)) {
-                    window.servers.push(realServer);
-                }
-                if (typeof window.socketJoinServer === 'function') {
-                    window.socketJoinServer(realServer._id);
-                }
-                
-                // Add to maps
-                if (window._srvReverseMap) {
-                    const channelMap = new Map();
-                    channels.forEach(ch => channelMap.set(ch.id, ch._realId));
-                    window._srvReverseMap.set(id, { realServerId: realServer._id, channels: channelMap, kind });
-                }
+                id = integrateServerIntoUI(realServer, false);
             } else {
                 // Fallback to mock creation if API fails/unavailable
-                if (selectedType === "server") {
-                    mockServers[id] = { name, kind: "server", channels: [{ id: id + "-general", name: "общий", type: "text" }, { id: id + "-voice", name: "Голосовой", type: "voice" }] };
-                } else {
-                    mockServers[id] = { name, kind: "room", channels: [{ id: id + "-general", name: "общий", type: "text" }, { id: id + "-voice", name: "Голосовой", type: "voice" }] };
-                }
+                mockServers[id] = { name, kind: selectedType === "server" ? "server" : "room", channels: [{ id: id + "-general", name: "общий", type: "text" }, { id: id + "-voice", name: "Голосовой", type: "voice" }] };
+                const accordion = document.getElementById("spaces-accordion-container");
+                if (accordion) accordion.innerHTML = ""; // Clear to force re-render
+                renderUnifiedSidebar();
             }
 
-            const accordion = document.getElementById("spaces-accordion-container");
-            if (accordion) accordion.innerHTML = ""; // Clear to force re-render
-            renderUnifiedSidebar();
-            
             modal.classList.add("hidden");
             nameInput.value = "";
             showToast("Создано", `${selectedType === "server" ? 'Сфера' : 'Комната'} «${name}» создана.`);
@@ -3077,6 +3202,7 @@ function renderServerChat() {
     const chatPanel = document.getElementById("server-chat-panel");
     if (chatPanel) chatPanel.classList.remove("hidden");
 
+    _saveVideoStates(serverChatFeed);
     serverChatFeed.innerHTML = "";
     const serverData = mockServers[activeServerId];
     if (!serverData) return;
@@ -3160,8 +3286,9 @@ function renderServerChat() {
             `;
         }
 
+        const srvBubbleText = msg.text ? `<div class="message-bubble">${escHTML(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
-            <div class="message-bubble">${escHTML(msg.text)}</div>
+            ${srvBubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
             ${actionsHtml}
         `;
@@ -3171,7 +3298,12 @@ function renderServerChat() {
 
         if (editBtn) {
             editBtn.addEventListener("click", () => {
-                const bubble = bubbleWrap.querySelector(".message-bubble");
+                let bubble = bubbleWrap.querySelector(".message-bubble");
+                if (!bubble) {
+                    bubble = document.createElement('div');
+                    bubble.className = 'message-bubble';
+                    bubbleWrap.prepend(bubble);
+                }
                 const oldText = msg.text;
                 bubbleWrap.classList.add("editing");
                 bubble.innerHTML = `
@@ -3222,8 +3354,12 @@ function renderServerChat() {
                 }
             });
         }
+        if (typeof window.renderMessageAttachments === 'function') window.renderMessageAttachments(bubbleWrap, msg.attachments);
+        if (typeof window.attachInviteCard === 'function') window.attachInviteCard(bubbleWrap, msg.text);
         groupContent.appendChild(bubbleWrap);
     });
+
+    _restoreVideoStates(serverChatFeed);
 
     if (typeof window.scrollToBottom === 'function') {
         window.scrollToBottom(serverChatFeed);
@@ -3261,9 +3397,10 @@ serverMessageForm.addEventListener("submit", (e) => {
 
     // Real backend: send via socket
     if (channel._realId && typeof window._sendRealChannelMessage === 'function' && window._sendRealChannelMessage(channel._realId, text)) {
-        // Add optimistic message
-        const displayName = window.currentUser?.nickname || window.currentUser?.username || 'Вы';
-        channel.messages.push({ sender: displayName, text: text, time: timeStr, _pending: true });
+        // Оптимистичное сообщение. ВАЖНО: sender='own', иначе appendMessage не
+        // смёржит его с входящим эхо (он ищет pending с sender==='own') и своё
+        // сообщение задвоится — слева как «партнёр», справа как своё.
+        channel.messages.push({ sender: 'own', text: text, time: timeStr, _pending: true });
         serverMessageInput.value = "";
         renderServerChat();
         return;
@@ -3295,6 +3432,480 @@ serverMessageForm.addEventListener("submit", (e) => {
     const channelIdCopy = activeServerChannelId;
 });
 
+// Отправить сообщение с вложениями в АКТИВНОМ контексте (ЛС/сфера/комната).
+// Используется кнопкой прикрепления файла и голосовыми. Возвращает true при успехе.
+window.sendMessageWithAttachments = function (attachments, text = '') {
+    const hasAtt = attachments && attachments.length;
+    if (!hasAtt && !String(text).trim()) return false;
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // ЛС
+    if (activeView === 'view-chats') {
+        const conv = mockConversations.find(c => c.id === activeConversationId);
+        if (!conv || !conv._realId) return false;
+        if (window._sendRealDMMessage && window._sendRealDMMessage(conv, text, attachments)) {
+            conv.messages.push({ sender: 'own', text: text || '', time: timeStr, _pending: true, attachments: attachments || [] });
+            renderChatMessages(conv);
+            if (typeof renderConversationsList === 'function') renderConversationsList(typeof searchInput !== 'undefined' && searchInput ? searchInput.value : "");
+            return true;
+        }
+        return false;
+    }
+
+    // Сфера/комната
+    if (activeView === 'view-servers') {
+        const serverData = mockServers[activeServerId];
+        if (!serverData) return false;
+        const kind = serverData._kind || serverData.kind;
+        let channel = serverData.channels.find(ch => ch.id === activeServerChannelId);
+        if (!channel || channel.type === 'voice') channel = serverData.channels.find(ch => ch.type === 'text');
+        if (!channel || !channel._realId) return false;
+        if (window._sendRealChannelMessage && window._sendRealChannelMessage(channel._realId, text, attachments)) {
+            channel.messages.push({ sender: 'own', text: text || '', time: timeStr, _pending: true, attachments: attachments || [] });
+            if (kind === 'room') renderRoomChat(); else renderServerChat();
+            return true;
+        }
+        return false;
+    }
+    return false;
+};
+
+// Прикрепление файлов со СТЕЙДЖИНГОМ: выбранные файлы попадают в лоток-превью
+// над инпутом (со статусом загрузки), а отправляются вместе с текстом по сабмиту.
+(function initFileAttach() {
+    let staged = [];          // { id, name, type, status, att, previewUrl }
+    let trayForm = null;      // форма, над которой показан лоток
+    let trayEl = null;
+    let attachForm = null;    // форма кнопки, по которой открыли выбор файла
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip,.rar';
+    fileInput.multiple = true;
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+
+    function escName(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    function removeTray() { if (trayEl) { trayEl.remove(); } }
+    function clearStaged() { staged.forEach(s => { if (s.previewUrl) URL.revokeObjectURL(s.previewUrl); }); staged = []; renderTray(); }
+
+    function renderTray() {
+        if (!staged.length) { removeTray(); return; }
+        if (!trayEl) { trayEl = document.createElement('div'); trayEl.className = 'attach-tray'; }
+        if (trayForm && trayEl.parentElement !== trayForm.parentElement) {
+            trayForm.parentElement.insertBefore(trayEl, trayForm);
+        }
+        trayEl.innerHTML = '';
+        staged.forEach(s => {
+            const item = document.createElement('div');
+            item.className = 'attach-tray-item' + (s.status === 'uploading' ? ' is-uploading' : '') + (s.status === 'error' ? ' is-error' : '');
+            if (s.type === 'image' && s.previewUrl) {
+                item.classList.add('has-thumb');
+                item.style.backgroundImage = `url("${s.previewUrl}")`;
+            } else {
+                item.innerHTML = `<span class="attach-tray-name">${escName(s.name)}</span>`;
+            }
+            if (s.status === 'uploading') {
+                const sp = document.createElement('div'); sp.className = 'attach-tray-spinner'; item.appendChild(sp);
+            }
+            const x = document.createElement('button');
+            x.type = 'button'; x.className = 'attach-tray-remove'; x.innerHTML = '&times;';
+            x.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+                staged = staged.filter(i => i.id !== s.id);
+                renderTray();
+            });
+            item.appendChild(x);
+            trayEl.appendChild(item);
+        });
+    }
+
+    async function uploadStaged(item, file) {
+        try {
+            const fd = new FormData();
+            fd.append('file', file, file.name);
+            const data = await apiUpload('/upload', fd, 'POST');
+            if (!data || !data.url) throw new Error('no url');
+            item.att = {
+                type: data.type || item.type,
+                url: data.url,
+                filename: data.filename || file.name,
+                originalName: data.originalName || file.name,
+                size: data.size || file.size,
+                mimetype: data.mimetype || file.type
+            };
+            item.status = 'ready';
+        } catch (e) {
+            console.error('[attach] upload failed:', e);
+            item.status = 'error';
+        }
+        renderTray();
+    }
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.input-control-btn[title="Прикрепить файл"]');
+        if (!btn) return;
+        e.preventDefault();
+        attachForm = btn.closest('form');
+        fileInput.click();
+    });
+
+    const MAX_FILES = 10; // лимит вложений в одном сообщении
+
+    fileInput.addEventListener('change', () => {
+        let files = Array.from(fileInput.files || []);
+        fileInput.value = '';
+        if (!files.length) return;
+        if (typeof apiUpload !== 'function') { showToast('Ошибка', 'Загрузка недоступна.'); return; }
+        const room = MAX_FILES - staged.length;
+        if (room <= 0) { showToast('Лимит', `Можно прикрепить максимум ${MAX_FILES} файлов.`); return; }
+        if (files.length > room) {
+            showToast('Лимит', `Добавлено ${room} из ${files.length} — максимум ${MAX_FILES} файлов.`);
+            files = files.slice(0, room);
+        }
+        trayForm = attachForm || document.querySelector('.message-input-form');
+        files.forEach(file => {
+            const type = file.type.startsWith('image/') ? 'image'
+                : file.type.startsWith('video/') ? 'video'
+                : file.type.startsWith('audio/') ? 'audio' : 'file';
+            const item = {
+                id: 'st-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                name: file.name, type, status: 'uploading', att: null,
+                previewUrl: type === 'image' ? URL.createObjectURL(file) : null
+            };
+            staged.push(item);
+            uploadStaged(item, file);
+        });
+        renderTray();
+    });
+
+    // Перехват отправки: если есть staged-вложения, шлём их вместе с текстом.
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!form.matches || !form.matches('#message-form, #server-message-form, #room-message-form')) return;
+        if (!staged.length) return; // нет вложений — обычная отправка текста
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (staged.some(s => s.status === 'uploading')) { showToast('Подождите', 'Файлы ещё загружаются…'); return; }
+        const ready = staged.filter(s => s.status === 'ready' && s.att).map(s => s.att);
+        if (!ready.length) { showToast('Ошибка', 'Файлы не загрузились.'); return; }
+        const input = form.querySelector('input[type="text"]');
+        const text = input ? input.value.trim() : '';
+        const ok = window.sendMessageWithAttachments(ready, text);
+        if (ok) {
+            if (input) input.value = '';
+            clearStaged();
+        } else {
+            showToast('Ошибка', 'Откройте чат, чтобы отправить.');
+        }
+    }, true);
+
+    window.addStagedFiles = function(files) {
+        if (typeof apiUpload !== 'function') return;
+        const fileArr = Array.from(files);
+        const room = MAX_FILES - staged.length;
+        if (room <= 0) { showToast('Лимит', `Можно прикрепить максимум ${MAX_FILES} файлов.`); return; }
+        const toAdd = fileArr.slice(0, room);
+        if (!trayForm) trayForm = document.querySelector('.message-input-form');
+        toAdd.forEach(file => {
+            const type = file.type.startsWith('image/') ? 'image'
+                : file.type.startsWith('video/') ? 'video'
+                : file.type.startsWith('audio/') ? 'audio' : 'file';
+            const item = {
+                id: 'st-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                name: file.name || 'screenshot.png', type, status: 'uploading', att: null,
+                previewUrl: type === 'image' ? URL.createObjectURL(file) : null
+            };
+            staged.push(item);
+            uploadStaged(item, file);
+        });
+        renderTray();
+    };
+})();
+
+// Clipboard paste: Ctrl+V / Cmd+V вставка изображений из буфера обмена
+(function initClipboardPaste() {
+    function handlePaste(e) {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        const imageFiles = [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.startsWith('image/')) {
+                const file = items[i].getAsFile();
+                if (file) imageFiles.push(file);
+            }
+        }
+        if (!imageFiles.length) return;
+        e.preventDefault();
+        if (typeof window.addStagedFiles === 'function') {
+            window.addStagedFiles(imageFiles);
+        }
+    }
+    document.addEventListener('paste', (e) => {
+        const active = document.activeElement;
+        if (active && (active.id === 'message-input' || active.id === 'server-message-input' || active.id === 'room-message-input')) {
+            handlePaste(e);
+        }
+    });
+})();
+
+// Эмодзи-пикер: клик по кнопке «Смайлики» открывает панель, выбор вставляет
+// эмодзи в инпут той же формы (ЛС/сфера/комната). Самодостаточный, без старого emojis.js.
+(function initEmojiPicker() {
+    const EMOJIS = ('😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥳 ' +
+        '😏 😒 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 ' +
+        '🤫 😶 😐 😑 😬 🙄 😮 😲 🥱 😴 🤤 😪 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 👍 👎 👌 ✌️ 🤞 🤟 🤙 👏 🙏 💪 ' +
+        '🔥 ✨ 🎉 ⭐ 💯 ❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💔 💋 👀 🎮 🎧 ☕ 🍕 🚀').split(' ').filter(Boolean);
+
+    let panel = null;
+    let targetInput = null;
+
+    function closePanel() {
+        if (panel) { panel.remove(); panel = null; targetInput = null; }
+    }
+
+    function insertAtCursor(input, text) {
+        const start = input.selectionStart != null ? input.selectionStart : input.value.length;
+        const end = input.selectionEnd != null ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, start) + text + input.value.slice(end);
+        const pos = start + text.length;
+        try { input.setSelectionRange(pos, pos); } catch (_) {}
+        input.focus();
+    }
+
+    function openPanel(btn) {
+        closePanel();
+        const form = btn.closest('form');
+        targetInput = form ? form.querySelector('input[type="text"]') : null;
+        if (!targetInput) return;
+
+        panel = document.createElement('div');
+        panel.className = 'emoji-picker';
+        EMOJIS.forEach(em => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = em;
+            b.addEventListener('click', () => { insertAtCursor(targetInput, em); });
+            panel.appendChild(b);
+        });
+        document.body.appendChild(panel);
+
+        const r = btn.getBoundingClientRect();
+        panel.style.left = Math.min(Math.max(8, r.left), window.innerWidth - 312) + 'px';
+        panel.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+    }
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.input-control-btn[title="Смайлики"]');
+        if (btn) {
+            e.preventDefault();
+            if (panel) closePanel(); else openPanel(btn);
+            return;
+        }
+        // Клик вне панели и не по эмодзи — закрыть
+        if (panel && !e.target.closest('.emoji-picker')) closePanel();
+    });
+})();
+
+// Голосовые сообщения: клик по кнопке войса → запись с микрофона → бар с таймером
+// и кнопками «Отмена»/«Отправить» → загрузка аудио → отправка как вложение.
+(function initVoiceMessages() {
+    const MAX_MS = 5 * 60 * 1000; // авто-стоп через 5 минут
+    let mediaRecorder = null, chunks = [], micStream = null;
+    let startTs = 0, timerId = null, maxTimerId = null, activeForm = null, bar = null, shouldSend = false;
+
+    const isRec = () => mediaRecorder && mediaRecorder.state === 'recording';
+
+    function stopTracks() {
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    }
+    function cleanupBar() {
+        if (timerId) { clearInterval(timerId); timerId = null; }
+        if (maxTimerId) { clearTimeout(maxTimerId); maxTimerId = null; }
+        if (bar) { bar.remove(); bar = null; }
+        activeForm = null;
+    }
+    function fmt(ms) {
+        const s = Math.floor(ms / 1000);
+        return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }
+
+    async function start(form) {
+        if (isRec()) return;
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {
+            showToast('Ошибка', 'Нет доступа к микрофону.');
+            return;
+        }
+        chunks = [];
+        try {
+            mediaRecorder = new MediaRecorder(micStream);
+        } catch (e) {
+            stopTracks();
+            showToast('Ошибка', 'Запись не поддерживается.');
+            return;
+        }
+        mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+        mediaRecorder.onstop = onStop;
+        mediaRecorder.start();
+        startTs = Date.now();
+        activeForm = form;
+        showBar(form);
+        maxTimerId = setTimeout(() => { shouldSend = true; if (isRec()) mediaRecorder.stop(); }, MAX_MS);
+    }
+
+    function showBar(form) {
+        form.style.position = 'relative';
+        bar = document.createElement('div');
+        bar.className = 'voice-rec-bar';
+        bar.innerHTML = `
+            <span class="voice-rec-dot"></span>
+            <span class="voice-rec-time">0:00</span>
+            <span class="voice-rec-spacer"></span>
+            <button type="button" class="voice-rec-cancel">Отмена</button>
+            <button type="button" class="voice-rec-send">Отправить</button>`;
+        form.appendChild(bar);
+        bar.querySelector('.voice-rec-cancel').addEventListener('click', () => { shouldSend = false; if (isRec()) mediaRecorder.stop(); });
+        bar.querySelector('.voice-rec-send').addEventListener('click', () => { shouldSend = true; if (isRec()) mediaRecorder.stop(); });
+        timerId = setInterval(() => {
+            const t = bar && bar.querySelector('.voice-rec-time');
+            if (t) t.textContent = fmt(Date.now() - startTs);
+        }, 200);
+    }
+
+    async function onStop() {
+        stopTracks();
+        const send = shouldSend;
+        shouldSend = false;
+        const localChunks = chunks.slice();
+        cleanupBar();
+        if (!send || !localChunks.length) return;
+        if (typeof apiUpload !== 'function') { showToast('Ошибка', 'Загрузка недоступна.'); return; }
+
+        const blob = new Blob(localChunks, { type: 'audio/webm' });
+        try {
+            showToast('Загрузка', 'Отправляю голосовое…');
+            const fd = new FormData();
+            fd.append('file', blob, 'voice-message.webm');
+            const data = await apiUpload('/upload', fd, 'POST');
+            if (!data || !data.url) { showToast('Ошибка', 'Не удалось отправить голосовое.'); return; }
+            const att = {
+                type: 'audio',
+                url: data.url,
+                filename: data.filename || 'voice-message.webm',
+                originalName: data.originalName || 'voice-message.webm',
+                size: data.size || blob.size,
+                mimetype: data.mimetype || 'audio/webm'
+            };
+            const ok = window.sendMessageWithAttachments([att], '');
+            if (!ok) showToast('Ошибка', 'Откройте чат, чтобы отправить голосовое.');
+        } catch (err) {
+            console.error('[voice-msg] send failed:', err);
+            showToast('Ошибка', 'Не удалось отправить голосовое.');
+        }
+    }
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.input-control-btn.voice-btn');
+        if (!btn) return;
+        e.preventDefault();
+        if (isRec()) return; // во время записи управляем баром
+        const form = btn.closest('form');
+        if (form) start(form);
+    });
+})();
+
+// Контекст-меню сообщений: ПКМ по сообщению/вложению → изменить/копировать/удалить.
+(function initMessageContextMenu() {
+    const EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+    const COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    const DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+    let menu = null;
+    function close() { if (menu) { menu.remove(); menu = null; } }
+    document.addEventListener('click', close);
+    document.addEventListener('scroll', close, true);
+    window.addEventListener('blur', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+    function openMenu(wrap, x, y) {
+        close();
+        const isOwn = !!wrap.closest('.message-group.own') || !!wrap.querySelector('.edit-btn');
+        const bubble = wrap.querySelector('.message-bubble');
+        const text = bubble ? bubble.textContent.trim() : '';
+        const editBtn = wrap.querySelector('.edit-btn');
+        const delBtn = wrap.querySelector('.delete-btn');
+        const messageId = wrap.getAttribute('data-message-id');
+
+        const items = [];
+        if (isOwn && editBtn && text) items.push({ label: 'Изменить', icon: EDIT_SVG, action: () => editBtn.click() });
+        if (text) items.push({ label: 'Копировать', icon: COPY_SVG, action: () => { try { navigator.clipboard.writeText(text); showToast('Скопировано', 'Текст в буфере.'); } catch (_) {} } });
+        if (isOwn) items.push({
+            label: 'Удалить', icon: DEL_SVG, danger: true, action: () => {
+                if (delBtn) { delBtn.click(); return; }
+                if (!messageId) return;
+                if (!confirm('Удалить это сообщение?')) return;
+                if (window.socket) window.socket.emit('message:delete', { messageId });
+                else if (typeof MessagesAPI !== 'undefined') MessagesAPI.delete(messageId);
+                wrap.remove();
+            }
+        });
+        if (!items.length) return;
+
+        menu = document.createElement('div');
+        menu.className = 'msg-context-menu';
+        items.forEach(it => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'msg-context-item' + (it.danger ? ' danger' : '');
+            b.innerHTML = `${it.icon}<span>${it.label}</span>`;
+            b.addEventListener('click', (ev) => { ev.stopPropagation(); close(); it.action(); });
+            menu.appendChild(b);
+        });
+        document.body.appendChild(menu);
+
+        const mw = 190, mh = menu.offsetHeight || (items.length * 38 + 10);
+        if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+        if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+        menu.style.left = Math.max(8, x) + 'px';
+        menu.style.top = Math.max(8, y) + 'px';
+    }
+
+    // Десктоп — правый клик.
+    document.addEventListener('contextmenu', (e) => {
+        const wrap = e.target.closest('.message-bubble-wrap');
+        if (!wrap) return;
+        e.preventDefault();
+        openMenu(wrap, e.clientX, e.clientY);
+    });
+
+    // Мобайл — долгий тап (~500 мс). Двигнул палец/отпустил раньше — отмена.
+    let lpTimer = null, lpWrap = null, lpX = 0, lpY = 0;
+    function cancelLongPress() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpWrap = null; }
+    document.addEventListener('touchstart', (e) => {
+        const wrap = e.target.closest('.message-bubble-wrap');
+        if (!wrap) return;
+        const t = e.touches[0];
+        lpWrap = wrap; lpX = t.clientX; lpY = t.clientY;
+        lpTimer = setTimeout(() => {
+            lpTimer = null;
+            if (lpWrap) { if (navigator.vibrate) try { navigator.vibrate(15); } catch (_) {} openMenu(lpWrap, lpX, lpY); }
+        }, 500);
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+        if (!lpTimer) return;
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - lpX) > 10 || Math.abs(t.clientY - lpY) > 10) cancelLongPress();
+    }, { passive: true });
+    document.addEventListener('touchend', cancelLongPress, { passive: true });
+    document.addEventListener('touchcancel', cancelLongPress, { passive: true });
+})();
+
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 3. СЕКЦИЯ: ДРУЗЬЯ (view-friends)
@@ -3308,8 +3919,72 @@ const friendsInlineSearchBar = document.getElementById("friends-inline-search-ba
 const friendsLocalSearchInput = document.getElementById("friends-local-search-input");
 const friendsClearSearchBtn = document.getElementById("friends-clear-search-btn");
 
+// Общая логика отправки заявки в друзья (переиспользуется инлайн-формой и модалкой).
+// Возвращает true при успешной отправке.
+window.sendFriendRequest = async function (username) {
+    username = (username || '').trim();
+    if (!username) return false;
+    const exists = mockFriends.find(f => f.name.toLowerCase() === username.toLowerCase());
+    if (exists) { showToast("Уже в списке", `Связь с ${username} уже существует или отправлена.`); return false; }
+
+    let realId = null;
+    if (typeof UsersAPI !== 'undefined' && typeof FriendsAPI !== 'undefined') {
+        try {
+            const searchRes = await UsersAPI.search(username);
+            const users = searchRes.users || searchRes;
+            const user = users.find(u => u.username === username || u.nickname === username);
+            if (!user) { showToast("Ошибка", `Пользователь ${username} не найден.`); return false; }
+            await FriendsAPI.sendRequest(user._id);
+            realId = user._id;
+            if (typeof socketNotifyFriendRequest === 'function') socketNotifyFriendRequest(user._id);
+            else if (window.socket) window.socket.emit('friend:request', { targetUserId: user._id });
+        } catch (err) {
+            showToast("Ошибка", "Не удалось отправить запрос.");
+            return false;
+        }
+    }
+    mockFriends.push({
+        name: username, avatar: username.charAt(0).toUpperCase(), online: false,
+        statusText: "Исходящий запрос", type: "pending", direction: "outgoing", _realId: realId
+    });
+    showToast("Запрос отправлен", `Пользователю ${username} отправлено предложение дружбы.`);
+    return true;
+};
+
+// Модалка добавления друга (используется на ПК вместо смены вкладки).
+(function initAddFriendModal() {
+    const modal = document.getElementById("add-friend-modal");
+    if (!modal) return;
+    const closeBtn = document.getElementById("add-friend-close");
+    const form = document.getElementById("add-friend-modal-form");
+    const input = document.getElementById("add-friend-modal-input");
+
+    window.openAddFriendModal = function () {
+        modal.classList.remove("hidden");
+        if (input) { input.value = ""; setTimeout(() => input.focus(), 50); }
+    };
+    function close() { modal.classList.add("hidden"); }
+    if (closeBtn) closeBtn.addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    if (form) form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const ok = await window.sendFriendRequest(input.value);
+        if (ok) {
+            close();
+            // Обновим список, если открыта вкладка друзей
+            const activeTab = document.querySelector(".friends-filter-nav .filter-tab.active");
+            if (activeTab && typeof loadFriends === 'function') loadFriends(activeTab.getAttribute("data-tab") || "all");
+        }
+    });
+})();
+
 if (friendsAddToggleBtn) {
     friendsAddToggleBtn.addEventListener("click", () => {
+        // На ПК — модалка; на узких экранах оставляем вкладку «Добавить».
+        if (window.innerWidth > 768 && typeof window.openAddFriendModal === 'function') {
+            window.openAddFriendModal();
+            return;
+        }
         friendTabs.forEach(t => t.classList.remove("active"));
         const addTab = document.querySelector(".filter-tab[data-tab='add']");
         if (addTab) addTab.classList.add("active");
@@ -3345,10 +4020,15 @@ if (friendsClearSearchBtn) {
 
 friendTabs.forEach(tab => {
     tab.addEventListener("click", () => {
+        const tabType = tab.getAttribute("data-tab");
+        // На ПК вкладка «Добавить» открывает модалку, а не меняет содержимое.
+        if (tabType === "add" && window.innerWidth > 768 && typeof window.openAddFriendModal === 'function') {
+            window.openAddFriendModal();
+            return;
+        }
         friendTabs.forEach(t => t.classList.remove("active"));
         tab.classList.add("active");
-        const tabType = tab.getAttribute("data-tab");
-        
+
         if (friendsInlineSearchBar) {
             if (tabType === "add") {
                 friendsInlineSearchBar.classList.add("hidden");
@@ -3358,7 +4038,7 @@ friendTabs.forEach(tab => {
         }
         if (friendsLocalSearchInput) friendsLocalSearchInput.value = "";
         if (friendsClearSearchBtn) friendsClearSearchBtn.style.display = "none";
-        
+
         loadFriends(tabType);
     });
 });
@@ -3539,49 +4219,8 @@ function loadFriends(type) {
         document.getElementById("add-friend-inner-form").addEventListener("submit", async (e) => {
             e.preventDefault();
             const username = document.getElementById("friend-username-input").value.trim();
-            if (username) {
-                const exists = mockFriends.find(f => f.name.toLowerCase() === username.toLowerCase());
-                if (exists) {
-                    showToast("Уже в списке", `Связь с ${username} уже существует или отправлена.`);
-                    return;
-                }
-                
-                let realId = null;
-                if (typeof UsersAPI !== 'undefined' && typeof FriendsAPI !== 'undefined') {
-                    try {
-                        const searchRes = await UsersAPI.search(username);
-                        const users = searchRes.users || searchRes;
-                        const user = users.find(u => u.username === username || u.nickname === username);
-                        if (!user) {
-                            showToast("Ошибка", `Пользователь ${username} не найден.`);
-                            return;
-                        }
-                        await FriendsAPI.sendRequest(user._id);
-                        realId = user._id;
-                        if (typeof socketNotifyFriendRequest === 'function') {
-                            socketNotifyFriendRequest(user._id);
-                        } else if (window.socket) {
-                            window.socket.emit('friend:request', { targetUserId: user._id });
-                        }
-                    } catch (err) {
-                        showToast("Ошибка", "Не удалось отправить запрос.");
-                        return;
-                    }
-                }
-
-                mockFriends.push({
-                    name: username,
-                    avatar: username.charAt(0).toUpperCase(),
-                    online: false,
-                    statusText: "Исходящий запрос",
-                    type: "pending",
-                    direction: "outgoing",
-                    _realId: realId
-                });
-                showToast("Запрос отправлен", `Пользователю ${username} отправлено предложение дружбы.`);
-                document.getElementById("friend-username-input").value = "";
-                loadFriends("add");
-            }
+            const ok = await window.sendFriendRequest(username);
+            if (ok) { document.getElementById("friend-username-input").value = ""; loadFriends("add"); }
         });
         return;
     }
@@ -3754,8 +4393,8 @@ function loadFriends(type) {
 // Love Hub статичный: реальная версия приложения. Полноценная история
 // обновлений и управление появятся позже через админ-панель.
 const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion === 'function')
-    ? (window.electronAPI.getVersion() || '1.7.2')
-    : '1.7.2';
+    ? (window.electronAPI.getVersion() || '2.0.0')
+    : '2.0.0';
 
 let mockHubUpdates = [
     {
@@ -3764,8 +4403,19 @@ let mockHubUpdates = [
         date: "",
         tag: "Текущая версия",
         title: "Love App v" + APP_VERSION,
-        desc: "Текущая установленная версия приложения. Полная история изменений будет доступна позже.",
-        changes: []
+        desc: "Мажорное обновление: Android-приложение, исправления видео и сообщений.",
+        changes: [
+            "Android-приложение через Capacitor (APK-сборка)",
+            "Исправлено воспроизведение видео при переключении вкладок",
+            "Исправлено удаление сообщений (temp-ID ошибка)",
+            "Скрытие пустых облачков при отправке файлов без текста",
+            "Вставка изображений из буфера обмена (Ctrl+V)",
+            "Исправлено выравнивание вложений в own-сообщениях",
+            "Исправлены кнопки редактирования/удаления (показ при наведении)",
+            "Исправлен крестик удаления файлов в превью",
+            "Устранён конфликт CSP для видео в Electron",
+            "Исправлен сброс видео/аудио при новом сообщении"
+        ]
     }
 ];
 

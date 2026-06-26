@@ -733,7 +733,11 @@ module.exports = (io) => {
           nickname: socket.user.nickname,
           avatar: socket.user.avatar,
           muted: false,
-          deafened: false
+          deafened: false,
+          // Состояние стримов участника — рассылается в voice:members_update,
+          // чтобы все клиенты знали, кто шарит экран / включил камеру.
+          screenSharing: false,
+          cameraOn: false
         });
         
         // Присоединяемся к комнате голосового канала
@@ -900,6 +904,17 @@ module.exports = (io) => {
       });
     });
 
+    // Помечает флаг стрима участника и рассылает обновлённый состав, чтобы у
+    // всех клиентов синхронизировались hasShare/hasCam (источник истины — сервер).
+    const _setStreamFlag = (channelId, field, value) => {
+      const members = voiceChannels.get(channelId);
+      if (!members) return null;
+      const member = members.find(m => m.userId === userId);
+      if (member) member[field] = value;
+      io.to(`voice:${channelId}`).emit('voice:members_update', { channelId, members });
+      return members;
+    };
+
     /**
      * Демонстрация экрана - начало
      */
@@ -910,6 +925,7 @@ module.exports = (io) => {
         userId,
         username: socket.user.username
       });
+      _setStreamFlag(channelId, 'screenSharing', true);
     });
 
     /**
@@ -921,6 +937,32 @@ module.exports = (io) => {
         channelId,
         userId
       });
+      _setStreamFlag(channelId, 'screenSharing', false);
+    });
+
+    /**
+     * Камера - начало
+     */
+    socket.on('camera:start', (data) => {
+      const { channelId } = data;
+      socket.to(`voice:${channelId}`).emit('camera:started', {
+        channelId,
+        userId,
+        username: socket.user.username
+      });
+      _setStreamFlag(channelId, 'cameraOn', true);
+    });
+
+    /**
+     * Камера - остановка
+     */
+    socket.on('camera:stop', (data) => {
+      const { channelId } = data;
+      socket.to(`voice:${channelId}`).emit('camera:stopped', {
+        channelId,
+        userId
+      });
+      _setStreamFlag(channelId, 'cameraOn', false);
     });
 
     // ==================== СЕРВЕРЫ ====================

@@ -31,6 +31,7 @@ function insertFormatting(before, after) {
   }
   
   input.focus();
+  input.dispatchEvent(new Event('input', { bubbles: true }));
   
   // Обновляем высоту textarea
   if (typeof handleMessageInput === 'function') {

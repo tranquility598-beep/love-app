@@ -140,7 +140,7 @@
       width: '100%', boxSizing: 'border-box', marginBottom: '0', position: 'relative',
       opacity: '0', transform: 'translateY(14px) scale(0.97)',
       transition: 'opacity 0.3s cubic-bezier(0.34,1.2,0.5,1), transform 0.3s cubic-bezier(0.34,1.2,0.5,1)',
-      pointerEvents: 'auto', cursor: opts.onClick ? 'pointer' : 'default',
+      pointerEvents: 'auto', cursor: 'pointer',
       boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
     });
     toast.innerHTML = `
@@ -159,9 +159,8 @@
       setTimeout(() => toast.remove(), 280);
     }
 
-    if (opts.onClick) {
-      toast.addEventListener('click', () => { opts.onClick(); dismiss(); });
-    }
+    // Любой тост кликабелен — клик закрывает его (и выполняет действие, если есть).
+    toast.addEventListener('click', () => { if (typeof opts.onClick === 'function') opts.onClick(); dismiss(); });
 
     container.appendChild(toast);
     requestAnimationFrame(() => {
@@ -329,6 +328,7 @@
             time: _formatTime(msg.createdAt || new Date().toISOString()),
             _id: msg._id,
             author: msg.author?._id || msg.author,
+            authorAvatar: msg.author?.avatar || '',
             attachments: msg.attachments || []
           });
 
@@ -773,6 +773,7 @@
           id:      mockId,
           name:    displayName,
           avatar:  _initials(displayName),
+          avatarUrl: other.avatar || '',   // реальный URL аватара (если есть)
           status:  statusText,
           online:  other.status === 'online' || other.status === 'idle',
           unread:  !!conv.unread,
@@ -923,6 +924,7 @@
         result.push({
           name:       f.nickname || f.username || 'User',
           avatar:     _initials(f.nickname || f.username),
+          avatarUrl:  f.avatar || '',
           online:     f.status === 'online' || f.status === 'idle',
           statusText: f.customStatus || statusMap[f.status] || 'не в сети',
           type:       'friend',
@@ -940,6 +942,7 @@
         result.push({
           name:       from.nickname || from.username || 'User',
           avatar:     _initials(from.nickname || from.username),
+          avatarUrl:  from.avatar || '',
           online:     false,
           statusText: 'Входящий запрос',
           type:       'pending',
@@ -955,6 +958,7 @@
         result.push({
           name:       to.nickname || to.username || 'User',
           avatar:     _initials(to.nickname || to.username),
+          avatarUrl:  to.avatar || '',
           online:     false,
           statusText: 'Исходящий запрос',
           type:       'pending',
@@ -965,13 +969,10 @@
 
       setFriends(result);
 
-      // Re-render friends tab if currently visible
-      if (typeof loadFriends === 'function') {
-        const state = window._getActiveState ? window._getActiveState() : {};
-        if (state.activeView === 'view-contacts') {
-          loadFriends();
-        }
-      }
+      // Перерисовываем список друзей РЕНДЕРЕРОМ (не loadRealFriends — иначе
+      // рекурсия, т.к. window.loadFriends здесь = этот же загрузчик). Рендерер
+      // сам берёт активную вкладку и читает обновлённый mockFriends.
+      if (typeof window.renderFriendsTab === 'function') window.renderFriendsTab();
 
       console.log('[init-app] Friends loaded:', result.length);
     } catch (err) {
@@ -1038,6 +1039,7 @@
         time:   _formatTime(msg.createdAt),
         _id:    msg._id,
         author: msg.author?._id || msg.author,
+        authorAvatar: msg.author?.avatar || '',
         attachments: msg.attachments || []
       }));
 
@@ -1387,12 +1389,17 @@
       return {
         name: name,
         avatar: (m.avatarLetters || _initials(name)).slice(0, 2),
+        avatarUrl: m.avatar || '',
         speaking: !!m.speaking,
-        hasCam: !!m.hasCam,
+        // Статус стримов берём из состояния сервера (screenSharing/cameraOn),
+        // не полагаясь только на факт прилёта webrtc-трека.
+        hasCam: !!(m.hasCam || m.cameraOn),
+        hasShare: !!(m.hasShare || m.screenSharing),
         isOwn: isOwn,
         micActive: !m.muted,
         soundActive: !m.deafened,
-        userId: m.userId
+        userId: m.userId,
+        socketId: m.socketId
       };
     });
 
@@ -1536,15 +1543,11 @@
     // (реальный клик по room-btn + синтетический по voice-btn) отменяет toggle.
     const micBtn = e.target.closest('#voice-btn-mic');
     if (micBtn) {
+      // Капча идёт ДО script.js: класс ещё в дотогловом состоянии → целевое = !текущее.
+      // toggleMute идемпотентно сам шлёт socketToggleMute — отдельный вызов убран
+      // (двойной эмит ломал синхронизацию при спам-кликах).
       const muted = !!micBtn.classList.contains('muted-state');
       if (typeof vm.toggleMute === 'function') vm.toggleMute(!muted);
-      if (typeof socketToggleMute === 'function') socketToggleMute(vm.channelId, !muted);
-      return;
-    }
-    const soundBtn = e.target.closest('#voice-btn-sound');
-    if (soundBtn) {
-      const deafened = !!soundBtn.classList.contains('muted-state');
-      if (typeof vm.toggleDeafen === 'function') vm.toggleDeafen(!deafened);
       return;
     }
   }, true); // capture phase — до оригинальных обработчиков, чтобы WebRTC успел обновиться
@@ -1559,7 +1562,7 @@
     // После клика script.js уже переключил: active-state = демка включена
     const nowActive = shareBtn.classList.contains('active-state');
     if (nowActive && typeof openScreenshareModal === 'function') {
-      openScreenshareModal();
+      openScreenshareModal('voice-btn-share');
     } else if (!nowActive && window.voiceManager && typeof window.voiceManager.stopScreenShare === 'function') {
       window.voiceManager.stopScreenShare();
     }
@@ -1583,7 +1586,7 @@
     // script.js уже переключил screenshare-active
     const nowActive = btn.classList.contains('screenshare-active');
     if (nowActive && typeof openScreenshareModal === 'function') {
-      openScreenshareModal();
+      openScreenshareModal('call-btn-screenshare');
     } else if (!nowActive && window.voiceManager && typeof window.voiceManager.stopScreenShare === 'function') {
       window.voiceManager.stopScreenShare();
     }
@@ -1833,12 +1836,18 @@
   const DEFAULT_MEDIA_VOLUME = 0.4;
 
   // Пауза видео/аудио при уходе из видимости (скролл или выход из чата).
+  // Запоминаем позицию видео, чтобы не сбрасывать при возврате.
+  const _videoPosStore = new Map(); // url → { currentTime, paused }
   const _mediaIO = (typeof IntersectionObserver !== 'undefined')
     ? new IntersectionObserver((entries) => {
         entries.forEach(en => {
           if (!en.isIntersecting || en.intersectionRatio < 0.2) {
             const m = en.target;
-            if ((m.tagName === 'VIDEO' || m.tagName === 'AUDIO') && !m.paused) m.pause();
+            if ((m.tagName === 'VIDEO' || m.tagName === 'AUDIO') && !m.paused) {
+              // Запоминаем позицию перед паузой.
+              if (m.tagName === 'VIDEO' && m.src) _videoPosStore.set(m.src, { currentTime: m.currentTime, paused: true });
+              m.pause();
+            }
           }
         });
       }, { threshold: [0, 0.2] })
@@ -1878,6 +1887,39 @@
 
   // Безопасный показ длительности (Infinity/NaN → пусто).
   function _durStr(d) { return (isFinite(d) && d > 0) ? _fmtT(d) : '--:--'; }
+
+  function _bindMediaScrub(timeline, media, getDuration, paint) {
+    if (!timeline || !media) return;
+    const seek = (clientX) => {
+      const d = getDuration();
+      if (!d) return;
+      const r = timeline.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width)));
+      media.currentTime = pct * d;
+      if (typeof paint === 'function') paint();
+    };
+
+    timeline.addEventListener('pointerdown', (e) => {
+      if (e.button != null && e.button !== 0) return;
+      e.preventDefault();
+      timeline.classList.add('is-scrubbing');
+      try { timeline.setPointerCapture(e.pointerId); } catch (_) {}
+      seek(e.clientX);
+    });
+    timeline.addEventListener('pointermove', (e) => {
+      if (!timeline.classList.contains('is-scrubbing')) return;
+      e.preventDefault();
+      seek(e.clientX);
+    });
+    const stop = (e) => {
+      if (!timeline.classList.contains('is-scrubbing')) return;
+      timeline.classList.remove('is-scrubbing');
+      try { timeline.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+    timeline.addEventListener('pointerup', stop);
+    timeline.addEventListener('pointercancel', stop);
+    timeline.addEventListener('lostpointercapture', () => timeline.classList.remove('is-scrubbing'));
+  }
 
   const _PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const _PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
@@ -1923,7 +1965,17 @@
 
     let scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0;
     const label = bar.querySelector('.ilb-zoom-label');
+    // Ограничиваем смещение, чтобы картинка не уезжала за края окна
+    // (по краю отмасштабированной картинки vs размера окна).
+    const clampPan = () => {
+      const w = img.clientWidth * scale, h = img.clientHeight * scale;
+      const maxX = Math.max(0, (w - window.innerWidth) / 2);
+      const maxY = Math.max(0, (h - window.innerHeight) / 2);
+      tx = Math.min(maxX, Math.max(-maxX, tx));
+      ty = Math.min(maxY, Math.max(-maxY, ty));
+    };
     const apply = () => {
+      clampPan();
       img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
       img.style.cursor = scale > 1 ? 'grab' : 'default';
       label.textContent = Math.round(scale * 100) + '%';
@@ -1935,11 +1987,15 @@
     function onMove(e) { if (!dragging) return; tx = e.clientX - sx; ty = e.clientY - sy; apply(); }
     function onUp() { dragging = false; img.style.cursor = scale > 1 ? 'grab' : 'default'; }
     function onKey(e) { if (e.key === 'Escape') close(); }
+    let closing = false;
     function close() {
-      ov.remove();
+      if (closing) return;
+      closing = true;
+      ov.classList.remove('is-open');           // плавное закрытие
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      setTimeout(() => ov.remove(), 200);
     }
 
     img.addEventListener('wheel', onWheel, { passive: false });
@@ -1955,6 +2011,8 @@
 
     apply();
     document.body.appendChild(ov);
+    // Плавное появление (fade + лёгкий зум) на следующем кадре.
+    requestAnimationFrame(() => ov.classList.add('is-open'));
   }
   window.openImageLightbox = openImageLightbox;
 
@@ -1965,6 +2023,12 @@
     const video = document.createElement('video');
     video.src = url; video.playsInline = true; video.preload = 'metadata';
     video.volume = DEFAULT_MEDIA_VOLUME;
+    // Восстановить позицию, если видео было приостановлено (а не сброшено).
+    const savedPos = _videoPosStore.get(url);
+    if (savedPos && savedPos.paused && isFinite(savedPos.currentTime)) {
+      video.currentTime = savedPos.currentTime;
+      _videoPosStore.delete(url);
+    }
     wrap.appendChild(video);
 
     const bigPlay = document.createElement('button');
@@ -2007,11 +2071,7 @@
     video.addEventListener('play', setUI);
     video.addEventListener('pause', setUI);
     video.addEventListener('timeupdate', paint);
-    timeline.addEventListener('click', (e) => {
-      const r = timeline.getBoundingClientRect();
-      const d = dur();
-      if (d) video.currentTime = ((e.clientX - r.left) / r.width) * d;
-    });
+    _bindMediaScrub(timeline, video, dur, paint);
     vol.addEventListener('input', () => { video.muted = false; video.volume = parseFloat(vol.value); });
     controls.querySelector('.mv-vol-btn').addEventListener('click', () => { video.muted = !video.muted; vol.value = video.muted ? 0 : video.volume; });
     controls.querySelector('.mv-fs').addEventListener('click', () => {
@@ -2072,11 +2132,7 @@
     audio.addEventListener('play', setUI);
     audio.addEventListener('pause', setUI);
     audio.addEventListener('timeupdate', paint);
-    timeline.addEventListener('click', (e) => {
-      const r = timeline.getBoundingClientRect();
-      const d = dur();
-      if (d) audio.currentTime = ((e.clientX - r.left) / r.width) * d;
-    });
+    _bindMediaScrub(timeline, audio, dur, paint);
     vol.addEventListener('input', () => { audio.muted = false; audio.volume = parseFloat(vol.value); });
     wrap.querySelector('.ma-vol-btn').addEventListener('click', () => { audio.muted = !audio.muted; vol.value = audio.muted ? 0 : audio.volume; });
     wrap.appendChild(_downloadAnchor(url, name, 'mv-btn ma-dl'));

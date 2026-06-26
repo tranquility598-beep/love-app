@@ -4,7 +4,8 @@ try {
     isPackaged = window.electronAPI.isPackagedSync();
   } else if (!window.electronAPI) {
     // Fallback if opened in a regular web browser (e.g. hosted on Vercel/Netlify)
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isCapacitor = Boolean(window.Capacitor) || window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost' && window.location.protocol === 'https:';
+    const isLocalhost = !isCapacitor && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     const isFileProtocol = window.location.protocol === 'file:';
     const isNgrok = window.location.hostname.includes('ngrok');
     // В Electron-приложении (даже не упакованном) и на хостинге используем логику адекватного определения продакшена
@@ -20,7 +21,8 @@ try {
 // Если же это не упакованный Electron или обычный браузер на localhost/ngrok — используем текущий хост
 const currentHost = window.location.origin;
 const isNgrokHost = window.location.hostname.includes('ngrok');
-window.BASE_URL = isPackaged ? 'https://api.loveapp.chat' : (isNgrokHost ? currentHost : 'http://localhost:5555');
+const isCapacitorRuntime = Boolean(window.Capacitor) || window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost');
+window.BASE_URL = (isPackaged || isCapacitorRuntime) ? 'https://api.loveapp.chat' : (isNgrokHost ? currentHost : 'http://localhost:5555');
 let API_BASE = window.BASE_URL + '/api';
 window.API_BASE = API_BASE;
 

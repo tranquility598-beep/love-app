@@ -43,8 +43,12 @@ JWT_SECRET=your-super-secret-key-CHANGE-THIS
 PORT=5555
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-GMAIL_USER=your-gmail@gmail.com
-GMAIL_PASS=your-gmail-app-password
+MAIL_FROM=noreply@loveapp.chat
+SMTP_HOST=smtp.your-mail-provider.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=noreply@loveapp.chat
+SMTP_PASS=your-smtp-password
 ```
 
 **ВАЖНО:** Сгенерируйте безопасный JWT_SECRET:
@@ -227,7 +231,7 @@ cp .env.example .env
 2. **Заполните свои данные в `.env`:**
    - `JWT_SECRET` - сгенерируйте случайную строку (см. ниже)
    - `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` - из Google Cloud Console
-   - `GMAIL_USER` и `GMAIL_PASS` - для отправки OTP кодов
+   - `MAIL_FROM`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` - для отправки писем
 
 3. **Генерация безопасного JWT_SECRET:**
 ```bash
@@ -248,14 +252,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 2. Добавьте Authorized Redirect URI: `https://your-domain.onrender.com/api/auth/google/callback`
 3. Добавьте credentials в Environment Variables на платформе
 
-### Gmail App Password
+### Email SMTP настройка
 
-Для отправки OTP кодов используется Gmail. Нужен App Password (не обычный пароль):
+Для отправки OTP и писем восстановления используйте SMTP вашего почтового провайдера:
 
-1. Включите 2FA в Google аккаунте
-2. Перейдите: https://myaccount.google.com/apppasswords
-3. Создайте App Password для "Mail"
-4. Скопируйте 16-значный код в `.env` как `GMAIL_PASS`
+1. Создайте почтовый ящик `noreply@loveapp.chat`
+2. В `.env` укажите `MAIL_FROM=noreply@loveapp.chat`
+3. Укажите `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`
+4. Если `SMTP_HOST` не задан, приложение использует старый Gmail fallback (`GMAIL_USER` / `GMAIL_PASS`)
 
 ### Deployment на Render
 

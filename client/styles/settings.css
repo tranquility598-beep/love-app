@@ -516,19 +516,18 @@
 .lvs-select.open .lvs-select-btn { border-color: var(--border-color-active); }
 
 .lvs-select-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  position: fixed;
+  min-width: 160px;
+  box-sizing: border-box;
   list-style: none;
   margin: 0;
   padding: 6px;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-color-active);
-  border-radius: var(--radius-md);
-  z-index: 40;
+  background: var(--glass-bg, rgba(18,18,18,0.96));
+  backdrop-filter: var(--glass-blur, blur(16px));
+  -webkit-backdrop-filter: var(--glass-blur, blur(16px));
+  border: 1px solid var(--border-color-active, rgba(255,255,255,0.15));
+  border-radius: var(--radius-md, 12px);
+  z-index: 1320;
   opacity: 0;
   transform: translateY(-6px);
   pointer-events: none;
@@ -537,6 +536,9 @@
 }
 
 .lvs-select.open .lvs-select-menu { opacity: 1; transform: translateY(0); pointer-events: auto; }
+/* Меню переносится в document.body при открытии (обход backdrop-filter),
+   поэтому видимость завязана на класс самого меню, а не на .lvs-select.open. */
+.lvs-select-menu.is-open { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
 .lvs-select-menu li {
   padding: 9px 11px;
@@ -546,6 +548,9 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: var(--transition-smooth);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lvs-select-menu li:hover { background: var(--settings-card-hover); color: var(--text-primary); }

@@ -189,9 +189,10 @@ class VoiceManager {
 
     // Останавливаем анализатор
     if (this.speakingCheckInterval) {
-      clearInterval(this.speakingCheckInterval);
+      clearTimeout(this.speakingCheckInterval);
       this.speakingCheckInterval = null;
     }
+    this.analyser = null;
 
     if (this.audioContext) {
       this.audioContext.close();
@@ -273,8 +274,42 @@ class VoiceManager {
       params.encodings[0].priority = 'high';     // голос важнее видео
       await sender.setParameters(params);
     } catch (e) {
-      // setParameters не критичен — если не вышло, звук всё равно работает
       console.warn('[Voice] audio bitrate optimize skipped:', e && e.message);
+    }
+  }
+
+  _getVideoBitrateForPeerCount() {
+    const count = this.peerConnections.size;
+    if (count <= 1) return 2500000;
+    if (count <= 3) return 1500000;
+    if (count <= 6) return 800000;
+    return 400000;
+  }
+
+  async _optimizeVideoBitrate(pc) {
+    try {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (!sender) return;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      if (this.isScreenSharing) {
+        // Демонстрация экрана: полное разрешение (без даунскейла, иначе текст
+        // мылится) + щедрый битрейт из выбранного качества. contentHint='detail'
+        // подсказывает кодеку беречь резкость, а не плавность.
+        params.encodings[0].maxBitrate = this._screenBitrate || 6000000;
+        delete params.encodings[0].scaleResolutionDownBy;
+        if (sender.track && 'contentHint' in sender.track) sender.track.contentHint = 'detail';
+      } else {
+        // Камера: адаптивный битрейт и даунскейл при большом числе участников.
+        params.encodings[0].maxBitrate = this._getVideoBitrateForPeerCount();
+        params.encodings[0].scaleResolutionDownBy = this.peerConnections.size > 3 ? 2 : 1;
+        if (sender.track && 'contentHint' in sender.track) sender.track.contentHint = 'motion';
+      }
+      await sender.setParameters(params);
+    } catch (e) {
+      console.warn('[Voice] video bitrate optimize skipped:', e && e.message);
     }
   }
 
@@ -568,19 +603,21 @@ class VoiceManager {
         const stats = await pc.getStats();
         stats.forEach(report => {
           if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-            console.log('📊 Remote audio stats:', socketId, {
-              bytesReceived: report.bytesReceived,
-              packetsReceived: report.packetsReceived,
-              packetsLost: report.packetsLost,
-              jitter: report.jitter,
-              audioLevel: report.audioLevel
-            });
+            if (window.__LOVE_DEBUG) {
+              console.log('📊 Remote audio stats:', socketId, {
+                bytesReceived: report.bytesReceived,
+                packetsReceived: report.packetsReceived,
+                packetsLost: report.packetsLost,
+                jitter: report.jitter,
+                audioLevel: report.audioLevel
+              });
+            }
           }
         });
       } catch (error) {
-        console.warn('Failed to read remote audio stats:', error);
+        // silent
       }
-    }, 3000);
+    }, 5000);
 
     this.remoteAudioStatsIntervals.set(socketId, intervalId);
   }
@@ -616,9 +653,10 @@ class VoiceManager {
       audio.srcObject = stream;
     }
 
-    audio.muted = this.isDeafened;
-    audio.volume = this.isDeafened ? 0 : ((Number(window.settingsManager?.get('output-volume')) || 100) / 100);
-    
+    // Заглушение звука (deafen) удалено — входящий звук не мьютим.
+    audio.muted = false;
+    audio.volume = (Number(window.settingsManager?.get('output-volume')) || 100) / 100;
+
     // Принудительный запуск (некоторые браузеры блокируют autoplay без .play())
     const playPromise = audio.play();
     if (playPromise !== undefined) {
@@ -635,8 +673,8 @@ class VoiceManager {
         console.warn('Audio auto-play failed, will try on interaction:', error);
         // Fallback: запуск по любому клику в документе
         const resumeAudio = () => {
-          audio.muted = this.isDeafened;
-          audio.volume = this.isDeafened ? 0 : 1;
+          audio.muted = false;
+          audio.volume = 1;
           audio.play().catch(() => {});
           document.removeEventListener('click', resumeAudio);
           document.removeEventListener('keydown', resumeAudio);
@@ -682,14 +720,22 @@ class VoiceManager {
   /**
    * Переключить микрофон
    */
-  toggleMute() {
-    this.isMuted = !this.isMuted;
+  // Управляет ТОЛЬКО микрофоном (локальный аудио-трек). Идемпотентно:
+  // force=true/false жёстко задаёт состояние, без аргумента — переключает.
+  // Повторный клик в то же состояние не двоит звук/эмит (защита от спам-кликов).
+  toggleMute(force) {
+    const next = (typeof force === 'boolean') ? force : !this.isMuted;
 
+    // Всегда приводим трек в соответствие с целевым состоянием (самовосстановление).
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
-        track.enabled = !this.isMuted;
+        track.enabled = !next;
       });
     }
+
+    if (next === this.isMuted) return this.isMuted; // уже в нужном состоянии
+
+    this.isMuted = next;
 
     // Если замутились, сбрасываем статус говорения
     if (this.isMuted && this.isSpeaking) {
@@ -710,23 +756,19 @@ class VoiceManager {
   /**
    * Переключить наушники (deafen)
    */
-  toggleDeafen() {
-    this.isDeafened = !this.isDeafened;
+  // Управляет ТОЛЬКО входящим звуком (deafen-флаг). Микрофон НЕ трогает —
+  // логика жёстко изолирована от toggleMute. Идемпотентно (force=true/false).
+  toggleDeafen(force) {
+    const next = (typeof force === 'boolean') ? force : !this.isDeafened;
 
-    // Заглушаем все удаленные потоки
+    // Всегда синхронизируем входящие аудио-элементы с целевым состоянием.
     this.audioElements.forEach(audio => {
-      audio.muted = this.isDeafened;
+      audio.muted = next;
     });
 
-    // Если включили deafen - также мутируем микрофон
-    if (this.isDeafened && !this.isMuted) {
-      this.isMuted = true;
-      if (this.localStream) {
-        this.localStream.getAudioTracks().forEach(track => {
-          track.enabled = false;
-        });
-      }
-    }
+    if (next === this.isDeafened) return this.isDeafened; // уже в нужном состоянии
+
+    this.isDeafened = next;
 
     // Звук дефена (Discord-style)
     if (window.playVoiceSound) {
@@ -754,7 +796,7 @@ class VoiceManager {
   /**
    * Начать демонстрацию экрана с выбранными настройками
    */
-  async startScreenShare(quality = 'medium') {
+  async startScreenShare(quality = 'ultra') {
     if (this.isScreenSharing) {
       this.stopScreenShare();
       return false;
@@ -768,7 +810,9 @@ class VoiceManager {
       ultra: { width: 1920, height: 1080, frameRate: 30, bitrate: 6000000 }
     };
 
-    const settings = qualitySettings[quality] || qualitySettings.medium;
+    const settings = qualitySettings[quality] || qualitySettings.ultra;
+    // Битрейт демонстрации берётся отсюда в _optimizeVideoBitrate (без даунскейла).
+    this._screenBitrate = settings.bitrate || 6000000;
 
     try {
       // Запрашиваем доступ к экрану с выбранными настройками
@@ -803,6 +847,7 @@ class VoiceManager {
           
           // Пересоздаем offer для обновления (sequential, not parallel)
           await this.renegotiate(socketId);
+          await this._optimizeVideoBitrate(pc);
         } catch (err) {
           console.error('Error adding screen share track:', err);
         }
@@ -907,7 +952,8 @@ class VoiceManager {
    * Включить камеру
    */
   async startCamera() {
-    if (this.isCameraOn) return true;
+    if (this.isCameraOn || this._cameraStarting) return true;
+    this._cameraStarting = true;
 
     // Камера и демонстрация взаимоисключающие — если идёт показ экрана, останавливаем его
     if (this.isScreenSharing) {
@@ -917,19 +963,23 @@ class VoiceManager {
     try {
       this.cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 24 }
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          frameRate: { ideal: 15 },
+          // На мобильных выбирает фронталку/заднюю; на десктопе игнорируется.
+          facingMode: { ideal: this._cameraFacing || 'user' }
         },
         audio: false
       });
     } catch (error) {
       console.error('[Voice] Error starting camera:', error);
       this.cameraStream = null;
+      this._cameraStarting = false;
       return false;
     }
 
     this.isCameraOn = true;
+    this._cameraStarting = false;
 
     const videoTrack = this.cameraStream.getVideoTracks()[0];
 
@@ -944,6 +994,7 @@ class VoiceManager {
           pc.addTrack(videoTrack, this.cameraStream);
         }
         await this.renegotiate(socketId);
+        await this._optimizeVideoBitrate(pc);
       } catch (err) {
         console.error('[Voice] Error adding camera track:', err);
       }
@@ -952,6 +1003,11 @@ class VoiceManager {
     // Показываем свою камеру локально (превью)
     if (typeof showLocalCameraVideo === 'function') {
       showLocalCameraVideo(this.cameraStream);
+    }
+
+    // Уведомляем сервер — состояние камеры разойдётся всем в members_update.
+    if (socket) {
+      socket.emit('camera:start', { channelId: this.channelId });
     }
 
     // Если камеру выключили на уровне ОС/драйвера — гасим состояние
@@ -996,7 +1052,64 @@ class VoiceManager {
       hideLocalCameraVideo();
     }
 
+    // Уведомляем сервер об остановке камеры.
+    if (socket) {
+      socket.emit('camera:stop', { channelId: this.channelId });
+    }
+
     console.log('[Voice] Camera stopped');
+  }
+
+  /**
+   * Переключить фронтальную/заднюю камеру (мобильные). Перезахватывает трек
+   * с противоположным facingMode и подменяет его во всех соединениях через
+   * replaceTrack (без полной ренеготиации). На десктопе просто берёт другую
+   * доступную камеру/ту же. Вызывать: window.voiceManager.flipCamera().
+   */
+  async flipCamera() {
+    if (!this.isCameraOn) return false;
+    if (this._cameraFlipping) return false;
+    this._cameraFlipping = true;
+
+    const prevFacing = this._cameraFacing || 'user';
+    this._cameraFacing = (prevFacing === 'environment') ? 'user' : 'environment';
+
+    let newStream;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          frameRate: { ideal: 15 },
+          facingMode: { ideal: this._cameraFacing }
+        },
+        audio: false
+      });
+    } catch (e) {
+      console.warn('[Voice] flipCamera failed, keeping current camera:', e && e.message);
+      this._cameraFacing = prevFacing; // откат
+      this._cameraFlipping = false;
+      return false;
+    }
+
+    const newTrack = newStream.getVideoTracks()[0];
+    // replaceTrack не требует renegotiate — подмена прозрачна для пиров.
+    for (const [, pc] of this.peerConnections) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        try { await sender.replaceTrack(newTrack); } catch (err) { console.warn('[Voice] flipCamera replaceTrack:', err && err.message); }
+      }
+    }
+
+    if (this.cameraStream) this.cameraStream.getTracks().forEach(t => t.stop());
+    this.cameraStream = newStream;
+    newTrack.onended = () => { this.stopCamera(); };
+
+    if (typeof showLocalCameraVideo === 'function') showLocalCameraVideo(this.cameraStream);
+    if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
+
+    this._cameraFlipping = false;
+    return true;
   }
 
   /**
@@ -1045,22 +1158,26 @@ class VoiceManager {
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
-      this.speakingCheckInterval = setInterval(() => {
-        if (this.analyser) {
-          let isSpeaking = false;
-          if (!this.isMuted) {
-            this.analyser.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-            isSpeaking = average > this.speakingThreshold;
-          }
-
-          if (isSpeaking !== this.isSpeaking) {
-            this.isSpeaking = isSpeaking;
-            socketSpeaking(this.channelId, isSpeaking);
-            updateSpeakingIndicator(window.currentUser?._id, isSpeaking);
-          }
+      const checkSpeaking = () => {
+        if (!this.analyser || !this.speakingCheckInterval) return;
+        let isSpeaking = false;
+        if (!this.isMuted) {
+          this.analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+          isSpeaking = average > this.speakingThreshold;
         }
-      }, 100);
+
+        if (isSpeaking !== this.isSpeaking) {
+          this.isSpeaking = isSpeaking;
+          socketSpeaking(this.channelId, isSpeaking);
+          updateSpeakingIndicator(window.currentUser?._id, isSpeaking);
+        }
+        // Adaptive: check faster when speaking (100ms), slower when silent/muted (300ms)
+        const delay = isSpeaking ? 100 : (this.isMuted ? 500 : 300);
+        this.speakingCheckInterval = setTimeout(checkSpeaking, delay);
+      };
+
+      this.speakingCheckInterval = setTimeout(checkSpeaking, 100);
 
     } catch (error) {
       console.error('Error setting up audio analyser:', error);
@@ -1345,8 +1462,10 @@ function showScreenShareVideo(stream, sourceId) {
 
   const nameTag = memberInfo ? (memberInfo.nickname || memberInfo.username) : (sourceId === 'local' ? 'Вы' : 'Пользователь');
 
-  // 1. Render in the fullscreen grid (voice-view-grid) if it exists
-  if (gridContainer) {
+  // 1. Render in the fullscreen grid (voice-view-grid) — ТОЛЬКО если он реально
+  //    виден. В новом дизайне это легаси-контейнер (display:none): создавать в нём
+  //    <video> = лишний декодер того же потока (один из источников лагов).
+  if (gridContainer && gridContainer.offsetParent !== null) {
     const cardId = 'voice-screen-card-' + targetUserId;
     let card = document.getElementById(cardId);
     let video = document.getElementById('screen-share-video-' + sourceId);
@@ -1397,8 +1516,9 @@ function showScreenShareVideo(stream, sourceId) {
     }
   }
 
-  // 2. Render in the chat screen share container (screen-share-container) if it exists
-  if (container) {
+  // 2. Render in the chat screen share container (screen-share-container) —
+  //    тоже только если виден (иначе ещё один лишний декодер в скрытом контейнере).
+  if (container && container.offsetParent !== null) {
     const chatCardId = 'chat-screen-card-' + targetUserId;
     let chatCard = document.getElementById(chatCardId);
     let chatVideo = document.getElementById('chat-screen-share-video-' + sourceId);
@@ -1454,6 +1574,11 @@ function showScreenShareVideo(stream, sourceId) {
 
   // Room screen-share UI is rendered by voice-constellation.js into the
   // new room voice structure. Do not create legacy room cards here.
+
+  // Живое видео демонстрации в новом дизайне рисует констелляция
+  // (renderVoiceChannel читает remoteVideoStreams). Триггерим её, чтобы
+  // удалённый экран появился без ожидания следующего members_update.
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
 
 /**
@@ -2017,7 +2142,7 @@ async function startWebRTCCall(callerId, meta = {}) {
     // Open the real call modal interface for the receiver!
     if (typeof window.startDirectCall === 'function') {
       const avatarVal = caller.avatar ? caller.avatar.charAt(0).toUpperCase() : (caller.username ? caller.username.charAt(0).toUpperCase() : 'C');
-      window.startDirectCall(caller.nickname || caller.username, avatarVal, false, caller._id, true);
+      window.startDirectCall(caller.nickname || caller.username, avatarVal, false, caller._id, true, caller.avatar || '');
     }
   }
 

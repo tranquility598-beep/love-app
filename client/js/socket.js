@@ -293,12 +293,15 @@ function handleMessageNew(data) {
     return;
   }
 
+  // Всегда прогоняем через appendMessage: он сам дедупит, мёржит pending→real
+  // и решает — перерисовать активный чат или пометить непрочитанным. Завязка на
+  // legacy-глобал window.currentChannelId не работала в новом UI → сообщения
+  // появлялись только после перезагрузки. (Дубликатов нет — appendMessage дедупит.)
+  appendMessage(message);
   if (currentCh && currentCh === msgCh) {
-    // Своё сообщение: appendMessage смёржит pending→real; чужое серверное — добавляет
-    appendMessage(message);
     scrollToBottom();
   }
-  
+
   if (!currentCh || currentCh !== msgCh) {
     let isEveryoneHereMention = false;
     if (message.content?.includes('@everyone') || message.content?.includes('@here')) {
@@ -422,17 +425,13 @@ function handleDMNewMessage(data) {
   // Но не трогаем messages активного диалога — appendMessage сделает это ниже
   if (window.loadDMConversations) window.loadDMConversations();
 
-  if (isCurrentChannel) {
-    // Своё сообщение уже добавлено оптимистично — appendMessage смёржит pending→real _id
-    // Чужое — добавляем как новое
+  // Чужое DM-сообщение прогоняем через appendMessage всегда — он сам определит
+  // активный диалог (по _mockConversations) и обновит его либо пометит непрочитанным.
+  // Своё уже обработано handleMessageNew (мёрж pending→real), чтобы не задвоить.
+  if (!isOwn) {
     appendMessage(message);
-    scrollToBottom();
-  }
-
-  if (!isCurrentChannel) {
-    if (!isOwn) {
-      showMessageNotification(message.author?.username, message.content, conversationId);
-    }
+    if (isCurrentChannel) scrollToBottom();
+    else showMessageNotification(message.author?.username, message.content, conversationId);
   }
 
   // Счётчик непрочитанных при неактивном окне или другом DM
@@ -533,6 +532,8 @@ function handleScreenStarted(data) {
       window.voiceManager.screenActiveSockets.add(member.socketId);
     }
   }
+  // Обновляем констелляцию, чтобы статус демонстрации участника отрисовался сразу.
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
 
 function handleScreenStopped(data) {
@@ -552,6 +553,26 @@ function handleScreenStopped(data) {
     }
     hideScreenShareVideoForUser(userId);
   }
+  // Обновляем констелляцию после остановки демонстрации.
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
+}
+
+function handleCameraStarted(data) {
+  // Состояние hasCam придёт в voice:members_update; просто перерисуем констелляцию,
+  // чтобы статус камеры участника отобразился сразу.
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
+}
+
+function handleCameraStopped(data) {
+  const { userId } = data || {};
+  if (window.voiceManager && window.voiceManager.channelMembers) {
+    const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
+    if (member && member.socketId && window.voiceManager.remoteVideoStreams) {
+      // Камера выключена — чистим превью её потока.
+      window.voiceManager.remoteVideoStreams.delete(member.socketId);
+    }
+  }
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
 
 function handleWebRTCOffer(data) {
@@ -945,6 +966,8 @@ function attachAllSocketListeners() {
   attachListener('voice', 'voice:left', handleVoiceLeft);
   attachListener('voice', 'screen:started', handleScreenStarted);
   attachListener('voice', 'screen:stopped', handleScreenStopped);
+  attachListener('voice', 'camera:started', handleCameraStarted);
+  attachListener('voice', 'camera:stopped', handleCameraStopped);
   attachListener('voice', 'webrtc:offer', handleWebRTCOffer);
   attachListener('voice', 'webrtc:answer', handleWebRTCAnswer);
   attachListener('voice', 'webrtc:ice_candidate', handleWebRTCIceCandidate);

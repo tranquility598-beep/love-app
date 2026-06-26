@@ -109,7 +109,16 @@ app.use(hpp());
 // CORS настройка с whitelist
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:5555', 'http://26.237.63.189:5555', 'http://localhost:5173', 'https://loveapp.chat', 'https://api.loveapp.chat', 'https://loveapp-landing.onrender.com'];
+  : [
+      'http://localhost:5555',
+      'http://26.237.63.189:5555',
+      'http://localhost:5173',
+      'https://localhost',
+      'capacitor://localhost',
+      'https://loveapp.chat',
+      'https://api.loveapp.chat',
+      'https://loveapp-landing.onrender.com'
+    ];
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -147,8 +156,9 @@ const uploadsDir = path.join(__dirname, 'uploads');
 const avatarsDir = path.join(uploadsDir, 'avatars');
 const filesDir = path.join(uploadsDir, 'files');
 const imagesDir = path.join(uploadsDir, 'images');
+const audioDir = path.join(uploadsDir, 'audio');
 
-[uploadsDir, avatarsDir, filesDir, imagesDir].forEach(dir => {
+[uploadsDir, avatarsDir, filesDir, imagesDir, audioDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -173,6 +183,7 @@ const uploadRoutes = require('./routes/upload');
 const adminRoutes = require('./routes/admin');
 const updatesRoutes = require('./routes/updates');
 const earlyAccessRoutes = require('./routes/earlyAccess');
+const releaseRoutes = require('./routes/release');
 const notificationRoutes = require('./routes/notifications');
 
 // Rate Limiting для всех API роутов
@@ -191,6 +202,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/early-access', earlyAccessRoutes);
+app.use('/api/release', releaseRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 // Базовый роут для проверки работы сервера
@@ -200,6 +212,31 @@ app.get('/api/health', (req, res) => {
 
 // Роут для корня - отдаем index.html
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
+});
+
+// Public release landing. It is safe to serve without auth and is used by loveapp.chat.
+app.get('/release', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'client', 'release.html'));
+});
+
+// Legal pages (TOS & Privacy Policy)
+const publicDir = path.join(__dirname, '..', 'sandbox', 'public');
+app.get('/tos', (req, res) => {
+  res.sendFile(path.join(publicDir, 'tos', 'index.html'));
+});
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(publicDir, 'privacy', 'index.html'));
+});
+// Landing page assets (CSS, icon, support page)
+app.use('/landing.css', (req, res) => res.sendFile(path.join(publicDir, 'landing.css')));
+app.use('/icon.png', (req, res) => res.sendFile(path.join(publicDir, 'icon.png')));
+app.use('/support', express.static(path.join(publicDir, 'support')));
+app.use('/support.css', (req, res) => res.sendFile(path.join(publicDir, 'support.css')));
+
+// Ссылка из письма восстановления пароля открывает тот же SPA, а auth-ui
+// подставляет email/code из query-параметров.
+app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
 });
 

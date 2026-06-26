@@ -165,6 +165,77 @@
               <span>Регистрация через Google</span>
             </button>
           </form>
+
+          <!-- ПОДТВЕРЖДЕНИЕ ПОЧТЫ / 2FA -->
+          <form class="auth-form" id="auth-form-otp" autocomplete="off" novalidate>
+            <div class="auth-form-head">
+              <h2 class="auth-form-title" id="otp-title">Подтвердите почту</h2>
+              <p class="auth-form-note" id="otp-subtitle">Мы отправили код на вашу почту</p>
+            </div>
+            <div class="otp-input-container">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+            </div>
+            <span class="auth-message auth-message--error hidden" id="otp-error"></span>
+            <button type="submit" class="auth-submit" id="otp-submit" disabled>Подтвердить</button>
+            <div class="auth-secondary-row">
+              <span id="resend-timer-text">Новый код через <b id="resend-counter">60</b> сек.</span>
+              <button type="button" class="auth-link hidden" id="resend-link">Отправить ещё раз</button>
+            </div>
+            <button type="button" class="auth-link auth-back-link go-to-login">Назад ко входу</button>
+          </form>
+
+          <!-- ВОССТАНОВЛЕНИЕ ПАРОЛЯ -->
+          <form class="auth-form" id="auth-form-forgot" autocomplete="off" novalidate>
+            <div class="auth-form-head">
+              <h2 class="auth-form-title">Восстановление пароля</h2>
+              <p class="auth-form-note">Введите почту аккаунта. Мы отправим письмо с кнопкой для смены пароля.</p>
+            </div>
+            <div class="auth-field">
+              <label class="auth-label" for="forgot-email">Почта</label>
+              <div class="auth-input-wrap">
+                <input type="email" id="forgot-email" class="auth-input" placeholder="you@example.com" autocomplete="off">
+              </div>
+            </div>
+            <span class="auth-message auth-message--error hidden" id="forgot-error"></span>
+            <span class="auth-message auth-message--success hidden" id="forgot-success"></span>
+            <button type="submit" class="auth-submit" id="forgot-submit">Отправить письмо</button>
+            <button type="button" class="auth-link auth-back-link go-to-login">Назад ко входу</button>
+          </form>
+
+          <!-- НОВЫЙ ПАРОЛЬ -->
+          <form class="auth-form" id="auth-form-reset" autocomplete="off" novalidate>
+            <div class="auth-form-head">
+              <h2 class="auth-form-title">Новый пароль</h2>
+              <p class="auth-form-note" id="reset-subtitle">Введите код из письма и новый пароль</p>
+            </div>
+            <div class="otp-input-container">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+            </div>
+            <div class="auth-field">
+              <label class="auth-label" for="reset-password">Новый пароль</label>
+              <div class="auth-input-wrap">
+                <input type="password" id="reset-password" class="auth-input" placeholder="минимум 8 символов и 1 цифра" autocomplete="off">
+                <button type="button" class="auth-eye" data-toggle-pass="reset-password" title="Показать пароль" aria-label="Показать пароль">
+                  <svg class="auth-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="auth-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+              <span class="auth-hint" id="reset-password-hint"></span>
+            </div>
+            <span class="auth-message auth-message--error hidden" id="reset-error"></span>
+            <button type="submit" class="auth-submit" id="reset-submit">Сменить пароль</button>
+            <button type="button" class="auth-link auth-back-link go-to-login">Назад ко входу</button>
+          </form>
         </div>
       </div>
 
@@ -393,7 +464,7 @@
                                 </svg>
                             </button>
                         </div>
-                        <input type="text" placeholder="написать..." id="message-input" autocomplete="off">
+                        <textarea placeholder="написать..." id="message-input" class="chat-composer-input" autocomplete="off" rows="1"></textarea>
                         <button type="submit" class="send-btn">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
@@ -507,7 +578,7 @@
                                     </svg>
                                 </button>
                             </div>
-                            <input type="text" placeholder="написать..." id="server-message-input" autocomplete="off">
+                            <textarea placeholder="написать..." id="server-message-input" class="chat-composer-input" autocomplete="off" rows="1"></textarea>
                             <button type="submit" class="send-btn">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
@@ -604,7 +675,7 @@
                                             </svg>
                                         </button>
                                     </div>
-                                    <input type="text" placeholder="написать в чат комнаты..." id="room-message-input" autocomplete="off">
+                                    <textarea placeholder="написать в чат комнаты..." id="room-message-input" class="chat-composer-input" autocomplete="off" rows="1"></textarea>
                                     <button type="submit" class="send-btn">
                                         <svg viewBox="0 0 24 24" fill="currentColor">
                                             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
@@ -653,17 +724,6 @@
                                                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                                                 <line x1="12" y1="19" x2="12" y2="23"/>
                                                 <line x1="8" y1="23" x2="16" y2="23"/>
-                                                <line x1="1" y1="1" x2="23" y2="23"/>
-                                            </svg>
-                                        </button>
-                                        <button type="button" class="voice-control-btn active-state" id="room-voice-btn-sound" title="Выключить звук">
-                                            <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
-                                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
-                                            </svg>
-                                            <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
-                                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
                                                 <line x1="1" y1="1" x2="23" y2="23"/>
                                             </svg>
                                         </button>
@@ -791,17 +851,6 @@
                                     </svg>
                                 </button>
 
-                                <button type="button" class="voice-control-btn active-state" id="voice-btn-sound" title="Выключить звук">
-                                    <svg class="voice-icon-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
-                                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
-                                    </svg>
-                                    <svg class="voice-icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
-                                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
-                                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                                    </svg>
-                                </button>
 
                                 <button type="button" class="voice-control-btn muted-state" id="voice-btn-cam" title="Включить камеру">
                                     <svg class="voice-icon-active hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -867,8 +916,8 @@
                         <div class="friends-header-secondary-row">
                             <span class="friends-count-title" id="friends-list-title">Друзья в сети — 0</span>
                             <div class="friends-filter-nav">
-                                <button class="filter-tab active" data-tab="online">В сети <span class="tab-count">(0)</span></button>
-                                <button class="filter-tab" data-tab="all">Все <span class="tab-count">(0)</span></button>
+                                <button class="filter-tab" data-tab="online">В сети <span class="tab-count">(0)</span></button>
+                                <button class="filter-tab active" data-tab="all">Все <span class="tab-count">(0)</span></button>
                                 <button class="filter-tab" data-tab="pending">Запросы <span class="tab-count">(0)</span><span class="pending-indicator-dot hidden"></span></button>
                                 <button class="filter-tab add-friend-tab" data-tab="add">Добавить</button>
                             </div>
@@ -1535,7 +1584,7 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Текущая версия</div></div>
-                  <span class="lvs-badge">1.0.0-beta.4</span>
+                  <span class="lvs-badge" id="settings-updates-version">2.0.0</span>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Статус</div></div>
@@ -1577,11 +1626,11 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Режим отладки</div><div class="lvs-row-sub">Подробные логи в консоли</div></div>
-                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" id="lvs-debug-mode"><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Аппаратное ускорение</div><div class="lvs-row-sub">Использовать GPU для отрисовки</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" id="lvs-hw-accel" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Кэш приложения</div><div class="lvs-row-sub" id="lvs-cache-size">Занято 128 МБ</div></div>
@@ -1589,11 +1638,7 @@
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Диагностика</div><div class="lvs-row-sub">Сведения о среде выполнения</div></div>
-                  <button class="lvs-btn">Открыть</button>
-                </div>
-              </div>
-
-              <div class="lvs-card lvs-card--danger">
+                  <button class="lvs-btn" id="lvs-diagnostics">Открыть</button>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Сбросить все настройки</div><div class="lvs-row-sub">Вернуть приложение к настройкам по умолчанию. Действие необратимо.</div></div>
                   <button class="lvs-btn lvs-btn--danger" id="lvs-reset-settings">Сбросить</button>
@@ -1614,8 +1659,8 @@
                 </div>
                 <div class="lvs-about-name">L O V E</div>
                 <div class="lvs-about-version">
-                  <span class="lvs-badge">v1.0.0-beta.4</span>
-                  <span class="lvs-badge">build #20260609</span>
+                  <span class="lvs-badge" id="settings-about-version">v2.0.0</span>
+                  <span class="lvs-badge" id="settings-about-build">build</span>
                 </div>
                 <p class="lvs-about-tagline">Мессенджер, сделанный с любовью.</p>
 
@@ -2202,7 +2247,7 @@
     </div>
 
     <!-- Скрытый аудиоплеер для реального воспроизведения импортированной музыки -->
-    <audio id="player-real-audio" style="display: none;"></audio>
+    <audio id="player-real-audio" preload="auto" style="display: none;"></audio>
 
     <!-- Dynamic Island: мини-плашка музыки (появляется при закрытии плеера с играющей музыкой) -->
     <div id="music-island" class="music-island hidden" title="Открыть плеер">
@@ -2232,10 +2277,6 @@
             <button class="vmb-btn" id="vmb-mic" type="button" title="Микрофон" aria-label="Микрофон">
                 <svg class="vmb-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 <svg class="vmb-icon-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            </button>
-            <button class="vmb-btn" id="vmb-sound" type="button" title="Звук" aria-label="Звук">
-                <svg class="vmb-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                <svg class="vmb-icon-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
             </button>
             <button class="vmb-btn vmb-btn-leave" id="vmb-leave" type="button" title="Отключиться" aria-label="Отключиться">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
@@ -2276,11 +2317,14 @@
             <button class="profile-close-btn" id="add-friend-close" title="Закрыть" style="top:20px; right:20px; z-index:10;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
-            <h3 style="margin-bottom:6px;">Добавить друга</h3>
-            <p style="font-size:13px;color:rgba(255,255,255,0.5);margin:0 0 18px;">Введите точный никнейм пользователя.</p>
-            <form id="add-friend-modal-form">
-                <input type="text" id="add-friend-modal-input" placeholder="Введите никнейм..." autocomplete="off" required style="width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#fff;font-size:14px;outline:none;box-sizing:border-box;">
-                <button type="submit" class="submit-action-btn" style="width:100%;margin-top:18px;height:46px;font-size:15px;font-weight:600;border-radius:12px;">Отправить запрос</button>
+            <h3 class="add-friend-heading">Кого ищем?</h3>
+            <form id="add-friend-modal-form" class="add-friend-form">
+                <div class="add-friend-input-wrap">
+                    <svg class="add-friend-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="add-friend-modal-input" placeholder="Никнейм пользователя" autocomplete="off" required>
+                </div>
+                <button type="submit" class="add-friend-submit">Добавить</button>
+                <div id="add-friend-status" class="add-friend-status" aria-live="polite"></div>
             </form>
         </div>
     </div>
@@ -2338,9 +2382,9 @@
               <label class="screenshare-quality-label">Качество</label>
               <select id="screen-quality" class="screenshare-quality-select">
                 <option value="low">Низкое (480p, 10 FPS)</option>
-                <option value="medium" selected>Среднее (720p, 15 FPS)</option>
+                <option value="medium">Среднее (720p, 15 FPS)</option>
                 <option value="high">Высокое (1080p, 24 FPS)</option>
-                <option value="ultra">Ультра (1080p, 30 FPS)</option>
+                <option value="ultra" selected>Ультра (1080p, 30 FPS)</option>
               </select>
             </div>
 

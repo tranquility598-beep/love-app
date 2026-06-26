@@ -32,20 +32,6 @@
       linesId: 'server-voice-lines',
       source: 'voice',
       compact: true
-    },
-    {
-      parentId: 'voice-view',
-      shellId: 'voice-view-constellation-shell',
-      gridId: 'voice-view-grid-constellation',
-      linesId: 'voice-view-lines',
-      source: 'voice'
-    },
-    {
-      parentId: 'room-voice-channel-container',
-      shellId: 'room-voice-constellation-shell',
-      gridId: 'room-voice-grid-constellation',
-      linesId: 'room-voice-lines',
-      source: 'room'
     }
   ];
 

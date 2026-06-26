@@ -16,12 +16,26 @@ const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 const TWO_FACTOR_TOKEN_EXPIRES = '10m';
 
-const { generateOTP, sendOTPEmail } = require('../utils/emailService');
+const { generateOTP, sendOTPEmail, sendPasswordResetEmail } = require('../utils/emailService');
 const LoginLog = require('../models/LoginLog');
 const { isFounderUser } = require('../utils/founder');
 
 // Регулярка для пароля: минимум 8 символов, 1 буква и 1 цифра
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
+
+function getPublicAppUrl(req) {
+  const envUrl = process.env.PUBLIC_APP_URL || process.env.APP_URL || process.env.CLIENT_URL || process.env.SITE_URL;
+  if (envUrl) return String(envUrl).replace(/\/+$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.get('host') || 'loveapp.chat';
+  return `${proto}://${host}`.replace(/\/+$/, '');
+}
+
+function buildResetPasswordUrl(req, email, code) {
+  const base = getPublicAppUrl(req);
+  const params = new URLSearchParams({ email, code });
+  return `${base}/reset-password?${params.toString()}`;
+}
 
 function normalizeIp(ip) {
   if (!ip || typeof ip !== 'string') return 'unknown';
@@ -157,7 +171,8 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
       role,
       otpCode: otp,
       otpExpires,
-      isVerified: false
+      isVerified: false,
+      onboardingPending: true
     });
     
     await user.save();
@@ -208,6 +223,8 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     user.statusPreference = 'online';
     user.otpCode = null;
     user.otpExpires = null;
+    const shouldStartOnboarding = Boolean(user.onboardingPending);
+    user.onboardingPending = false;
     await user.save();
     
     // Логируем успешный вход (после верификации)
@@ -234,7 +251,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     res.json({
       message: 'Почта подтверждена',
       token,
-      user: buildAuthUser(user)
+      user: buildAuthUser(user, { onboardingPending: shouldStartOnboarding })
     });
     
   } catch (error) {
@@ -365,6 +382,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       const otp = generateOTP();
       user.otpCode = otp;
       user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+      user.onboardingPending = false;
       await user.save();
       const emailSent = await sendOTPEmail(user.email, otp, 'verification');
       if (!emailSent) {
@@ -531,7 +549,8 @@ router.post('/forgot-password', passwordResetLimiter, sanitizeBody, validateEmai
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
     
-    const emailSent = await sendOTPEmail(user.email, otp, 'reset');
+    const resetUrl = buildResetPasswordUrl(req, user.email, otp);
+    const emailSent = await sendPasswordResetEmail(user.email, otp, resetUrl);
     if (!emailSent) {
       return res.status(500).json({ message: 'Ошибка отправки письма для восстановления пароля.' });
     }
@@ -539,7 +558,7 @@ router.post('/forgot-password', passwordResetLimiter, sanitizeBody, validateEmai
     user.otpLastSentAt = new Date();
     await user.save();
     
-    res.json({ message: 'Код восстановления отправлен на почту' });
+    res.json({ message: 'Письмо для восстановления отправлено на почту' });
     
   } catch (error) {
     res.status(500).json({ message: 'Ошибка сервера' });
@@ -576,6 +595,7 @@ router.post('/reset-password', otpLimiter, sanitizeBody, validateEmail, validate
     user.otpCode = null;
     user.otpExpires = null;
     user.isVerified = true; // Сброс пароля по почте подтверждает владение почтой
+    user.onboardingPending = false;
     // Сбрасываем блокировку аккаунта: владелец почты подтверждён, держать
     // его залоченным после успешного сброса пароля бессмысленно.
     user.loginAttempts = 0;
@@ -663,8 +683,10 @@ router.post('/google-onboarding', authMiddleware, sanitizeBody, validateUsername
     }
 
     user.googleOnboardingComplete = true;
+    const shouldStartOnboarding = Boolean(user.onboardingPending);
+    user.onboardingPending = false;
     await user.save();
-    res.json({ user: buildAuthUser(user), message: 'Настройка завершена' });
+    res.json({ user: buildAuthUser(user, { onboardingPending: shouldStartOnboarding }), message: 'Настройка завершена' });
   } catch (error) {
     console.error('Google onboarding error:', error);
     res.status(500).json({ message: 'Ошибка настройки аккаунта' });

@@ -31,7 +31,7 @@
         "nsis"
       ],
       "icon": "client/assets/icon.png",
-      "artifactName": "1. ${productName}-v${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
@@ -78,7 +78,7 @@
         }
       ],
       "icon": "client/assets/icon.png",
-      "artifactName": "2. ${productName}-v${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "protocols": [
       {

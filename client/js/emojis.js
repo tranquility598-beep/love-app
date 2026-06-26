@@ -50,6 +50,7 @@ function insertCustomEmoji(emojiText) {
   if (picker) picker.classList.add('hidden');
   
   input.focus();
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 /**

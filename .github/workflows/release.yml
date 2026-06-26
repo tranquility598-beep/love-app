@@ -67,22 +67,22 @@ jobs:
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
 
+      # Собираем debug-APK: он подписан debug-ключом и СТАВИТСЯ на устройство
+      # (release-unsigned поставить нельзя без подписи). Имя — Love-<версия>.apk.
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Build Release APK
-        working-directory: android
-        run: ./gradlew assembleRelease
+      - name: Rename APK to Love-<version>.apk
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "Love-${VERSION}.apk"
+          ls -la Love-*.apk
 
-      - name: Upload Debug APK to Release
+      - name: Upload APK + release notes
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload Release APK to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          body_path: docs/RELEASE_NOTES_v2.0.0.md
+          files: Love-*.apk

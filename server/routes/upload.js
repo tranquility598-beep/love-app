@@ -77,6 +77,31 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
 
+    // Проверяем, настроен ли Cloudinary
+    const cloudinaryConfigured = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
+
+    // Если Cloudinary не настроен — сохраняем ЛЮБОЙ файл локально (fallback)
+    if (!cloudinaryConfigured) {
+      const localFolder = isVideo ? 'video' : (isImage ? 'images' : (isAudio ? 'audio' : 'files'));
+      const targetDir = path.join(__dirname, '..', 'uploads', localFolder);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+      const safeName = generateSafeFilename(file.name, file.mimetype);
+      const targetPath = path.join(targetDir, safeName);
+      await file.mv(targetPath);
+
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${localFolder}/${safeName}`;
+      return res.json({
+        url: fileUrl,
+        filename: safeName,
+        originalName: validation.sanitizedName,
+        size: file.size,
+        type: isAudio ? 'audio' : (isImage ? 'image' : (isVideo ? 'video' : 'file')),
+        mimetype: file.mimetype,
+        storage: 'local'
+      });
+    }
+
     // Загрузка в Cloudinary (изображения, аудио и файлы до 5 МБ)
     let folder = 'files';
     if (isImage) folder = 'images';

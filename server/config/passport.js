@@ -28,6 +28,7 @@ passport.use(new GoogleStrategy({
         user.googleId = profile.id;
         if (!user.avatar) user.avatar = profile.photos[0].value;
         if (user.password) user.googleOnboardingComplete = true;
+        user.onboardingPending = false;
         await user.save();
         return done(null, user);
       }
@@ -39,6 +40,7 @@ passport.use(new GoogleStrategy({
         googleId: profile.id,
         avatar: profile.photos[0].value,
         googleOnboardingComplete: false,
+        onboardingPending: true,
         status: 'online',
         role: 'user'
       });

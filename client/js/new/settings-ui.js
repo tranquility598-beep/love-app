@@ -21,6 +21,8 @@
     initDangerActions(shell);
     initUpdates(shell);
     initAbout(shell);
+    initVersions(shell);
+    initAdvanced(shell);
     initAccount(shell);
     initPrefsPersistence(shell);
     initDirtyTracking(shell);
@@ -354,6 +356,44 @@
 
   function initSelects(shell) {
     const selects = shell.querySelectorAll('.lvs-select');
+    let activeSelect = null;
+    let activeMenu = null; // текущее открытое меню (в body)
+
+    function resetMenuStyles(menu) {
+      if (!menu) return;
+      menu.style.position = '';
+      menu.style.left = '';
+      menu.style.top = '';
+      menu.style.minWidth = '';
+      menu.style.width = '';
+      menu.style.maxHeight = '';
+      menu.style.overflowY = '';
+    }
+
+    function positionActiveMenu() {
+      if (!activeMenu || !activeSelect) return;
+      const btn = activeSelect.querySelector('.lvs-select-btn');
+      if (!btn) return;
+      const btnRect = btn.getBoundingClientRect();
+      if (btnRect.bottom < 0 || btnRect.top > window.innerHeight || btnRect.right < 0 || btnRect.left > window.innerWidth) {
+        closeAllSelects();
+        return;
+      }
+      activeMenu.style.position = 'fixed';
+      activeMenu.style.left = Math.max(12, Math.min(btnRect.left, window.innerWidth - btnRect.width - 12)) + 'px';
+      activeMenu.style.top = (btnRect.bottom + 6) + 'px';
+      activeMenu.style.minWidth = btnRect.width + 'px';
+      activeMenu.style.width = Math.min(btnRect.width, window.innerWidth - 24) + 'px';
+      activeMenu.style.maxHeight = Math.max(140, window.innerHeight - 24) + 'px';
+      activeMenu.style.overflowY = 'auto';
+      const menuH = activeMenu.scrollHeight || 150;
+      if (btnRect.bottom + menuH + 10 > window.innerHeight) {
+        activeMenu.style.top = Math.max(12, btnRect.top - menuH - 6) + 'px';
+      }
+      if (btnRect.left + activeMenu.offsetWidth + 10 > window.innerWidth) {
+        activeMenu.style.left = Math.max(12, window.innerWidth - activeMenu.offsetWidth - 12) + 'px';
+      }
+    }
 
     selects.forEach(select => {
       const btn = select.querySelector('.lvs-select-btn');
@@ -371,7 +411,15 @@
         e.stopPropagation();
         const wasOpen = select.classList.contains('open');
         closeAllSelects();
-        if (!wasOpen) select.classList.add('open');
+        if (!wasOpen) {
+          // Переносим меню в document.body, чтобы backdrop-filter не ломал position:fixed
+          document.body.appendChild(menu);
+          activeMenu = menu;
+          activeSelect = select;
+          positionActiveMenu();
+          menu.classList.add('is-open');
+          select.classList.add('open');
+        }
       });
 
       menu.querySelectorAll('li').forEach(li => {
@@ -380,6 +428,12 @@
           if (label) label.textContent = li.textContent;
           menu.querySelectorAll('li').forEach(x => x.classList.remove('selected'));
           li.classList.add('selected');
+          // Возвращаем меню обратно в .lvs-select
+          menu.classList.remove('is-open');
+          select.appendChild(menu);
+          activeMenu = null;
+          activeSelect = null;
+          resetMenuStyles(menu);
           select.classList.remove('open');
           select.dispatchEvent(new CustomEvent('lvs-change', { detail: li.dataset.value }));
         });
@@ -387,10 +441,27 @@
     });
 
     function closeAllSelects() {
-      selects.forEach(s => s.classList.remove('open'));
+      // Возвращаем активное меню обратно в родителя
+      if (activeMenu && activeSelect) {
+        activeMenu.classList.remove('is-open');
+        if (activeMenu.parentElement !== activeSelect) {
+          activeSelect.appendChild(activeMenu);
+        }
+        resetMenuStyles(activeMenu);
+        activeSelect.classList.remove('open');
+        activeMenu = null;
+        activeSelect = null;
+      }
+      selects.forEach(s => {
+        s.classList.remove('open');
+        const menu = s.querySelector('.lvs-select-menu');
+        if (menu) menu.classList.remove('is-open');
+      });
     }
 
     document.addEventListener('click', () => closeAllSelects());
+    document.addEventListener('scroll', positionActiveMenu, true);
+    window.addEventListener('resize', positionActiveMenu);
   }
 
   /* ───────────────  Слайдеры  ─────────────── */
@@ -610,17 +681,87 @@
   function initUpdates(shell) {
     const btn = shell.querySelector('#lvs-check-updates');
     if (!btn) return;
+    // Показываем реальную текущую версию вместо фейковой проверки.
     btn.addEventListener('click', () => {
       if (btn.classList.contains('is-loading')) return;
-      const original = btn.textContent;
       btn.classList.add('is-loading');
       btn.textContent = 'Проверка…';
       setTimeout(() => {
         btn.classList.remove('is-loading');
-        btn.textContent = 'Установлена последняя версия';
-        setTimeout(() => { btn.textContent = original; }, 2200);
-      }, 1400);
+        const ver = getAppVersion();
+        btn.textContent = 'У вас версия v' + ver + ' — обновлений нет';
+        setTimeout(() => { btn.textContent = 'Проверить обновления'; }, 2800);
+      }, 1200);
     });
+  }
+
+  // Единый источник версии: Electron API, package.json, или fallback.
+  function getAppVersion() {
+    if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
+      return window.electronAPI.getVersion() || '2.0.0';
+    }
+    return '2.0.0';
+  }
+
+  function initVersions(shell) {
+    const ver = getAppVersion();
+    // About page
+    const aboutVer = document.getElementById('settings-about-version');
+    if (aboutVer) aboutVer.textContent = 'v' + ver;
+    const aboutBuild = document.getElementById('settings-about-build');
+    if (aboutBuild) aboutBuild.textContent = 'build ' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    // Updates page
+    const updVer = document.getElementById('settings-updates-version');
+    if (updVer) updVer.textContent = ver;
+  }
+
+  function initAdvanced(shell) {
+    // Режим отладки — включает Verbose-логи в консоль.
+    const debugToggle = shell.querySelector('#lvs-debug-mode');
+    if (debugToggle) {
+      const stored = String(localStorage.getItem('love_debug_mode')) === 'true';
+      debugToggle.checked = stored;
+      if (stored) { window.__LOVE_DEBUG = true; console.log('[Love] Режим отладки включён.'); }
+      debugToggle.addEventListener('change', () => {
+        localStorage.setItem('love_debug_mode', debugToggle.checked);
+        window.__LOVE_DEBUG = debugToggle.checked;
+        if (debugToggle.checked) console.log('[Love] Режим отладки включён.');
+      });
+    }
+
+    // Аппаратное ускорение — перезапустить без GPU или с GPU (Electron only).
+    const hwToggle = shell.querySelector('#lvs-hw-accel');
+    if (hwToggle) {
+      const storedHw = localStorage.getItem('love_hw_accel');
+      hwToggle.checked = storedHw !== 'off';
+      hwToggle.addEventListener('change', () => {
+        localStorage.setItem('love_hw_accel', hwToggle.checked ? 'on' : 'off');
+        if (window.electronAPI && typeof window.electronAPI.restartForHwAccel === 'function') {
+          window.electronAPI.restartForHwAccel(hwToggle.checked);
+        } else {
+          if (typeof showToast === 'function') showToast('Перезапустите приложение', 'Изменение вступит в силу после перезагрузки.');
+        }
+      });
+    }
+
+    // Диагностика — вся полезная инфа в консоль + toast.
+    const diagBtn = shell.querySelector('#lvs-diagnostics');
+    if (diagBtn) {
+      diagBtn.addEventListener('click', () => {
+        const info = {
+          version: getAppVersion(),
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language,
+          online: navigator.onLine,
+          screen: `${window.screen.width}x${window.screen.height}`,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+        console.table(info);
+        if (typeof showToast === 'function') showToast('Диагностика', 'Сведения выведены в консоль (F12 → Console).');
+      });
+    }
   }
   /* ───────────────  О приложении: кнопки-заглушки  ─────────────── */
 

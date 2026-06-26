@@ -119,6 +119,39 @@
     const formOtp = $('auth-form-otp');
     const formForgot = $('auth-form-forgot');
     const formReset = $('auth-form-reset');
+    const NEW_REG_KEY = 'love_pending_registration_email';
+
+    function normEmail(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function setPendingRegistration(email) {
+      const value = normEmail(email);
+      if (!value) return;
+      try { sessionStorage.setItem(NEW_REG_KEY, value); } catch (e) {}
+      window.pendingRegistrationEmail = value;
+    }
+
+    function clearPendingRegistration() {
+      try { sessionStorage.removeItem(NEW_REG_KEY); } catch (e) {}
+      window.pendingRegistrationEmail = '';
+    }
+
+    function hasPendingRegistration(email) {
+      const value = normEmail(email);
+      if (!value) return false;
+      try {
+        return sessionStorage.getItem(NEW_REG_KEY) === value || window.pendingRegistrationEmail === value;
+      } catch (e) {
+        return window.pendingRegistrationEmail === value;
+      }
+    }
+
+    function consumePendingRegistration(email) {
+      const ok = hasPendingRegistration(email);
+      if (ok) clearPendingRegistration();
+      return ok;
+    }
 
     function showForm(formId) {
       [formLogin, formRegister, formOtp, formForgot, formReset].forEach(f => {
@@ -130,7 +163,7 @@
       const target = $(formId);
       if (target) {
         target.classList.add('active');
-        target.style.display = 'block';
+        target.style.display = 'flex';
       }
 
       if (sw) {
@@ -156,6 +189,9 @@
     /* Навигация "Назад" во всех формах */
     document.querySelectorAll('.go-to-login').forEach(btn => {
       btn.addEventListener('click', () => showForm('auth-form-login'));
+    });
+    document.querySelectorAll('[data-auth-forgot], #go-to-forgot').forEach(btn => {
+      btn.addEventListener('click', () => showForm('auth-form-forgot'));
     });
 
     /* ─────── Показать/скрыть пароль ─────── */
@@ -254,6 +290,22 @@
       regTerms.addEventListener('change', () => { reg.terms = regTerms.checked; refreshRegSubmit(); });
     }
 
+    // Ссылки «Условия пользования» / «Политика конфиденциальности» при регистрации
+    // открывают соответствующие страницы на сайте (внешний браузер).
+    document.querySelectorAll('.auth-link[data-doc]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const doc = el.getAttribute('data-doc');
+        const path = doc === 'privacy' ? '/privacy' : '/tos';
+        const url = 'https://loveapp.chat' + path;
+        if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+          window.electronAPI.openExternal(url);
+        } else {
+          window.open(url, '_blank', 'noopener');
+        }
+      });
+    });
+
     if (formRegister) {
       formRegister.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -272,6 +324,7 @@
           if (data.requireVerification) {
             window.lastAuthEmail = email;
             window.otpType = 'verification';
+            setPendingRegistration(email);
             showOtpForm(email, 'verification');
           }
         } catch (err) {
@@ -306,6 +359,7 @@
         }
 
         try {
+          clearPendingRegistration();
           loginSubmit.disabled = true;
           loginSubmit.textContent = 'Вход...';
           setHint(loginEmailHint, 'Выполняем вход...', '');
@@ -330,6 +384,7 @@
           if (err.status === 403 && err.data && err.data.requireVerification) {
             window.lastAuthEmail = email;
             window.otpType = 'verification';
+            clearPendingRegistration();
             showOtpForm(email, 'verification');
           } else {
             setWrap(loginEmail, 'error');
@@ -353,10 +408,6 @@
     const forgotSuccess = $('forgot-success');
     const forgotSubmit = $('forgot-submit');
 
-    if ($('go-to-forgot')) {
-      $('go-to-forgot').addEventListener('click', () => showForm('auth-form-forgot'));
-    }
-
     if (formForgot) {
       formForgot.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -376,17 +427,17 @@
 
           await AuthAPI.forgotPassword(email);
           window.lastAuthEmail = email;
-          forgotSuccess.textContent = 'Код сброса отправлен на вашу почту!';
+          forgotSuccess.textContent = 'Письмо со ссылкой для смены пароля отправлено на вашу почту.';
           forgotSuccess.classList.remove('hidden');
 
           setTimeout(() => showResetForm(email), 1200);
         } catch (err) {
           setWrap(forgotEmail, 'error');
-          forgotError.textContent = err.message || 'Ошибка отправки кода';
+          forgotError.textContent = err.message || 'Ошибка отправки письма';
           forgotError.classList.remove('hidden');
         } finally {
           forgotSubmit.disabled = false;
-          forgotSubmit.textContent = 'Отправить код';
+          forgotSubmit.textContent = 'Отправить письмо';
         }
       });
 
@@ -450,7 +501,7 @@
 
         try {
           resetSubmit.disabled = true;
-          resetSubmit.textContent = 'Сброс...';
+          resetSubmit.textContent = 'Смена...';
           resetError.classList.add('hidden');
 
           await AuthAPI.resetPassword(window.lastAuthEmail, code, newPassword);
@@ -458,13 +509,18 @@
           if (typeof window.showToast === 'function') {
             window.showToast('Пароль сброшен', 'Используйте новый пароль для входа');
           }
+          try {
+            if (window.location.search && window.history && window.history.replaceState) {
+              window.history.replaceState({}, document.title, '/');
+            }
+          } catch (e) {}
           showForm('auth-form-login');
         } catch (err) {
-          resetError.textContent = err.message || 'Неверный код сброса или ошибка';
+          resetError.textContent = err.message || 'Неверный или истекший код';
           resetError.classList.remove('hidden');
         } finally {
           resetSubmit.disabled = false;
-          resetSubmit.textContent = 'Сбросить пароль';
+          resetSubmit.textContent = 'Сменить пароль';
         }
       });
     }
@@ -520,10 +576,14 @@
           otpSubmit.textContent = 'Проверка...';
           otpError.classList.add('hidden');
 
-          const shouldStartOnboarding = window.otpType !== 'login';
           const data = window.otpType === 'login'
             ? await AuthAPI.verifyTwoFactor(window.pendingTwoFactorToken, code)
             : await AuthAPI.verifyOtp(window.lastAuthEmail, code);
+          const shouldStartOnboarding = window.otpType === 'verification' && (
+            Boolean(data.user && data.user.onboardingPending) ||
+            consumePendingRegistration(window.lastAuthEmail)
+          );
+          if (window.otpType === 'verification') clearPendingRegistration();
 
           window.pendingTwoFactorToken = null;
           await storeAuthToken(data.token);
@@ -601,10 +661,34 @@
     function showResetForm(email) {
       showForm('auth-form-reset');
       const subtitle = $('reset-subtitle');
-      if (subtitle) subtitle.textContent = `Код сброса отправлен на ${email}`;
+      if (subtitle) subtitle.textContent = `Письмо для восстановления отправлено на ${email}. Код можно ввести вручную.`;
       resetOtpDigits.forEach(input => input.value = '');
       resetPass.value = '';
       setTimeout(() => { if (resetOtpDigits[0]) resetOtpDigits[0].focus(); }, 100);
+    }
+
+    function prefillResetFromUrl() {
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        const email = normEmail(params.get('email'));
+        const code = String(params.get('code') || '').replace(/\D/g, '').slice(0, 6);
+        if (!email) return;
+        if (forgotEmail) forgotEmail.value = email;
+        window.lastAuthEmail = email;
+        if (code && formReset) {
+          showForm('auth-form-reset');
+          const subtitle = $('reset-subtitle');
+          if (subtitle) subtitle.textContent = `Ссылка восстановления открыта для ${email}. Придумайте новый пароль.`;
+          resetOtpDigits.forEach((input, index) => {
+            input.value = code[index] || '';
+          });
+          setTimeout(() => {
+            if (resetPass) resetPass.focus();
+          }, 100);
+        } else if (formForgot) {
+          showForm('auth-form-forgot');
+        }
+      } catch (e) {}
     }
 
     /* ─────── Google OAuth → шаг выбора username ─────── */
@@ -675,7 +759,7 @@
           oauthStep.classList.remove('is-visible');
           screen.classList.remove('oauth-active');
           
-          afterAuth(true, 'Добро пожаловать в Love!');
+          afterAuth(Boolean(data.user && data.user.onboardingPending), 'Добро пожаловать в Love!');
         } catch (err) {
           console.error(err);
           setHint(oauthHint, err.message || 'Ошибка сохранения имени', 'error');
@@ -765,18 +849,34 @@
 
     /* ─────── Проверка сессии при загрузке ─────── */
     async function checkExistingSession() {
+      const resetLinkOpened = (() => {
+        try {
+          const params = new URLSearchParams(window.location.search || '');
+          return Boolean(params.get('email')) && (window.location.pathname.includes('reset-password') || params.has('code'));
+        } catch (e) {
+          return false;
+        }
+      })();
+      if (resetLinkOpened) {
+        hideSplash();
+        screen.classList.remove('auth-hidden');
+        prefillResetFromUrl();
+        return;
+      }
+
       try {
         const getMeData = await AuthAPI.getMe();
         if (getMeData && getMeData.user) {
           window.currentUser = getMeData.user;
           localStorage.setItem('user', JSON.stringify(getMeData.user));
-          afterAuth(false, 'Сессия восстановлена');
+          afterAuth(false);
         }
       } catch (err) {
         console.log('Нет активной сессии:', err.message);
         // Показываем форму логина
         hideSplash();
-        showForm('auth-form-login');
+        prefillResetFromUrl();
+        if (!formReset || !formReset.classList.contains('active')) showForm('auth-form-login');
       }
     }
 
@@ -845,12 +945,22 @@
     }
 
     /* ─────── Онбординг: intro + Spotlight ─────── */
-    const ONBOARD_KEY = 'love_onboarding_done';
-    function onboardingDone() { try { return localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { return false; } }
-    function markOnboarding() { try { localStorage.setItem(ONBOARD_KEY, '1'); } catch (e) {} }
+    function onboardingKey(user = window.currentUser) {
+      const id = user && (user._id || user.id || user.email);
+      return `love_onboarding_done:${String(id || 'anonymous').toLowerCase()}`;
+    }
+    function onboardingDone(user = window.currentUser) {
+      try { return localStorage.getItem(onboardingKey(user)) === '1'; } catch (e) { return false; }
+    }
+    function markOnboarding(user = window.currentUser) {
+      try { localStorage.setItem(onboardingKey(user), '1'); } catch (e) {}
+      if (user && typeof user === 'object') user.onboardingPending = false;
+      if (window.currentUser && window.currentUser === user) window.currentUser.onboardingPending = false;
+    }
 
     function afterAuth(isNew, msg) {
-      if (isNew && !onboardingDone()) startOnboardingIntro();
+      const currentUserNew = Boolean(window.currentUser && window.currentUser.onboardingPending);
+      if ((isNew || currentUserNew) && !onboardingDone()) startOnboardingIntro();
       else enterApp(msg);
     }
 

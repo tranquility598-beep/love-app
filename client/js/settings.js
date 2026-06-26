@@ -27,8 +27,8 @@ class SettingsManager {
       'echo-cancellation': true,
       'auto-gain-control': true,
       'voice-activation': false,
-      'default-screen-quality': 'medium',
-      
+      'default-screen-quality': 'ultra',
+
       // Конфиденциальность
       'privacy-friend-requests': true,
       'privacy-server-invites': true,

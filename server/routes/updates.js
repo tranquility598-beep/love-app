@@ -1,45 +1,42 @@
-/**
- * Updates Router - Прокси для обновлений из приватного репозитория GitHub
- */
-
 const express = require('express');
-const router = express.Router();
 const axios = require('axios');
+
+const router = express.Router();
 
 const GITHUB_OWNER = 'tranquility598-beep';
 const GITHUB_REPO = 'love-app';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+const CACHE_TTL_MS = 60 * 1000;
 
-// Кэш для инфы о последнем релизе
-let lastReleaseCache = {
+let latestReleaseCache = {
   data: null,
   timestamp: 0
 };
-const CACHE_TTL = 60 * 1000; // 1 минута
 
-/**
- * Получение информации о последнем релизе с кэшированием
- */
-async function getLatestRelease() {
-  const now = Date.now();
-  if (lastReleaseCache.data && (now - lastReleaseCache.timestamp < CACHE_TTL)) {
-    return lastReleaseCache.data;
-  }
-
+function githubHeaders(accept = 'application/vnd.github.v3+json') {
   if (!GITHUB_TOKEN) {
     throw new Error('GITHUB_TOKEN is not configured on the server');
   }
 
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
-  const response = await axios.get(url, {
-    headers: {
-      'Authorization': `token ${GITHUB_TOKEN}`,
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Love-App-Server'
-    }
-  });
+  return {
+    Authorization: `token ${GITHUB_TOKEN}`,
+    Accept: accept,
+    'User-Agent': 'Love-App-Server'
+  };
+}
 
-  lastReleaseCache = {
+async function getLatestRelease() {
+  const now = Date.now();
+  if (latestReleaseCache.data && now - latestReleaseCache.timestamp < CACHE_TTL_MS) {
+    return latestReleaseCache.data;
+  }
+
+  const response = await axios.get(
+    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+    { headers: githubHeaders() }
+  );
+
+  latestReleaseCache = {
     data: response.data,
     timestamp: now
   };
@@ -47,115 +44,132 @@ async function getLatestRelease() {
   return response.data;
 }
 
-/**
- * Маршрут для проверки обновлений (latest.yml, latest-mac.yml и т.д.)
- * и для скачивания конкретных файлов сборки
- */
+function assetName(asset) {
+  return String(asset?.name || '').toLowerCase();
+}
+
+function isExe(asset) {
+  return assetName(asset).endsWith('.exe');
+}
+
+function isDmg(asset) {
+  return assetName(asset).endsWith('.dmg');
+}
+
+function isApk(asset) {
+  return assetName(asset).endsWith('.apk');
+}
+
+function preferArch(assets, extMatcher, arch) {
+  return assets.find((asset) => extMatcher(asset) && assetName(asset).includes(arch))
+    || assets.find(extMatcher);
+}
+
+async function streamGithubAsset(asset, res, forcedFilename) {
+  if (!asset) {
+    return res.status(404).json({ error: 'Release asset not found on GitHub' });
+  }
+
+  console.log(`[Updates] Streaming asset ${asset.name} as ${forcedFilename || asset.name}`);
+
+  const response = await axios({
+    method: 'get',
+    url: `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${asset.id}`,
+    headers: githubHeaders('application/octet-stream'),
+    responseType: 'stream'
+  });
+
+  res.setHeader('Content-Type', asset.content_type || 'application/octet-stream');
+  if (asset.size) res.setHeader('Content-Length', asset.size);
+  res.setHeader('Content-Disposition', `attachment; filename="${forcedFilename || asset.name}"`);
+
+  response.data.on('error', (error) => {
+    console.error('[Updates] GitHub asset stream error:', error.message);
+    if (!res.headersSent) res.status(502).end();
+  });
+
+  response.data.pipe(res);
+}
+
+function handleDownload(platform, findAsset, filename) {
+  return async (req, res) => {
+    try {
+      const release = await getLatestRelease();
+      const asset = findAsset(release.assets || []);
+
+      if (!asset) {
+        return res.status(404).json({
+          error: `${platform} installer not found in latest GitHub release`
+        });
+      }
+
+      await streamGithubAsset(asset, res, filename);
+    } catch (error) {
+      console.error(`[Updates] Error in /download/${platform}:`, error.message);
+      if (error.response?.status === 404) {
+        return res.status(404).json({ error: 'Latest GitHub release or asset not found' });
+      }
+      res.status(500).json({
+        error: 'Failed to fetch installer from GitHub',
+        details: error.message
+      });
+    }
+  };
+}
+
+router.get('/download/win', handleDownload(
+  'win',
+  (assets) => assets.find(isExe),
+  'Love.exe'
+));
+
+router.get('/download/mac', handleDownload(
+  'mac',
+  (assets) => preferArch(assets, isDmg, 'arm64'),
+  'Love.dmg'
+));
+
+router.get('/download/mac-arm64', handleDownload(
+  'mac-arm64',
+  (assets) => preferArch(assets, isDmg, 'arm64'),
+  'Love.dmg'
+));
+
+router.get('/download/mac-x64', handleDownload(
+  'mac-x64',
+  (assets) => preferArch(assets, isDmg, 'x64'),
+  'Love.dmg'
+));
+
+router.get('/download/android', handleDownload(
+  'android',
+  (assets) => assets.find(isApk),
+  'Love.apk'
+));
+
 router.get('/:filename', async (req, res) => {
   const filename = req.params.filename;
 
   try {
     const release = await getLatestRelease();
-    const asset = release.assets.find(a => a.name.toLowerCase() === filename.toLowerCase());
+    const asset = (release.assets || []).find((a) => assetName(a) === filename.toLowerCase());
 
     if (!asset) {
       console.warn(`[Updates] Asset not found: ${filename}`);
       return res.status(404).json({ error: `Asset not found: ${filename}` });
     }
 
-    console.log(`[Updates] Streaming asset ${filename} (ID: ${asset.id}, Size: ${asset.size} bytes)`);
-
-    // Запрос к GitHub API для скачивания ассета в виде бинарного стрима
-    const response = await axios({
-      method: 'get',
-      url: `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/assets/${asset.id}`,
-      headers: {
-        'Authorization': `token ${GITHUB_TOKEN}`,
-        'Accept': 'application/octet-stream',
-        'User-Agent': 'Love-App-Server'
-      },
-      responseType: 'stream'
-    });
-
-    // Устанавливаем заголовки ответа
-    res.setHeader('Content-Type', asset.content_type || 'application/octet-stream');
-    res.setHeader('Content-Length', asset.size);
-    res.setHeader('Content-Disposition', `attachment; filename="${asset.name}"`);
-
-    // Передаем стрим пользователю
-    response.data.pipe(res);
-
+    await streamGithubAsset(asset, res);
   } catch (error) {
     console.error(`[Updates] Error serving file ${filename}:`, error.message);
-    if (error.response && error.response.status === 404) {
+    if (error.response?.status === 404) {
       return res.status(404).json({ error: 'Release or asset not found on GitHub' });
     }
-    res.status(500).json({ error: 'Failed to fetch update from GitHub', details: error.message });
+    res.status(500).json({
+      error: 'Failed to fetch update from GitHub',
+      details: error.message
+    });
   }
-});
-
-/**
- * Ссылка для скачивания последней версии Windows (.exe) с сайта
- */
-router.get('/download/win', async (req, res) => {
-  try {
-    const release = await getLatestRelease();
-    const exeAsset = release.assets.find(a => a.name.endsWith('.exe'));
-
-    if (!exeAsset) {
-      return res.status(404).json({ error: 'Windows installer (.exe) not found in latest release' });
-    }
-
-    res.redirect(`/api/updates/${exeAsset.name}`);
-  } catch (error) {
-    console.error('[Updates] Error in /download/win:', error.message);
-    res.status(500).json({ error: 'Failed to process download link', details: error.message });
-  }
-});
-
-/**
- * Ссылка для скачивания последней версии macOS (.dmg) для Apple Silicon (arm64)
- */
-router.get('/download/mac-arm64', async (req, res) => {
-  try {
-    const release = await getLatestRelease();
-    const dmgAsset = release.assets.find(a => a.name.endsWith('.dmg') && a.name.includes('arm64'));
-
-    if (!dmgAsset) {
-      return res.status(404).json({ error: 'macOS arm64 installer (.dmg) not found in latest release' });
-    }
-
-    res.redirect(`/api/updates/${dmgAsset.name}`);
-  } catch (error) {
-    console.error('[Updates] Error in /download/mac-arm64:', error.message);
-    res.status(500).json({ error: 'Failed to process download link', details: error.message });
-  }
-});
-
-/**
- * Ссылка для скачивания последней версии macOS (.dmg) для Intel (x64)
- */
-router.get('/download/mac-x64', async (req, res) => {
-  try {
-    const release = await getLatestRelease();
-    const dmgAsset = release.assets.find(a => a.name.endsWith('.dmg') && a.name.includes('x64'));
-
-    if (!dmgAsset) {
-      return res.status(404).json({ error: 'macOS x64 installer (.dmg) not found in latest release' });
-    }
-
-    res.redirect(`/api/updates/${dmgAsset.name}`);
-  } catch (error) {
-    console.error('[Updates] Error in /download/mac-x64:', error.message);
-    res.status(500).json({ error: 'Failed to process download link', details: error.message });
-  }
-});
-
-/**
- * Общий редирект для macOS (по умолчанию отдаем ARM64)
- */
-router.get('/download/mac', (req, res) => {
-  res.redirect('/api/updates/download/mac-arm64');
 });
 
 module.exports = router;

@@ -102,56 +102,81 @@
 
   // ── Получить источник для воспроизведения ───────────────────────────
   // opts: { isOwn: boolean, cloudUrl: string }
-  // Возвращает { src } (blob-URL или '') — пустая строка = играть нечего (симуляция).
+  // Возвращает { src } (blob-URL или direct-URL) — пустая строка = играть нечего.
   async function resolveSource(opts) {
     opts = opts || {};
+    console.log('[Music] resolveSource called:', JSON.stringify(opts));
 
     // Владелец: пробуем локальный файл
     if (opts.isOwn) {
       const p = localStorage.getItem(LS_PATH);
+      console.log('[Music] own: localPath =', p, 'electron =', hasElectron());
       if (p && hasElectron()) {
         try {
           const res = await window.electronAPI.readLocalFile(p);
+          console.log('[Music] own: readLocalFile result:', res && res.ok);
           if (res && res.ok && res.data) {
             const blob = new Blob([res.data], { type: res.mime || 'audio/mpeg' });
             return { src: _trackUrl(URL.createObjectURL(blob)), source: 'local' };
           }
-        } catch (e) { /* падаем дальше на cloud */ }
-        // Локальный путь есть, но файл не читается — он пропал
+        } catch (e) {
+          console.warn('[Music] own: readLocalFile failed:', e && e.message);
+        }
         return { src: '', missing: true };
       }
-      // Локального пути нет (например другой ПК) — играем с Cloudinary, если есть
     }
 
-    // Чужой трек или владелец без локального файла: Cloudinary + Cache API
+    // Чужой трек или владелец без локального файла: прямая ссылка + Cache API
     if (opts.cloudUrl) {
-      const cached = await _fromCache(opts.cloudUrl);
-      if (cached) return { src: cached, source: 'cache' };
+      console.log('[Music] cloudUrl =', opts.cloudUrl);
+      try {
+        const cached = await _fromCache(opts.cloudUrl);
+        console.log('[Music] _fromCache result:', cached ? cached.substring(0, 80) + '...' : 'null');
+        if (cached) return { src: cached, source: 'cache' };
+      } catch (e) {
+        console.warn('[Music] _fromCache error:', e && e.message);
+      }
+      console.log('[Music] fallback to direct URL');
+      return { src: opts.cloudUrl, source: 'direct' };
     }
 
+    console.warn('[Music] NO cloudUrl provided! Returning empty src.');
     return { src: '' };
   }
 
   // ── Cache API для чужих треков ───────────────────────────────────────
   async function _fromCache(url) {
     if (!('caches' in window)) {
-      // Нет Cache API — просто отдаём прямую ссылку
-      return url;
+      console.log('[Music] no Cache API, returning null');
+      return null;
     }
     try {
       const cache = await caches.open(CACHE_NAME);
       let resp = await cache.match(url);
       if (!resp) {
-        const net = await fetch(url, { mode: 'cors' });
-        if (!net.ok) return url; // не вышло — прямая ссылка как fallback
-        await cache.put(url, net.clone());
-        resp = net;
+        console.log('[Music] cache miss, fetching:', url.substring(0, 80));
+        try {
+          const net = await fetch(url, { mode: 'cors' });
+          console.log('[Music] fetch result:', net.status, net.ok);
+          if (net.ok) {
+            await cache.put(url, net.clone());
+            resp = net;
+          }
+        } catch (fetchErr) {
+          console.warn('[Music] CORS fetch failed:', fetchErr && fetchErr.message);
+        }
+      } else {
+        console.log('[Music] cache hit!');
       }
-      const blob = await resp.blob();
-      return _trackUrl(URL.createObjectURL(blob));
+      if (resp) {
+        const blob = await resp.blob();
+        console.log('[Music] blob created, size:', blob.size);
+        return _trackUrl(URL.createObjectURL(blob));
+      }
     } catch (e) {
-      return url; // любой сбой — прямая ссылка
+      console.warn('[Music] _fromCache error:', e && e.message);
     }
+    return null;
   }
 
   // ── Управление кешем (для настроек) ──────────────────────────────────

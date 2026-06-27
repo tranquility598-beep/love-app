@@ -10,19 +10,30 @@ const smtpSecure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true
 const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
 const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_PASS;
 
+// Таймауты, чтобы зависший SMTP-хендшейк (часто на хостингах с зарезанным
+// исходящим SMTP) НЕ держал HTTP-запрос открытым до nginx-504. Лучше быстро
+// упасть с понятной ошибкой, чем отдать 504 Gateway Time-out.
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 12000, // соединение с SMTP-сервером
+  greetingTimeout: 8000,    // ожидание приветствия сервера
+  socketTimeout: 15000      // неактивность сокета
+};
+
 const transporter = smtpHost
   ? nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
       secure: smtpSecure,
-      auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined
+      auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined,
+      ...SMTP_TIMEOUTS
     })
   : nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS // Это должен быть "Пароль приложения"
-      }
+      },
+      ...SMTP_TIMEOUTS
     });
 
 /**
@@ -153,15 +164,66 @@ const getOTPTemplate = (code, type = 'verification') => {
 /**
  * Главная функция отправки письма
  */
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// Отправитель должен быть на ПОДТВЕРЖДЁННОМ в Resend домене (gmail.com нельзя!).
+// Верифицируй loveapp.chat в Resend → ставь сюда адрес на этом домене.
+const MAIL_FROM = process.env.MAIL_FROM || 'Love <noreply@loveapp.chat>';
+
+/**
+ * Отправка письма через Resend HTTP API (порт 443 — дешёвые VPS его не режут,
+ * в отличие от исходящего SMTP 25/465/587). Используется, если задан
+ * RESEND_API_KEY. Иначе — fallback на SMTP/nodemailer ниже.
+ */
+const sendViaResend = async (to, subject, html) => {
+  if (typeof fetch !== 'function') {
+    throw new Error('global fetch недоступен (нужен Node 18+) для Resend');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ from: MAIL_FROM, to, subject, html }),
+      signal: controller.signal
+    });
+    if (!resp.ok) {
+      let detail = '';
+      try { detail = JSON.stringify(await resp.json()); } catch (_) {}
+      throw new Error(`Resend ${resp.status} ${detail}`);
+    }
+    const data = await resp.json().catch(() => ({}));
+    console.log('Email sent via Resend: %s', data.id || '(no id)');
+    return true;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const sendEmail = async (to, subject, html) => {
   try {
+    // Предпочитаем Resend, если ключ задан (надёжно на VPS с зарезанным SMTP).
+    if (RESEND_API_KEY) {
+      return await sendViaResend(to, subject, html);
+    }
+
     const fromAddress = process.env.MAIL_FROM || 'noreply@loveapp.chat';
-    const info = await transporter.sendMail({
-      from: `"LOVE" <${fromAddress}>`,
-      to,
-      subject,
-      html
-    });
+    // Жёсткий потолок: даже если SMTP-таймауты не сработают, ответ вернётся
+    // за ~18с и роут не упрётся в nginx-504.
+    const info = await Promise.race([
+      transporter.sendMail({
+        from: `"LOVE" <${fromAddress}>`,
+        to,
+        subject,
+        html
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP send timeout')), 18000)
+      )
+    ]);
     console.log('Email sent: %s', info.messageId);
     return true;
   } catch (error) {

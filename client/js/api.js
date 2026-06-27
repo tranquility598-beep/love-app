@@ -123,6 +123,20 @@ function isAuthEntryEndpoint(endpoint) {
   );
 }
 
+// Пользователь сейчас на экране авторизации (не залогинен)?
+// Если да — 401 на любом запросе НЕ должен чистить токен и дёргать
+// showAuthScreen(): мы и так на экране входа, а такой редирект сбрасывает
+// форму регистрации на форму входа (баг: проверка занятости ника шлёт
+// /users/search без токена → 401 → форма прыгает на вход).
+function isOnAuthScreen() {
+  try {
+    const screen = document.getElementById('auth-screen');
+    return Boolean(screen) && !screen.classList.contains('auth-hidden');
+  } catch (e) {
+    return false;
+  }
+}
+
 function normalizeApiErrorMessage(message, status) {
   if (typeof message !== 'string') return 'Ошибка запроса';
   if (message.includes('<!DOCTYPE html>') || message.includes('Cannot POST') || message.includes('Cannot GET')) {
@@ -153,7 +167,7 @@ async function apiFetch(endpoint, options = {}) {
           throw abortError;
         }
         console.error('API request failed:', endpoint, result.status, result.data);
-        if (result.status === 401 && !isAuthEntryEndpoint(endpoint)) {
+        if (result.status === 401 && !isAuthEntryEndpoint(endpoint) && !isOnAuthScreen()) {
           // Авторизованный запрос с протухшим токеном — чистим и
           // мягко выкидываем на экран логина. БЕЗ reload, чтобы не было
           // циклов перезагрузки при долгоживущих сбоях.
@@ -217,7 +231,7 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    if (response.status === 401 && !isAuthEntryEndpoint(endpoint)) {
+    if (response.status === 401 && !isAuthEntryEndpoint(endpoint) && !isOnAuthScreen()) {
       await clearAuthToken();
       localStorage.removeItem('user');
       if (typeof disconnectSocket === 'function') disconnectSocket();

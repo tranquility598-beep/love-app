@@ -817,6 +817,48 @@
     }
   }
 
+  // ── Открыть (или создать) ЛС-беседу с пользователем ───────────────────
+  // Используется кнопкой «чат» в панели друзей. Раньше клик только искал
+  // уже существующую беседу в списке — а после принятия заявки её ещё нет
+  // (DM создаётся на сервере при первом открытии). Теперь создаём через
+  // DMAPI.openConversation, догружаем список и открываем чат.
+  async function openDMWithUser(realUserId, fallbackName, fallbackAvatarUrl) {
+    const mockArr = window._mockConversations || [];
+    const navChats = document.getElementById('logo-nav-chats');
+
+    let conv = mockArr.find(c => c._otherUser && String(c._otherUser._id) === String(realUserId));
+
+    if (!conv && realUserId) {
+      try {
+        const res = await DMAPI.openConversation(realUserId);
+        const created = (res && res.conversation) || res;
+        // Полностью перечитываем список ЛС, чтобы новая беседа корректно
+        // легла в _mockConversations и _dmReverseMap.
+        await loadRealDMConversations();
+        const createdId = created && created._id;
+        conv = mockArr.find(c => createdId && String(c._realId) === String(createdId))
+            || mockArr.find(c => c._otherUser && String(c._otherUser._id) === String(realUserId));
+      } catch (err) {
+        console.error('[init-app] openDMWithUser failed:', err);
+        if (typeof window.showToast === 'function') {
+          window.showToast('Ошибка', 'Не удалось открыть личный чат.');
+        }
+      }
+    }
+
+    // Переходим в раздел чатов
+    if (navChats) navChats.click();
+
+    if (conv && typeof window.selectConversation === 'function') {
+      window.selectConversation(conv.id);
+    } else if (typeof renderConversationsList === 'function') {
+      renderConversationsList('');
+    }
+
+    return conv;
+  }
+  window.openDMWithUser = openDMWithUser;
+
   // ── Load servers and rooms ────────────────────────────────────────────
   async function loadRealServers() {
     try {

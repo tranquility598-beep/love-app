@@ -537,6 +537,9 @@ function selectConversation(id) {
         window._onConversationSelected(id, conv);
     }
 }
+// Доступ из init-app.js (openDMWithUser): выбрать беседу по id после её
+// создания/догрузки с сервера.
+window.selectConversation = selectConversation;
 
 const _videoStates = new Map();
 
@@ -4800,6 +4803,12 @@ function loadFriends(type) {
         if (nameCol) nameCol.addEventListener("click", () => showProfileModal(friend.name, friend._realId));
 
         card.querySelector(".chat-direct-action").addEventListener("click", () => {
+            // Открываем (или создаём на сервере) ЛС-беседу с этим другом.
+            if (friend._realId && typeof window.openDMWithUser === 'function') {
+                window.openDMWithUser(friend._realId, friend.name, friend.avatarUrl);
+                return;
+            }
+            // Fallback (нет реального id / мок): просто открыть существующий чат.
             const conv = mockConversations.find(c => c.name === friend.name);
             if (conv) {
                 activeConversationId = conv.id;
@@ -4849,18 +4858,13 @@ let mockHubUpdates = [
         date: "",
         tag: "Текущая версия",
         title: "Love App v" + APP_VERSION,
-        desc: "Мажорное обновление: Android-приложение, исправления видео и сообщений.",
+        desc: "Стабильность: починена регистрация, личные чаты из друзей и Android-сборка.",
         changes: [
-            "Android-приложение через Capacitor (APK-сборка)",
-            "Исправлено воспроизведение видео при переключении вкладок",
-            "Исправлено удаление сообщений (temp-ID ошибка)",
-            "Скрытие пустых облачков при отправке файлов без текста",
-            "Вставка изображений из буфера обмена (Ctrl+V)",
-            "Исправлено выравнивание вложений в own-сообщениях",
-            "Исправлены кнопки редактирования/удаления (показ при наведении)",
-            "Исправлен крестик удаления файлов в превью",
-            "Устранён конфликт CSP для видео в Electron",
-            "Исправлен сброс видео/аудио при новом сообщении"
+            "Починена регистрация (ввод ника больше не кидает на вход)",
+            "Сервер не зависает на отправке письма — понятная ошибка вместо 504",
+            "Личный чат открывается прямо из «Друзей» и из профиля",
+            "Восстановление пароля по коду на почту",
+            "Восстановлена Android-сборка (CI на Node 22)"
         ]
     }
 ];
@@ -6186,10 +6190,28 @@ function showProfileModal(profileName = "own", realId = null) {
 
             if (targetId && (!window.currentUser || String(targetId) !== String(window.currentUser._id))) {
                 if (friend && friend.type === "friend") {
+                    // Уже друзья — кнопка «Написать сообщение» (открывает/создаёт ЛС)
+                    const btnMsg = document.createElement("button");
+                    btnMsg.className = "profile-save-btn";
+                    btnMsg.style.marginTop = "0";
+                    btnMsg.style.flex = "1";
+                    btnMsg.style.borderColor = "rgba(255,255,255,0.25)";
+                    btnMsg.style.background = "rgba(255,255,255,0.1)";
+                    btnMsg.style.color = "rgba(255,255,255,0.9)";
+                    btnMsg.textContent = "Написать сообщение";
+                    btnMsg.addEventListener("click", () => {
+                        if (typeof window.openDMWithUser === 'function') {
+                            window.openDMWithUser(targetId, targetName);
+                        }
+                        if (typeof closeProfile === 'function') closeProfile();
+                    });
+                    friendActionsContainer.appendChild(btnMsg);
+
                     // Уже друзья
                     const btnRemove = document.createElement("button");
                     btnRemove.className = "profile-save-btn";
                     btnRemove.style.marginTop = "0";
+                    btnRemove.style.flex = "1";
                     btnRemove.style.borderColor = "rgba(239, 68, 68, 0.2)";
                     btnRemove.style.background = "rgba(239, 68, 68, 0.05)";
                     btnRemove.style.color = "rgba(239, 68, 68, 0.8)";

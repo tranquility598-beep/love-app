@@ -1,6 +1,6 @@
 {
   "name": "love-app",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Love - A beautiful chat application",
   "main": "client/main.js",
   "scripts": {

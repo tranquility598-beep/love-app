@@ -4848,8 +4848,8 @@ function loadFriends(type) {
 // Love Hub статичный: реальная версия приложения. Полноценная история
 // обновлений и управление появятся позже через админ-панель.
 const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion === 'function')
-    ? (window.electronAPI.getVersion() || '2.0.0')
-    : '2.0.0';
+    ? (window.electronAPI.getVersion() || '2.0.1')
+    : '2.0.1';
 
 let mockHubUpdates = [
     {

@@ -52,113 +52,74 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => (
 }[char]));
 
 /**
- * Красивый HTML-шаблон для OTP сообщений
+ * Премиальная B&W-обёртка письма (wabi-sabi). Табличная вёрстка + инлайн-стили —
+ * для максимальной совместимости с почтовыми клиентами (Gmail, Apple Mail, Outlook).
+ */
+const wrapEmail = ({ title, lead, inner = '', hint = '' }) => {
+  const heart = '<svg width="26" height="26" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="#ffffff"/></svg>';
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>${title}</title>
+  <style>
+    body { margin:0; padding:0; background:#000; }
+    a { text-decoration:none; }
+    @media (max-width:600px){ .lv-card{ width:100% !important; border-radius:0 !important; } .lv-pad{ padding-left:24px !important; padding-right:24px !important; } }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#000;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#000;padding:40px 16px;">
+    <tr><td align="center">
+      <table role="presentation" class="lv-card" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:480px;background:#0b0b0b;border:1px solid rgba(255,255,255,0.08);border-radius:22px;overflow:hidden;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr><td style="height:3px;line-height:3px;font-size:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.7),rgba(255,255,255,0));">&nbsp;</td></tr>
+        <tr><td class="lv-pad" style="padding:44px 44px 6px;text-align:center;">
+          <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td width="60" height="60" align="center" valign="middle" style="width:60px;height:60px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:50%;">${heart}</td></tr></table>
+          <div style="margin-top:18px;font-size:13px;letter-spacing:7px;color:rgba(255,255,255,0.45);font-weight:700;">LOVE</div>
+        </td></tr>
+        <tr><td class="lv-pad" style="padding:20px 44px 38px;text-align:center;">
+          <h1 style="margin:0 0 12px;font-size:23px;font-weight:800;color:#ffffff;letter-spacing:0.3px;">${title}</h1>
+          <p style="margin:0 0 26px;font-size:15px;line-height:1.6;color:rgba(255,255,255,0.55);">${lead}</p>
+          ${inner}
+          ${hint ? `<p style="margin:26px 0 0;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.34);">${hint}</p>` : ''}
+        </td></tr>
+        <tr><td style="border-top:1px solid rgba(255,255,255,0.06);padding:18px;text-align:center;background:#070707;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.28);">
+          Сделано с <span style="color:#ff4d4d;">&#10084;</span>&nbsp;&nbsp;loveapp.chat
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+};
+
+// Бокс с кодом (моноширинный, крупный, в рамке). text-indent компенсирует
+// хвостовой letter-spacing, чтобы код выглядел визуально по центру.
+const otpBox = (code) => `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;"><tr><td style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:24px 30px;">
+  <div style="font-family:'Courier New',Courier,monospace;font-size:38px;font-weight:800;letter-spacing:12px;text-indent:12px;color:#ffffff;">${escapeHtml(code)}</div>
+</td></tr></table>`;
+
+/**
+ * Стильный HTML-шаблон для OTP-писем (подтверждение почты / код входа / сброс).
  */
 const getOTPTemplate = (code, type = 'verification') => {
   const isReset = type === 'reset';
   const isLogin = type === 'login';
-  const title = isReset ? 'Сброс пароля' : (isLogin ? 'Код входа' : 'Подтверждение регистрации');
-  const subTitle = isReset ? 'Используйте этот код для сброса вашего пароля.' : (isLogin ? 'Введите этот код в LOVE, чтобы завершить вход.' : 'Добро пожаловать в LOVE! Используйте этот код для подтверждения вашего аккаунта.');
-  
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-        body {
-          background-color: #050505;
-          margin: 0;
-          padding: 0;
-          font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          color: #ffffff;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background: #0a0a0a;
-          border: 1px solid #1a1a1a;
-          border-radius: 16px;
-          overflow: hidden;
-          margin-top: 40px;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        }
-        .header {
-          padding: 40px 20px;
-          text-align: center;
-          background: linear-gradient(180deg, #111 0%, #0a0a0a 100%);
-        }
-        .logo {
-          width: 60px;
-          height: 60px;
-          margin-bottom: 20px;
-        }
-        .content {
-          padding: 40px;
-          text-align: center;
-        }
-        h1 {
-          font-size: 24px;
-          font-weight: 800;
-          margin-bottom: 10px;
-          letter-spacing: 0.5px;
-        }
-        p {
-          color: rgba(255,255,255,0.5);
-          font-size: 15px;
-          line-height: 1.6;
-          margin-bottom: 30px;
-        }
-        .otp-container {
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px;
-          padding: 30px;
-          margin-bottom: 30px;
-        }
-        .otp-code {
-          font-size: 42px;
-          font-weight: 800;
-          letter-spacing: 12px;
-          color: #ffffff;
-          text-shadow: 0 0 20px rgba(255,255,255,0.3);
-        }
-        .footer {
-          padding: 20px;
-          text-align: center;
-          background: #080808;
-          font-size: 11px;
-          color: rgba(255,255,255,0.2);
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-        .heart {
-          color: #ff4d4d;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <svg class="logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
-          </svg>
-          <h1>${title}</h1>
-        </div>
-        <div class="content">
-          <p>${subTitle}</p>
-          <div class="otp-container">
-            <div class="otp-code">${code}</div>
-          </div>
-          <p>Код действителен в течение 10 минут. Если вы не запрашивали это письмо, просто проигнорируйте его.</p>
-        </div>
-        <div class="footer">
-          Сделано с <span class="heart">♥</span> командой LOVE
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const title = isReset ? 'Сброс пароля' : (isLogin ? 'Код входа' : 'Подтверждение почты');
+  const lead = isReset
+    ? 'Используйте код ниже, чтобы задать новый пароль.'
+    : (isLogin
+      ? 'Введите этот код в LOVE, чтобы завершить вход.'
+      : 'Добро пожаловать в LOVE. Введите код ниже, чтобы подтвердить аккаунт.');
+
+  return wrapEmail({
+    title,
+    lead,
+    inner: otpBox(code),
+    hint: 'Код действует 10 минут. Если вы ничего не запрашивали — просто проигнорируйте это письмо.'
+  });
 };
 
 /**
@@ -248,47 +209,20 @@ module.exports = {
     const subject = 'Восстановление пароля — LOVE';
     const safeUrl = String(resetUrl || '').trim();
     const escapedUrl = escapeHtml(safeUrl);
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { background:#050505; margin:0; padding:0; font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#fff; }
-          .container { max-width:600px; margin:40px auto 0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:16px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.5); }
-          .header { padding:40px 20px 24px; text-align:center; background:linear-gradient(180deg,#111 0%,#0a0a0a 100%); }
-          .logo { width:60px; height:60px; margin-bottom:18px; }
-          .content { padding:34px 40px 40px; text-align:center; }
-          h1 { margin:0 0 10px; font-size:24px; font-weight:800; }
-          p { color:rgba(255,255,255,.56); font-size:15px; line-height:1.6; margin:0 0 18px; }
-          .button { display:inline-block; padding:14px 24px; border-radius:10px; background:#fff; color:#000; text-decoration:none; font-weight:700; margin:10px 0 22px; }
-          .otp-container { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:24px; margin:0 0 22px; }
-          .otp-code { font-size:38px; font-weight:800; letter-spacing:10px; color:#fff; word-break:break-all; }
-          .fallback { font-size:12px; color:rgba(255,255,255,.42); word-break:break-all; }
-          .footer { padding:20px; text-align:center; background:#080808; font-size:11px; color:rgba(255,255,255,.22); text-transform:uppercase; letter-spacing:1px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <svg class="logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M50 85 C50 85 15 60 15 35 C15 22 25 13 37 13 C43 13 48 16 50 20 C52 16 57 13 63 13 C75 13 85 22 85 35 C85 60 50 85 50 85Z" fill="white" opacity="0.9"/>
-            </svg>
-            <h1>Сброс пароля</h1>
-          </div>
-          <div class="content">
-            <p>Нажмите кнопку ниже, чтобы открыть страницу смены пароля. Если кнопка не сработает, используйте код вручную.</p>
-            ${safeUrl ? `<a class="button" href="${escapedUrl}">Сменить пароль</a>` : ''}
-            <div class="otp-container">
-              <div class="otp-code">${code}</div>
-            </div>
-            <p class="fallback">${escapedUrl}</p>
-          </div>
-          <div class="footer">Сделано с ♥ командой LOVE</div>
-        </div>
-      </body>
-      </html>
-    `;
+    const button = safeUrl
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 22px;"><tr><td style="border-radius:10px;background:#ffffff;">
+          <a href="${escapedUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#000000;border-radius:10px;">Сменить пароль</a>
+        </td></tr></table>`
+      : '';
+    const fallback = safeUrl
+      ? `<p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:rgba(255,255,255,0.3);word-break:break-all;">${escapedUrl}</p>`
+      : '';
+    const html = wrapEmail({
+      title: 'Сброс пароля',
+      lead: 'Нажмите кнопку, чтобы открыть страницу смены пароля. Или введите код вручную.',
+      inner: button + otpBox(code) + fallback,
+      hint: 'Ссылка и код действуют ограниченное время. Если вы не запрашивали сброс — просто проигнорируйте это письмо.'
+    });
     return await sendEmail(email, subject, html);
   }
 };

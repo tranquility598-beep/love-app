@@ -3,6 +3,61 @@
  * Управляет peer-to-peer аудио соединениями и демонстрацией экрана
  */
 
+// ── Capacitor runtime permissions (Android 6+) ─────────────────────────
+// На Android WebView getUserMedia() молча падает без явного разрешения.
+// Запрашиваем RECORD_AUDIO / CAMERA через Capacitor Permissions API
+// перед вызовом navigator.mediaDevices.getUserMedia().
+async function ensureMicPermission() {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Permissions) {
+      const perm = window.Capacitor.Plugins.Permissions;
+      const mic = await perm.query({ name: 'microphone' });
+      if (mic && mic.state !== 'granted') {
+        const result = await perm.request({ name: 'microphone' });
+        if (!result || result.state !== 'granted') {
+          console.warn('⚠️ Microphone permission denied by user');
+          return false;
+        }
+      }
+    }
+    // Fallback: если нет Capacitor Permissions API, пробуем обычный
+    // navigator.permissions (поддерживается не везде, но не мешает)
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const status = await navigator.permissions.query({ name: 'microphone' });
+        if (status.state === 'denied') {
+          console.warn('⚠️ Microphone permission denied (system)');
+          return false;
+        }
+      } catch (_) {}
+    }
+    return true;
+  } catch (e) {
+    console.warn('ensureMicPermission error:', e);
+    return true; // не блокируем — пусть getUserMedia сам покажет диалог
+  }
+}
+
+async function ensureCameraPermission() {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Permissions) {
+      const perm = window.Capacitor.Plugins.Permissions;
+      const cam = await perm.query({ name: 'camera' });
+      if (cam && cam.state !== 'granted') {
+        const result = await perm.request({ name: 'camera' });
+        if (!result || result.state !== 'granted') {
+          console.warn('⚠️ Camera permission denied by user');
+          return false;
+        }
+      }
+    }
+    return true;
+  } catch (e) {
+    console.warn('ensureCameraPermission error:', e);
+    return true;
+  }
+}
+
 window.getAvatarUrl = function(avatar, name, userId) {
   if (!avatar) return 'assets/default-avatar.png';
   if (avatar.startsWith('http')) return avatar;
@@ -88,6 +143,14 @@ class VoiceManager {
   async joinChannel(channelId) {
     try {
       this.channelId = channelId;
+
+      // Запрашиваем разрешение на микрофон (Android 6+ / Capacitor)
+      const micOk = await ensureMicPermission();
+      if (!micOk) {
+        console.error('🎙️ Microphone permission denied — cannot join voice');
+        if (typeof showToast === 'function') showToast('Микрофон', 'Разрешите доступ к микрофону в настройках устройства.');
+        return false;
+      }
 
       // Запрашиваем доступ к микрофону
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -961,6 +1024,12 @@ class VoiceManager {
     }
 
     try {
+      const camOk = await ensureCameraPermission();
+      if (!camOk) {
+        console.warn('⚠️ Camera permission denied');
+        this._cameraStarting = false;
+        return false;
+      }
       this.cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },

@@ -1128,6 +1128,7 @@
       case 'mention':
         return Object.assign(base, {
           type: 'mention',
+          category: 'normal',
           groupName: _esc(n.serverName || 'Сервер'),
           groupAvatar: _esc((n.serverName || 'S').charAt(0).toUpperCase()),
           senderAvatar: _esc(avatar),
@@ -1136,16 +1137,17 @@
       case 'new_dm':
         return Object.assign(base, {
           type: 'dm',
+          category: 'normal',
           convId: n.conversationId ? ('dm-' + n.conversationId) : ''
         });
       case 'friend_request':
-        return Object.assign(base, { type: 'request', isFriend: false, convId: '' });
+        return Object.assign(base, { type: 'request', category: 'normal', isFriend: false, convId: '' });
       case 'missed_call':
-        return Object.assign(base, { type: 'system_call' });
+        return Object.assign(base, { type: 'system_call', category: 'normal' });
       case 'friend_accepted':
       case 'system':
       default:
-        return Object.assign(base, { type: 'system_joined' });
+        return Object.assign(base, { type: 'system_joined', category: 'system' });
     }
   }
   window._mapServerNotification = _mapServerNotification;

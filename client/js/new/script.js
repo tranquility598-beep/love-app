@@ -5570,11 +5570,11 @@ if (notifFeedContainer) {
         const { notifAction, notifId, convId, serverId, name, actorId } = el.dataset;
 
         switch (notifAction) {
-            case "close":         removeNotification(e, Number(notifId)); break;
-            case "goto-chat":     goToNotificationChat(serverId); break;
-            case "request-reply": handleChatRequest(e, Number(notifId), "reply", convId); break;
-            case "request-block": handleChatRequest(e, Number(notifId), "block", name); break;
-            case "callback":      handleCallbackCall(name, actorId); break;
+            case "close":          removeNotification(e, Number(notifId)); break;
+            case "goto-chat":      goToNotificationChat(serverId); break;
+            case "friend-accept":  handleFriendAccept(Number(notifId), actorId, name); break;
+            case "friend-decline": handleFriendDecline(Number(notifId), actorId, name); break;
+            case "callback":       handleCallbackCall(name, actorId); break;
         }
     });
 
@@ -5585,20 +5585,27 @@ if (notifFeedContainer) {
     });
 }
 
+let notifActiveTab = "normal"; // 'normal' | 'system'
+
 function loadNotifications() {
     notifFeedContainer.innerHTML = "";
-    
-    if (mockNotifications.length === 0) {
+
+    // Фильтр по активной вкладке (старые уведомления без category → 'normal').
+    const list = mockNotifications.filter(n => (n.category || "normal") === notifActiveTab);
+
+    if (list.length === 0) {
         notifFeedContainer.appendChild(createEmptyState(
-            "Уведомлений нет",
-            "Когда появятся ответы, упоминания или системные события, они будут здесь.",
+            notifActiveTab === "system" ? "Системных уведомлений нет" : "Уведомлений нет",
+            notifActiveTab === "system"
+                ? "Системные события — принятые заявки, объявления — появятся здесь."
+                : "Ответы, упоминания, заявки в друзья и звонки появятся здесь.",
             "",
             null
         ));
         return;
     }
 
-    mockNotifications.forEach(notif => {
+    list.forEach(notif => {
         const item = document.createElement("div");
         
         if (notif.type === "dm") {
@@ -5675,12 +5682,11 @@ function loadNotifications() {
                     </button>
                 </div>
                 <div class="notif-card-body">
-                    <p class="notif-message-text">${escHTML(notif.text)}</p>
-                    ${!notif.isFriend ? '<p class="notif-not-friend-hint">Этот пользователь не в списке ваших друзей</p>' : ''}
+                    <p class="notif-message-text">${escHTML(notif.text || (notif.name + ' хочет добавить вас в друзья'))}</p>
                 </div>
                 <div class="notif-card-actions buttons-row">
-                    <button class="notif-action-btn notif-btn-bw" data-notif-action="request-reply" data-notif-id="${notif.id}" data-conv-id="${escHTML(notif.convId)}">Ответить</button>
-                    <button class="notif-action-btn notif-btn-bw" data-notif-action="request-block" data-notif-id="${notif.id}" data-name="${escHTML(notif.name)}">Заблокировать</button>
+                    <button class="notif-action-btn primary" data-notif-action="friend-accept" data-notif-id="${notif.id}" data-actor-id="${escHTML(notif.actorId || '')}" data-name="${escHTML(notif.name)}">Принять</button>
+                    <button class="notif-action-btn notif-btn-bw" data-notif-action="friend-decline" data-notif-id="${notif.id}" data-actor-id="${escHTML(notif.actorId || '')}" data-name="${escHTML(notif.name)}">Отклонить</button>
                 </div>
             `;
         }
@@ -5754,19 +5760,67 @@ function loadNotifications() {
     });
 }
 
+// Удалить уведомление на сервере по локальному id (если у него есть _realId).
+function _removeNotifServerSide(id) {
+    const notif = mockNotifications.find(n => n.id === id);
+    if (notif && notif._realId && typeof NotificationsAPI !== 'undefined') {
+        NotificationsAPI.remove(notif._realId).catch(() => {});
+    }
+}
+
 window.removeNotification = function(e, id) {
     if (e) e.stopPropagation();
+    _removeNotifServerSide(id);
     mockNotifications = mockNotifications.filter(n => n.id !== id);
     loadNotifications();
     checkUnreadNotifications();
     showToast("Удалено", "Уведомление стерто из списка.");
 };
 
+// Принять заявку в друзья прямо из панели уведомлений.
+async function handleFriendAccept(notifId, actorId, name) {
+    if (!actorId) { showToast("Ошибка", "Не удалось определить пользователя."); return; }
+    try {
+        if (typeof FriendsAPI !== 'undefined') {
+            await FriendsAPI.accept(actorId);
+            if (typeof socketNotifyFriendAccepted === 'function') socketNotifyFriendAccepted(actorId);
+            else if (window.socket) window.socket.emit('friend:accepted', { targetUserId: actorId });
+        }
+    } catch (err) {
+        showToast("Ошибка", "Не удалось принять заявку.");
+        return;
+    }
+    _removeNotifServerSide(notifId);
+    mockNotifications = mockNotifications.filter(n => n.id !== notifId);
+    loadNotifications();
+    checkUnreadNotifications();
+    if (typeof window.loadFriendsFromAPI === 'function') window.loadFriendsFromAPI();
+    showToast("Заявка принята", `Вы теперь друзья с ${name || 'пользователем'}.`);
+}
+
+// Отклонить заявку в друзья из панели уведомлений.
+async function handleFriendDecline(notifId, actorId, name) {
+    try {
+        if (actorId && typeof FriendsAPI !== 'undefined') {
+            await FriendsAPI.decline(actorId);
+        }
+    } catch (err) {
+        showToast("Ошибка", "Не удалось отклонить заявку.");
+        return;
+    }
+    _removeNotifServerSide(notifId);
+    mockNotifications = mockNotifications.filter(n => n.id !== notifId);
+    loadNotifications();
+    checkUnreadNotifications();
+    showToast("Заявка отклонена", `Заявка от ${name || 'пользователя'} отклонена.`);
+}
+
 if (clearAllNotifsBtn) {
     clearAllNotifsBtn.addEventListener("click", () => {
         mockNotifications = [];
         loadNotifications();
         checkUnreadNotifications();
+        if (typeof NotificationsAPI !== 'undefined') NotificationsAPI.clearAll().catch(() => {});
         showToast("Очищено", "Все уведомления удалены.");
     });
 }
@@ -5776,9 +5830,20 @@ if (markAllReadNotifsBtn) {
         mockNotifications.forEach(n => n.unread = false);
         loadNotifications();
         checkUnreadNotifications();
+        // Помечаем прочитанными и на сервере, чтобы не висели после перезахода.
+        if (typeof NotificationsAPI !== 'undefined') NotificationsAPI.markRead().catch(() => {});
         showToast("Уведомления", "Все уведомления помечены как прочитанные.");
     });
 }
+
+// Вкладки «Обычные» / «Системные»
+document.querySelectorAll('[data-notif-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+        notifActiveTab = tab.getAttribute('data-notif-tab') || 'normal';
+        document.querySelectorAll('[data-notif-tab]').forEach(t => t.classList.toggle('active', t === tab));
+        loadNotifications();
+    });
+});
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

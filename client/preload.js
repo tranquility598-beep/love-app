@@ -36,7 +36,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Автообновления
   onUpdateMessage: (callback) => ipcRenderer.on('updater-message', (_event, data) => callback(data)),
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.send('download-update'),
   installUpdate: () => ipcRenderer.send('install-update'),
+  setUpdateChannel: (allowPrerelease) => ipcRenderer.send('set-update-channel', allowPrerelease),
+  openExternal: (url) => ipcRenderer.send('open-external', url),
 
   // Голосовые звонки
   showIncomingCall: (caller, conversationId, channelId) => ipcRenderer.send('show-incoming-call', { caller, conversationId, channelId }),

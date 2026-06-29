@@ -25,6 +25,11 @@ const log = require('electron-log');
 // Настройка логгера для автообновлений
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
+// Фоновое авто-обновление: при наличии обновления оно само скачивается, и
+// устанавливается тихо при выходе из приложения. Параллельно рендер показывает
+// уведомление + раздел Настройки → Обновления с кнопкой «обновить сейчас».
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 // Отключаем аппаратное ускорение для совместимости
 // app.disableHardwareAcceleration();
@@ -583,7 +588,30 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 ipcMain.on('check-for-updates', () => {
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdates().catch((err) => {
+    if (mainWindow) mainWindow.webContents.send('updater-message', { type: 'error', error: err.message });
+  });
+});
+
+// Пользователь нажал «Скачать обновление» — запускаем загрузку.
+ipcMain.on('download-update', () => {
+  autoUpdater.downloadUpdate().catch((err) => {
+    if (mainWindow) mainWindow.webContents.send('updater-message', { type: 'error', error: err.message });
+  });
+});
+
+// Канал обновлений: stable (false) или beta/предрелизы (true).
+// Рендер шлёт сохранённый выбор при старте и при переключении тумблера.
+ipcMain.on('set-update-channel', (_event, allowPrerelease) => {
+  autoUpdater.allowPrerelease = !!allowPrerelease;
+  log.info('Update channel: ' + (allowPrerelease ? 'beta (prerelease)' : 'stable'));
+});
+
+// Открыть ссылку во внешнем браузере (фолбэк скачивания для macOS и пр.).
+ipcMain.on('open-external', (_event, url) => {
+  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+    shell.openExternal(url);
+  }
 });
 
 ipcMain.on('install-update', () => {
@@ -759,10 +787,10 @@ if (!gotTheLock) {
     } else {
       createWindow();
       createTray();
-      setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 3000);
+      setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 3000);
       setInterval(() => {
-        autoUpdater.checkForUpdatesAndNotify();
-      }, 60 * 60 * 1000); 
+        autoUpdater.checkForUpdates().catch(() => {});
+      }, 60 * 60 * 1000);
     }
 
     app.on('activate', () => {

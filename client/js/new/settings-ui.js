@@ -679,20 +679,12 @@
   /* ───────────────  Обновления  ─────────────── */
 
   function initUpdates(shell) {
-    const btn = shell.querySelector('#lvs-check-updates');
-    if (!btn) return;
-    // Показываем реальную текущую версию вместо фейковой проверки.
-    btn.addEventListener('click', () => {
-      if (btn.classList.contains('is-loading')) return;
-      btn.classList.add('is-loading');
-      btn.textContent = 'Проверка…';
-      setTimeout(() => {
-        btn.classList.remove('is-loading');
-        const ver = getAppVersion();
-        btn.textContent = 'У вас версия v' + ver + ' — обновлений нет';
-        setTimeout(() => { btn.textContent = 'Проверить обновления'; }, 2800);
-      }, 1200);
-    });
+    // Реальная логика обновлений живёт в js/new/updates.js (Electron):
+    // проверка/скачивание/установка + канал stable/beta через electron-updater.
+    // Здесь только перерисовываем секцию под текущее состояние при открытии настроек.
+    if (typeof window.renderUpdatesSection === 'function') {
+      window.renderUpdatesSection();
+    }
   }
 
   // Единый источник версии: Electron API, package.json, или fallback.

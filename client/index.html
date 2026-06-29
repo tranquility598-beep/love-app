@@ -1588,26 +1588,30 @@
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Статус</div></div>
-                  <span class="lvs-badge lvs-badge--success">Актуальная версия</span>
+                  <span class="lvs-badge lvs-badge--success" id="settings-updates-status">Актуальная версия</span>
                 </div>
                 <div class="lvs-row">
-                  <div class="lvs-row-text"><div class="lvs-row-label">Канал обновлений</div></div>
-                  <div class="lvs-select" data-value="beta"><button class="lvs-select-btn"><span>Beta</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
-                    <ul class="lvs-select-menu"><li data-value="stable">Stable</li><li data-value="beta">Beta</li><li data-value="canary">Canary</li></ul></div>
+                  <div class="lvs-row-text"><div class="lvs-row-label">Получать бета-версии</div><div class="lvs-row-sub">Новые функции раньше всех — но могут быть нестабильны</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" id="lvs-beta-channel"><span class="lvs-toggle-track"></span></label>
                 </div>
-                <div class="lvs-row lvs-row--end">
+                <div class="lvs-row" id="settings-updates-progress" style="display:none;">
+                  <div class="lvs-row-text" style="flex:1;">
+                    <div class="lvs-row-label">Загрузка обновления</div>
+                    <div style="margin-top:8px;height:6px;border-radius:6px;background:rgba(255,255,255,0.08);overflow:hidden;">
+                      <div id="settings-updates-progress-fill" style="height:100%;width:0%;border-radius:6px;background:#fff;transition:width .25s ease;"></div>
+                    </div>
+                  </div>
+                  <span class="lvs-badge" id="settings-updates-progress-pct" style="margin-left:14px;">0%</span>
+                </div>
+                <div class="lvs-row lvs-row--end" style="gap:10px;">
                   <button class="lvs-btn" id="lvs-check-updates">Проверить обновления</button>
+                  <button class="lvs-btn" id="settings-updates-action" style="display:none;background:#fff;color:#000;border-color:#fff;"></button>
                 </div>
               </div>
 
-              <div class="lvs-card">
-                <div class="lvs-section-subtitle">Что нового в beta.4</div>
-                <ul class="lvs-changelog">
-                  <li>Полностью переработанный экран настроек</li>
-                  <li>Живое превью профиля и темы</li>
-                  <li>Новый аудио-метр в разделе «Голос»</li>
-                  <li>Десятки мелких улучшений и исправлений</li>
-                </ul>
+              <div class="lvs-card" id="settings-updates-changelog-card" style="display:none;">
+                <div class="lvs-section-subtitle" id="settings-updates-changelog-title">Что нового</div>
+                <div class="lvs-changelog" id="settings-updates-changelog"></div>
               </div>
             </section>
 
@@ -2565,6 +2569,7 @@
     <script src="js/new/settings-ui.js"></script>
     <script src="js/new/script.js"></script>
     <script src="js/new/init-app.js"></script>
+    <script src="js/new/updates.js"></script>
     <script src="js/new/space-settings.js"></script>
     <script src="js/new/auth-ui.js"></script>
 </body>

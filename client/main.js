@@ -257,7 +257,7 @@ ipcMain.on('window-close', () => {
 // Обработчик для показа уведомлений (с опциональным payload для перехода по клику)
 ipcMain.on('show-notification', (event, { title, body, payload }) => {
   if (Notification.isSupported()) {
-    const n = new Notification({ title, body });
+    const n = new Notification({ title, body, icon: appIcon, silent: false });
     n.on('click', () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();

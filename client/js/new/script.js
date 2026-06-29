@@ -1941,6 +1941,27 @@ function initVoiceControls() {
         if (m) m.classList.toggle("hidden", active);
     };
 
+    // Кнопка «Перевернуть камеру»: видна только когда камера включена
+    // (полезна на телефоне — фронт/зад). Синхронизируется из _doRenderVoiceChannel.
+    window._syncFlipBtns = () => {
+        const show = !!voiceState.camActive;
+        ['voice-btn-flip', 'room-voice-btn-flip'].forEach(id => {
+            const b = document.getElementById(id);
+            if (b) b.style.display = show ? '' : 'none';
+        });
+    };
+    ['voice-btn-flip', 'room-voice-btn-flip'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b && !b._flipBound) {
+            b._flipBound = true;
+            b.addEventListener('click', () => {
+                if (window.voiceManager && typeof window.voiceManager.flipCamera === 'function') {
+                    window.voiceManager.flipCamera();
+                }
+            });
+        }
+    });
+
     if (micBtn) {
         micBtn.addEventListener("click", () => {
             voiceState.micActive = !voiceState.micActive;
@@ -2249,6 +2270,7 @@ function renderVoiceChannel() {
     requestAnimationFrame(() => { _voiceRenderPending = false; _doRenderVoiceChannel(); });
 }
 function _doRenderVoiceChannel() {
+    if (typeof window._syncFlipBtns === 'function') window._syncFlipBtns();
     const gridConstellation = document.getElementById("voice-grid-constellation");
     const memberCountText = document.getElementById("voice-member-count-text");
 

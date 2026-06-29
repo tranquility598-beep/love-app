@@ -214,6 +214,12 @@
   if (window.electronAPI && typeof window.electronAPI.onNotificationClick === 'function' && !window.__notifClickBound) {
     window.__notifClickBound = true;
     window.electronAPI.onNotificationClick((payload) => {
+      // Нотификации разделов (заявки/упоминания) несут payload.view.
+      if (payload && payload.view) {
+        const btn = document.querySelector('[data-target="' + payload.view + '"]');
+        if (btn) btn.click();
+        return;
+      }
       const cid = payload && payload.conversationId;
       if (!cid) return;
       const convs = window._mockConversations || [];
@@ -1297,21 +1303,23 @@
                 friend_accepted: 'Запрос принят',
                 missed_call: 'Пропущенный звонок'
               };
+              const notifTitle = titles[n.type] || 'Уведомление';
+              const notifText = (n.preview || '').toString();
+              const notifView = (n.type === 'friend_request' || n.type === 'friend_accepted')
+                ? 'view-contacts' : 'view-notifications';
               window.showAppNotification({
-                title: titles[n.type] || 'Уведомление',
-                text: n.preview || '',
+                title: notifTitle,
+                text: notifText,
                 avatar: (n.actorName || '?').charAt(0).toUpperCase(),
                 onClick: () => {
-                  // Переходим в нужный раздел
-                  if (n.type === 'friend_request' || n.type === 'friend_accepted') {
-                    const btn = document.querySelector('[data-target="view-contacts"]');
-                    if (btn) btn.click();
-                  } else {
-                    const navNotif = document.querySelector('[data-target="view-notifications"]');
-                    if (navNotif) navNotif.click();
-                  }
+                  const btn = document.querySelector('[data-target="' + notifView + '"]');
+                  if (btn) btn.click();
                 }
               });
+              // Нативное ОС-уведомление, когда приложение свёрнуто/в фоне.
+              if (!document.hasFocus() && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
+                window.electronAPI.showNotification(notifTitle, notifText.slice(0, 120), { view: notifView });
+              }
             }
           });
         }

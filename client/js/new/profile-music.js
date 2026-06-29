@@ -53,6 +53,12 @@
       console.warn('[music] Cloudinary upload failed:', e && e.message);
     }
 
+    // Не молчим, если облачная копия не загрузилась — иначе друзья видят трек
+    // без звука (url пустой), а пользователь об этом не знает.
+    if (!cloudUrl && typeof window.showToast === 'function') {
+      window.showToast('Музыка', 'Трек добавлен, но копию для друзей загрузить не удалось. Попробуйте аудиофайл до 10 МБ.');
+    }
+
     // Сохраняем в профиле (title всегда, url — если выгрузилось)
     try {
       if (typeof UsersAPI !== 'undefined' && UsersAPI.updateProfile) {

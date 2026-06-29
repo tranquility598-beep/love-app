@@ -31,9 +31,11 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
     }
     
     const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const audioTypes = ['audio/webm', 'audio/ogg', 'audio/mp3', 'audio/wav'];
     const isImage = imageTypes.includes(file.mimetype);
-    const isAudio = audioTypes.includes(file.mimetype);
+    // Любой аудио-MIME (включая audio/mpeg для MP3) — иначе MP3 попадал в
+    // категорию 'document' с лимитом 5MB и обычный трек резался валидацией,
+    // из-за чего музыка профиля сохранялась без облачной ссылки.
+    const isAudio = file.mimetype.startsWith('audio/');
     const isVideo = file.mimetype.startsWith('video/');
     
     let fileCategory = 'document';

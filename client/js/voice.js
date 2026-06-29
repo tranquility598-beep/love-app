@@ -118,6 +118,18 @@ class VoiceManager {
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
+        // Свой coturn на VDSina (приоритетный релей — стабильнее бесплатного).
+        {
+          urls: 'turn:87.199.197.158:3478',
+          username: 'loveturn',
+          credential: 'Lv2026Turn_Xk9q'
+        },
+        {
+          urls: 'turn:87.199.197.158:3478?transport=tcp',
+          username: 'loveturn',
+          credential: 'Lv2026Turn_Xk9q'
+        },
+        // Бесплатный TURN как резерв, если свой недоступен.
         {
           urls: 'turn:free.expressturn.com:3478',
           username: '000000002095347409',

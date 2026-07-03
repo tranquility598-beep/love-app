@@ -11,6 +11,10 @@
     <link rel="stylesheet" href="styles/style.css">
     <link rel="stylesheet" href="styles/settings.css">
     <link rel="stylesheet" href="styles/auth.css">
+    <link rel="stylesheet" href="styles/perf-android.css">
+    <!-- Android WebView заметно слабее iOS: помечаем html.perf-lite, чтобы
+         perf-android.css отключил дорогие эффекты (blur/backdrop/фоновые анимации). -->
+    <script>(function(){try{if(/Android/i.test(navigator.userAgent||''))document.documentElement.classList.add('perf-lite');}catch(e){}})();</script>
 </head>
 <body>
     <!-- ════════════════ ЗАГРУЗОЧНЫЙ ЭКРАН ════════════════ -->

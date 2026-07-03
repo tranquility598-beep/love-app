@@ -2,6 +2,14 @@
  * Улучшенный анимированный космический фон с лучистыми звездами
  */
 (function() {
+  // Android-режим производительности: постоянный полноэкранный rAF-цикл —
+  // главный источник лагов на слабом WebView. Не запускаем вовсе.
+  try {
+    if (document.documentElement.classList.contains('perf-lite') || /Android/i.test(navigator.userAgent || '')) {
+      return;
+    }
+  } catch (e) {}
+
   const canvas = document.createElement('canvas');
   canvas.id = 'starfield-canvas';
   document.body.prepend(canvas);

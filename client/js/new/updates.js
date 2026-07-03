@@ -27,8 +27,11 @@
       const check = $('lvs-check-updates');
       const beta = $('lvs-beta-channel');
       const ver = $('settings-updates-version');
+      const isMobile = !!(window.Capacitor) || /Android|iPhone|iPad/i.test(navigator.userAgent || '');
       if (ver) ver.textContent = currentVersion() || ver.textContent;
-      if (status) status.textContent = 'Обновления — в приложении';
+      if (status) status.textContent = isMobile
+        ? 'Новые версии — на loveapp.chat'
+        : 'Авто-обновления — в десктоп-приложении';
       if (check) check.style.display = 'none';
       if (beta) { const row = beta.closest('.lvs-row'); if (row) row.style.display = 'none'; }
     });

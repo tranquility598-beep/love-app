@@ -1,0 +1,64 @@
+/* ════════════════════════════════════════════════════════════════
+   LOVE — Мобильные фиксы.
+
+   1) Android-режим производительности (html.perf-lite).
+      Android WebView заметно слабее iOS на blur/backdrop/постоянных
+      анимациях. Отключаем именно их; transform/opacity-анимации
+      (премиум-переходы) остаются — они дёшевы для GPU.
+      iOS и десктоп НЕ затронуты (класс ставится только на Android).
+
+   2) Safe-area: отступ сверху под статус-бар (часы/зарядка) и снизу
+      под жест-полоску. Для всех мобильных (env()=0 на десктопе).
+   ════════════════════════════════════════════════════════════════ */
+
+/* ───────── 1. Android performance mode ───────── */
+
+/* Самый дорогой эффект — backdrop-filter (пересчёт блюра каждый кадр,
+   особенно при скролле). Снимаем везде. Полупрозрачные фоны (rgba)
+   остаются — выглядит чисто на сплошном фоне (см. ниже). */
+.perf-lite *,
+.perf-lite *::before,
+.perf-lite *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Постоянный космический фон-канвас (rAF на весь экран 24/7) — убираем.
+   JS-цикл тоже не запускается (см. starfield.js). */
+.perf-lite #starfield-canvas { display: none !important; }
+
+/* Канвас давал фон — задаём сплошной тёмный, чтобы карточки без блюра
+   лежали на ровной поверхности, а не на «дыре». */
+.perf-lite body { background-color: #0a0a0a !important; }
+
+/* will-change держит лишние GPU-слои в памяти — на слабых Android это
+   само по себе вызывает тормоза/вылеты. Освобождаем. */
+.perf-lite * { will-change: auto !important; }
+
+/* Декоративные блюр-свечения через filter: blur — самые тяжёлые при
+   перерисовке. Гасим только чистый blur, drop-shadow на иконках не трогаем. */
+.perf-lite .auth-particle,
+.perf-lite .auth-glow,
+.perf-lite .ambient-glow,
+.perf-lite .bg-glow,
+.perf-lite [class*="-glow"] {
+  filter: none !important;
+  animation: none !important;
+}
+
+/* ───────── 2. Safe-area (все мобильные) ───────── */
+@media (max-width: 768px) {
+  /* Контент уходит вниз из-под статус-бара (часы/зарядка). */
+  .app-container {
+    padding-top: env(safe-area-inset-top);
+    box-sizing: border-box;
+  }
+
+  /* Нижний навбар приподнимается над жест-полоской: высота + внутренний
+     отступ снизу на величину инсета. */
+  body .app-container .global-sidebar,
+  body .app-container.sidebar-collapsed .global-sidebar {
+    height: calc(60px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+}

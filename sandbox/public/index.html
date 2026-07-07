@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Outfit:wght@300;400;500;600&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="landing.css?v=4">
+    <link rel="stylesheet" href="landing.css?v=5">
 </head>
 <body>
 
@@ -38,7 +38,7 @@
             </div>
             <div class="controls-wrap">
                 <button class="lang-btn" id="lang-toggle">RU</button>
-                <a href="#downloads" class="btn-waitlist" data-i18n="btn_waitlist">Download</a>
+                <a href="#downloads" class="btn-primary" data-i18n="btn_waitlist">Download</a>
             </div>
         </div>
     </header>
@@ -51,22 +51,10 @@
                 Love is a modern platform designed for conversations, communities, and realtime connection.
             </p>
 
-            <!-- Release Progress → Launch Reveal -->
+            <!-- Launch Reveal -->
             <div class="release-reveal" id="release-reveal">
-                <!-- Phase 1: Progress bar -->
-                <div class="release-progress" id="release-progress">
-                    <div class="release-progress-head">
-                        <span class="release-progress-label" data-i18n="progress_label">Road to release</span>
-                        <span class="release-progress-value"><span id="progress-num">0</span>%</span>
-                    </div>
-                    <div class="release-progress-track">
-                        <div class="release-progress-fill" id="progress-fill"></div>
-                    </div>
-                    <div class="release-progress-caption" data-i18n="progress_caption">In active development — getting closer to launch.</div>
-                </div>
-
-                <!-- Phase 2: Launch announcement (hidden until progress completes) -->
-                <div class="launch-announce hidden" id="launch-announce">
+                <!-- Launch announcement -->
+                <div class="launch-announce hidden" id="launch-announce" data-reveal>
                     <div class="launch-sparkle" id="launch-sparkle"></div>
                     <h2 class="launch-title" data-i18n="launch_title">We've launched.</h2>
                     <p class="launch-subtitle" data-i18n="launch_subtitle">Love is available now. Download and start connecting.</p>
@@ -74,8 +62,7 @@
                     <div class="version-pill" id="release-version-pill" hidden></div>
 
                     <div class="download-grid" id="downloads">
-                        <a href="https://github.com/tranquility598-beep/love-app/releases/latest" target="_blank" rel="noopener" class="download-card" id="dl-win">
-                            <div class="download-card-glow"></div>
+                        <a href="https://api.loveapp.chat/api/updates/download/win" class="download-card" id="dl-win">
                             <div class="download-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
                             </div>
@@ -86,8 +73,7 @@
                             </div>
                             <span class="download-cta" data-i18n="dl_get">Скачать</span>
                         </a>
-                        <a href="https://github.com/tranquility598-beep/love-app/releases/latest" target="_blank" rel="noopener" class="download-card" id="dl-mac-arm">
-                            <div class="download-card-glow"></div>
+                        <a href="https://api.loveapp.chat/api/updates/download/mac-arm64" class="download-card" id="dl-mac-arm">
                             <div class="download-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                             </div>
@@ -98,8 +84,7 @@
                             </div>
                             <span class="download-cta" data-i18n="dl_get">Скачать</span>
                         </a>
-                        <a href="https://github.com/tranquility598-beep/love-app/releases/latest" target="_blank" rel="noopener" class="download-card" id="dl-mac-x64">
-                            <div class="download-card-glow"></div>
+                        <a href="https://api.loveapp.chat/api/updates/download/mac-x64" class="download-card" id="dl-mac-x64">
                             <div class="download-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                             </div>
@@ -110,8 +95,7 @@
                             </div>
                             <span class="download-cta" data-i18n="dl_get">Скачать</span>
                         </a>
-                        <a href="https://github.com/tranquility598-beep/love-app/releases/latest" target="_blank" rel="noopener" class="download-card" id="dl-android">
-                            <div class="download-card-glow"></div>
+                        <a href="https://api.loveapp.chat/api/updates/download/android" class="download-card" id="dl-android">
                             <div class="download-icon">
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M17.523 15.34c-.5 0-.908-.407-.908-.907s.407-.908.908-.908.907.407.907.908-.406.907-.907.907m-11.046 0c-.5 0-.908-.407-.908-.907s.407-.908.908-.908.907.407.907.908-.406.907-.907.907m11.405-6.02l1.997-3.46a.416.416 0 00-.152-.567.416.416 0 00-.567.152L17.073 8.95a9.446 9.446 0 00-3.894-.818c-1.5 0-2.948.295-3.894.818L6.41 5.437a.416.416 0 00-.567-.152.416.416 0 00-.152.567l1.997 3.46C4.696 10.924 2.862 13.65 2.862 16.767h18.276c0-3.117-1.834-5.843-4.816-7.447"/></svg>
                             </div>
@@ -127,32 +111,7 @@
             </div>
 
             <!-- Cinematic App Mockup -->
-            <div class="mockup-container">
-                <div class="floating-widget widget-profile">
-                    <div class="widget-profile-avatar">AL</div>
-                    <div class="widget-profile-info">
-                        <div class="widget-profile-name" data-i18n="widget_profile_name">Aleksandr</div>
-                        <div class="widget-profile-status">
-                            <span class="status-dot"></span>
-                            <span data-i18n="widget_profile_status">brewing tea...</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="floating-widget widget-player">
-                    <div>
-                        <div class="widget-player-track">Irreducible</div>
-                        <div class="widget-player-artist">Comastudio</div>
-                    </div>
-                    <div class="widget-player-waves">
-                        <span class="widget-wave-bar"></span>
-                        <span class="widget-wave-bar"></span>
-                        <span class="widget-wave-bar"></span>
-                        <span class="widget-wave-bar"></span>
-                        <span class="widget-wave-bar"></span>
-                    </div>
-                </div>
-
+            <div class="mockup-container" data-reveal>
                 <div class="mockup-window">
                     <div class="mockup-header">
                         <div class="mockup-dots">
@@ -205,11 +164,11 @@
     <!-- Features Section -->
     <section class="features-section" id="features">
         <div class="container">
-            <div class="section-header">
-                <span class="section-label" data-i18n="nav_features">Features</span>
+            <div class="section-header" data-reveal>
+                <span class="section-label" data-idx="01" data-i18n="nav_features">Features</span>
                 <h2 data-i18n="features_title">Designed for modern workflows</h2>
             </div>
-            <div class="features-grid">
+            <div class="features-grid" data-reveal>
                 <div class="feature-card">
                     <div class="feature-icon-wrap">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
@@ -282,12 +241,12 @@
     <!-- Roadmap Section -->
     <section class="roadmap-section" id="roadmap">
         <div class="container">
-            <div class="section-header">
-                <span class="section-label" data-i18n="roadmap_label">Roadmap</span>
+            <div class="section-header" data-reveal>
+                <span class="section-label" data-idx="02" data-i18n="roadmap_label">Roadmap</span>
                 <h2 data-i18n="roadmap_title">Where Love is heading</h2>
                 <p class="section-sub" data-i18n="roadmap_subtitle">What we're building and what's coming next. The roadmap is shaped together with the community.</p>
             </div>
-            <div class="roadmap-list">
+            <div class="roadmap-list" data-reveal>
                 <div class="roadmap-row done">
                     <span class="roadmap-badge" data-i18n="roadmap_done">Done</span>
                     <div class="roadmap-body">
@@ -330,12 +289,12 @@
     <!-- Community Rules Section -->
     <section class="rules-section" id="rules">
         <div class="container">
-            <div class="section-header">
-                <span class="section-label" data-i18n="rules_label">Community Rules</span>
+            <div class="section-header" data-reveal>
+                <span class="section-label" data-idx="03" data-i18n="rules_label">Community Rules</span>
                 <h2 data-i18n="rules_title">A calm, respectful space</h2>
                 <p class="section-sub" data-i18n="rules_subtitle">Love is a cozy place. A few simple rules keep it good for everyone.</p>
             </div>
-            <div class="rules-grid">
+            <div class="rules-grid" data-reveal>
                 <div class="rule-card">
                     <span class="rule-num">01</span>
                     <h3 data-i18n="rules_1_title">Respect</h3>
@@ -369,11 +328,11 @@
     <!-- Philosophy Section -->
     <section class="philosophy" id="philosophy">
         <div class="container">
-            <div class="philosophy-content">
-                <span class="section-label" data-i18n="nav_philosophy">Philosophy</span>
+            <div class="philosophy-content" data-reveal>
+                <span class="section-label" data-idx="04" data-i18n="nav_philosophy">Philosophy</span>
                 <h2 class="philosophy-title" data-i18n="phil_title">Built for focus.</h2>
                 <p class="philosophy-text" data-i18n="phil_desc1">Love is designed to feel calm, responsive, and intentional.</p>
-                <p class="philosophy-text" style="font-size: 15px; color: var(--text-secondary);" data-i18n="phil_desc2">Every interface decision prioritizes clarity, communication, and usability over noise and distraction. No algorithms, no ads, no trackers. Just you and your connections.</p>
+                <p class="philosophy-text muted" data-i18n="phil_desc2">Every interface decision prioritizes clarity, communication, and usability over noise and distraction. No algorithms, no ads, no trackers. Just you and your connections.</p>
             </div>
         </div>
     </section>
@@ -381,7 +340,7 @@
     <!-- Support Panel -->
     <section class="support-panel" id="support-panel">
         <div class="container">
-            <div class="support-card">
+            <div class="support-card" data-reveal>
                 <div class="support-card-inner">
                     <div class="support-card-text">
                         <h3 data-i18n="support_panel_title">Need help?</h3>
@@ -620,39 +579,28 @@
         }
         updateLanguage(detectLang());
 
-        // ── Progress bar → Launch reveal ──
+        // ── Launch reveal (без фейкового прогресс-бара: показываем анонс сразу) ──
         (function initRelease() {
-            const pct = Math.max(0, Math.min(100, RELEASE_PROGRESS));
-            const fill = document.getElementById('progress-fill');
-            const num = document.getElementById('progress-num');
-            const progressEl = document.getElementById('release-progress');
             const announceEl = document.getElementById('launch-announce');
-            if (!fill || !num || !progressEl || !announceEl) return;
+            if (!announceEl) return;
+            announceEl.classList.remove('hidden');
+            requestAnimationFrame(() => announceEl.classList.add('is-visible'));
+        })();
 
-            requestAnimationFrame(() => { fill.style.width = pct + '%'; });
-            const dur = 1200;
-            const start = performance.now();
-            function step(now) {
-                const t = Math.min(1, (now - start) / dur);
-                num.textContent = Math.round(t * pct);
-                if (t < 1) requestAnimationFrame(step);
-                else setTimeout(revealLaunch, 800);
+        // ── Scroll-reveal: мягкий fade-up при входе в зону видимости ──
+        (function initReveal() {
+            const els = document.querySelectorAll('[data-reveal]');
+            if (!els.length) return;
+            if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                els.forEach(el => el.classList.add('in-view'));
+                return;
             }
-            requestAnimationFrame(step);
-
-            function revealLaunch() {
-                progressEl.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-                progressEl.style.opacity = '0';
-                progressEl.style.transform = 'translateY(-8px)';
-                setTimeout(() => {
-                    progressEl.classList.add('hidden');
-                    announceEl.classList.remove('hidden');
-                    requestAnimationFrame(() => {
-                        announceEl.style.opacity = '1';
-                        announceEl.style.transform = 'translateY(0)';
-                    });
-                }, 500);
-            }
+            const io = new IntersectionObserver((entries) => {
+                entries.forEach(en => {
+                    if (en.isIntersecting) { en.target.classList.add('in-view'); io.unobserve(en.target); }
+                });
+            }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+            els.forEach(el => io.observe(el));
         })();
 
         // ── GitHub latest release → прямые ссылки на установщики ──
@@ -660,18 +608,27 @@
         // и показываем реальное имя файла (напр. Love-Setup-2.0.0.exe).
         (function fetchRelease() {
             const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases/latest`;
+            const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+                ? 'http://localhost:5555'
+                : 'https://api.loveapp.chat';
+            const DOWNLOAD_URLS = {
+                win: `${API_BASE}/api/updates/download/win`,
+                macArm: `${API_BASE}/api/updates/download/mac-arm64`,
+                macX64: `${API_BASE}/api/updates/download/mac-x64`,
+                android: `${API_BASE}/api/updates/download/android`
+            };
 
             const pick = (assets, test) => assets.find(a => test(a.name.toLowerCase()));
 
-            const bind = (cardId, verId, asset, soonText) => {
+            const bind = (cardId, verId, asset, soonText, downloadHref, displayName) => {
                 const card = document.getElementById(cardId);
                 const ver = document.getElementById(verId);
                 if (!card) return;
                 if (asset) {
-                    card.href = asset.browser_download_url;
+                    card.href = downloadHref;
                     card.removeAttribute('target');       // прямое скачивание тем же окном
                     card.classList.add('is-ready');
-                    if (ver) { ver.textContent = asset.name; ver.removeAttribute('data-i18n'); }
+                    if (ver) { ver.textContent = displayName || asset.name; ver.removeAttribute('data-i18n'); }
                 } else {
                     card.href = RELEASES_PAGE;
                     card.classList.add('is-soon');
@@ -697,10 +654,10 @@
                                 || pick(assets, n => n.endsWith('.dmg') && !/(arm64|aarch64)/.test(n));
                     const apk   = pick(assets, n => n.endsWith('.apk'));
 
-                    bind('dl-win',     'dl-win-ver',     exe,    soon);
-                    bind('dl-mac-arm', 'dl-mac-arm-ver', macArm, soon);
-                    bind('dl-mac-x64', 'dl-mac-x64-ver', macX64, soon);
-                    bind('dl-android', 'dl-android-ver', apk,    soon);
+                    bind('dl-win',     'dl-win-ver',     exe,    soon, DOWNLOAD_URLS.win,     'LoveSetup.exe');
+                    bind('dl-mac-arm', 'dl-mac-arm-ver', macArm, soon, DOWNLOAD_URLS.macArm,  'LoveSetup.dmg');
+                    bind('dl-mac-x64', 'dl-mac-x64-ver', macX64, soon, DOWNLOAD_URLS.macX64,  'LoveSetup.dmg');
+                    bind('dl-android', 'dl-android-ver', apk,    soon, DOWNLOAD_URLS.android, 'LoveSetup.apk');
                 })
                 .catch(() => {
                     // Сеть/лимит API недоступны — оставляем ссылки на страницу релизов.

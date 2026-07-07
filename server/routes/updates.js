@@ -79,9 +79,15 @@ async function streamGithubAsset(asset, res, forcedFilename) {
     responseType: 'stream'
   });
 
-  res.setHeader('Content-Type', asset.content_type || 'application/octet-stream');
+  const downloadName = forcedFilename || asset.name;
+  const contentType = downloadName.toLowerCase().endsWith('.apk')
+    ? 'application/vnd.android.package-archive'
+    : (asset.content_type || 'application/octet-stream');
+
+  res.setHeader('Content-Type', contentType);
   if (asset.size) res.setHeader('Content-Length', asset.size);
-  res.setHeader('Content-Disposition', `attachment; filename="${forcedFilename || asset.name}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
   response.data.on('error', (error) => {
     console.error('[Updates] GitHub asset stream error:', error.message);
@@ -120,31 +126,31 @@ function handleDownload(platform, findAsset, filename) {
 router.get('/download/win', handleDownload(
   'win',
   (assets) => assets.find(isExe),
-  'Love.exe'
+  'LoveSetup.exe'
 ));
 
 router.get('/download/mac', handleDownload(
   'mac',
   (assets) => preferArch(assets, isDmg, 'arm64'),
-  'Love.dmg'
+  'LoveSetup.dmg'
 ));
 
 router.get('/download/mac-arm64', handleDownload(
   'mac-arm64',
   (assets) => preferArch(assets, isDmg, 'arm64'),
-  'Love.dmg'
+  'LoveSetup.dmg'
 ));
 
 router.get('/download/mac-x64', handleDownload(
   'mac-x64',
   (assets) => preferArch(assets, isDmg, 'x64'),
-  'Love.dmg'
+  'LoveSetup.dmg'
 ));
 
 router.get('/download/android', handleDownload(
   'android',
   (assets) => assets.find(isApk),
-  'Love.apk'
+  'LoveSetup.apk'
 ));
 
 router.get('/:filename', async (req, res) => {

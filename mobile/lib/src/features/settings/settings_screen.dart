@@ -801,8 +801,6 @@ class _UpdatesSection extends StatelessWidget {
 }
 
 // ── Advanced ─────────────────────────────────────────────────────────────────
-
-// ── Advanced ─────────────────────────────────────────────────────────────────
 // Possible reasons why this section may appear empty at runtime:
 // Same as Voice section — check LovePrefs init, plugin linkage, stale APK.
 

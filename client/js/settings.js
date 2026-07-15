@@ -374,7 +374,9 @@ function getVoiceAudioConstraints() {
     autoGainControl: window.settingsManager?.get('auto-gain-control') !== false
   };
   if (inputDevice && inputDevice !== 'default') {
-    constraints.deviceId = { exact: inputDevice };
+    // NOTE: `ideal` (not `exact`) so a stale/removed device id degrades to the
+    // default mic instead of throwing OverconstrainedError and killing voice.
+    constraints.deviceId = { ideal: inputDevice };
   }
   return constraints;
 }

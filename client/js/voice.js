@@ -164,11 +164,31 @@ class VoiceManager {
         return false;
       }
 
-      // Запрашиваем доступ к микрофону
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: typeof getVoiceAudioConstraints === 'function' ? getVoiceAudioConstraints() : true,
-        video: false
-      });
+      // Запрашиваем доступ к микрофону. Если сохранённые констрейнты (например,
+      // устаревший deviceId) не удовлетворяются — OverconstrainedError/NotFound —
+      // повторяем с базовым микрофоном, чтобы войс всё равно заработал.
+      const audioConstraints = typeof getVoiceAudioConstraints === 'function'
+        ? getVoiceAudioConstraints()
+        : true;
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false
+        });
+      } catch (mediaError) {
+        const recoverable = mediaError && (
+          mediaError.name === 'OverconstrainedError' ||
+          mediaError.name === 'NotFoundError' ||
+          mediaError.name === 'NotReadableError' ||
+          mediaError.name === 'ConstraintNotSatisfiedError'
+        );
+        if (!recoverable) throw mediaError;
+        console.warn('[Voice] Audio constraints failed (' + mediaError.name + '), retrying with default mic');
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
+      }
       if (typeof setupVoiceDeviceSelectors === 'function') setupVoiceDeviceSelectors();
 
       console.log('🎙️ Local audio tracks:', this.localStream.getAudioTracks().map(track => ({

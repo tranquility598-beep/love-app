@@ -18,9 +18,9 @@ const MAGIC_BYTES = {
 // Whitelist расширений
 const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 const ALLOWED_FILE_EXTENSIONS = [
-  '.pdf', '.txt', '.doc', '.docx', '.xls', '.xlsx', 
+  '.pdf', '.txt', '.doc', '.docx', '.xls', '.xlsx',
   '.zip', '.rar', '.7z',
-  '.mp3', '.wav', '.ogg',
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac',
   '.mp4', '.mov', '.avi', '.webm'
 ];
 
@@ -42,6 +42,9 @@ const MIME_EXTENSION_MAP = {
   'audio/wav': '.wav',
   'audio/ogg': '.ogg',
   'audio/webm': '.webm',
+  'audio/mp4': '.m4a',
+  'audio/x-m4a': '.m4a',
+  'audio/aac': '.aac',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
   'video/x-msvideo': '.avi',
@@ -129,6 +132,9 @@ function isAllowedMimeType(mimetype, isImage) {
     'audio/wav',
     'audio/ogg',
     'audio/webm',
+    'audio/mp4',
+    'audio/x-m4a',
+    'audio/aac',
     'video/mp4',
     'video/quicktime',
     'video/x-msvideo',

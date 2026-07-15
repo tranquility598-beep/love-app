@@ -22,6 +22,7 @@ router.get('/', authMiddleware, async (req, res) => {
       hiddenBy: { $ne: req.user._id }
     })
     .populate('participants', 'username nickname avatar status discriminator customStatus')
+    .populate('channel', '_id name type')
     .populate('lastMessage', 'content createdAt author')
     .sort({ updatedAt: -1 });
     
@@ -53,7 +54,9 @@ router.post('/:userId', authMiddleware, async (req, res) => {
     // Ищем существующий диалог
     let conversation = await DirectMessage.findOne({
       participants: { $all: [req.user._id, targetUserId] }
-    }).populate('participants', 'username nickname avatar status discriminator');
+    })
+      .populate('participants', 'username nickname avatar status discriminator')
+      .populate('channel', '_id name type');
     
     if (!conversation) {
       // Создаем новый канал для диалога
@@ -78,11 +81,15 @@ router.post('/:userId', authMiddleware, async (req, res) => {
       await conversation.save();
       
       await conversation.populate('participants', 'username nickname avatar status discriminator');
+      await conversation.populate('channel', '_id name type');
     } else {
       // Если диалог найден, убираем текущего пользователя из списка скрывших
       if (conversation.hiddenBy.includes(req.user._id)) {
         conversation.hiddenBy.pull(req.user._id);
         await conversation.save();
+      }
+      if (!conversation.populated('channel')) {
+        await conversation.populate('channel', '_id name type');
       }
     }
     

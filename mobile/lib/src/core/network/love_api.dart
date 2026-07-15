@@ -90,25 +90,29 @@ class LoveApi {
 
   Future<Map<String, dynamic>> uploadServerIcon(
     String serverId,
-    String filePath,
-  ) {
+    String filePath, {
+    String? mimeType,
+  }) {
     return api.upload(
       '/servers/$serverId/icon',
       filePath: filePath,
       fieldName: 'icon',
       method: 'PUT',
+      mimeType: mimeType,
     );
   }
 
   Future<Map<String, dynamic>> uploadServerBanner(
     String serverId,
-    String filePath,
-  ) {
+    String filePath, {
+    String? mimeType,
+  }) {
     return api.upload(
       '/servers/$serverId/banner',
       filePath: filePath,
       fieldName: 'banner',
       method: 'PUT',
+      mimeType: mimeType,
     );
   }
 

@@ -10,6 +10,7 @@ import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/love_pill_tabs.dart';
 import '../../widgets/love_surface.dart';
+import '../../widgets/space_banner.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
 import '../shell/screen_frame.dart';
@@ -288,6 +289,7 @@ class _SpaceCard extends StatelessWidget {
         channels.where((item) => asText(item['type']) == 'voice').toList();
     final voiceCount = voiceChannels.length;
     final memberCount = _memberCount(space);
+    final banner = asText(space['banner']);
 
     return LoveSurface(
       padding: const EdgeInsets.all(14),
@@ -296,6 +298,13 @@ class _SpaceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (banner.isNotEmpty) ...[
+            SizedBox(
+              width: double.infinity,
+              child: SpaceBanner(url: banner),
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               LoveAvatar(

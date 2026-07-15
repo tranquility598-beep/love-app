@@ -175,7 +175,15 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
       setState(() => _error = 'Сокет еще не подключен');
       return;
     }
-    widget.socket.emit('voice:join', {'channelId': _channelId});
+    final response = await widget.socket.emitWithAck(
+      'voice:join',
+      {'channelId': _channelId},
+    );
+    if (!mounted) return;
+    if (response['status'] != 'ok') {
+      setState(() => _error = asText(response['message'], 'Не удалось войти в войс'));
+      return;
+    }
     setState(() => _joined = true);
   }
 

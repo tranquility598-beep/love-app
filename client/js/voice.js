@@ -182,12 +182,17 @@ class VoiceManager {
           mediaError.name === 'NotReadableError' ||
           mediaError.name === 'ConstraintNotSatisfiedError'
         );
-        if (!recoverable) throw mediaError;
-        console.warn('[Voice] Audio constraints failed (' + mediaError.name + '), retrying with default mic');
+        if (!recoverable && mediaError.name !== 'OverconstrainedError') throw mediaError;
+        console.warn('[Voice] Selected microphone is unavailable; using default', {
+          name: mediaError.name,
+          constraint: mediaError.constraint,
+          message: mediaError.message,
+        });
         this.localStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: false
         });
+        localStorage.removeItem('selectedMicrophoneId');
       }
       if (typeof setupVoiceDeviceSelectors === 'function') setupVoiceDeviceSelectors();
 

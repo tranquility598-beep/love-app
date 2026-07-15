@@ -34,8 +34,27 @@ function normalizeMessageAttachments(raw) {
 }
 
 // Хранилище подключенных пользователей
-// { userId: socketId }
+// { userId: Set<socketId> }. One account can be open on several devices.
 const connectedUsers = new Map();
+
+function addConnectedSocket(userId, socketId) {
+  const sockets = connectedUsers.get(userId) || new Set();
+  sockets.add(socketId);
+  connectedUsers.set(userId, sockets);
+}
+
+function removeConnectedSocket(userId, socketId) {
+  const sockets = connectedUsers.get(userId);
+  if (!sockets) return false;
+  sockets.delete(socketId);
+  if (sockets.size) return false;
+  connectedUsers.delete(userId);
+  return true;
+}
+
+function socketIsInVoiceChannel(channelId, socketId) {
+  return !!voiceChannels.get(channelId)?.some((member) => member.socketId === socketId);
+}
 
 // Хранилище участников голосовых каналов
 // { channelId: [{ userId, socketId }] }
@@ -92,7 +111,8 @@ module.exports = (io) => {
     console.log(`✅ User connected: ${socket.user.username} (${socket.id})`);
     
     // Сохраняем соединение
-    connectedUsers.set(userId, socket.id);
+    addConnectedSocket(userId, socket.id);
+    socket.join(`user:${userId}`);
     console.log(`🔍 CONNECTION SET: userId=${userId}, new socket=${socket.id}`);
     
     // Получаем предпочтительный статус пользователя
@@ -819,7 +839,10 @@ module.exports = (io) => {
      * WebRTC - Offer (инициатор соединения)
      */
     socket.on('webrtc:offer', (data) => {
-      const { targetSocketId, offer, channelId } = data;
+      const { targetSocketId, offer, channelId } = data || {};
+      if (!targetSocketId || !offer || !channelId ||
+          !socketIsInVoiceChannel(channelId, socket.id) ||
+          !socketIsInVoiceChannel(channelId, targetSocketId)) return;
       
       io.to(targetSocketId).emit('webrtc:offer', {
         offer,
@@ -833,7 +856,10 @@ module.exports = (io) => {
      * WebRTC - Answer (ответ на offer)
      */
     socket.on('webrtc:answer', (data) => {
-      const { targetSocketId, answer, channelId } = data;
+      const { targetSocketId, answer, channelId } = data || {};
+      if (!targetSocketId || !answer || !channelId ||
+          !socketIsInVoiceChannel(channelId, socket.id) ||
+          !socketIsInVoiceChannel(channelId, targetSocketId)) return;
       
       io.to(targetSocketId).emit('webrtc:answer', {
         answer,
@@ -846,7 +872,10 @@ module.exports = (io) => {
      * WebRTC - ICE Candidate
      */
     socket.on('webrtc:ice_candidate', (data) => {
-      const { targetSocketId, candidate, channelId } = data;
+      const { targetSocketId, candidate, channelId } = data || {};
+      if (!targetSocketId || !candidate || !channelId ||
+          !socketIsInVoiceChannel(channelId, socket.id) ||
+          !socketIsInVoiceChannel(channelId, targetSocketId)) return;
       
       io.to(targetSocketId).emit('webrtc:ice_candidate', {
         candidate,
@@ -1048,11 +1077,11 @@ module.exports = (io) => {
     socket.on('call:request', async (data) => {
       const { targetUserId } = data;
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
-      const targetSocketId = connectedUsers.get(targetIdStr);
+      const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
-      console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found socket: ${targetSocketId ? 'YES' : 'NO'}`);
+      console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found sockets: ${targetIsOnline ? 'YES' : 'NO'}`);
 
-      if (targetSocketId) {
+      if (targetIsOnline) {
         // Проверка дружбы перед звонком
         const recipientUser = await User.findById(targetIdStr).lean();
         const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
@@ -1070,7 +1099,7 @@ module.exports = (io) => {
           return;
         }
 
-        io.to(targetSocketId).emit('call:incoming', {
+        io.to(`user:${targetIdStr}`).emit('call:incoming', {
           conversationId: conversation._id.toString(),
           channelId: conversation.channel.toString(),
           from: {
@@ -1099,10 +1128,10 @@ module.exports = (io) => {
     socket.on('call:response', (data) => {
       const { callerId, accepted, conversationId, channelId } = data;
       const callerIdStr = callerId ? callerId.toString() : null;
-      const callerSocketId = connectedUsers.get(callerIdStr);
+      const callerIsOnline = !!connectedUsers.get(callerIdStr)?.size;
 
-      if (callerSocketId) {
-        io.to(callerSocketId).emit('call:response', {
+      if (callerIsOnline) {
+        io.to(`user:${callerIdStr}`).emit('call:response', {
           accepted,
           conversationId,
           channelId,
@@ -1118,10 +1147,10 @@ module.exports = (io) => {
     socket.on('call:end', (data) => {
       const { targetUserId } = data;
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
-      const targetSocketId = connectedUsers.get(targetIdStr);
+      const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
-      if (targetSocketId) {
-        io.to(targetSocketId).emit('call:terminated', {
+      if (targetIsOnline) {
+        io.to(`user:${targetIdStr}`).emit('call:terminated', {
           by: userId
         });
       }
@@ -1132,20 +1161,12 @@ module.exports = (io) => {
     socket.on('disconnect', async () => {
       console.log(`❌ User disconnected: ${socket.user.username} (${socket.id})`);
       
-      console.log(`🔍 DISCONNECT CHECK: userId=${userId}, disconnecting socket=${socket.id}, active socket=${connectedUsers.get(userId)}`);
-      
-      // Проверяем, является ли отключающийся сокет актуальным для этого пользователя.
-      // Если connectedUsers.get(userId) не равен socket.id — значит пользователь уже переподключился с новым сокетом,
-      // и этот старый disconnect нужно просто проигнорировать, чтобы не сбросить статус в offline и не стереть новое соединение.
-      if (connectedUsers.get(userId) !== socket.id) {
-        console.log(`ℹ️ Ignore stale disconnect for ${socket.user.username} (newer socket ${connectedUsers.get(userId)} is active)`);
-        return;
-      }
+      const becameOffline = removeConnectedSocket(userId, socket.id);
       
       // Выходим из всех голосовых каналов (копируем entries чтобы избежать мутации при итерации)
       const voiceEntries = Array.from(voiceChannels.entries());
       for (const [channelId, members] of voiceEntries) {
-        const hasMember = members.some(m => m.userId === userId || m.socketId === socket.id);
+        const hasMember = members.some(m => m.socketId === socket.id);
         if (hasMember) {
           await leaveVoiceChannel(socket, channelId);
         }
@@ -1153,15 +1174,11 @@ module.exports = (io) => {
       
       // Обернем обновление статуса в setTimeout с задержкой 2000 мс (грейс-период)
       setTimeout(async () => {
-        // Проверяем еще раз, не подключился ли новый сокет за эти 2 секунды.
-        // Если connectedUsers.get(userId) не равен текущему socket.id — значит пользователь уже переподключился, игнорируем оффлайн.
-        if (connectedUsers.get(userId) !== socket.id) {
+        // A second device may have connected during the grace period.
+        if (connectedUsers.get(userId)?.size) {
           console.log(`ℹ️ Grace period check: User ${socket.user.username} has reconnected, keeping online.`);
           return;
         }
-        
-        // Удаляем из хранилища
-        connectedUsers.delete(userId);
         
         // Обновляем статус
         await User.findByIdAndUpdate(userId, {
@@ -1170,12 +1187,12 @@ module.exports = (io) => {
         });
         
         // Уведомляем всех об оффлайн статусе
-        socket.broadcast.emit('user:status', {
+        io.emit('user:status', {
           userId,
           status: 'offline'
         });
         console.log(`💤 Grace period expired: User ${socket.user.username} is now offline.`);
-      }, 2000);
+      }, becameOffline ? 2000 : 0);
     });
     
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
@@ -1188,9 +1205,10 @@ module.exports = (io) => {
       if (!channelMembers) return;
       const isDMCall = channelId.startsWith('dm_call:');
       
-      // Удаляем ВСЕ записи этого пользователя (защита от дубликатов)
+      // Remove only this socket. A second device for the same account may still
+      // be connected to the room.
       const initialLength = channelMembers.length;
-      const filtered = channelMembers.filter(m => m.userId !== userId && m.socketId !== socket.id);
+      const filtered = channelMembers.filter(m => m.socketId !== socket.id);
       
       if (filtered.length === initialLength) {
         // Пользователь не был в канале

@@ -1,0 +1,26 @@
+# Apply in the desktop `voice.js` function `joinChannel`, at the existing
+# `navigator.mediaDevices.getUserMedia(...)` call (the console says line ~195).
+# Preserve the surrounding stream lifecycle / selected-device setting names.
+
+@@
+- const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
++ let stream;
++ try {
++   // First preserve the user's selected microphone, if it still exists.
++   stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
++ } catch (error) {
++   // A saved `deviceId: { exact: ... }` becomes invalid after unplugging,
++   // renaming or changing the default input. Do not block joining voice.
++   if (error?.name !== 'OverconstrainedError' && error?.name !== 'NotFoundError') {
++     throw error;
++   }
++   console.warn('[Voice] Selected microphone is unavailable; using default', {
++     name: error.name,
++     constraint: error.constraint,
++     message: error.message,
++   });
++   stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
++   // Replace this key with the actual selected-input storage key used by voice.js.
++   localStorage.removeItem('selectedMicrophoneId');
++ }
+*** End Patch

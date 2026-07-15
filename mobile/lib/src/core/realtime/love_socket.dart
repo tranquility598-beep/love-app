@@ -66,6 +66,21 @@ class LoveSocket {
     _socket?.emit(event, data);
   }
 
+  Future<Map<String, dynamic>> emitWithAck(
+    String event,
+    dynamic data, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final socket = _socket;
+    if (socket == null || !socket.connected) {
+      return {'status': 'error', 'message': 'Сокет еще не подключен'};
+    }
+    final result = await socket.emitWithAckAsync(event, data).timeout(timeout);
+    return result is Map
+        ? result.cast<String, dynamic>()
+        : {'status': 'error', 'message': 'Некорректный ответ сервера'};
+  }
+
   Future<void> disconnect() async {
     final socket = _socket;
     if (socket != null) {

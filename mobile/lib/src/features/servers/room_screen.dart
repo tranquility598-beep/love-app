@@ -11,6 +11,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/love_surface.dart';
+import '../../widgets/space_banner.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
 import 'space_settings_screen.dart';
@@ -155,61 +156,70 @@ class _RoomHeader extends StatelessWidget {
         ? (space['settings'] as Map).cast<String, dynamic>()
         : <String, dynamic>{};
     final vibe = asText(settings['vibeStatus']);
+    final banner = asText(space['banner']);
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.22),
         border: const Border(bottom: BorderSide(color: LoveColors.border)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          IconButton(
-            tooltip: 'Назад',
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          LoveAvatar(
-            label: name,
-            imageUrl: asText(space['icon']),
-            icon: Icons.grid_view_rounded,
-            size: 42,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (banner.isNotEmpty)
+            SpaceBanner(url: banner, height: 120, radius: 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+            child: Row(
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
+                IconButton(
+                  tooltip: 'Назад',
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                LoveAvatar(
+                  label: name,
+                  imageUrl: asText(space['icon']),
+                  icon: Icons.grid_view_rounded,
+                  size: 42,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        vibe.isNotEmpty
+                            ? vibe
+                            : description.isNotEmpty
+                                ? description
+                                : '${_memberCount(space)} участников',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: LoveColors.textMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  vibe.isNotEmpty
-                      ? vibe
-                      : description.isNotEmpty
-                          ? description
-                          : '${_memberCount(space)} участников',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                IconButton(
+                  tooltip: 'Настройки комнаты',
+                  onPressed: onSettings,
+                  icon: const Icon(Icons.tune_rounded),
                 ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: 'Настройки комнаты',
-            onPressed: onSettings,
-            icon: const Icon(Icons.tune_rounded),
           ),
         ],
       ),

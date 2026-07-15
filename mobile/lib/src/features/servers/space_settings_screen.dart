@@ -9,6 +9,7 @@ import '../../widgets/async_value_view.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/love_surface.dart';
+import '../../widgets/space_banner.dart';
 import '../chat/chat_models.dart';
 import '../shell/screen_frame.dart';
 
@@ -125,6 +126,8 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
     required bool isRoom,
     required bool isOwner,
   }) {
+    final hasIcon = asText(space['icon']).isNotEmpty;
+    final hasBanner = asText(space['banner']).isNotEmpty;
     return _SettingsCard(
       title: isRoom ? 'Обзор комнаты' : 'Обзор сферы',
       subtitle: isOwner
@@ -197,6 +200,30 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
               ),
             ],
           ),
+          if (isOwner && (hasIcon || hasBanner)) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (hasIcon)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _removeImage('icon'),
+                      icon: const Icon(Icons.hide_image_outlined),
+                      label: const Text('Убрать иконку'),
+                    ),
+                  ),
+                if (hasIcon && hasBanner) const SizedBox(width: 10),
+                if (hasBanner)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _removeImage('banner'),
+                      icon: const Icon(Icons.image_not_supported_outlined),
+                      label: const Text('Убрать баннер'),
+                    ),
+                  ),
+              ],
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(
@@ -402,9 +429,37 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
       );
       if (picked == null) return;
       if (kind == 'icon') {
-        await widget.api.uploadServerIcon(widget.spaceId, picked.path);
+        await widget.api.uploadServerIcon(
+          widget.spaceId,
+          picked.path,
+          mimeType: picked.mimeType,
+        );
       } else {
-        await widget.api.uploadServerBanner(widget.spaceId, picked.path);
+        await widget.api.uploadServerBanner(
+          widget.spaceId,
+          picked.path,
+          mimeType: picked.mimeType,
+        );
+      }
+      _changed = true;
+      _reload();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _removeImage(String kind) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (kind == 'icon') {
+        await widget.api.deleteServerIcon(widget.spaceId);
+      } else {
+        await widget.api.deleteServerBanner(widget.spaceId);
       }
       _changed = true;
       _reload();
@@ -520,39 +575,49 @@ class _SpaceHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = asText(space['name'], isRoom ? 'Комната' : 'Сфера');
+    final banner = asText(space['banner']);
     return LoveSurface(
       padding: const EdgeInsets.all(16),
       radius: 18,
       color: LoveColors.surfaceStrong,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LoveAvatar(
-            label: name,
-            imageUrl: asText(space['icon']),
-            icon: isRoom ? Icons.grid_view_rounded : Icons.public_rounded,
-            size: 58,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+          if (banner.isNotEmpty) ...[
+            SpaceBanner(url: banner, height: 110),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              LoveAvatar(
+                label: name,
+                imageUrl: asText(space['icon']),
+                icon: isRoom ? Icons.grid_view_rounded : Icons.public_rounded,
+                size: 58,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${isRoom ? 'Комната' : 'Сфера'} · ${_memberCount(space)} участников',
+                      style: const TextStyle(color: LoveColors.textMuted),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${isRoom ? 'Комната' : 'Сфера'} · ${_memberCount(space)} участников',
-                  style: const TextStyle(color: LoveColors.textMuted),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

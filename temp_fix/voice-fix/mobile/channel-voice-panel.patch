@@ -1,0 +1,48 @@
+# Current file:
+# mobile/lib/src/features/servers/voice_channel_panel.dart
+#
+# This patch fixes the false-positive UI state: it currently sets `_joined = true`
+# immediately after emit. The server can reject the join, leaving a broken UI.
+# LoveSocket currently has no emitWithAck wrapper, so add the method below first.
+
+*** Begin Patch
+*** Update File: mobile/lib/src/core/realtime/love_socket.dart
+@@
+   void emit(String event, [dynamic data]) {
+     _socket?.emit(event, data);
+   }
++
++  Future<Map<String, dynamic>> emitWithAck(
++    String event,
++    dynamic data, {
++    Duration timeout = const Duration(seconds: 10),
++  }) async {
++    final socket = _socket;
++    if (socket == null || !socket.connected) {
++      return {'status': 'error', 'message': 'Сокет еще не подключен'};
++    }
++    final result = await socket.emitWithAckAsync(event, data).timeout(timeout);
++    return result is Map
++        ? result.cast<String, dynamic>()
++        : {'status': 'error', 'message': 'Некорректный ответ сервера'};
++  }
+*** Update File: mobile/lib/src/features/servers/voice_channel_panel.dart
+@@
+- widget.socket.emit('voice:join', {'channelId': _channelId});
+- setState(() => _joined = true);
++ final response = await widget.socket.emitWithAck(
++   'voice:join',
++   {'channelId': _channelId},
++ );
++ if (!mounted) return;
++ if (response['status'] != 'ok') {
++   setState(() => _error = asText(response['message'], 'Не удалось войти в войс'));
++   return;
++ }
++ setState(() => _joined = true);
+*** End Patch
+
+# NOTE: this is deliberately not presented as a WebRTC implementation.
+# The committed panel has no flutter_webrtc / RTCPeerConnection code at all.
+# Add the application-scoped VoiceChannelController described in PATCH-VOICE.md
+# before declaring mobile server voice audio complete.

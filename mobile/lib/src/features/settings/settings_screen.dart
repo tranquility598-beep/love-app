@@ -552,6 +552,11 @@ class _NotificationsSection extends StatelessWidget {
 }
 
 // ── Voice ────────────────────────────────────────────────────────────────────
+// Possible reasons why this section may appear empty at runtime:
+// 1. LovePrefs.init() threw and _prefs is null → late field crash
+// 2. SharedPreferences plugin not properly linked in the APK
+// 3. Permission.microphone dependency missing (AndroidManifest)
+// 4. Stale APK — code was rebuilt without the latest patches applied
 
 class _VoiceSection extends StatefulWidget {
   const _VoiceSection();
@@ -796,6 +801,10 @@ class _UpdatesSection extends StatelessWidget {
 }
 
 // ── Advanced ─────────────────────────────────────────────────────────────────
+
+// ── Advanced ─────────────────────────────────────────────────────────────────
+// Possible reasons why this section may appear empty at runtime:
+// Same as Voice section — check LovePrefs init, plugin linkage, stale APK.
 
 class _AdvancedSection extends StatefulWidget {
   const _AdvancedSection();

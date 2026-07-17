@@ -1,5 +1,7 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'love_page_transitions.dart';
 import 'love_tokens.dart';
 
 class LoveTheme {
@@ -143,6 +145,12 @@ class LoveTheme {
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: LoveColors.border),
         ),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: LovePageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
       ),
       dividerTheme: const DividerThemeData(
         color: LoveColors.border,

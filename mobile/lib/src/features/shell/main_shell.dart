@@ -5,6 +5,7 @@ import '../../core/notifications/in_app_notifications.dart';
 import '../../core/notifications/local_notifications.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../theme/love_tokens.dart';
+import '../../widgets/fade_indexed_stack.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/love_nav_icons.dart';
 import '../chat/chat_models.dart';
@@ -221,7 +222,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         child: Column(
           children: [
             Expanded(
-              child: IndexedStack(
+              child: FadeIndexedStack(
                 index: _index,
                 children: pages,
               ),

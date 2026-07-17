@@ -14,15 +14,18 @@ let latestReleaseCache = {
 };
 
 function githubHeaders(accept = 'application/vnd.github.v3+json') {
-  if (!GITHUB_TOKEN) {
-    throw new Error('GITHUB_TOKEN is not configured on the server');
-  }
-
-  return {
-    Authorization: `token ${GITHUB_TOKEN}`,
+  const headers = {
     Accept: accept,
     'User-Agent': 'Love-App-Server'
   };
+
+  // Токен необязателен — репозиторий публичный.
+  // Если токен задан — выше лимиты GitHub API (5000/ч вместо 60/ч).
+  if (GITHUB_TOKEN) {
+    headers.Authorization = `token ${GITHUB_TOKEN}`;
+  }
+
+  return headers;
 }
 
 async function getLatestRelease() {
@@ -149,7 +152,8 @@ router.get('/download/mac-x64', handleDownload(
 
 router.get('/download/android', handleDownload(
   'android',
-  (assets) => assets.find(isApk),
+  (assets) => preferArch(assets, isApk, 'arm64')
+    || assets.find(isApk),
   'LoveSetup.apk'
 ));
 

@@ -566,9 +566,6 @@ class _VoiceSection extends StatefulWidget {
 }
 
 class _VoiceSectionState extends State<_VoiceSection> {
-  late int _micVol = LovePrefs.instance.getInt(K.inputVolume, 80);
-  late int _outVol = LovePrefs.instance.getInt(K.outputVolume, 100);
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -588,17 +585,10 @@ class _VoiceSectionState extends State<_VoiceSection> {
               defaultValue: 'default',
               options: [SettingsOption('default', 'Микрофон по умолчанию')],
             ),
-            SettingsSliderRow(
+            const _VolumeSlider(
               title: 'Громкость ввода',
-              value: _micVol.toDouble(),
-              min: 0,
-              max: 100,
-              divisions: 20,
-              valueLabel: '$_micVol%',
-              onChanged: (v) {
-                setState(() => _micVol = v.round());
-                LovePrefs.instance.setInt(K.inputVolume, _micVol);
-              },
+              prefKey: K.inputVolume,
+              defaultValue: 80,
             ),
             SettingsActionRow(
               title: 'Проверить микрофон',
@@ -620,17 +610,10 @@ class _VoiceSectionState extends State<_VoiceSection> {
               defaultValue: 'default',
               options: [SettingsOption('default', 'Динамики по умолчанию')],
             ),
-            SettingsSliderRow(
+            const _VolumeSlider(
               title: 'Громкость вывода',
-              value: _outVol.toDouble(),
-              min: 0,
-              max: 100,
-              divisions: 20,
-              valueLabel: '$_outVol%',
-              onChanged: (v) {
-                setState(() => _outVol = v.round());
-                LovePrefs.instance.setInt(K.outputVolume, _outVol);
-              },
+              prefKey: K.outputVolume,
+              defaultValue: 100,
             ),
             SettingsActionRow(
               title: 'Проверить звук',
@@ -677,6 +660,44 @@ class _VoiceSectionState extends State<_VoiceSection> {
               : 'Нет доступа к микрофону',
         ),
       ),
+    );
+  }
+}
+
+/// Self-contained volume slider that only rebuilds itself on drag, not the
+/// entire parent settings section.
+class _VolumeSlider extends StatefulWidget {
+  const _VolumeSlider({
+    required this.title,
+    required this.prefKey,
+    required this.defaultValue,
+  });
+
+  final String title;
+  final String prefKey;
+  final int defaultValue;
+
+  @override
+  State<_VolumeSlider> createState() => _VolumeSliderState();
+}
+
+class _VolumeSliderState extends State<_VolumeSlider> {
+  late int _value =
+      LovePrefs.instance.getInt(widget.prefKey, widget.defaultValue);
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsSliderRow(
+      title: widget.title,
+      value: _value.toDouble(),
+      min: 0,
+      max: 100,
+      divisions: 20,
+      valueLabel: '$_value%',
+      onChanged: (v) {
+        setState(() => _value = v.round());
+        LovePrefs.instance.setInt(widget.prefKey, _value);
+      },
     );
   }
 }

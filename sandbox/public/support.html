@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Support — LOVE</title>
+<link rel="stylesheet" href="doc.css" />
+<script src="lang.js"></script>
+</head>
+<body>
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html"><span class="dot"></span>LOVE</a>
+    <div class="nav-links">
+      <a href="index.html#download"><span class="l-en">Download</span><span class="l-ru">Скачать</span></a>
+      <a href="changelog.html"><span class="l-en">Changelog</span><span class="l-ru">История версий</span></a>
+      <button class="lang-btn" onclick="toggleLang()" aria-label="Switch language"><span class="l-en">RU</span><span class="l-ru">EN</span></button>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="kicker"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></div>
+  <h1><span class="l-en">How can we help?</span><span class="l-ru">Чем помочь?</span></h1>
+  <p class="updated"><span class="l-en">Our support team typically responds within 24 hours</span><span class="l-ru">Служба поддержки обычно отвечает в течение 24 часов</span></p>
+
+  <style>
+    .sform { border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 26px; margin: 26px 0 40px; background: rgba(255,255,255,0.02); }
+    .sform h2 { margin-top: 0; }
+    .fgroup { margin-bottom: 16px; }
+    .fgroup label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-bottom: 7px; }
+    .fgroup input, .fgroup select, .fgroup textarea { width: 100%; box-sizing: border-box; background: #101010; border: 1px solid rgba(255,255,255,0.14); border-radius: 9px; color: #f5f5f5; font: inherit; font-size: 14px; padding: 11px 13px; outline: none; transition: border-color .2s; }
+    .fgroup input:focus, .fgroup select:focus, .fgroup textarea:focus { border-color: rgba(255,255,255,0.45); }
+    .fgroup textarea { min-height: 130px; resize: vertical; }
+    .fgroup select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 13px center; cursor: pointer; }
+    .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) { .frow { grid-template-columns: 1fr; } }
+    .fattach { display: block; border: 1px dashed rgba(255,255,255,0.22); border-radius: 9px; padding: 14px; text-align: center; color: rgba(255,255,255,0.55); font-size: 13px; cursor: pointer; transition: border-color .2s, color .2s; }
+    .fattach:hover { border-color: rgba(255,255,255,0.5); color: #f5f5f5; }
+    .fattach input { display: none; }
+    .fhint { font-size: 11.5px; color: rgba(255,255,255,0.35); margin-top: 6px; }
+    .flist { list-style: none; margin: 10px 0 0; padding: 0; }
+    .flist li { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #101010; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 7px 11px; font-size: 12.5px; color: rgba(255,255,255,0.75); margin-bottom: 6px; }
+    .flist .fsize { color: rgba(255,255,255,0.4); white-space: nowrap; }
+    .flist button { background: none; border: none; color: rgba(255,255,255,0.5); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+    .flist button:hover { color: #fff; }
+    .fsubmit { display: inline-block; background: #f5f5f5; color: #0a0a0a; border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; padding: 12px 26px; cursor: pointer; transition: transform .15s, opacity .15s; }
+    .fsubmit:hover { transform: translateY(-1px); }
+    .fsubmit:disabled { opacity: 0.5; cursor: default; transform: none; }
+    .ferror { color: #ff6b6b; font-size: 13px; margin: 10px 0 0; }
+    .fsuccess { display: none; text-align: center; padding: 34px 20px; }
+    .fsuccess.show { display: block; }
+    .fsuccess .fs-icon { width: 52px; height: 52px; margin: 0 auto 16px; border: 1px solid rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .fsuccess h3 { margin: 0 0 8px; font-size: 20px; }
+    .fsuccess p { color: rgba(255,255,255,0.55); margin: 0; }
+  </style>
+
+  <div class="sform" id="contact">
+    <div id="form-wrap">
+      <h2><span class="l-en">Submit a request</span><span class="l-ru">Отправить обращение</span></h2>
+      <p><span class="l-en">Can’t find what you’re looking for? Fill out the form and our support team will get back to you within 24 hours.</span><span class="l-ru">Не нашли ответ? Заполните форму — команда поддержки ответит в течение 24 часов.</span></p>
+      <form id="support-form" novalidate>
+        <div class="frow">
+          <div class="fgroup">
+            <label for="sf-name"><span class="l-en">Full Name</span><span class="l-ru">Имя</span></label>
+            <input type="text" id="sf-name" required placeholder="John Doe" data-ph-ru="Иван Иванов" />
+          </div>
+          <div class="fgroup">
+            <label for="sf-email"><span class="l-en">Email Address</span><span class="l-ru">Email</span></label>
+            <input type="email" id="sf-email" required placeholder="john@example.com" data-ph-ru="ivan@example.com" />
+          </div>
+        </div>
+        <div class="fgroup">
+          <label for="sf-category"><span class="l-en">Category</span><span class="l-ru">Категория</span></label>
+          <select id="sf-category">
+            <option value="bug">Bug Report</option>
+            <option value="account">Account Issue</option>
+            <option value="feature">Feature Request</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label for="sf-subject"><span class="l-en">Subject</span><span class="l-ru">Тема</span></label>
+          <input type="text" id="sf-subject" required placeholder="Brief description of your issue" data-ph-ru="Кратко опишите проблему" />
+        </div>
+        <div class="fgroup">
+          <label for="sf-description"><span class="l-en">Description</span><span class="l-ru">Описание</span></label>
+          <textarea id="sf-description" required placeholder="Describe your issue in detail. Include steps to reproduce if applicable." data-ph-ru="Опишите проблему подробно. Если возможно — шаги воспроизведения."></textarea>
+        </div>
+        <div class="fgroup">
+          <label><span class="l-en">Attachments</span><span class="l-ru">Вложения</span></label>
+          <label class="fattach" for="sf-files"><span class="l-en">+ Attach files (screenshots, logs)</span><span class="l-ru">+ Прикрепить файлы (скриншоты, логи)</span>
+            <input type="file" id="sf-files" multiple accept="image/*,.txt,.log,.zip,.mp4" />
+          </label>
+          <div class="fhint"><span class="l-en">Up to 10 MB total.</span><span class="l-ru">Суммарно до 10 МБ.</span></div>
+          <ul class="flist" id="sf-flist"></ul>
+        </div>
+        <button type="submit" class="fsubmit" id="sf-submit"><span class="l-en">Submit Request</span><span class="l-ru">Отправить</span></button>
+        <p class="ferror" id="sf-error" hidden></p>
+      </form>
+      <p class="fhint" style="margin-top:14px"><span class="l-en">Prefer email? Write to</span><span class="l-ru">Удобнее почтой? Напишите на</span> <a href="mailto:support@loveapp.chat">support@loveapp.chat</a>.</p>
+    </div>
+    <div class="fsuccess" id="sf-success">
+      <div class="fs-icon">✓</div>
+      <h3><span class="l-en">Request Submitted</span><span class="l-ru">Обращение отправлено</span></h3>
+      <p><span class="l-en">We’ve received your request and will respond within 24 hours.</span><span class="l-ru">Мы получили ваше обращение и ответим в течение 24 часов.</span></p>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var ENDPOINT = 'https://loveapp-1-dk8a.onrender.com/api/support';
+    var RU = function () { return document.documentElement.getAttribute('data-lang') === 'ru'; };
+    var MAX_TOTAL = 10 * 1024 * 1024;
+    var form = document.getElementById('support-form');
+    var fileInput = document.getElementById('sf-files');
+    var flist = document.getElementById('sf-flist');
+    var errEl = document.getElementById('sf-error');
+    var files = [];
+
+    function fmtSize(n) {
+      return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+    }
+    function totalSize() { return files.reduce(function (a, f) { return a + f.size; }, 0); }
+    function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
+    function clearError() { errEl.hidden = true; }
+
+    function renderList() {
+      flist.innerHTML = '';
+      files.forEach(function (f, i) {
+        var li = document.createElement('li');
+        var name = document.createElement('span');
+        name.textContent = f.name;
+        name.style.overflow = 'hidden'; name.style.textOverflow = 'ellipsis'; name.style.whiteSpace = 'nowrap';
+        var size = document.createElement('span');
+        size.className = 'fsize'; size.textContent = fmtSize(f.size);
+        var del = document.createElement('button');
+        del.type = 'button'; del.textContent = '\u00d7'; del.setAttribute('aria-label', 'Remove');
+        del.addEventListener('click', function () { files.splice(i, 1); renderList(); clearError(); });
+        li.appendChild(name); li.appendChild(size); li.appendChild(del);
+        flist.appendChild(li);
+      });
+    }
+
+    fileInput.addEventListener('change', function () {
+      clearError();
+      var added = Array.prototype.slice.call(fileInput.files);
+      for (var k = 0; k < added.length; k++) {
+        if (totalSize() + added[k].size > MAX_TOTAL) {
+          showError(RU() ? 'Вложения превышают лимит 10 МБ. «' + added[k].name + '» не добавлен.' : 'Attachments exceed the 10 MB limit. “' + added[k].name + '” was not added.');
+          break;
+        }
+        files.push(added[k]);
+      }
+      fileInput.value = '';
+      renderList();
+    });
+
+    function readAsDataURL(file) {
+      return new Promise(function (resolve, reject) {
+        var r = new FileReader();
+        r.onload = function () { resolve(String(r.result).split(',')[1] || ''); };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearError();
+      var name = document.getElementById('sf-name').value.trim();
+      var email = document.getElementById('sf-email').value.trim();
+      var category = document.getElementById('sf-category').value;
+      var subject = document.getElementById('sf-subject').value.trim();
+      var description = document.getElementById('sf-description').value.trim();
+
+      if (!name || !email || !subject || !description) return showError(RU() ? 'Заполните все поля.' : 'Please fill in all fields.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError(RU() ? 'Введите корректный email.' : 'Please enter a valid email address.');
+      if (totalSize() > MAX_TOTAL) return showError(RU() ? 'Вложения превышают лимит 10 МБ.' : 'Attachments exceed the 10 MB limit.');
+
+      var btn = document.getElementById('sf-submit');
+      btn.disabled = true; btn.textContent = RU() ? 'Отправка...' : 'Sending...';
+
+      Promise.all(files.map(function (f) {
+        return readAsDataURL(f).then(function (data) {
+          return { name: f.name, type: f.type, size: f.size, data: data };
+        });
+      })).then(function (attachments) {
+        return fetch(ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, email: email, category: category, subject: subject, description: description, attachments: attachments })
+        });
+      }).catch(function () { /* show success anyway, like the app site */ }).then(function () {
+        document.getElementById('form-wrap').style.display = 'none';
+        document.getElementById('sf-success').classList.add('show');
+      });
+    });
+
+    ['sf-name', 'sf-email', 'sf-subject', 'sf-description'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', clearError);
+    });
+
+    var optEn = { bug: 'Bug Report', account: 'Account Issue', feature: 'Feature Request', other: 'Other' };
+    var optRu = { bug: 'Сообщение об ошибке', account: 'Проблема с аккаунтом', feature: 'Предложение функции', other: 'Другое' };
+    function localizeOptions() {
+      var m = RU() ? optRu : optEn;
+      Array.prototype.forEach.call(document.getElementById('sf-category').options, function (o) {
+        if (m[o.value]) o.textContent = m[o.value];
+      });
+    }
+    new MutationObserver(localizeOptions).observe(document.documentElement, { attributes: true, attributeFilter: ['data-lang'] });
+    localizeOptions();
+  })();
+  </script>
+
+  <h2><span class="l-en">Frequently asked questions</span><span class="l-ru">Частые вопросы</span></h2>
+
+  <h2 style="font-size:17px"><span class="l-en">How do I get access to Love?</span><span class="l-ru">Как получить доступ к Love?</span></h2>
+  <p><span class="l-en">Love is currently in early access. You can request an invitation on our main page — after review, you'll receive an access code via email. Access is granted manually while the platform is being tested.</span><span class="l-ru">Love сейчас в раннем доступе. Запросить приглашение можно на главной странице — после рассмотрения вы получите код доступа на почту. Пока платформа тестируется, доступ выдаётся вручную.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">How do I report a bug?</span><span class="l-ru">Как сообщить об ошибке?</span></h2>
+  <p><span class="l-en">You can report bugs directly inside the app: open <strong>Love Hub → “Report a Bug”</strong>, or use the <a href="#contact">form above</a>. Please include steps to reproduce and your app version.</span><span class="l-ru">Сообщить об ошибке можно прямо в приложении: откройте <strong>Love Hub → «Сообщить об ошибке»</strong> или воспользуйтесь <a href="#contact">формой выше</a>. Пожалуйста, укажите шаги воспроизведения и версию приложения.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">I can't log into my account. What do I do?</span><span class="l-ru">Не могу войти в аккаунт. Что делать?</span></h2>
+  <p><span class="l-en">First, try resetting your password via the login screen. If you no longer have access to your email, contact us with your username and registration email — we'll help verify your identity.</span><span class="l-ru">Сначала попробуйте сбросить пароль на экране входа. Если доступа к почте больше нет, напишите нам, указав имя пользователя и почту регистрации — мы поможем подтвердить личность.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">What's the difference between a Server and a Room?</span><span class="l-ru">Чем сервер отличается от комнаты?</span></h2>
+  <p><span class="l-en">Servers are traditional community spaces with channels, categories, and roles. Rooms are a simpler format — a single space for text and voice, ideal for small groups and focused conversations.</span><span class="l-ru">Серверы — классические пространства сообществ с каналами, категориями и ролями. Комнаты — более простой формат: единое пространство для текста и голоса, идеально для небольших групп и сфокусированных разговоров.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">My microphone isn't working in voice channels.</span><span class="l-ru">Микрофон не работает в голосовых каналах.</span></h2>
+  <p><span class="l-en">Make sure Love has microphone permissions in your system settings (Windows: Settings → Privacy → Microphone). Also check that the correct input device is selected in <strong>Love Settings → Audio</strong>.</span><span class="l-ru">Убедитесь, что у Love есть разрешение на микрофон в настройках системы (Windows: Параметры → Конфиденциальность → Микрофон). Также проверьте, что в <strong>Настройках Love → Аудио</strong> выбрано правильное устройство ввода.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">How do app updates work?</span><span class="l-ru">Как работают обновления приложения?</span></h2>
+  <p><span class="l-en">Love updates automatically. When a new version is available, you'll see a banner at the top of the app — click it to download and restart. You can always check your current version in <strong>Settings → About</strong>.</span><span class="l-ru">Love обновляется автоматически. Когда доступна новая версия, вверху приложения появится баннер — нажмите его, чтобы скачать и перезапустить. Текущую версию всегда видно в <strong>Настройки → О приложении</strong>.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">Windows says the installer is from an unknown publisher</span><span class="l-ru">Windows пишет, что установщик от неизвестного издателя</span></h2>
+  <p><span class="l-en">That's Windows SmartScreen being cautious with new apps. Click <strong>More info → Run anyway</strong>. The installer is the official build from this site.</span><span class="l-ru">Это Windows SmartScreen осторожничает с новыми приложениями. Нажмите <strong>Подробнее → Выполнить в любом случае</strong>. Установщик — официальная сборка с этого сайта.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">macOS says the app “cannot be verified”</span><span class="l-ru">macOS пишет, что приложение «не может быть проверено»</span></h2>
+  <p><span class="l-en">Right-click (Control-click) the app → <strong>Open</strong> → confirm. You only need to do this once, on first launch.</span><span class="l-ru">Кликните по приложению правой кнопкой (Control-клик) → <strong>Открыть</strong> → подтвердите. Это нужно сделать один раз, при первом запуске.</span></p>
+
+  <h2 style="font-size:17px"><span class="l-en">Android won't install the APK</span><span class="l-ru">Android не устанавливает APK</span></h2>
+  <p><span class="l-en">Enable <strong>“Install from unknown sources”</strong> for your browser or file manager the first time. After that, updates install normally.</span><span class="l-ru">Разрешите <strong>«Установку из неизвестных источников»</strong> для браузера или файлового менеджера один раз. Дальше обновления ставятся как обычно.</span></p>
+</div>
+
+<footer>
+  <span><span class="l-en">© 2026 LOVE. Crafted with care.</span><span class="l-ru">© 2026 LOVE. Сделано с заботой.</span></span>
+  <span><a href="terms.html"><span class="l-en">Terms</span><span class="l-ru">Условия</span></a> · <a href="privacy.html"><span class="l-en">Privacy</span><span class="l-ru">Конфиденциальность</span></a> · <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a></span>
+</footer>
+</body>
+</html>

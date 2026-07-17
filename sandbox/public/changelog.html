@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Changelog — LOVE</title>
+<link rel="stylesheet" href="doc.css" />
+<script src="lang.js"></script>
+</head>
+<body>
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html"><span class="dot"></span>LOVE</a>
+    <div class="nav-links">
+      <a href="index.html#download"><span class="l-en">Download</span><span class="l-ru">Скачать</span></a>
+      <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a>
+      <button class="lang-btn" onclick="toggleLang()" aria-label="Switch language"><span class="l-en">RU</span><span class="l-ru">EN</span></button>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="kicker"><span class="l-en">Release notes</span><span class="l-ru">Заметки о выпусках</span></div>
+  <h1><span class="l-en">Changelog</span><span class="l-ru">История версий</span></h1>
+  <p class="updated"><span class="l-en">Current version · v 2.0.5</span><span class="l-ru">Текущая версия · v 2.0.5</span></p>
+
+  <div class="card">
+    <span class="vtag">v 2.0.5</span>
+    <h2><span class="l-en">Voice stability &amp; mobile presence.</span><span class="l-ru">Стабильный войс и мобильная присутствие.</span></h2>
+    <ul class="l-en">
+      <li><strong>Multi-device voice</strong> — logged in on PC and phone at the same time? Both receive incoming calls and can join voice channels independently.</li>
+      <li><strong>Mobile voice panel</strong> — fully native presence UI: see who is in the voice channel, mute/deafen controls, join/leave with server acknowledgement.</li>
+      <li><strong>Desktop microphone resilience</strong> — switching or unplugging your mic no longer breaks voice. Falls back to the default device automatically.</li>
+      <li><strong>Server avatar/banner system</strong> — upload icons and banners for spheres and rooms. Banners render on cards, room headers and settings.</li>
+      <li><strong>MIME-aware uploads</strong> — server correctly detects file types for profile pictures, server icons and banners.</li>
+      <li><strong>Public landing page</strong> — loveapp.chat site with changelog, privacy, terms and support pages.</li>
+    </ul>
+    <ul class="l-ru">
+      <li><strong>Мульти-устройства в войсе</strong> — залогинен на ПК и телефоне? Оба получают звонки и могут заходить в войс-каналы независимо.</li>
+      <li><strong>Панель войса на мобиле</strong> — нативный UI присутствия: кто в канале, кнопки mute/deafen, вход/выход с подтверждением сервера.</li>
+      <li><strong>Устойчивый микрофон на десктопе</strong> — переключение или отключение микрофона больше не ломает войс. Автоматический fallback на устройство по умолчанию.</li>
+      <li><strong>Система иконок и баннеров</strong> — загружайте иконки и баннеры для сфер и комнат. Баннеры отображаются в карточках, шапках комнат и настройках.</li>
+      <li><strong>Загрузка с определением MIME</strong> — сервер корректно определяет типы файлов для аватарок, иконок и баннеров.</li>
+      <li><strong>Публичный сайт</strong> — loveapp.chat с историей версий, политикой, условиями и поддержкой.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <span class="vtag">v 2.0.4</span>
+    <h2><span class="l-en">Notifications, done right.</span><span class="l-ru">Уведомления — как надо.</span></h2>
+    <ul class="l-en">
+      <li><strong>Native desktop notifications</strong> — real Windows notifications for messages, friend requests, mentions and missed calls while the app is minimized. Click to jump straight to the right place.</li>
+      <li><strong>Notifications panel, reworked</strong> — two tabs (Normal / System), friend requests actionable right there with Accept / Decline, reply and call back without leaving the panel.</li>
+      <li><strong>Mobile camera flip</strong> — front/back camera switch during video calls.</li>
+    </ul>
+    <ul class="l-ru">
+      <li><strong>Нативные уведомления на рабочем столе</strong> — настоящие уведомления Windows о сообщениях, заявках в друзья, упоминаниях и пропущенных звонках, пока приложение свёрнуто. Клик ведёт сразу в нужное место.</li>
+      <li><strong>Переработанная панель уведомлений</strong> — две вкладки (Обычные / Системные), заявки в друзья с кнопками Принять / Отклонить, ответ и обратный звонок прямо из панели.</li>
+      <li><strong>Переворот камеры на мобильном</strong> — переключение фронтальной/основной камеры во время видеозвонков.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <span class="vtag">v 2.0.3</span>
+    <h2><span class="l-en">Always up to date.</span><span class="l-ru">Всегда актуальная версия.</span></h2>
+    <ul class="l-en">
+      <li><strong>Auto-updates</strong> — new versions download in the background and install on restart.</li>
+      <li><strong>Settings → Updates</strong> — current version, status, download progress and a “Restart &amp; install” button.</li>
+      <li><strong>Beta channel</strong> — opt in to pre-releases before everyone else.</li>
+      <li><strong>Profile music fix</strong> — MP3 tracks are now reliably audible to friends.</li>
+    </ul>
+    <ul class="l-ru">
+      <li><strong>Автообновления</strong> — новые версии скачиваются в фоне и устанавливаются при перезапуске.</li>
+      <li><strong>Настройки → Обновления</strong> — текущая версия, статус, прогресс загрузки и кнопка «Перезапустить и установить».</li>
+      <li><strong>Бета-канал</strong> — включите предрелизы раньше всех.</li>
+      <li><strong>Исправление музыки профиля</strong> — MP3-треки теперь стабильно слышны друзьям.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <span class="vtag">v 2.0.2</span>
+    <h2><span class="l-en">Voice that connects.</span><span class="l-ru">Голос, который соединяет.</span></h2>
+    <ul class="l-en">
+      <li>More stable voice connections and cleaner reconnects.</li>
+      <li>Audio quality improvements across calls and voice rooms.</li>
+    </ul>
+    <ul class="l-ru">
+      <li>Более стабильные голосовые соединения и аккуратные переподключения.</li>
+      <li>Улучшено качество звука в звонках и голосовых комнатах.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <span class="vtag">v 2.0.1</span>
+    <h2><span class="l-en">Smoother onboarding.</span><span class="l-ru">Более плавный старт.</span></h2>
+    <ul class="l-en">
+      <li>A calmer, faster first-run and sign-in experience.</li>
+      <li>Polish and fixes across the app shell.</li>
+    </ul>
+    <ul class="l-ru">
+      <li>Более спокойный и быстрый первый запуск и вход.</li>
+      <li>Полировка и исправления по всему приложению.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <span class="vtag">v 2.0.0</span>
+    <h2><span class="l-en">Communication, reimagined.</span><span class="l-ru">Общение, переосмысленное.</span></h2>
+    <ul class="l-en">
+      <li><strong>Voice rooms 2.0</strong> — a brand-new voice engine with presence orbs, smooth screen sharing up to 1080p @ 60fps and camera support.</li>
+      <li><strong>Perfect screen share</strong> — window/display picker, crisp text, instant start and clean stop.</li>
+      <li><strong>Everything realtime</strong> — messages, calls and statuses arrive instantly. No reloads.</li>
+      <li><strong>Wabi-Sabi design</strong> — a quiet black &amp; white world built for focus. Profiles, moods, music and interests in one calm interface.</li>
+    </ul>
+    <ul class="l-ru">
+      <li><strong>Голосовые комнаты 2.0</strong> — новый голосовой движок с орбами присутствия, плавной демонстрацией экрана до 1080p @ 60fps и поддержкой камеры.</li>
+      <li><strong>Идеальная демонстрация экрана</strong> — выбор окна/дисплея, чёткий текст, мгновенный старт и чистое завершение.</li>
+      <li><strong>Всё в реальном времени</strong> — сообщения, звонки и статусы приходят мгновенно. Без перезагрузок.</li>
+      <li><strong>Дизайн ваби-саби</strong> — тихий чёрно-белый мир для фокуса. Профили, настроения, музыка и интересы в одном спокойном интерфейсе.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>
+  <span><span class="l-en">© 2026 LOVE. Crafted with care.</span><span class="l-ru">© 2026 LOVE. Сделано с заботой.</span></span>
+  <span><a href="terms.html"><span class="l-en">Terms</span><span class="l-ru">Условия</span></a> · <a href="privacy.html"><span class="l-en">Privacy</span><span class="l-ru">Конфиденциальность</span></a> · <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a></span>
+</footer>
+</body>
+</html>

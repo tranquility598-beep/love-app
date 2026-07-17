@@ -35,10 +35,8 @@ class SettingsSectionHead extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontFamily: LoveFonts.serif,
-            fontStyle: FontStyle.italic,
             fontSize: 23,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
             letterSpacing: -0.4,
             color: LoveColors.textPrimary,
           ),
@@ -829,10 +827,8 @@ Future<T?> showLoveSheet<T>(
                         child: Text(
                           title,
                           style: const TextStyle(
-                            fontFamily: LoveFonts.serif,
-                            fontStyle: FontStyle.italic,
                             fontSize: 21,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                             color: LoveColors.textPrimary,
                           ),
                         ),

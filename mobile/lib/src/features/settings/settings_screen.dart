@@ -999,7 +999,6 @@ class _AboutSection extends StatelessWidget {
               const Text(
                 'L O V E',
                 style: TextStyle(
-                  fontFamily: LoveFonts.serif,
                   fontSize: 28,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 6,

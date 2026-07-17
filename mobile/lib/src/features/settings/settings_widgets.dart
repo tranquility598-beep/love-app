@@ -575,11 +575,40 @@ class SettingsActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Expanded(child: _RowLabel(title: title, subtitle: subtitle, icon: icon)),
-          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final label = _RowLabel(
+            title: title,
+            subtitle: subtitle,
+            icon: icon,
+          );
+          final action = trailing;
+
+          if (action == null) return label;
+
+          if (constraints.maxWidth < 360) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                label,
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: action,
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: label),
+              const SizedBox(width: 12),
+              action,
+            ],
+          );
+        },
       ),
     );
   }

@@ -3,25 +3,22 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Client-local settings store — the mobile equivalent of the web's
-/// `localStorage` + `SettingsManager`. The desktop app persists everything
-/// except profile/account here (appearance, privacy, notifications, voice, hub
-/// channels, advanced flags, update channel, Dev Log votes). None of these hit
-/// the server, so mobile mirrors that with `shared_preferences`.
+/// Client-local settings store.
 ///
-/// Keys deliberately match the desktop keys 1:1 where the desktop defines one,
-/// so the two clients stay conceptually in sync.
+/// Preferences must never make a settings screen fail to build. If Android's
+/// SharedPreferences is temporarily unavailable, values are kept in memory for
+/// the current app session and all getters return their supplied defaults.
 class LovePrefs {
   LovePrefs._();
 
   static final LovePrefs instance = LovePrefs._();
 
   SharedPreferences? _prefs;
-  SharedPreferences get _p {
-    final prefs = _prefs;
-    assert(prefs != null, 'LovePrefs.init() must be awaited before use');
-    return prefs!;
-  }
+  final Map<String, Object> _memory = <String, Object>{};
+  bool _initializing = false;
+
+  /// True when the platform-backed store is available.
+  bool get isReady => _prefs != null;
 
   /// Applied globally by the app root (text scaling). 1.0 == 100%.
   final ValueNotifier<double> uiScale = ValueNotifier<double>(1.0);
@@ -29,46 +26,85 @@ class LovePrefs {
   /// When true, the app should minimise motion (matches web `no-animations`).
   final ValueNotifier<bool> reduceMotion = ValueNotifier<bool>(false);
 
+  /// Initializes the persistent store without making the application unusable
+  /// if the plugin/platform call fails on a particular device.
   Future<void> init() async {
-    if (_prefs != null) return;
-    _prefs = await SharedPreferences.getInstance();
+    if (_prefs != null || _initializing) return;
+    _initializing = true;
+    try {
+      _prefs = await SharedPreferences.getInstance();
+    } catch (error, stackTrace) {
+      debugPrint('LovePrefs.init failed; using in-memory preferences: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      _initializing = false;
+    }
+
     uiScale.value = (getInt(K.uiScale, 100) / 100).clamp(0.75, 1.25);
     reduceMotion.value = !getBool(K.animations, true);
   }
 
   // ── Typed accessors ──────────────────────────────────────────────────────
 
-  bool getBool(String key, bool fallback) => _p.getBool(key) ?? fallback;
+  bool getBool(String key, bool fallback) {
+    final value = _prefs?.getBool(key) ?? _memory[key];
+    return value is bool ? value : fallback;
+  }
 
   Future<void> setBool(String key, bool value) async {
-    await _p.setBool(key, value);
+    _memory[key] = value;
+    final prefs = _prefs;
+    try {
+      if (prefs != null) await prefs.setBool(key, value);
+    } catch (error) {
+      debugPrint('LovePrefs.setBool failed for $key: $error');
+    }
     if (key == K.animations) reduceMotion.value = !value;
   }
 
-  int getInt(String key, int fallback) => _p.getInt(key) ?? fallback;
+  int getInt(String key, int fallback) {
+    final value = _prefs?.getInt(key) ?? _memory[key];
+    return value is int ? value : fallback;
+  }
 
   Future<void> setInt(String key, int value) async {
-    await _p.setInt(key, value);
+    _memory[key] = value;
+    final prefs = _prefs;
+    try {
+      if (prefs != null) await prefs.setInt(key, value);
+    } catch (error) {
+      debugPrint('LovePrefs.setInt failed for $key: $error');
+    }
     if (key == K.uiScale) {
       uiScale.value = (value / 100).clamp(0.75, 1.25);
     }
   }
 
-  String getString(String key, String fallback) =>
-      _p.getString(key) ?? fallback;
+  String getString(String key, String fallback) {
+    final value = _prefs?.getString(key) ?? _memory[key];
+    return value is String ? value : fallback;
+  }
 
-  Future<void> setString(String key, String value) =>
-      _p.setString(key, value);
+  Future<void> setString(String key, String value) async {
+    _memory[key] = value;
+    final prefs = _prefs;
+    try {
+      if (prefs != null) await prefs.setString(key, value);
+    } catch (error) {
+      debugPrint('LovePrefs.setString failed for $key: $error');
+    }
+  }
 
-  // ── Dev Log votes (matches localStorage["love_devlog_votes"]) ────────────
+  // ── Dev Log votes ────────────────────────────────────────────────────────
 
   Map<String, String> devLogVotes() {
-    final raw = _p.getString(K.devLogVotes);
-    if (raw == null || raw.isEmpty) return <String, String>{};
+    final raw = getString(K.devLogVotes, '');
+    if (raw.isEmpty) return <String, String>{};
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map) {
-        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+        return decoded.map((key, value) =>
+            MapEntry(key.toString(), value.toString()));
       }
     } catch (_) {}
     return <String, String>{};
@@ -81,37 +117,42 @@ class LovePrefs {
     } else {
       votes[postId] = vote;
     }
-    await _p.setString(K.devLogVotes, jsonEncode(votes));
+    await setString(K.devLogVotes, jsonEncode(votes));
   }
 
-  /// Reset every client-local setting to its default (web `resetSettings()`).
+  /// Reset every client-local setting to its default.
   Future<void> resetAll() async {
-    for (final key in K.all) {
-      await _p.remove(key);
+    _memory.clear();
+    final prefs = _prefs;
+    if (prefs != null) {
+      for (final key in K.all) {
+        try {
+          await prefs.remove(key);
+        } catch (error) {
+          debugPrint('LovePrefs.resetAll failed for $key: $error');
+        }
+      }
     }
     uiScale.value = 1.0;
     reduceMotion.value = false;
   }
 }
 
-/// Preference keys. Values mirror the desktop `localStorage` keys where one
-/// exists; the rest use a stable `love_` prefix.
+/// Preference keys. Values mirror the desktop localStorage keys where one
+/// exists; the rest use a stable love_ prefix.
 class K {
-  // Appearance
-  static const theme = 'app-theme'; // dark | light | system (mobile: dark only)
-  static const uiScale = 'ui-scale'; // 75..125
+  static const theme = 'app-theme';
+  static const uiScale = 'ui-scale';
   static const compactMode = 'compact-mode';
   static const animations = 'animations';
   static const transparency = 'transparency-effects';
 
-  // Privacy
   static const privacyOnline = 'privacy-online-status';
-  static const privacyProfile = 'privacy-profile-visibility'; // all|friends|none
+  static const privacyProfile = 'privacy-profile-visibility';
   static const privacyActivity = 'privacy-activity';
-  static const privacyFriendReq = 'privacy-friend-requests'; // all|fof|none
-  static const privacyDm = 'privacy-dm'; // all|friends|none
+  static const privacyFriendReq = 'privacy-friend-requests';
+  static const privacyDm = 'privacy-dm';
 
-  // Notifications
   static const notifDesktop = 'notif-desktop';
   static const notifPush = 'notif-push';
   static const notifMessages = 'notif-messages';
@@ -119,7 +160,6 @@ class K {
   static const notifAppUpdates = 'notif-app-updates';
   static const notifHub = 'notif-hub';
 
-  // Voice
   static const voiceInputDevice = 'voice-input-device';
   static const voiceOutputDevice = 'voice-output-device';
   static const inputVolume = 'input-volume';
@@ -128,20 +168,14 @@ class K {
   static const echoCancellation = 'echo-cancellation';
   static const voiceActivation = 'voice-activation';
 
-  // Hub channels
   static const hubAnnouncements = 'hub-announcements';
   static const hubDevlog = 'hub-devlog';
   static const hubIdeas = 'hub-ideas';
   static const hubFeedback = 'hub-feedback';
 
-  // Advanced
   static const debugMode = 'love_debug_mode';
   static const hwAccel = 'love_hw_accel';
-
-  // Updates
-  static const updateChannel = 'love_update_channel'; // stable | beta
-
-  // Dev Log
+  static const updateChannel = 'love_update_channel';
   static const devLogVotes = 'love_devlog_votes';
 
   static const all = <String>[

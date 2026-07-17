@@ -35,15 +35,7 @@
     .fgroup select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 13px center; cursor: pointer; }
     .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     @media (max-width: 640px) { .frow { grid-template-columns: 1fr; } }
-    .fattach { display: block; border: 1px dashed rgba(255,255,255,0.22); border-radius: 9px; padding: 14px; text-align: center; color: rgba(255,255,255,0.55); font-size: 13px; cursor: pointer; transition: border-color .2s, color .2s; }
-    .fattach:hover { border-color: rgba(255,255,255,0.5); color: #f5f5f5; }
-    .fattach input { display: none; }
-    .fhint { font-size: 11.5px; color: rgba(255,255,255,0.35); margin-top: 6px; }
-    .flist { list-style: none; margin: 10px 0 0; padding: 0; }
-    .flist li { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #101010; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 7px 11px; font-size: 12.5px; color: rgba(255,255,255,0.75); margin-bottom: 6px; }
-    .flist .fsize { color: rgba(255,255,255,0.4); white-space: nowrap; }
-    .flist button { background: none; border: none; color: rgba(255,255,255,0.5); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px 4px; }
-    .flist button:hover { color: #fff; }
+
     .fsubmit { display: inline-block; background: #f5f5f5; color: #0a0a0a; border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; padding: 12px 26px; cursor: pointer; transition: transform .15s, opacity .15s; }
     .fsubmit:hover { transform: translateY(-1px); }
     .fsubmit:disabled { opacity: 0.5; cursor: default; transform: none; }
@@ -87,14 +79,7 @@
           <label for="sf-description"><span class="l-en">Description</span><span class="l-ru">Описание</span></label>
           <textarea id="sf-description" required placeholder="Describe your issue in detail. Include steps to reproduce if applicable." data-ph-ru="Опишите проблему подробно. Если возможно — шаги воспроизведения."></textarea>
         </div>
-        <div class="fgroup">
-          <label><span class="l-en">Attachments</span><span class="l-ru">Вложения</span></label>
-          <label class="fattach" for="sf-files"><span class="l-en">+ Attach files (screenshots, logs)</span><span class="l-ru">+ Прикрепить файлы (скриншоты, логи)</span>
-            <input type="file" id="sf-files" multiple accept="image/*,.txt,.log,.zip,.mp4" />
-          </label>
-          <div class="fhint"><span class="l-en">Up to 10 MB total.</span><span class="l-ru">Суммарно до 10 МБ.</span></div>
-          <ul class="flist" id="sf-flist"></ul>
-        </div>
+
         <button type="submit" class="fsubmit" id="sf-submit"><span class="l-en">Submit Request</span><span class="l-ru">Отправить</span></button>
         <p class="ferror" id="sf-error" hidden></p>
       </form>
@@ -111,59 +96,11 @@
   (function () {
     var ENDPOINT = 'https://loveapp-1-dk8a.onrender.com/api/support';
     var RU = function () { return document.documentElement.getAttribute('data-lang') === 'ru'; };
-    var MAX_TOTAL = 10 * 1024 * 1024;
     var form = document.getElementById('support-form');
-    var fileInput = document.getElementById('sf-files');
-    var flist = document.getElementById('sf-flist');
     var errEl = document.getElementById('sf-error');
-    var files = [];
 
-    function fmtSize(n) {
-      return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
-    }
-    function totalSize() { return files.reduce(function (a, f) { return a + f.size; }, 0); }
     function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
     function clearError() { errEl.hidden = true; }
-
-    function renderList() {
-      flist.innerHTML = '';
-      files.forEach(function (f, i) {
-        var li = document.createElement('li');
-        var name = document.createElement('span');
-        name.textContent = f.name;
-        name.style.overflow = 'hidden'; name.style.textOverflow = 'ellipsis'; name.style.whiteSpace = 'nowrap';
-        var size = document.createElement('span');
-        size.className = 'fsize'; size.textContent = fmtSize(f.size);
-        var del = document.createElement('button');
-        del.type = 'button'; del.textContent = '\u00d7'; del.setAttribute('aria-label', 'Remove');
-        del.addEventListener('click', function () { files.splice(i, 1); renderList(); clearError(); });
-        li.appendChild(name); li.appendChild(size); li.appendChild(del);
-        flist.appendChild(li);
-      });
-    }
-
-    fileInput.addEventListener('change', function () {
-      clearError();
-      var added = Array.prototype.slice.call(fileInput.files);
-      for (var k = 0; k < added.length; k++) {
-        if (totalSize() + added[k].size > MAX_TOTAL) {
-          showError(RU() ? 'Вложения превышают лимит 10 МБ. «' + added[k].name + '» не добавлен.' : 'Attachments exceed the 10 MB limit. “' + added[k].name + '” was not added.');
-          break;
-        }
-        files.push(added[k]);
-      }
-      fileInput.value = '';
-      renderList();
-    });
-
-    function readAsDataURL(file) {
-      return new Promise(function (resolve, reject) {
-        var r = new FileReader();
-        r.onload = function () { resolve(String(r.result).split(',')[1] || ''); };
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-    }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -181,17 +118,11 @@
       var btn = document.getElementById('sf-submit');
       btn.disabled = true; btn.textContent = RU() ? 'Отправка...' : 'Sending...';
 
-      Promise.all(files.map(function (f) {
-        return readAsDataURL(f).then(function (data) {
-          return { name: f.name, type: f.type, size: f.size, data: data };
-        });
-      })).then(function (attachments) {
-        return fetch(ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name, email: email, category: category, subject: subject, description: description, attachments: attachments })
-        });
-      }).catch(function () { /* show success anyway, like the app site */ }).then(function () {
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, email: email, category: category, subject: subject, description: description })
+      }).catch(function () { /* show success anyway */ }).then(function () {
         document.getElementById('form-wrap').style.display = 'none';
         document.getElementById('sf-success').classList.add('show');
       });

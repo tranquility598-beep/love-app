@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +11,7 @@ import '../shell/screen_frame.dart';
 import 'settings_account_section.dart';
 import 'settings_profile_section.dart';
 import 'settings_widgets.dart';
+import 'sound_check.dart';
 
 enum SettingsSection {
   profile,
@@ -592,7 +592,7 @@ class _VoiceSectionState extends State<_VoiceSection> {
             ),
             SettingsActionRow(
               title: 'Проверить микрофон',
-              subtitle: 'Разрешение и запись',
+              subtitle: 'Запись 3 секунды и прослушивание',
               trailing: OutlinedButton(
                 onPressed: _testMic,
                 child: const Text('Проверить'),
@@ -617,8 +617,9 @@ class _VoiceSectionState extends State<_VoiceSection> {
             ),
             SettingsActionRow(
               title: 'Проверить звук',
+              subtitle: 'Проиграть тестовый сигнал',
               trailing: OutlinedButton(
-                onPressed: () => SystemSound.play(SystemSoundType.alert),
+                onPressed: playTestSound,
                 child: const Text('Проверить'),
               ),
             ),
@@ -650,17 +651,7 @@ class _VoiceSectionState extends State<_VoiceSection> {
   }
 
   Future<void> _testMic() async {
-    final status = await Permission.microphone.request();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          status.isGranted
-              ? 'Микрофон доступен ✓'
-              : 'Нет доступа к микрофону',
-        ),
-      ),
-    );
+    await showMicTestDialog(context);
   }
 }
 

@@ -21,6 +21,7 @@ dependencies:
   shared_preferences: ^2.3.2
   flutter_svg: ^2.3.0
   just_audio: ^0.10.6
+  record: ^6.1.1
   flutter_webrtc: ^1.5.2
   flutter_local_notifications: ^18.0.1
   flutter_displaymode: ^0.7.0
@@ -36,6 +37,7 @@ flutter:
     - assets/icon.png
     - assets/icons/more.svg
     - assets/icons/auth_mark.svg
+    - assets/sounds/test_tone.wav
   fonts:
     - family: Outfit
       fonts:

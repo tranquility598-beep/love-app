@@ -39,6 +39,9 @@ class DmCallController extends ChangeNotifier {
   bool speakerOn = true;
   String? errorMessage;
 
+  /// Called when an incoming call was missed (not answered before remote hung up).
+  void Function(String peerName)? onMissedCall;
+
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
   final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
@@ -135,6 +138,25 @@ class DmCallController extends ChangeNotifier {
     _resetToIdle();
   }
 
+  /// Accepts an incoming call event from CallCenter when the chat screen
+  /// is not open and the controller hasn't been created yet.
+  void adoptIncoming({
+    required String callerId,
+    required String conversationId,
+    required String channelId,
+    required String callerName,
+  }) {
+    if (phase != DmCallPhase.idle) return;
+    _activePeerId = callerId;
+    _incomingConversationId =
+        conversationId.isNotEmpty ? conversationId : null;
+    _incomingChannelId = channelId.isNotEmpty ? channelId : null;
+    _incomingPeerName = callerName.isNotEmpty ? callerName : null;
+    phase = DmCallPhase.incoming;
+    errorMessage = null;
+    _safeNotify();
+  }
+
   Future<void> endCall() async {
     final targetId = _activePeerId ?? peerId;
     if (targetId.isNotEmpty && phase != DmCallPhase.idle) {
@@ -149,12 +171,10 @@ class DmCallController extends ChangeNotifier {
     final stream = _localStream;
     if (stream != null) {
       for (final track in stream.getAudioTracks()) {
+        // track.enabled полностью останавливает отправку аудио.
+        // Helper.setMicrophoneMute убран: на части Android он «залипает»
+        // и микрофон не возвращается после включения.
         track.enabled = !next;
-        try {
-          await Helper.setMicrophoneMute(next, track);
-        } catch (_) {
-          // Track.enabled is enough on Android; helper failures are non-fatal.
-        }
       }
     }
     muted = next;
@@ -246,8 +266,10 @@ class DmCallController extends ChangeNotifier {
         return;
       }
     }
+    final missedFrom = phase == DmCallPhase.incoming ? displayName : null;
     unawaited(_leaveCall());
     _resetToIdle();
+    if (missedFrom != null) onMissedCall?.call(missedFrom);
   }
 
   void _handleCallError(dynamic data) {

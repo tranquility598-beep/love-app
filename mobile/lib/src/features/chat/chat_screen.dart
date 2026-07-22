@@ -14,6 +14,7 @@ import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/notifications/local_notifications.dart';
+import '../../core/calls/call_center.dart';
 import 'chat_models.dart';
 import 'dm_call_controller.dart';
 
@@ -76,14 +77,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _joinServerRoom();
     final peerId = widget.peerId;
     if (widget.conversationId != null && peerId != null && peerId.isNotEmpty) {
-      _callController = DmCallController(
+      // Call controller lives in CallScreen, not on the screen:
+      // leaving the chat no longer ends the call.
+      _callController = CallCenter.instance.obtain(
         socket: widget.socket,
         conversationId: widget.conversationId!,
         channelId: widget.channelId ?? '',
         peerId: peerId,
         peerName: widget.title,
         peerAvatar: widget.peerAvatar ?? '',
-      )..attach();
+      );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load();
@@ -107,7 +110,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_recordingVoice) {
       ChatNativeFiles.cancelVoiceRecording();
     }
-    _callController?.dispose();
+    if (_callController != null) {
+      CallCenter.instance.release(_callController!);
+    }
     _message.dispose();
     _scroll.dispose();
     super.dispose();
@@ -852,17 +857,6 @@ class _DmCallPanel extends StatelessWidget {
                     controller.muted
                         ? Icons.mic_off_rounded
                         : Icons.mic_rounded,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                IconButton.outlined(
-                  tooltip:
-                      controller.speakerOn ? 'Динамик' : 'Разговорный динамик',
-                  onPressed: controller.toggleSpeaker,
-                  icon: Icon(
-                    controller.speakerOn
-                        ? Icons.volume_up_rounded
-                        : Icons.hearing_rounded,
                   ),
                 ),
                 const SizedBox(width: 6),

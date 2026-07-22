@@ -9,6 +9,7 @@
   const api = window.electronAPI;
   const CHANNEL_KEY = 'love_update_channel'; // 'stable' | 'beta'
   const DOWNLOAD_PAGE = 'https://loveapp.chat';
+  const RELEASES_PAGE = 'https://github.com/tranquility598-beep/love-app/releases/latest';
 
   function $(id) { return document.getElementById(id); }
 
@@ -136,7 +137,7 @@
           actionBtn.style.display = '';
           actionBtn.disabled = false;
           actionBtn.textContent = 'Скачать с сайта';
-          actionBtn.onclick = () => api.openExternal(DOWNLOAD_PAGE);
+          actionBtn.onclick = () => api.openExternal(RELEASES_PAGE);
         }
         break;
 

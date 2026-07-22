@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_config.dart';
+import '../../core/updates/app_updater.dart';
 import '../../core/network/love_api.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../theme/love_tokens.dart';
@@ -769,8 +770,36 @@ class _HubChannelsSectionState extends State<_HubChannelsSection> {
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 
-class _UpdatesSection extends StatelessWidget {
+class _UpdatesSection extends StatefulWidget {
   const _UpdatesSection();
+
+  @override
+  State<_UpdatesSection> createState() => _UpdatesSectionState();
+}
+
+class _UpdatesSectionState extends State<_UpdatesSection> {
+  bool _beta = false;
+  bool _checking = false;
+  String? _available;
+
+  @override
+  void initState() {
+    super.initState();
+    AppUpdater.isBetaChannel().then((v) {
+      if (mounted) setState(() => _beta = v);
+    });
+  }
+
+  Future<void> _check() async {
+    setState(() => _checking = true);
+    final found = await AppUpdater.checkForUpdates(context, silent: false);
+    if (mounted) {
+      setState(() {
+        _checking = false;
+        _available = found;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -789,16 +818,37 @@ class _UpdatesSection extends StatelessWidget {
               value: '',
               badge: LoveBadge('v${AppConfig.productVersion}'),
             ),
-            const SettingsValueRow(
+            SettingsValueRow(
               title: 'Статус',
               value: '',
-              badge: LoveBadge('Актуальная версия', success: true),
+              badge: _available != null
+                  ? LoveBadge('Доступна v$_available')
+                  : const LoveBadge('Актуальная версия', success: true),
+            ),
+            SettingsToggleRow(
+              title: 'Бета-канал',
+              subtitle: 'Получать предрелизные версии',
+              value: _beta,
+              onChanged: (v) {
+                setState(() => _beta = v);
+                AppUpdater.setBetaChannel(v);
+              },
             ),
           ],
         ),
         const SizedBox(height: 14),
-        const LoveBanner('Новые версии — на loveapp.chat'),
-        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _checking ? null : _check,
+          icon: _checking
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded, size: 18),
+          label: Text(_checking ? 'Проверяем…' : 'Проверить обновления'),
+        ),
+        const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => launchUrl(
             Uri.parse(AppConfig.website),

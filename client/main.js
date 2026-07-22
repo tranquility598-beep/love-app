@@ -30,6 +30,12 @@ autoUpdater.logger.transports.file.level = 'info';
 // уведомление + раздел Настройки → Обновления с кнопкой «обновить сейчас».
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
+// macOS: билд не подписан сертификатом Apple — Squirrel.Mac не сможет
+// установить обновление тихо. Не качаем в фоне (будут ошибки),
+// только проверяем и показываем «доступна версия» + кнопку скачать.
+if (process.platform === 'darwin') {
+  autoUpdater.autoDownload = false;
+}
 
 // Отключаем аппаратное ускорение для совместимости
 // app.disableHardwareAcceleration();

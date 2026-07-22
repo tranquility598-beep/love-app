@@ -8,6 +8,7 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/fade_indexed_stack.dart';
 import '../../widgets/love_background.dart';
 import '../../core/prefs/love_prefs.dart';
+import '../../core/updates/app_updater.dart';
 import '../../widgets/love_nav_icons.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
@@ -47,6 +48,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       onError: (_) {},
     );
     _attachNotificationHandlers();
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) AppUpdater.checkForUpdates(context);
+    });
   }
 
   @override

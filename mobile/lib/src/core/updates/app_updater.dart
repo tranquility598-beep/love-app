@@ -7,8 +7,6 @@ import 'package:ota_update/ota_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../config/app_config.dart';
-
 import 'current_version.dart';
 
 /// Автообновления Android: проверяет последний релиз на GitHub
@@ -120,22 +118,6 @@ class AppUpdater {
     } catch (_) {
       return null;
     }
-  }
-
-  /// true, если [latest] новее [current] (сравнение чисел через точку).
-  static bool _isNewer(String latest, String current) {
-    List<int> parse(String v) => v
-        .split(RegExp(r'[.+-]'))
-        .map((p) => int.tryParse(p) ?? 0)
-        .toList();
-    final a = parse(latest);
-    final b = parse(current);
-    for (var i = 0; i < 3; i++) {
-      final x = i < a.length ? a[i] : 0;
-      final y = i < b.length ? b[i] : 0;
-      if (x != y) return x > y;
-    }
-    return false;
   }
 
   /// Выбор APK из ассетов: сначала arm64, потом love-mobile, потом любой.

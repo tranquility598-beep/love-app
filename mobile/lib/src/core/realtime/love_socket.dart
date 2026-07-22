@@ -45,6 +45,11 @@ class LoveSocket {
     _socket!.connect();
   }
 
+  Future<void> ensureConnected() async {
+    if (isConnected) return;
+    await connect();
+  }
+
   void on(String event, SocketEventHandler handler) {
     _handlers.putIfAbsent(event, () => <SocketEventHandler>{}).add(handler);
     _socket?.on(event, handler);

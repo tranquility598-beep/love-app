@@ -12,6 +12,8 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
+import '../../core/prefs/love_prefs.dart';
+import '../../core/notifications/local_notifications.dart';
 import 'chat_models.dart';
 import 'dm_call_controller.dart';
 
@@ -66,6 +68,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _activeChannelId = widget.channelId;
     if (widget.conversationId != null) {
       ActiveChat.conversationId = widget.conversationId;
+      LocalNotifications.clearConversation(widget.conversationId!);
     }
     widget.socket.on('message:new', _handleNewMessage);
     widget.socket.on('message:update', _handleMessageUpdate);
@@ -921,7 +924,9 @@ class _MessageBubbleState extends State<_MessageBubble> {
               : Border.all(color: Colors.white.withValues(alpha: 0.06)),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+          padding: LovePrefs.instance.compactMode.value
+              ? const EdgeInsets.fromLTRB(12, 7, 12, 6)
+              : const EdgeInsets.fromLTRB(14, 10, 14, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
@@ -965,15 +970,17 @@ class _MessageBubbleState extends State<_MessageBubble> {
 
     final grouped = widget.grouped;
 
+    final compact = LovePrefs.instance.compactMode.value;
+
     if (message.isOwn) {
       return Padding(
-        padding: EdgeInsets.only(bottom: grouped ? 3 : 10),
+        padding: EdgeInsets.only(bottom: grouped ? 2 : (compact ? 5 : 10)),
         child: Align(alignment: Alignment.centerRight, child: bubble),
       );
     }
 
     return Padding(
-      padding: EdgeInsets.only(bottom: grouped ? 3 : 12),
+      padding: EdgeInsets.only(bottom: grouped ? 2 : (compact ? 6 : 12)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [

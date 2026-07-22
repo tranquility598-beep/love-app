@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/realtime/love_socket.dart';
+import '../../core/prefs/love_prefs.dart';
 import 'chat_models.dart';
 
 enum DmCallPhase {
@@ -382,7 +383,14 @@ class DmCallController extends ChangeNotifier {
       throw StateError('microphone-denied');
     }
     _localStream = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
+      'audio': {
+        'echoCancellation':
+            LovePrefs.instance.getBool(K.echoCancellation, true),
+        'noiseSuppression':
+            LovePrefs.instance.getBool(K.noiseSuppression, true),
+        'autoGainControl': true,
+        'channelCount': 1,
+      },
       'video': false,
     });
   }

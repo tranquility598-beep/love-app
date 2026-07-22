@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../core/prefs/love_prefs.dart';
+
 /// An [IndexedStack] that softly cross-fades (fade + subtle upward slide)
 /// whenever [index] changes, while keeping every tab's state alive.
 ///
 /// Used by the main shell so switching bottom-nav tabs feels smooth instead
 /// of an instant hard cut.
+///
+/// Respects the «Анимации» setting: when animations are disabled the tab
+/// switch is instant.
 class FadeIndexedStack extends StatefulWidget {
   const FadeIndexedStack({
     required this.index,
@@ -35,7 +40,12 @@ class _FadeIndexedStackState extends State<FadeIndexedStack>
   void didUpdateWidget(FadeIndexedStack oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index != widget.index) {
-      _controller.forward(from: 0);
+      if (LovePrefs.instance.reduceMotion.value) {
+        // Анимации выключены — переключаем вкладку мгновенно.
+        _controller.value = 1;
+      } else {
+        _controller.forward(from: 0);
+      }
     }
     if (oldWidget.duration != widget.duration) {
       _controller.duration = widget.duration;

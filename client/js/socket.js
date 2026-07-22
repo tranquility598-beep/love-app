@@ -1052,8 +1052,9 @@ async function initSocket() {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 10000
   });
 
   // Перед каждой попыткой реконнекта обновляем socket-token: исходный мог
@@ -1074,6 +1075,28 @@ async function initSocket() {
     detachAllListeners();
     attachAllSocketListeners();
   });
+
+  // Страховка №1: если менеджер всё-таки сдался — пересоздаём соединение целиком.
+  socket.io.on('reconnect_failed', () => {
+    console.warn('[socket-lifecycle] reconnect_failed — full re-init');
+    setTimeout(() => initSocket(), 2000);
+  });
+
+  // Страховка №2: при возврате сети/фокуса проверяем, жив ли сокет.
+  if (!window.__socketNetWatchdog) {
+    window.__socketNetWatchdog = true;
+    const ensureAlive = () => {
+      if (window.socket && !window.socket.connected) {
+        console.log('[socket-lifecycle] ensureAlive: socket dead, reconnecting');
+        window.socket.connect();
+      }
+    };
+    window.addEventListener('online', ensureAlive);
+    window.addEventListener('focus', ensureAlive);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) ensureAlive();
+    });
+  }
 
   // Экспортируем в глобальную область
   window.socket = socket;

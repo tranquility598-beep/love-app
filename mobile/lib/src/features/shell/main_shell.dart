@@ -7,6 +7,7 @@ import '../../core/realtime/love_socket.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/fade_indexed_stack.dart';
 import '../../widgets/love_background.dart';
+import '../../core/prefs/love_prefs.dart';
 import '../../widgets/love_nav_icons.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
@@ -51,6 +52,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycle = state;
+    if (state == AppLifecycleState.resumed) {
+      _socket.ensureConnected();
+      Future<void>.delayed(const Duration(seconds: 4), () {
+        if (_lifecycle == AppLifecycleState.resumed) {
+          _socket.ensureConnected();
+        }
+      });
+    }
   }
 
   @override
@@ -86,6 +95,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     IconData? icon,
     VoidCallback? onTap,
     String? payload,
+    String? conversationId,
   }) {
     if (_foreground) {
       InAppNotifications.show(
@@ -97,7 +107,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         onTap: onTap,
       );
     } else {
-      LocalNotifications.show(title: title, body: body, payload: payload);
+      if (!LovePrefs.instance.getBool(K.notifPush, true)) return;
+      if (conversationId != null) {
+        LocalNotifications.showMessage(
+          conversationId: conversationId,
+          sender: title,
+          text: body ?? 'Новое сообщение',
+          payload: payload,
+        );
+      } else {
+        LocalNotifications.show(title: title, body: body, payload: payload);
+      }
     }
   }
 
@@ -115,14 +135,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _onDmMessage(dynamic data) {
     final payload = _map(data);
     final conversationId = asId(payload['conversationId']);
-    if (conversationId.isEmpty || conversationId == ActiveChat.conversationId) {
+    if (conversationId.isEmpty) return;
+    if (_foreground && conversationId == ActiveChat.conversationId) {
       return;
     }
+    if (!LovePrefs.instance.getBool(K.notifMessages, true)) return;
     final message = _map(payload['message']);
     final author = _map(message['author']);
     final name = userDisplayName(author.isEmpty ? null : author);
     final content = asText(message['content'], 'Новое сообщение');
     _deliver(
+      conversationId: conversationId,
       title: name,
       body: content,
       avatarLabel: name,
@@ -137,6 +160,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _onMention(dynamic data) {
+    if (!LovePrefs.instance.getBool(K.notifMentions, true)) return;
     final payload = _map(data);
     final from = asText(payload['from'], 'Кто-то');
     _deliver(
@@ -177,6 +201,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _onAnnouncement(dynamic data) {
     final payload = _map(data);
     if (asText(payload['type']) == 'silent') return;
+    if (!LovePrefs.instance.getBool(K.notifHub, true)) return;
     _deliver(
       title: asText(payload['title'], 'Объявление'),
       body: asText(payload['content']),

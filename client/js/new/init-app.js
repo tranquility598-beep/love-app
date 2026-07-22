@@ -180,9 +180,13 @@
     if (suppressed) {
       return;
     }
+    if (window.settingsManager && window.settingsManager.get('notif-messages') === false) {
+      return;
+    }
+    const showPreview = !window.settingsManager || window.settingsManager.get('notif-preview') !== false;
     window.showAppNotification({
       title: _esc(username || 'Новое сообщение'),
-      text: (text || '').toString().slice(0, 80),
+      text: showPreview ? (text || '').toString().slice(0, 80) : 'Новое сообщение',
       avatar: (username || '?').charAt(0).toUpperCase(),
       onClick: () => {
         // Переходим к нужному диалогу/каналу
@@ -200,7 +204,7 @@
     if (!document.hasFocus() && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
       window.electronAPI.showNotification(
         username || 'Новое сообщение',
-        (text || '').toString().slice(0, 120),
+        showPreview ? (text || '').toString().slice(0, 120) : 'Новое сообщение',
         { conversationId: targetChannelId }
       );
     }
@@ -1298,7 +1302,11 @@
               window._prependNotification(mapped);
             }
             // Показываем тост для уведомлений кроме DM-сообщений (те идут через showMessageNotification)
-            if (n.type !== 'new_dm' && typeof window.showAppNotification === 'function') {
+            const notifBlocked = window.settingsManager && (
+              (n.type === 'mention' && window.settingsManager.get('notif-mentions') === false) ||
+              ((n.type === 'friend_request' || n.type === 'friend_accepted') && window.settingsManager.get('notif-friends') === false)
+            );
+            if (!notifBlocked && n.type !== 'new_dm' && typeof window.showAppNotification === 'function') {
               const titles = {
                 mention: 'Упоминание',
                 friend_request: 'Запрос в друзья',

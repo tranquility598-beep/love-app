@@ -9,9 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_config.dart';
 
+import 'current_version.dart';
+
 /// Автообновления Android: проверяет последний релиз на GitHub
 /// (stable или beta-канал с предрелизами), сравнивает с текущей
-/// версией (AppConfig.productVersion), скачивает APK с прогрессом и
+/// версией (из package_info), скачивает APK с прогрессом и
 /// запускает системный установщик. При ошибке OTA — фолбэк на браузер.
 class AppUpdater {
   AppUpdater._();
@@ -57,7 +59,7 @@ class AppUpdater {
 
       final latest = (release['tag_name'] as String? ?? '')
           .replaceFirst(RegExp(r'^v'), '');
-      if (latest.isEmpty || !_isNewer(latest, AppConfig.productVersion)) {
+      if (latest.isEmpty || !await CurrentVersion.isNewer(latest)) {
         if (!silent && context.mounted) {
           _snack(context, 'У тебя последняя версия');
         }

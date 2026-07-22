@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_config.dart';
 import '../../core/updates/app_updater.dart';
+import '../../core/updates/current_version.dart';
 import '../../core/network/love_api.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../theme/love_tokens.dart';
@@ -813,10 +814,13 @@ class _UpdatesSectionState extends State<_UpdatesSection> {
         const SizedBox(height: 16),
         SettingsCard(
           children: [
-            SettingsValueRow(
-              title: 'Текущая версия',
-              value: '',
-              badge: LoveBadge('v${AppConfig.productVersion}'),
+            FutureBuilder<String>(
+              future: CurrentVersion.get(),
+              builder: (context, snap) => SettingsValueRow(
+                title: 'Текущая версия',
+                value: '',
+                badge: LoveBadge('v${snap.data ?? AppConfig.productVersion}'),
+              ),
             ),
             SettingsValueRow(
               title: 'Статус',

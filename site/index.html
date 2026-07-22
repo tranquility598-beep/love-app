@@ -1,10 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LOVE — Connect without limits</title>
-<meta name="description" content="LOVE is a fast, private messenger for communities, friends and creators. Free for Windows." />
+<title>LOVE — мессенджер: сообщения, звонки и сообщества</title>
+<meta name="description" content="LOVE — бесплатный мессенджер для личных сообщений, голосовых звонков и сообществ. Скачайте для Windows, macOS и Android." />
+<meta property="og:title" content="LOVE — мессенджер: сообщения, звонки и сообщества" />
+<meta property="og:description" content="Бесплатный мессенджер: сообщения, звонки, сообщества, демонстрация экрана. Windows · macOS · Android." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://loveapp.chat" />
+<script src="lang.js"></script>
 <style>
   :root {
     --black: #0a0a0a;
@@ -33,41 +38,30 @@
     overflow-x: hidden;
   }
 
+  /* ===== Язык: пары .en / .ru ===== */
+  html[data-lang="ru"] .en { display: none !important; }
+  html:not([data-lang="ru"]) .ru { display: none !important; }
+
   ::selection { background: var(--white); color: var(--black); }
   .light ::selection { background: var(--black); color: var(--white); }
 
   a { color: inherit; text-decoration: none; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
 
-  /* ================= Custom cursor (desktop, JS) ================= */
-  #cursor {
-    position: fixed; top: 0; left: 0; z-index: 9999;
-    width: 28px; height: 28px; border-radius: 50%;
-    background: #fff; mix-blend-mode: difference;
-    pointer-events: none; opacity: 0;
-    transform: translate(-50%, -50%);
-    transition: width 0.35s var(--ease), height 0.35s var(--ease), opacity 0.3s;
-  }
-  #cursor.on { opacity: 1; }
-  #cursor.grow { width: 64px; height: 64px; }
-
-  /* ================= Scroll progress ================= */
   #progress {
     position: fixed; top: 0; left: 0; height: 2px; width: 0%;
     background: var(--white); z-index: 1000; mix-blend-mode: difference;
   }
 
-  /* ================= Reveal (progressive) ================= */
   html.js .reveal { opacity: 0; transform: translateY(28px); transition: opacity 1s var(--ease), transform 1s var(--ease); }
   html.js .reveal.in { opacity: 1; transform: none; }
   html.js .reveal.d1 { transition-delay: 0.08s; }
   html.js .reveal.d2 { transition-delay: 0.16s; }
   html.js .reveal.d3 { transition-delay: 0.24s; }
 
-  /* Hero letters */
   html.js .split .ltr {
     display: inline-block;
-    opacity: 0; transform: translateY(0.7em) rotate(4deg); filter: blur(8px);
+    opacity: 0; transform: translateY(0.7em); filter: blur(8px);
     animation: ch-in 1.1s var(--ease) forwards;
   }
   @keyframes ch-in { to { opacity: 1; transform: none; filter: blur(0); } }
@@ -77,10 +71,9 @@
     html.js .reveal { opacity: 1; transform: none; transition: none; }
     html.js .split .ltr { opacity: 1; transform: none; filter: none; animation: none; }
     * { animation: none !important; transition: none !important; }
-    #cursor { display: none; }
   }
 
-  /* ================= Nav ================= */
+  /* ===== Nav ===== */
   nav {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     background: rgba(10,10,10,0.55);
@@ -96,21 +89,22 @@
   .brand .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2.4s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
   .nav-links { display: flex; align-items: center; gap: 28px; }
-  .nav-links a { font-size: 13px; color: var(--paper-65); transition: color 0.3s; position: relative; }
+  .nav-links a, .nav-links button { font-size: 13px; color: var(--paper-65); transition: color 0.3s; position: relative; background: none; border: 0; cursor: pointer; font-family: inherit; }
   .nav-links a:not(.nav-cta)::after {
     content: ""; position: absolute; left: 0; bottom: -6px; height: 1px; width: 0;
     background: var(--white); transition: width 0.45s var(--ease);
   }
-  .nav-links a:hover { color: var(--white); }
+  .nav-links a:hover, .nav-links button:hover { color: var(--white); }
   .nav-links a:not(.nav-cta):hover::after { width: 100%; }
   .nav-cta {
     font-size: 13px; font-weight: 600; padding: 8px 18px; border-radius: 980px;
     background: var(--white); color: var(--black) !important;
-    transition: transform 0.4s var(--ease), box-shadow 0.4s;
+    transition: transform 0.4s var(--ease);
   }
   .nav-cta:hover { transform: scale(1.05); }
+  .lang-btn { border: 1px solid var(--paper-12) !important; border-radius: 980px; padding: 6px 12px !important; letter-spacing: 0.1em; }
 
-  /* ================= Buttons ================= */
+  /* ===== Buttons ===== */
   .btn {
     position: relative; overflow: hidden;
     display: inline-flex; align-items: center; gap: 10px;
@@ -126,8 +120,6 @@
   }
   .btn:hover::before { transform: translateY(0); }
   .btn small { font-size: 12px; font-weight: 400; opacity: 0.6; }
-
-  /* on dark */
   .btn-w { background: var(--white); color: var(--black); }
   .btn-w::before { background: var(--black); }
   .btn-w:hover { color: var(--white); border-color: var(--paper-12); }
@@ -135,15 +127,7 @@
   .btn-ow::before { background: var(--white); }
   .btn-ow:hover { color: var(--black); }
 
-  /* on light */
-  .btn-b { background: var(--black); color: var(--white); }
-  .btn-b::before { background: transparent; border: 0; }
-  .btn-b:hover { transform: scale(1.04); }
-  .btn-ob { background: transparent; color: var(--black); border-color: rgba(10,10,10,0.3); }
-  .btn-ob::before { background: var(--black); }
-  .btn-ob:hover { color: var(--white); }
-
-  /* ================= Hero ================= */
+  /* ===== Hero ===== */
   .hero {
     min-height: 100svh; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
@@ -165,54 +149,36 @@
   }
   .hero-badge .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--white); animation: pulse 2s infinite; }
   h1 {
-    font-size: clamp(52px, 11vw, 138px);
+    font-size: clamp(48px, 10vw, 128px);
     font-weight: 800; letter-spacing: -0.045em; line-height: 0.94;
     text-transform: uppercase;
   }
   h1 .row { display: block; overflow: hidden; padding: 0.03em 0; }
-  h1 .outline {
-    color: transparent;
-    -webkit-text-stroke: 2px var(--white);
-  }
+  h1 .outline { color: transparent; -webkit-text-stroke: 2px var(--white); }
   .hero p.sub {
-    margin: 36px auto 0; max-width: 520px;
+    margin: 36px auto 0; max-width: 560px;
     font-size: clamp(17px, 2.1vw, 20px); line-height: 1.55; color: var(--paper-65);
   }
   .hero-ctas { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
   .hero-meta { margin-top: 30px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); }
   .hero-meta span + span::before { content: "·"; margin: 0 12px; }
-  .scroll-hint {
-    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-    font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--paper-40);
-  }
-  .scroll-hint .line { width: 1px; height: 42px; background: var(--paper-12); position: relative; overflow: hidden; }
-  .scroll-hint .line::after {
-    content: ""; position: absolute; left: 0; top: -40%; width: 100%; height: 40%;
-    background: var(--white); animation: drop 2.4s var(--ease) infinite;
-  }
-  @keyframes drop { to { top: 130%; } }
 
-  /* ================= Marquee ================= */
+  /* ===== Marquee ===== */
   .marquee {
     border-top: 1px solid var(--paper-12); border-bottom: 1px solid var(--paper-12);
     overflow: hidden; padding: 20px 0; position: relative;
   }
-  .marquee .track {
-    display: flex; gap: 0; width: max-content;
-    animation: marquee 28s linear infinite;
-  }
+  .marquee .track { display: flex; gap: 0; width: max-content; animation: marquee 28s linear infinite; }
   .marquee:hover .track { animation-play-state: paused; }
-  .marquee span {
+  .marquee b {
     font-size: 14px; font-weight: 600; letter-spacing: 0.3em; text-transform: uppercase;
     color: var(--paper-65); padding: 0 28px; white-space: nowrap;
   }
-  .marquee span::after { content: "✦"; margin-left: 56px; color: var(--paper-40); font-size: 10px; }
+  .marquee b::after { content: "✦"; margin-left: 56px; color: var(--paper-40); font-size: 10px; }
   @keyframes marquee { to { transform: translateX(-50%); } }
 
-  /* ================= Light sections base ================= */
+  /* ===== Sections ===== */
   .light { background: var(--white); color: var(--black); }
-
   section { padding: 110px 0; }
   .kicker {
     font-size: 12px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase;
@@ -224,102 +190,54 @@
     font-size: clamp(34px, 5.4vw, 64px);
     font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; text-transform: uppercase;
   }
-  .section-sub { margin-top: 20px; max-width: 540px; font-size: 17px; line-height: 1.6; color: var(--ink-60); }
+  .section-sub { margin-top: 20px; max-width: 560px; font-size: 17px; line-height: 1.6; color: var(--ink-60); }
   .dark .section-sub { color: var(--paper-65); }
 
-  /* ================= Preview / window ================= */
+  /* ===== Окно приложения ===== */
   .preview { padding-top: 96px; }
   .window {
-    max-width: 920px; margin: 0 auto;
+    max-width: 920px; margin: 64px auto 0;
     background: var(--black); color: var(--white);
     border-radius: 18px; overflow: hidden; text-align: left;
     border: 1px solid rgba(10,10,10,0.9);
     box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 32px 80px rgba(0,0,0,0.25);
   }
-  .titlebar {
-    display: flex; align-items: center; gap: 8px;
-    padding: 13px 16px; border-bottom: 1px solid var(--paper-12);
-  }
+  .titlebar { display: flex; align-items: center; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--paper-12); }
   .titlebar .tl { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4); }
   .titlebar .tl.f { background: var(--white); border-color: var(--white); }
   .titlebar .name { margin-left: 10px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-40); }
-  .app { display: grid; grid-template-columns: 54px 230px 1fr; min-height: 470px; }
-  .app svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .rail { border-right: 1px solid var(--paper-12); padding: 12px 0 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .rail .ric { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--paper-40); }
-  .rail .ric svg { width: 16px; height: 16px; }
-  .rail .ric.on { background: var(--white); color: var(--black); }
-  .rail .ric.q { font-size: 13px; font-weight: 700; border: 1px solid var(--paper-12); border-radius: 50%; width: 28px; height: 28px; margin-top: 4px; }
-  .rail .rgrow { flex: 1; }
-  .rail .rav { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.3); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 4px; }
+  .app { display: grid; grid-template-columns: 230px 1fr; min-height: 440px; }
   .spanel { border-right: 1px solid var(--paper-12); padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; }
-  .panel-title { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 16px; padding: 0 4px 4px; }
-  .sphere { border: 1px solid var(--paper-12); border-radius: 14px; overflow: hidden; background: rgba(255, 255, 255, 0.02); }
-  .sphere .banner { height: 50px; background: linear-gradient(115deg, #101010 10%, #3f3f3f 45%, #191919 75%, #2b2b2b); display: flex; align-items: center; padding: 0 12px; font-weight: 800; font-style: italic; font-size: 14px; letter-spacing: 0.22em; color: rgba(255, 255, 255, 0.85); }
+  .panel-title { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); padding: 0 4px 4px; }
+  .sphere { border: 1px solid var(--paper-12); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,0.02); }
+  .sphere .banner { height: 46px; background: linear-gradient(115deg, #101010 10%, #3f3f3f 45%, #191919 75%, #2b2b2b); display: flex; align-items: center; padding: 0 12px; font-weight: 800; font-size: 13px; letter-spacing: 0.22em; color: rgba(255,255,255,0.85); }
   .sp-row { display: flex; align-items: center; gap: 9px; padding: 10px 10px 8px; }
   .sq { width: 26px; height: 26px; border-radius: 8px; background: repeating-linear-gradient(45deg, #2e2e2e 0 3px, #1a1a1a 3px 6px); flex-shrink: 0; }
-  .sq.rm { display: flex; align-items: center; justify-content: center; background: #1d1d1d; font-family: Georgia, serif; font-style: italic; font-size: 13px; }
+  .sq.rm { display: flex; align-items: center; justify-content: center; background: #1d1d1d; font-size: 12px; font-weight: 700; }
   .sp-name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
   .sp-sub { font-size: 10px; color: var(--paper-40); margin-top: 1px; }
-  .chev { margin-left: auto; color: var(--paper-40); font-size: 11px; }
   .chn { display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 7px 10px; border-radius: 10px; font-size: 12px; color: var(--paper-65); }
-  .chn svg { width: 12px; height: 12px; opacity: 0.6; }
-  .chn.on { background: rgba(255, 255, 255, 0.08); color: var(--white); border: 1px solid var(--paper-12); }
-  .room-card { display: flex; align-items: center; gap: 9px; border: 1px solid var(--paper-12); border-radius: 14px; padding: 10px; background: rgba(255, 255, 255, 0.02); }
-  .room-card.on { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.22); }
-  .cpill { display: inline-block; margin-left: 6px; padding: 2px 7px; border: 1px solid var(--paper-12); border-radius: 999px; font-size: 9px; font-weight: 600; color: var(--paper-65); background: rgba(255, 255, 255, 0.05); vertical-align: 1px; }
-  .create { border: 1px dashed rgba(255, 255, 255, 0.18); border-radius: 12px; padding: 9px; text-align: center; font-size: 11.5px; color: var(--paper-40); }
+  .chn.on { background: rgba(255,255,255,0.08); color: var(--white); border: 1px solid var(--paper-12); }
+  .room-card { display: flex; align-items: center; gap: 9px; border: 1px solid var(--paper-12); border-radius: 14px; padding: 10px; background: rgba(255,255,255,0.02); }
+  .room-card.on { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.22); }
+  .cpill { display: inline-block; margin-left: 6px; padding: 2px 7px; border: 1px solid var(--paper-12); border-radius: 999px; font-size: 9px; font-weight: 600; color: var(--paper-65); background: rgba(255,255,255,0.05); vertical-align: 1px; }
   .chat { padding: 14px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
   .chat-top { padding-bottom: 10px; border-bottom: 1px solid var(--paper-12); }
   .chat-top .cname { font-size: 13.5px; font-weight: 700; }
-  .chat-top .cname .sl { color: var(--paper-40); margin-right: 3px; }
   .chat-top .cstatus { font-size: 10.5px; color: var(--paper-40); margin-top: 2px; }
-  .tabcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .tabcard { border: 1px solid var(--paper-12); border-radius: 12px; padding: 8px 11px; background: rgba(255, 255, 255, 0.02); }
-  .tabcard.on { background: rgba(255, 255, 255, 0.06); }
-  .tabcard .tt { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; }
-  .tabcard .tt span { color: var(--paper-40); font-weight: 400; }
-  .tabcard .td { font-size: 9.5px; color: var(--paper-40); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brow { display: flex; align-items: flex-end; gap: 8px; margin-top: 4px; }
   .brow.own { justify-content: flex-end; }
   .bav { width: 24px; height: 24px; border-radius: 50%; background: var(--white); color: var(--black); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
-  .bav.pink { background: #ef4f9f; color: #fff; }
   .bubble { max-width: 68%; padding: 8px 12px; border-radius: 14px; border-bottom-left-radius: 4px; font-size: 12.5px; line-height: 1.4; background: #181818; color: #dfdfdf; }
   .brow.own .bubble { background: #f2f2f2; color: #0a0a0a; border-radius: 14px; border-bottom-right-radius: 4px; }
-  .trow { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 10px; color: var(--paper-40); padding-left: 32px; }
-  .trow.own { text-align: right; padding-right: 32px; }
   .audio { display: flex; align-items: center; gap: 10px; border: 1px solid var(--paper-12); background: #141414; border-radius: 12px; padding: 9px 12px; }
   .audio .play { width: 22px; height: 22px; border-radius: 6px; background: #222; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--paper-65); }
   .audio .track { width: 84px; height: 3px; background: #333; border-radius: 2px; position: relative; }
   .audio .track i { position: absolute; left: 14px; top: -2.5px; width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
-  .audio .at { font-family: Georgia, serif; font-style: italic; font-size: 9.5px; color: var(--paper-40); }
-  .inputbar { margin-top: auto; display: flex; align-items: center; gap: 10px; border: 1px solid var(--paper-12); border-radius: 14px; padding: 10px 12px; background: rgba(255, 255, 255, 0.03); font-size: 12px; color: var(--paper-40); }
-  .inputbar svg { width: 14px; height: 14px; opacity: 0.55; }
-  .inputbar .ph { flex: 1; }
-  .msg { display: flex; gap: 12px; }
-  .avatar {
-    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700;
-    background: var(--white); color: var(--black);
-  }
-  .avatar.o { background: transparent; color: var(--white); border: 1px solid rgba(255,255,255,0.4); }
-  .msg .meta { display: flex; align-items: baseline; gap: 8px; }
-  .msg .user { font-size: 13.5px; font-weight: 700; }
-  .msg .time { font-size: 11px; color: var(--paper-40); }
-  .msg .text { margin-top: 3px; font-size: 14px; line-height: 1.5; color: var(--paper-65); }
-  .typing { display: flex; align-items: center; gap: 10px; }
-  .typing .dots { display: flex; gap: 4px; }
-  .typing .dots i {
-    width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.6);
-    animation: bounce 1.4s infinite ease-in-out;
-  }
-  .typing .dots i:nth-child(2) { animation-delay: 0.15s; }
-  .typing .dots i:nth-child(3) { animation-delay: 0.3s; }
-  @keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
-  .typing .who { font-size: 12px; color: var(--paper-40); }
+  .audio .at { font-size: 9.5px; color: var(--paper-40); }
+  .inputbar { margin-top: auto; display: flex; align-items: center; gap: 10px; border: 1px solid var(--paper-12); border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,0.03); font-size: 12px; color: var(--paper-40); }
 
-  /* ================= Stats ================= */
+  /* ===== Статистика ===== */
   .stats {
     max-width: 820px; margin: 80px auto 0;
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; text-align: center;
@@ -327,13 +245,13 @@
   .stat .k { font-size: clamp(30px, 3.6vw, 44px); font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
   .stat .l { margin-top: 8px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-40); }
 
-  /* ================= Features ================= */
+  /* ===== Возможности ===== */
   .cards { margin-top: 64px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--gray-2); }
   .card {
     position: relative; overflow: hidden;
     background: var(--white); padding: 34px 30px;
     border-right: 1px solid var(--gray-2); border-bottom: 1px solid var(--gray-2);
-    display: flex; flex-direction: column; min-height: 270px;
+    display: flex; flex-direction: column; min-height: 260px;
   }
   .card:nth-child(3n) { border-right: 0; }
   .card:nth-child(n+4) { border-bottom: 0; }
@@ -343,560 +261,361 @@
   }
   .card:hover::before { transform: translateY(0); }
   .card > * { position: relative; z-index: 1; }
-  .card, .card h3, .card p, .card .meta, .card .num { transition: color 0.45s var(--ease); }
+  .card, .card h3, .card p, .card .meta { transition: color 0.45s var(--ease); }
   .card:hover, .card:hover h3 { color: var(--white); }
   .card:hover p { color: var(--paper-65); }
-  .card:hover .meta, .card:hover .num { color: var(--paper-40); }
-  .card .icon { width: 26px; height: 26px; color: currentColor; }
+  .card:hover .meta { color: var(--paper-40); }
+  .card .icon { width: 26px; height: 26px; }
+  .card .icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .card-top { display: flex; align-items: center; justify-content: space-between; }
   .card .meta { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--ink-40); text-transform: uppercase; }
   .card h3 { margin-top: auto; padding-top: 48px; font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
   .card p { margin-top: 10px; font-size: 14.5px; line-height: 1.55; color: var(--ink-60); }
-  .card .num { position: absolute; top: 30px; right: 30px; font-size: 12px; font-weight: 700; color: var(--ink-40); display: none; }
 
-  /* ================= Statement ================= */
-  .statement { padding: 130px 0; text-align: center; }
-  .statement .big {
-    font-size: clamp(40px, 8.6vw, 110px); font-weight: 800; text-transform: uppercase;
-    letter-spacing: -0.04em; line-height: 0.98;
+  /* ===== Скачать ===== */
+  .dl-grid { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .dl-card {
+    display: flex; flex-direction: column; gap: 6px; text-align: left;
+    border: 1px solid var(--paper-12); border-radius: 18px; padding: 24px 22px;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.4s var(--ease), border-color 0.4s, transform 0.4s var(--ease);
   }
-  .statement .big .outline { color: transparent; -webkit-text-stroke: 2px var(--black); }
+  .dl-card:hover { background: var(--white); color: var(--black); transform: translateY(-4px); }
+  .dl-card .os { font-size: 17px; font-weight: 700; }
+  .dl-card .fmt { font-size: 12px; color: var(--paper-40); transition: color 0.4s; }
+  .dl-card:hover .fmt { color: var(--ink-60); }
+  .dl-card .get { margin-top: 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+  .dl-note { margin-top: 28px; font-size: 12.5px; color: var(--paper-40); }
+  .dl-note a { text-decoration: underline; text-underline-offset: 3px; }
+  .dl-meta { margin-top: 34px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); }
+  .dl-meta span + span::before { content: "·"; margin: 0 12px; }
 
-  /* ================= Rooms (dark) ================= */
-  .rooms-head { text-align: center; }
-  .rooms-head .section-sub { margin-left: auto; margin-right: auto; }
-  .tabs {
-    margin: 48px auto 0; display: flex; justify-content: center; gap: 4px;
-    border: 1px solid var(--paper-12); border-radius: 980px; padding: 4px; width: fit-content;
-  }
-  .tab {
-    border: 0; background: transparent; color: var(--paper-65);
-    font: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
-    padding: 11px 26px; border-radius: 980px; cursor: pointer;
-    transition: background 0.35s var(--ease), color 0.35s; min-height: 44px;
-  }
-  .tab:hover { color: var(--white); }
-  .tab.active { background: var(--white); color: var(--black); }
-  .panels { margin-top: 52px; }
-  .panel { display: none; max-width: 760px; margin: 0 auto; text-align: center; }
-  .panel.active { display: block; animation: fadeUp 0.6s var(--ease); }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-  .panel h3 { font-size: clamp(24px, 3.4vw, 38px); font-weight: 800; letter-spacing: -0.02em; }
-  .panel p.body { margin: 16px auto 0; max-width: 540px; font-size: 16px; line-height: 1.6; color: var(--paper-65); }
-  .panel .stat-line { margin-top: 22px; font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--paper-40); }
-
-  .chat-demo {
-    margin: 40px auto 0; max-width: 540px; text-align: left;
-    border: 1px solid var(--paper-12); border-radius: 16px; padding: 24px;
-    display: flex; flex-direction: column; gap: 16px; background: rgba(255,255,255,0.03);
-  }
-  .voice-demo { margin: 44px auto 0; display: flex; justify-content: center; gap: 40px; }
-  .speaker { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-  .speaker .ring { position: relative; }
-  .speaker .av {
-    width: 64px; height: 64px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 17px; font-weight: 700;
-    background: var(--white); color: var(--black);
-  }
-  .speaker .av.o { background: transparent; color: var(--white); border: 1px solid rgba(255,255,255,0.4); }
-  .speaker.live .ring::before, .speaker.live .ring::after {
-    content: ""; position: absolute; inset: 0; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.55);
-    animation: ripple 2.2s infinite ease-out;
-  }
-  .speaker.live .ring::after { animation-delay: 0.7s; }
-  @keyframes ripple { from { transform: scale(1); opacity: 0.8; } to { transform: scale(2); opacity: 0; } }
-  .speaker .nm { font-size: 13px; color: var(--paper-65); }
-
-  .media-demo {
-    margin: 40px auto 0; max-width: 540px;
-    border: 1px solid var(--paper-12); border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.03);
-  }
-  .media-demo .bar {
-    display: flex; align-items: center; gap: 6px; padding: 11px 14px;
-    border-bottom: 1px solid var(--paper-12); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-40);
-  }
-  .media-demo .bar i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35); display: inline-block; }
-  .media-demo .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 18px; }
-  .media-demo .cell {
-    aspect-ratio: 4/3; border-radius: 8px;
-    border: 1px solid var(--paper-12); background: rgba(255,255,255,0.05);
-    transition: background 0.4s;
-  }
-  .media-demo .cell:hover { background: rgba(255,255,255,0.16); }
-  .media-demo .cell:nth-child(3n) { background: rgba(255,255,255,0.12); }
-
-  /* ================= Download ================= */
-  .download { text-align: center; padding: 140px 0; }
-  .download h2 { font-size: clamp(40px, 7vw, 96px); }
-  .download .section-sub { margin-left: auto; margin-right: auto; }
-  .dl-ctas { margin-top: 52px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
-  .dl-note { margin-top: 28px; font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-40); }
-
-  /* ================= Footer ================= */
-  footer { border-top: 1px solid var(--paper-12); padding: 64px 0 44px; font-size: 13.5px; color: var(--paper-65); }
-  .foot-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 40px; }
-  .foot-about { margin-top: 16px; max-width: 260px; line-height: 1.65; color: var(--paper-40); }
-  .foot-col .head { font-size: 11px; font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase; color: var(--paper-40); margin-bottom: 16px; }
-  .foot-col ul { list-style: none; display: flex; flex-direction: column; gap: 11px; }
-  .foot-col a { transition: color 0.3s; }
-  .foot-col a:hover { color: var(--white); }
+  /* ===== Footer ===== */
+  footer { border-top: 1px solid var(--paper-12); padding: 64px 0 40px; }
+  .foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 32px; }
+  .foot-title { font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--paper-40); margin-bottom: 16px; }
+  .foot-grid ul { list-style: none; }
+  .foot-grid li + li { margin-top: 10px; }
+  .foot-grid a { font-size: 13.5px; color: var(--paper-65); transition: color 0.3s; }
+  .foot-grid a:hover { color: var(--white); }
+  .foot-about { max-width: 280px; font-size: 13.5px; line-height: 1.7; color: var(--paper-40); margin-top: 16px; }
   .foot-bottom {
-    margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--paper-12);
-    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-40);
+    margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--paper-12);
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--paper-40);
   }
 
-  /* ================= Responsive ================= */
+  /* ===== Responsive ===== */
   @media (max-width: 900px) {
-    .cards { grid-template-columns: 1fr 1fr; }
-    .card:nth-child(3n) { border-right: 1px solid var(--gray-2); }
-    .card:nth-child(2n) { border-right: 0; }
-    .card:nth-child(n+4) { border-bottom: 1px solid var(--gray-2); }
-    .card:nth-child(n+5) { border-bottom: 0; }
-  }
-  @media (max-width: 720px) {
-    .wrap { padding: 0 20px; }
-    .nav-inner { padding: 0 20px; }
-    .nav-links a:not(.nav-cta) { display: none; }
-    section { padding: 80px 0; }
+    .nav-links a:not(.nav-cta):not(.lang-btn) { display: none; }
     .cards { grid-template-columns: 1fr; }
     .card { border-right: 0 !important; border-bottom: 1px solid var(--gray-2) !important; min-height: 0; }
     .card:last-child { border-bottom: 0 !important; }
-    .card h3 { padding-top: 32px; }
-    .stats { grid-template-columns: 1fr 1fr; gap: 30px; }
+    .card h3 { padding-top: 28px; }
+    .dl-grid { grid-template-columns: repeat(2, 1fr); }
+    .stats { grid-template-columns: repeat(2, 1fr); }
     .app { grid-template-columns: 1fr; }
-    .rail, .spanel { display: none; }
-    .tabcard .td { display: none; }
-    .voice-demo { flex-wrap: wrap; gap: 26px; }
-    .foot-grid { grid-template-columns: 1fr; gap: 34px; }
-    .tabs { transform: scale(0.92); }
+    .spanel { display: none; }
+    .foot-grid { grid-template-columns: 1fr 1fr; }
   }
-  html[data-lang="ru"] .l-en { display: none !important; }
-  html:not([data-lang="ru"]) .l-ru { display: none !important; }
-  .lang-btn { background: none; border: 1px solid var(--paper-40); border-radius: 999px; color: var(--white); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; padding: 6px 13px; cursor: pointer; transition: border-color .2s; }
-  .lang-btn:hover { border-color: var(--white); }
 </style>
-<script src="lang.js"></script>
 </head>
 <body>
-<script>document.documentElement.classList.add("js");</script>
-
 <div id="progress"></div>
-<div id="cursor" aria-hidden="true"></div>
 
 <nav>
   <div class="nav-inner">
     <a class="brand" href="#top"><span class="dot"></span>LOVE</a>
     <div class="nav-links">
-      <a href="#features"><span class="l-en">Features</span><span class="l-ru">Возможности</span></a>
-      <a href="#rooms"><span class="l-en">Rooms</span><span class="l-ru">Комнаты</span></a>
-      <a href="#download"><span class="l-en">Download</span><span class="l-ru">Скачать</span></a>
-      <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a>
-      <a class="nav-cta" href="#download"><span class="l-en">Download</span><span class="l-ru">Скачать</span></a>
-      <button class="lang-btn" onclick="toggleLang()" aria-label="Switch language"><span class="l-en">RU</span><span class="l-ru">EN</span></button>
+      <a href="#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
+      <a href="#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
+      <a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
+      <a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a>
+      <button class="lang-btn" onclick="toggleLang()" aria-label="Language"><span class="ru">EN</span><span class="en">RU</span></button>
+      <a class="nav-cta" href="#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
     </div>
   </div>
 </nav>
 
 <header class="hero" id="top">
-  <div class="hero-badge reveal"><span class="pulse"></span><span class="l-en">Now in public beta</span><span class="l-ru">Открытая бета</span></div>
-  <h1 aria-label="Connect without limits">
-    <span class="row split l-en">CONNECT</span>
-    <span class="row split outline l-en">WITHOUT</span>
-    <span class="row split l-en">LIMITS</span>
-    <span class="row split l-ru">ОБЩЕНИЕ</span>
-    <span class="row split outline l-ru">БЕЗ</span>
-    <span class="row split l-ru">ГРАНИЦ</span>
-  </h1>
-  <p class="sub reveal d1"><span class="l-en">A new generation of communication, designed for communities, friends and creators.</span><span class="l-ru">Новое поколение общения — для сообществ, друзей и авторов.</span></p>
-  <div class="hero-ctas reveal d2">
-    <a class="btn btn-w magnetic" href="#download"><span><span class="l-en">Download the app</span><span class="l-ru">Скачать приложение</span></span></a>
-    <a class="btn btn-ow" href="#features"><span><span class="l-en">View features →</span><span class="l-ru">Возможности →</span></span></a>
+  <div class="hero-badge"><span class="pulse"></span><span class="js-ver">v 2.0.5</span>&nbsp;·&nbsp;<span class="ru">Официальный сайт</span><span class="en">Official site</span></div>
+  <h1 class="split ru"><span class="row">Общение</span><span class="row outline">без границ</span></h1>
+  <h1 class="split en"><span class="row">Connect</span><span class="row outline">without limits</span></h1>
+  <p class="sub">
+    <span class="ru">LOVE — бесплатный мессенджер для общения с друзьями и сообществами: личные сообщения, голосовые звонки, демонстрация экрана и собственные сферы.</span>
+    <span class="en">LOVE is a free messenger for friends and communities: direct messages, voice calls, screen sharing and your own spheres.</span>
+  </p>
+  <div class="hero-ctas">
+    <a class="btn btn-w js-dl-win" href="https://github.com/tranquility598-beep/love-app/releases/latest"><span><span class="ru">Скачать для Windows</span><span class="en">Download for Windows</span></span></a>
+    <a class="btn btn-ow" href="#download"><span><span class="ru">Другие платформы</span><span class="en">All platforms</span></span></a>
   </div>
-  <div class="hero-meta reveal d3">
-    <span>v 2.0.5 · <span class="l-en">Free forever</span><span class="l-ru">Бесплатно навсегда</span></span><span>Windows · macOS · Android</span><span><span class="l-en">Auto-updates</span><span class="l-ru">Автообновления</span></span>
+  <div class="hero-meta">
+    <span class="ru">Бесплатно</span><span class="en">Free</span>
+    <span>Windows</span>
+    <span>macOS</span>
+    <span>Android</span>
   </div>
-  <div class="scroll-hint"><span><span class="l-en">Scroll</span><span class="l-ru">Листай</span></span><span class="line"></span></div>
 </header>
 
 <div class="marquee" aria-hidden="true">
   <div class="track">
-    <span><span class="l-en">Free forever</span><span class="l-ru">Бесплатно навсегда</span></span><span><span class="l-en">End-to-end encrypted</span><span class="l-ru">Сквозное шифрование</span></span><span><span class="l-en">60 fps always</span><span class="l-ru">Всегда 60 fps</span></span><span><span class="l-en">Cold start &lt; 1 s</span><span class="l-ru">Старт &lt; 1 с</span></span><span><span class="l-en">No ads</span><span class="l-ru">Без рекламы</span></span><span><span class="l-en">No trackers</span><span class="l-ru">Без трекеров</span></span>
-    <span><span class="l-en">Free forever</span><span class="l-ru">Бесплатно навсегда</span></span><span><span class="l-en">End-to-end encrypted</span><span class="l-ru">Сквозное шифрование</span></span><span><span class="l-en">60 fps always</span><span class="l-ru">Всегда 60 fps</span></span><span><span class="l-en">Cold start &lt; 1 s</span><span class="l-ru">Старт &lt; 1 с</span></span><span><span class="l-en">No ads</span><span class="l-ru">Без рекламы</span></span><span><span class="l-en">No trackers</span><span class="l-ru">Без трекеров</span></span>
+    <b><span class="ru">Сообщения</span><span class="en">Messaging</span></b>
+    <b><span class="ru">Звонки</span><span class="en">Voice calls</span></b>
+    <b><span class="ru">Сферы</span><span class="en">Communities</span></b>
+    <b><span class="ru">Демонстрация экрана</span><span class="en">Screen sharing</span></b>
+    <b><span class="ru">Шифрование</span><span class="en">Encryption</span></b>
+    <b><span class="ru">Без рекламы</span><span class="en">No ads</span></b>
+    <b><span class="ru">Сообщения</span><span class="en">Messaging</span></b>
+    <b><span class="ru">Звонки</span><span class="en">Voice calls</span></b>
+    <b><span class="ru">Сферы</span><span class="en">Communities</span></b>
+    <b><span class="ru">Демонстрация экрана</span><span class="en">Screen sharing</span></b>
+    <b><span class="ru">Шифрование</span><span class="en">Encryption</span></b>
+    <b><span class="ru">Без рекламы</span><span class="en">No ads</span></b>
   </div>
 </div>
 
-<div class="light">
-  <div class="preview wrap" id="preview">
-    <div class="window reveal" role="img" aria-label="Preview of the LOVE desktop app">
-      <div class="titlebar">
-        <span class="tl f"></span><span class="tl"></span><span class="tl"></span>
-        <span class="name">♥ LOVE</span>
-      </div>
+<section class="light preview">
+  <div class="wrap" style="text-align:center">
+    <div class="reveal"><div class="kicker"><span class="ru">Приложение</span><span class="en">The app</span></div></div>
+    <div class="reveal d1"><h2><span class="ru">Всё для общения —<br/>в одном приложении</span><span class="en">Everything you need —<br/>in one app</span></h2></div>
+    <div class="reveal d2"><p class="section-sub" style="margin-left:auto;margin-right:auto">
+      <span class="ru">Чаты, звонки, сообщества и медиа. Быстро работает даже на слабых компьютерах.</span>
+      <span class="en">Chats, calls, communities and media. Fast even on low-end machines.</span>
+    </p></div>
+
+    <div class="window reveal d2">
+      <div class="titlebar"><span class="tl f"></span><span class="tl"></span><span class="tl"></span><span class="name">LOVE</span></div>
       <div class="app">
-        <div class="rail">
-          <div class="ric"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.6 8.4 9 9 0 0 1-3.7-.8L3 20l1.1-4.1A8.4 8.4 0 1 1 21 11.5z"/></svg></div>
-          <div class="ric on"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13.5l9 5 9-5"/></svg></div>
-          <div class="ric"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.9"/></svg></div>
-          <div class="ric"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg></div>
-          <div class="ric"><svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a1.7 1.7 0 0 0 3 0"/></svg></div>
-          <div class="rgrow"></div>
-          <div class="ric q">?</div>
-          <div class="ric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></svg></div>
-          <div class="rav">V</div>
-        </div>
         <div class="spanel">
-          <div class="panel-title">Сферы</div>
+          <div class="panel-title"><span class="ru">Сферы</span><span class="en">Spheres</span></div>
           <div class="sphere">
-            <div class="banner">MIDNIGHT</div>
+            <div class="banner">ВАЙБ</div>
             <div class="sp-row">
-              <div class="sq"></div>
-              <div><div class="sp-name">вайб(только для свои…</div><div class="sp-sub">сервер · 2 участн.</div></div>
-              <div class="chev">⌄</div>
+              <span class="sq"></span>
+              <div><div class="sp-name"><span class="ru">вайб</span><span class="en">vibe</span></div><div class="sp-sub"><span class="ru">сфера · 2 участника</span><span class="en">sphere · 2 members</span></div></div>
             </div>
-            <div class="chn"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.6 8.4 9 9 0 0 1-3.7-.8L3 20l1.1-4.1A8.4 8.4 0 1 1 21 11.5z"/></svg>general</div>
-            <div class="chn"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/></svg>Голосовой</div>
+            <div class="chn on"># general</div>
+            <div class="chn">🔊 <span class="ru">Голосовой</span><span class="en">Voice</span></div>
           </div>
           <div class="room-card on">
-            <div class="sq rm">c</div>
-            <div><div class="sp-name">chill</div><div class="sp-sub">комната · 2 участн.</div></div>
+            <span class="sq rm">c</span>
+            <div><div class="sp-name">chill<span class="cpill"><span class="ru">комната</span><span class="en">room</span></span></div><div class="sp-sub"><span class="ru">2 участника онлайн</span><span class="en">2 members online</span></div></div>
           </div>
-          <div class="create">+ Создать сферу</div>
         </div>
         <div class="chat">
           <div class="chat-top">
-            <div class="cname">chill <span class="cpill">● 2 участн.</span></div>
-            <div class="cstatus">Комната</div>
+            <div class="cname">chill</div>
+            <div class="cstatus"><span class="ru">комната · 2 участника онлайн</span><span class="en">room · 2 members online</span></div>
           </div>
-          <div class="tabcards">
-            <div class="tabcard on"><div class="tt">Чат <span>→</span></div><div class="td">Текстовый чат комнаты</div></div>
-            <div class="tabcard"><div class="tt">Войс <span>→</span></div><div class="td">Голосовой WebRTC-канал</div></div>
-            <div class="tabcard"><div class="tt">Медиа <span>→</span></div><div class="td">Медиатека, фото и файлы</div></div>
-          </div>
-          <div class="brow"><div class="bav">K</div><div class="bubble">го в войс, я новый трек скинул</div></div>
-          <div class="brow"><div class="bav">K</div><div class="audio"><span class="play">▶</span><span class="track"><i></i></span><span class="at">0:00 / 2:02</span></div></div>
-          <div class="trow">ср</div>
-          <div class="brow own"><div class="bubble">ща, две минуты 🖤</div><div class="bav pink">M</div></div>
-          <div class="trow own">ср</div>
-          <div class="inputbar">
-            <svg viewBox="0 0 24 24"><path d="M21.4 11l-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>
-            <span class="ph">написать в чат комнаты...</span>
-            <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/></svg>
-          </div>
+          <div class="brow"><span class="bav">K</span><span class="bubble"><span class="ru">го в войс, я новый трек скинул</span><span class="en">hop in voice, i dropped a new track</span></span></div>
+          <div class="brow"><span class="bav">K</span><span class="bubble" style="padding:0;background:transparent"><span class="audio"><span class="play">▶</span><span class="track"><i></i></span><span class="at">0:14 / 2:02</span></span></span></div>
+          <div class="brow own"><span class="bubble"><span class="ru">ща, две минуты 🖤</span><span class="en">gimme two minutes 🖤</span></span><span class="bav">M</span></div>
+          <div class="inputbar"><span class="ru">Написать сообщение…</span><span class="en">Write a message…</span></div>
         </div>
       </div>
     </div>
 
-    <div class="stats reveal">
-      <div class="stat"><div class="k">&lt; <span data-count="1">1</span> s</div><div class="l"><span class="l-en">cold start</span><span class="l-ru">холодный старт</span></div></div>
-      <div class="stat"><div class="k"><span data-count="60">60</span> fps</div><div class="l"><span class="l-en">always</span><span class="l-ru">всегда</span></div></div>
-      <div class="stat"><div class="k">E2EE</div><div class="l"><span class="l-en">direct messages</span><span class="l-ru">личные сообщения</span></div></div>
-      <div class="stat"><div class="k"><span data-count="62">62</span> MB</div><div class="l"><span class="l-en">installer size</span><span class="l-ru">размер установщика</span></div></div>
-    </div>
-  </div>
-
-  <section class="features" id="features">
-    <div class="wrap">
-      <div class="reveal">
-        <div class="kicker"><span class="l-en">Everything you'd want</span><span class="l-ru">Всё, что нужно</span></div>
-        <h2><span class="l-en">A quieter kind<br />of communication.</span><span class="l-ru">Более тихий<br />способ общения.</span></h2>
-        <p class="section-sub"><span class="l-en">Six deliberate choices, each polished until it disappears. LOVE gets out of the way so the conversation can begin.</span><span class="l-ru">Шесть продуманных решений, отполированных до незаметности. LOVE не мешает — разговор просто начинается.</span></p>
-      </div>
-      <div class="cards reveal">
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1 1 16.1-3.8z"/></svg>
-            <span class="meta">&lt; 40 ms</span>
-          </div>
-          <h3><span class="l-en">Realtime messaging</span><span class="l-ru">Мгновенные сообщения</span></h3>
-          <p><span class="l-en">Words arrive the instant they're written. Rich text, threads, reactions — quiet, fast, beautiful.</span><span class="l-ru">Слова приходят в момент написания. Rich-текст, треды, реакции — тихо, быстро, красиво.</span></p>
-        </div>
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12h2M6 8v8M10 5v14M14 8v8M18 10v4M22 12h-1"/></svg>
-            <span class="meta">Opus · 48 kHz</span>
-          </div>
-          <h3><span class="l-en">Voice rooms</span><span class="l-ru">Голосовые комнаты</span></h3>
-          <p><span class="l-en">Studio-grade voice that feels like sitting in the same room. Drop in, listen, speak, leave.</span><span class="l-ru">Студийный звук — будто вы в одной комнате. Зашёл, послушал, сказал, вышел.</span></p>
-        </div>
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span class="meta"><span class="l-en">Unlimited</span><span class="l-ru">Без лимита</span></span>
-          </div>
-          <h3><span class="l-en">Communities</span><span class="l-ru">Сообщества</span></h3>
-          <p><span class="l-en">Homes for the people you keep returning to. Roles, spaces and rituals — designed with care.</span><span class="l-ru">Дом для людей, к которым возвращаешься. Роли, пространства и ритуалы — сделано с заботой.</span></p>
-        </div>
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            <span class="meta">60 fps</span>
-          </div>
-          <h3><span class="l-en">Desktop, considered</span><span class="l-ru">Продуманный десктоп</span></h3>
-          <p><span class="l-en">Native performance. Keyboard-first. A window you're happy to keep open all day long.</span><span class="l-ru">Нативная производительность. Клавиатура — в приоритете. Окно, которое приятно держать открытым весь день.</span></p>
-        </div>
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span class="meta">E2EE</span>
-          </div>
-          <h3><span class="l-en">Privacy focused</span><span class="l-ru">Приватность прежде всего</span></h3>
-          <p><span class="l-en">End-to-end encryption for direct messages. No trackers. No ads. Your conversations are yours.</span><span class="l-ru">Сквозное шифрование личных сообщений. Без трекеров. Без рекламы. Ваши разговоры — только ваши.</span></p>
-        </div>
-        <div class="card">
-          <div class="card-top">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span class="meta">&lt; 900 ms</span>
-          </div>
-          <h3><span class="l-en">Fast, everywhere</span><span class="l-ru">Быстро везде</span></h3>
-          <p><span class="l-en">Built on a lean runtime that stays out of your way. Cold start under a second, always.</span><span class="l-ru">Лёгкий рантайм, который не мешает. Холодный старт меньше секунды — всегда.</span></p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <div class="statement">
-    <div class="wrap reveal">
-      <div class="big l-en">Designed<br /><span class="outline">to disappear.</span></div>
-      <div class="big l-ru">Создан,<br /><span class="outline">чтобы исчезать.</span></div>
-    </div>
-  </div>
-</div>
-
-<section class="rooms dark" id="rooms">
-  <div class="wrap">
-    <div class="rooms-head reveal">
-      <div class="kicker"><span class="l-en">Rooms</span><span class="l-ru">Комнаты</span></div>
-      <h2><span class="l-en">One place.<br />Three ways to be together.</span><span class="l-ru">Одно место.<br />Три способа быть вместе.</span></h2>
-    </div>
-
-    <div class="tabs reveal" role="tablist" aria-label="Room types">
-      <button class="tab active" role="tab" aria-selected="true" data-tab="chat"><span class="l-en">Chat</span><span class="l-ru">Чат</span></button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="voice"><span class="l-en">Voice</span><span class="l-ru">Войс</span></button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="media"><span class="l-en">Media</span><span class="l-ru">Медиа</span></button>
-    </div>
-
-    <div class="panels">
-      <div class="panel active" id="panel-chat" role="tabpanel">
-        <h3><span class="l-en">Threaded conversations that keep their shape.</span><span class="l-ru">Треды, которые держат форму.</span></h3>
-        <p class="body"><span class="l-en">Long threads never sprawl. Reactions never crowd. Every message has room to breathe, so the interesting ones stand out.</span><span class="l-ru">Длинные обсуждения не расползаются. Реакции не мешают. У каждого сообщения есть воздух — важное заметно сразу.</span></p>
-        <div class="chat-demo">
-          <div class="msg">
-            <div class="avatar">A</div>
-            <div>
-              <div class="meta"><span class="user">Amelie</span><span class="time">3:04 PM</span></div>
-              <div class="text"><span class="l-en">the palette shifted a little. moved everything one notch warmer.</span><span class="l-ru">чуть сдвинула палитру. сделала всё на тон теплее.</span></div>
-            </div>
-          </div>
-          <div class="msg">
-            <div class="avatar o">K</div>
-            <div>
-              <div class="meta"><span class="user">Kenji</span><span class="time">3:05 PM</span></div>
-              <div class="text"><span class="l-en">this feels lived-in. keeping it.</span><span class="l-ru">выглядит обжито. оставляем.</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="stat-line"><span class="l-en">Threads · Reactions · Rich text</span><span class="l-ru">Треды · Реакции · Rich-текст</span></div>
-      </div>
-
-      <div class="panel" id="panel-voice" role="tabpanel">
-        <h3><span class="l-en">Voice channels that feel like a shared room.</span><span class="l-ru">Голосовые каналы — как общая комната.</span></h3>
-        <p class="body"><span class="l-en">Studio-grade audio, spatialized so voices sit where you'd expect. Drop in silently, listen for a while, speak when you're ready.</span><span class="l-ru">Студийный звук с пространственным позиционированием. Заходи тихо, слушай и говори, когда будешь готов.</span></p>
-        <div class="voice-demo">
-          <div class="speaker live">
-            <div class="ring"><div class="av">A</div></div>
-            <span class="nm">Amelie</span>
-          </div>
-          <div class="speaker">
-            <div class="ring"><div class="av o">K</div></div>
-            <span class="nm">Kenji</span>
-          </div>
-          <div class="speaker live">
-            <div class="ring"><div class="av">L</div></div>
-            <span class="nm">Léa</span>
-          </div>
-          <div class="speaker">
-            <div class="ring"><div class="av o">R</div></div>
-            <span class="nm">Ravi</span>
-          </div>
-        </div>
-        <div class="stat-line"><span class="l-en">Spatial · Push-to-talk · Noise gate</span><span class="l-ru">Пространственный звук · Push-to-talk · Шумоподавление</span></div>
-      </div>
-
-      <div class="panel" id="panel-media" role="tabpanel">
-        <h3><span class="l-en">Screens, streams and shared canvases.</span><span class="l-ru">Экраны, стримы и общие холсты.</span></h3>
-        <p class="body"><span class="l-en">Share what you're seeing at a glance. Draw over it. Watch together. LOVE turns any channel into a place you can make things in.</span><span class="l-ru">Покажи, что видишь, в один клик. Рисуй поверх. Смотрите вместе. LOVE превращает любой канал в место, где можно создавать.</span></p>
-        <div class="media-demo">
-          <div class="bar"><i></i><i></i><i></i><span style="margin-left:8px">love — brand explorations</span></div>
-          <div class="grid">
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-          </div>
-        </div>
-        <div class="stat-line"><span class="l-en">Screen share · 4K · &lt; 80 ms</span><span class="l-ru">Демонстрация экрана · 4K · &lt; 80 мс</span></div>
-      </div>
+    <div class="stats">
+      <div class="stat reveal"><div class="k">&lt; 1 с</div><div class="l"><span class="ru">запуск</span><span class="en">cold start</span></div></div>
+      <div class="stat reveal d1"><div class="k">60 fps</div><div class="l"><span class="ru">интерфейс</span><span class="en">interface</span></div></div>
+      <div class="stat reveal d2"><div class="k">E2EE</div><div class="l"><span class="ru">личные сообщения</span><span class="en">direct messages</span></div></div>
+      <div class="stat reveal d3"><div class="k">62 МБ</div><div class="l"><span class="ru">установщик</span><span class="en">installer</span></div></div>
     </div>
   </div>
 </section>
 
-<div class="marquee" aria-hidden="true">
-  <div class="track">
-    <span><span class="l-en">Download</span><span class="l-ru">Скачать</span></span><span><span class="l-en">Free</span><span class="l-ru">Бесплатно</span></span><span>Windows</span><span>macOS</span><span>Android</span><span><span class="l-en">Auto-updates</span><span class="l-ru">Автообновления</span></span>
-    <span><span class="l-en">Download</span><span class="l-ru">Скачать</span></span><span><span class="l-en">Free</span><span class="l-ru">Бесплатно</span></span><span>Windows</span><span>macOS</span><span>Android</span><span><span class="l-en">Auto-updates</span><span class="l-ru">Автообновления</span></span>
-  </div>
-</div>
+<section class="light" id="features" style="padding-top:0">
+  <div class="wrap">
+    <div class="reveal"><div class="kicker"><span class="ru">Возможности</span><span class="en">Features</span></div></div>
+    <div class="reveal d1"><h2><span class="ru">Всё, что нужно.<br/>Ничего лишнего.</span><span class="en">Everything you need.<br/>Nothing extra.</span></h2></div>
+    <div class="reveal d2"><p class="section-sub">
+      <span class="ru">Сообщения, звонки, сообщества и демонстрация экрана. Бесплатно, без рекламы и трекеров.</span>
+      <span class="en">Messaging, calls, communities and screen sharing. Free, with no ads and no trackers.</span>
+    </p></div>
 
-<div class="light">
-  <section class="download" id="download">
-    <div class="wrap">
-      <div class="reveal">
-        <div class="kicker"><span class="l-en">Get LOVE</span><span class="l-ru">Скачай LOVE</span></div>
-        <h2><span class="l-en">Ready to<br /><span style="color:transparent;-webkit-text-stroke:2px #0a0a0a">experience love?</span></span><span class="l-ru">Готов<br /><span style="color:transparent;-webkit-text-stroke:2px #0a0a0a">испытать love?</span></span></h2>
-        <p class="section-sub"><span class="l-en">A quiet, beautiful, considered place to keep in touch with the people you like most.</span><span class="l-ru">Тихое, красивое, продуманное место, чтобы быть на связи с теми, кто дорог.</span></p>
-      </div>
-      <div class="dl-ctas reveal d1">
-        <a class="btn btn-b magnetic" href="https://github.com/tranquility598-beep/love-app/releases/download/v2.0.5/Love-Setup-2.0.5.exe"><span>Windows</span> <small>.exe · v 2.0.5</small></a>
-        <a class="btn btn-b magnetic" href="https://github.com/tranquility598-beep/love-app/releases/download/v2.0.5/Love-2.0.5-arm64.dmg"><span>macOS</span> <small>.dmg · Apple Silicon</small></a>
-        <a class="btn btn-b magnetic" href="https://github.com/tranquility598-beep/love-app/releases/download/v2.0.5/Love-2.0.5-x64.dmg"><span>macOS</span> <small>.dmg · Intel</small></a>
-        <a class="btn btn-b magnetic" href="https://api.loveapp.chat/api/updates/download/android"><span>Android</span> <small>.apk · v 2.0.5</small></a>
-        <a class="btn btn-ob" href="changelog.html"><span><span class="l-en">What’s new</span><span class="l-ru">Что нового</span></span></a>
-      </div>
-      <div class="dl-note reveal d2"><span class="l-en">Free · Auto-updates built in · Android: allow installs from unknown sources</span><span class="l-ru">Бесплатно · Автообновления встроены · Android: разрешите установку из неизвестных источников</span></div>
+    <div class="cards">
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span class="meta">&lt; 40 <span class="ru">мс</span><span class="en">ms</span></span></div>
+        <h3><span class="ru">Мгновенные сообщения</span><span class="en">Instant messaging</span></h3>
+        <p><span class="ru">Личные и групповые чаты: ответы, реакции, файлы, фото и голосовые сообщения. Доставка — мгновенно.</span><span class="en">Direct and group chats: replies, reactions, files, photos and voice messages. Delivered instantly.</span></p>
+      </article>
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span class="meta">48 <span class="ru">кГц</span><span class="en">kHz</span></span></div>
+        <h3><span class="ru">Голосовые звонки</span><span class="en">Voice calls</span></h3>
+        <p><span class="ru">Звонки в личных сообщениях и голосовые каналы в сферах. Чистый звук, низкая задержка, шумоподавление.</span><span class="en">Calls in DMs and voice channels in spheres. Clear audio, low latency, noise suppression.</span></p>
+      </article>
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="meta"><span class="ru">Без лимитов</span><span class="en">Unlimited</span></span></div>
+        <h3><span class="ru">Сферы</span><span class="en">Spheres</span></h3>
+        <p><span class="ru">Сообщества с текстовыми и голосовыми каналами, ролями и комнатами — для друзей, команды или клана.</span><span class="en">Communities with text and voice channels, roles and rooms — for friends, teams or clans.</span></p>
+      </article>
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></span><span class="meta"><span class="ru">до</span><span class="en">up to</span> 4K</span></div>
+        <h3><span class="ru">Демонстрация экрана</span><span class="en">Screen sharing</span></h3>
+        <p><span class="ru">Показывайте экран прямо в звонке — в высоком качестве и без лишних настроек.</span><span class="en">Share your screen right in a call — in high quality, no extra setup.</span></p>
+      </article>
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><span class="meta">E2EE</span></div>
+        <h3><span class="ru">Приватность</span><span class="en">Privacy</span></h3>
+        <p><span class="ru">Сквозное шифрование личных сообщений. Без рекламы, без трекеров, без продажи данных.</span><span class="en">End-to-end encryption for direct messages. No ads, no trackers, no data selling.</span></p>
+      </article>
+      <article class="card">
+        <div class="card-top"><span class="icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></span><span class="meta">3 <span class="ru">платформы</span><span class="en">platforms</span></span></div>
+        <h3><span class="ru">Все устройства</span><span class="en">All devices</span></h3>
+        <p><span class="ru">Windows, macOS и Android. Автообновления — у вас всегда последняя версия.</span><span class="en">Windows, macOS and Android. Auto-updates keep you on the latest version.</span></p>
+      </article>
     </div>
-  </section>
-</div>
+  </div>
+</section>
 
-<footer>
+<section class="dark" id="download">
+  <div class="wrap" style="text-align:center">
+    <div class="reveal"><div class="kicker"><span class="ru">Скачать</span><span class="en">Download</span></div></div>
+    <div class="reveal d1"><h2><span class="ru">Скачайте LOVE<br/>бесплатно</span><span class="en">Get LOVE<br/>for free</span></h2></div>
+    <div class="reveal d2"><p class="section-sub" style="margin-left:auto;margin-right:auto">
+      <span class="ru">Выберите свою платформу. Установка занимает меньше минуты.</span>
+      <span class="en">Pick your platform. Setup takes less than a minute.</span>
+    </p></div>
+
+    <div class="dl-grid reveal d2">
+      <a class="dl-card js-dl-win" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+        <span class="os">Windows</span>
+        <span class="fmt">.exe · Windows 10 / 11</span>
+        <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+      </a>
+      <a class="dl-card js-dl-mac-as" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+        <span class="os">macOS</span>
+        <span class="fmt">.dmg · Apple Silicon</span>
+        <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+      </a>
+      <a class="dl-card js-dl-mac-intel" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+        <span class="os">macOS</span>
+        <span class="fmt">.dmg · Intel</span>
+        <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+      </a>
+      <a class="dl-card js-dl-android" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+        <span class="os">Android</span>
+        <span class="fmt">.apk · Android 8+</span>
+        <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+      </a>
+    </div>
+
+    <p class="dl-note">
+      <span class="ru">На Android при первой установке разрешите установку из этого источника. Все новые версии и список изменений — на странице <a href="changelog.html">«Что нового»</a>.</span>
+      <span class="en">On Android, allow installs from this source the first time. All releases and changes are listed on the <a href="changelog.html">What’s new</a> page.</span>
+    </p>
+
+    <div class="dl-meta">
+      <span class="js-ver">v 2.0.5</span>
+      <span class="ru">Бесплатно</span><span class="en">Free</span>
+      <span class="ru">Автообновления</span><span class="en">Auto-updates</span>
+    </div>
+  </div>
+</section>
+
+<footer class="dark">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="#top"><span class="dot"></span>LOVE</a>
-        <p class="foot-about"><span class="l-en">A quiet home for conversations, communities and the people you keep coming back to.</span><span class="l-ru">Тихий дом для разговоров, сообществ и людей, к которым возвращаешься.</span></p>
+        <p class="foot-about">
+          <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
+          <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
+        </p>
       </div>
-      <div class="foot-col">
-        <div class="head"><span class="l-en">Company</span><span class="l-ru">Компания</span></div>
+      <div>
+        <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
         <ul>
-          <li><a href="privacy.html"><span class="l-en">Privacy Policy</span><span class="l-ru">Политика конфиденциальности</span></a></li>
-          <li><a href="terms.html"><span class="l-en">Terms of Service</span><span class="l-ru">Условия использования</span></a></li>
-          <li><a href="changelog.html"><span class="l-en">Changelog</span><span class="l-ru">История версий</span></a></li>
+          <li><a href="#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
+          <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
+          <li><a href="#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
         </ul>
       </div>
-      <div class="foot-col">
-        <div class="head"><span class="l-en">Community</span><span class="l-ru">Сообщество</span></div>
+      <div>
+        <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
         <ul>
-          <li><a href="https://github.com/tranquility598-beep/love-app/releases" target="_blank" rel="noopener">GitHub · Releases</a></li>
-          <li><a href="#">Discord</a></li>
-          <li><a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a></li>
-          <li><a href="mailto:support@loveapp.chat">support@loveapp.chat</a></li>
+          <li><a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a></li>
+          <li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
+        <ul>
+          <li><a href="terms.html"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
+          <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
         </ul>
       </div>
     </div>
     <div class="foot-bottom">
-      <span><span class="l-en">© 2026 LOVE. Crafted with care.</span><span class="l-ru">© 2026 LOVE. Сделано с заботой.</span></span>
-      <span><span class="l-en">Built for humans · Made in the quiet hours</span><span class="l-ru">Для людей · Сделано в тихие часы</span></span>
+      <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
+      <div>loveapp.chat</div>
     </div>
   </div>
 </footer>
 
 <script>
 (function () {
-  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.documentElement.classList.add("js");
 
-  /* Split hero letters */
-  document.querySelectorAll(".split").forEach(function (el, rowIdx) {
-    var text = el.textContent;
-    el.textContent = "";
-    Array.prototype.forEach.call(text, function (ch, i) {
+  // Заголовок вкладки по языку
+  function syncTitle() {
+    document.title = (window.loveLang && loveLang() === "ru")
+      ? "LOVE — мессенджер: сообщения, звонки и сообщества"
+      : "LOVE — messenger: messaging, calls and communities";
+  }
+  syncTitle();
+  var _t = window.toggleLang;
+  window.toggleLang = function () { _t(); syncTitle(); };
+
+  // Прогресс-бар
+  var bar = document.getElementById("progress");
+  window.addEventListener("scroll", function () {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+  }, { passive: true });
+
+  // Появление секций
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { rootMargin: "-60px" });
+  document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+
+  // Побуквенная анимация заголовка
+  document.querySelectorAll("h1.split .row").forEach(function (row, ri) {
+    var text = row.textContent;
+    row.textContent = "";
+    Array.prototype.forEach.call(text, function (ch, ci) {
       var s = document.createElement("span");
       s.className = "ltr";
       s.textContent = ch === " " ? "\u00a0" : ch;
-      s.style.animationDelay = (0.15 + rowIdx * 0.14 + i * 0.04) + "s";
-      el.appendChild(s);
+      s.style.animationDelay = (0.25 + ri * 0.15 + ci * 0.035) + "s";
+      row.appendChild(s);
     });
   });
 
-  /* Reveal on scroll */
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
-    });
-  }, { rootMargin: "-50px 0px", threshold: 0.05 });
-  document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
-
-  /* Count-up stats */
-  if (!reduced) {
-    var cio = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        cio.unobserve(e.target);
-        var target = parseInt(e.target.getAttribute("data-count"), 10);
-        var t0 = null;
-        function step(t) {
-          if (!t0) t0 = t;
-          var p = Math.min((t - t0) / 1200, 1);
-          e.target.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-          if (p < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
-      });
-    }, { threshold: 0.6 });
-    document.querySelectorAll("[data-count]").forEach(function (el) { cio.observe(el); });
-  }
-
-  /* Scroll progress */
-  var bar = document.getElementById("progress");
-  function onScroll() {
-    var h = document.documentElement;
-    var p = h.scrollTop / (h.scrollHeight - h.clientHeight);
-    bar.style.width = (p * 100) + "%";
-  }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
-
-  /* Rooms tabs */
-  var tabs = document.querySelectorAll(".tab");
-  tabs.forEach(function (t) {
-    t.addEventListener("click", function () {
-      tabs.forEach(function (x) { x.classList.remove("active"); x.setAttribute("aria-selected", "false"); });
-      t.classList.add("active");
-      t.setAttribute("aria-selected", "true");
-      document.querySelectorAll(".panel").forEach(function (p) { p.classList.remove("active"); });
-      document.getElementById("panel-" + t.dataset.tab).classList.add("active");
-    });
-  });
-
-  /* Custom cursor + magnetic buttons (desktop only) */
-  if (window.matchMedia("(pointer: fine)").matches && !reduced) {
-    var cur = document.getElementById("cursor");
-    var cx = -100, cy = -100, tx = -100, ty = -100;
-    document.addEventListener("mousemove", function (e) {
-      tx = e.clientX; ty = e.clientY;
-      if (!cur.classList.contains("on")) cur.classList.add("on");
-    });
-    (function loop() {
-      cx += (tx - cx) * 0.18; cy += (ty - cy) * 0.18;
-      cur.style.transform = "translate(" + (cx - 14) + "px," + (cy - 14) + "px)";
-      requestAnimationFrame(loop);
-    })();
-    document.querySelectorAll("a, button").forEach(function (el) {
-      el.addEventListener("mouseenter", function () { cur.classList.add("grow"); });
-      el.addEventListener("mouseleave", function () { cur.classList.remove("grow"); });
-    });
-
-    document.querySelectorAll(".magnetic").forEach(function (el) {
-      el.addEventListener("mousemove", function (e) {
-        var r = el.getBoundingClientRect();
-        var dx = e.clientX - (r.left + r.width / 2);
-        var dy = e.clientY - (r.top + r.height / 2);
-        el.style.transform = "translate(" + dx * 0.18 + "px," + dy * 0.28 + "px)";
-      });
-      el.addEventListener("mouseleave", function () { el.style.transform = ""; });
-    });
-  }
+  // Актуальная версия и прямые ссылки — с GitHub Releases
+  var REPO = "tranquility598-beep/love-app";
+  fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+    .then(function (r) { return r.json(); })
+    .then(function (rel) {
+      if (!rel) return;
+      var v = (rel.tag_name || "").replace(/^v/, "");
+      if (v) document.querySelectorAll(".js-ver").forEach(function (el) { el.textContent = "v " + v; });
+      var assets = rel.assets || [];
+      function url(match) {
+        for (var i = 0; i < assets.length; i++) if (match(assets[i].name || "")) return assets[i].browser_download_url;
+        return null;
+      }
+      function set(cls, u) {
+        if (!u) return;
+        document.querySelectorAll("." + cls).forEach(function (el) { el.href = u; });
+      }
+      set("js-dl-win", url(function (n) { return /\.exe$/i.test(n); }));
+      set("js-dl-mac-as", url(function (n) { return /arm64\.dmg$/i.test(n); }));
+      set("js-dl-mac-intel", url(function (n) { return /\.dmg$/i.test(n) && !/arm64/i.test(n); }));
+      set("js-dl-android", url(function (n) { return /love-mobile.*\.apk$/i.test(n); }) || url(function (n) { return /\.apk$/i.test(n); }));
+    })
+    .catch(function () { /* останутся ссылки на страницу релизов */ });
 })();
 </script>
 </body>

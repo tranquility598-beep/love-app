@@ -1,17 +1,36 @@
+import 'dart:async';
+import 'dart:isolate';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
+import '../../features/calls/call_screen.dart';
+import '../../features/calls/call_session.dart';
 import '../../features/chat/chat_models.dart';
 import '../../features/chat/dm_call_controller.dart';
 import '../notifications/in_app_notifications.dart';
 import '../notifications/local_notifications.dart';
 import '../realtime/love_socket.dart';
+import '../voice/channel_voice_controller.dart';
 
-/// Глобальный центр звонков. Живёт на уровне приложения, а не экрана чата:
+/// Глобальный центр звонков. Живёт на уровне приложения:
 /// - звонок НЕ обрывается при выходе из чата (контроллер хранится здесь);
-/// - уведомление о входящем звонке с кнопками «Принять»/«Отклонить»;
-/// - уведомление о пропущенном звонке;
-/// - постоянное уведомление во время звонка с «Микрофон»/«Завершить».
-class CallCenter {
+/// - входящий звонок открывает полноэкранный [CallScreen] (если приложение
+///   развёрнуто) и/или уведомление с «Принять»/«Отклонить»;
+/// - во время звонка/войса висит постоянное уведомление с «Микрофон»/
+///   «Завершить» — кнопки работают БЕЗ открытия приложения (фоновый изолят
+///   → порт [kLoveCallActionPort] → сюда).
+///
+/// ВАЖНО: в MaterialApp нужно прокинуть `navigatorKey: CallCenter.navigatorKey`
+/// (см. PATCHES.md), иначе входящий звонок не сможет открыться поверх
+/// любого экрана.
+class CallCenter extends ChangeNotifier {
   CallCenter._();
   static final CallCenter instance = CallCenter._();
+
+  /// Подключается к MaterialApp, чтобы открывать полноэкранный звонок
+  /// из любого места приложения.
+  static final navigatorKey = GlobalKey<NavigatorState>();
 
   LoveSocket? _socket;
   DmCallController? _controller; // основной (текущий/последний звонок)
@@ -22,11 +41,42 @@ class CallCenter {
 
   DmCallPhase _lastPhase = DmCallPhase.idle;
   bool _lastMuted = false;
+  bool _lastVoiceActive = false;
+  bool _lastVoiceMuted = false;
+  String _lastVoiceTitle = '';
+
+  /// Активный звонок в ЛС (для плашки ActiveCallBar и полноэкранного UI).
+  DmCallController? get activeDm {
+    final c = _activeCall();
+    if (c == null ||
+        c.phase == DmCallPhase.idle ||
+        c.phase == DmCallPhase.error) {
+      return null;
+    }
+    return c;
+  }
 
   void init(LoveSocket socket) {
     if (_socket != null) return;
     _socket = socket;
     socket.on('call:incoming', _onGlobalIncoming);
+    ChannelVoiceController.instance.addListener(_onVoiceChanged);
+    _registerActionPort();
+  }
+
+  /// Принимает нажатия кнопок уведомлений из фонового изолята
+  /// (showsUserInterface: false — приложение НЕ открывается).
+  void _registerActionPort() {
+    IsolateNameServer.removePortNameMapping(kLoveCallActionPort);
+    final port = ReceivePort();
+    IsolateNameServer.registerPortWithName(port.sendPort, kLoveCallActionPort);
+    port.listen((message) {
+      final text = '$message';
+      final index = text.indexOf('|');
+      final action = index < 0 ? text : text.substring(0, index);
+      final payload = index < 0 ? '' : text.substring(index + 1);
+      handleNotificationAction(action, payload.isEmpty ? null : payload);
+    });
   }
 
   /// Экран чата берёт контроллер отсюда, а не создаёт свой.
@@ -71,7 +121,7 @@ class CallCenter {
   }
 
   /// Экран чата закрывается. Основной контроллер НЕ уничтожаем —
-  /// именно поэтому звонок теперь переживает выход из чата.
+  /// именно поэтому звонок переживает выход из чата.
   void release(DmCallController controller) {
     if (!identical(controller, _temp)) return;
     if (_temp!.phase == DmCallPhase.idle) {
@@ -85,23 +135,37 @@ class CallCenter {
     }
   }
 
-  /// Кнопки в уведомлениях (подключается в main_shell).
+  /// Кнопки в уведомлениях: и из основного изолята («Принять» открывает
+  /// приложение), и из фонового через порт (микрофон/завершить/отклонить
+  /// работают, НЕ открывая приложение). Обрабатывает и звонки в ЛС,
+  /// и войс сфер.
   void handleNotificationAction(String actionId, String? payload) {
     final c = _activeCall();
-    if (c == null) return;
+    final voice = ChannelVoiceController.instance;
     switch (actionId) {
       case 'call_accept':
-        c.acceptIncoming();
+        if (c != null) {
+          unawaited(c.acceptIncoming());
+          _openCallScreen();
+        }
         break;
       case 'call_decline':
-        c.declineIncoming();
+        c?.declineIncoming();
         LocalNotifications.cancelIncomingCall();
         break;
       case 'call_mute':
-        c.toggleMute();
+        if (c != null && c.phase != DmCallPhase.idle) {
+          unawaited(c.toggleMute());
+        } else if (voice.isActive) {
+          voice.toggleMute();
+        }
         break;
       case 'call_hangup':
-        c.endCall();
+        if (c != null && c.phase != DmCallPhase.idle) {
+          unawaited(c.endCall());
+        } else if (voice.isActive) {
+          unawaited(voice.leave());
+        }
         break;
     }
   }
@@ -149,8 +213,16 @@ class CallCenter {
     return _controller ?? _temp;
   }
 
-  /// call:incoming пришёл, а чат с этим человеком не открыт — раньше звонок
-  /// просто терялся. Теперь создаём контроллер здесь и показываем уведомление.
+  /// Открыть полноэкранный звонок поверх любого экрана.
+  void _openCallScreen() {
+    final c = activeDm;
+    final navigator = navigatorKey.currentState;
+    if (c == null || navigator == null) return;
+    unawaited(CallScreen.push(navigator, DmCallSession(c)));
+  }
+
+  /// call:incoming пришёл, а чат с этим человеком не открыт — создаём
+  /// контроллер здесь и показываем полноэкранный звонок/уведомление.
   void _onGlobalIncoming(dynamic data) {
     if (data is! Map) return;
     final raw = data.cast<String, dynamic>();
@@ -192,6 +264,10 @@ class CallCenter {
       );
     }
 
+    // Приложение развёрнуто — показываем полноэкранный входящий звонок.
+    if (foreground) {
+      _openCallScreen();
+    }
     // Уведомление — если приложение свёрнуто или открыт другой экран.
     if (!foreground || ActiveChat.conversationId != conversationId) {
       LocalNotifications.showIncomingCall(caller: callerName);
@@ -207,26 +283,62 @@ class CallCenter {
     final c = _activeCall();
     final phase = c?.phase ?? DmCallPhase.idle;
     final muted = c?.muted ?? false;
-    if (phase == _lastPhase && muted == _lastMuted) return;
-
-    switch (phase) {
-      case DmCallPhase.connecting:
-      case DmCallPhase.connected:
-        LocalNotifications.cancelIncomingCall();
-        LocalNotifications.showOngoingCall(
-          peer: c!.displayName,
-          muted: muted,
-        );
-        break;
-      case DmCallPhase.incoming:
-        // Показ уведомления делает _onGlobalIncoming.
-        break;
-      default: // idle, outgoing, error
-        LocalNotifications.cancelIncomingCall();
-        LocalNotifications.cancelOngoingCall();
-        break;
+    if (phase != _lastPhase || muted != _lastMuted) {
+      switch (phase) {
+        case DmCallPhase.connecting:
+        case DmCallPhase.connected:
+          LocalNotifications.cancelIncomingCall();
+          LocalNotifications.showOngoingCall(
+            peer: c!.displayName,
+            muted: muted,
+          );
+          break;
+        case DmCallPhase.incoming:
+          // Показ уведомления/экрана делает _onGlobalIncoming.
+          break;
+        default: // idle, outgoing, error
+          LocalNotifications.cancelIncomingCall();
+          _syncVoiceNotification(force: true);
+          break;
+      }
+      _lastPhase = phase;
+      _lastMuted = muted;
     }
-    _lastPhase = phase;
-    _lastMuted = muted;
+    notifyListeners();
+  }
+
+  void _onVoiceChanged() {
+    _syncVoiceNotification();
+    notifyListeners();
+  }
+
+  /// Постоянное уведомление для войса сфер (если нет звонка в ЛС —
+  /// у него приоритет, уведомление общее).
+  void _syncVoiceNotification({bool force = false}) {
+    final voice = ChannelVoiceController.instance;
+    final dm = activeDm;
+    final dmBusy = dm != null &&
+        (dm.phase == DmCallPhase.connecting ||
+            dm.phase == DmCallPhase.connected);
+    if (dmBusy) return;
+    if (voice.isActive) {
+      final changed = voice.isActive != _lastVoiceActive ||
+          voice.muted != _lastVoiceMuted ||
+          voice.channelTitle != _lastVoiceTitle;
+      if (force || changed) {
+        LocalNotifications.showOngoingCall(
+          peer: voice.channelTitle.isEmpty ? 'Войс' : voice.channelTitle,
+          muted: voice.muted,
+          body: voice.muted
+              ? 'Вы в войсе · микрофон выключен'
+              : 'Вы в войсе',
+        );
+      }
+    } else if (_lastVoiceActive || force) {
+      LocalNotifications.cancelOngoingCall();
+    }
+    _lastVoiceActive = voice.isActive;
+    _lastVoiceMuted = voice.muted;
+    _lastVoiceTitle = voice.channelTitle;
   }
 }

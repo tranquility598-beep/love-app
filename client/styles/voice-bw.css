@@ -1,0 +1,172 @@
+/* ============================================================
+   LOVE — ч/б стиль кнопок голосовых каналов (ПК)
+   Подключать ПОСЛЕ styles/style.css:
+   <link rel="stylesheet" href="styles/voice-bw.css">
+   ============================================================ */
+
+/* ── Плавающая мини-панель войса ───────────────────────────── */
+#voice-panel {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55) !important;
+  padding: 14px !important;
+}
+
+#voice-channel-name {
+  color: #fff !important;
+  font-weight: 800 !important;
+}
+
+#voice-server-name {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 12px !important;
+}
+
+/* Участники в мини-панели */
+#voice-panel-members > * {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  transition: background 0.15s ease;
+}
+
+#voice-panel-members > *:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Контейнеры кнопок ─────────────────────────────────────── */
+/* Если контейнеры называются иначе — поправь селекторы под реальные классы. */
+#voice-panel .voice-controls,
+#voice-view .voice-view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+
+/* ── Кнопки управления войсом (базовый ч/б стиль) ──────────── */
+.vc-btn,
+#voice-mute-btn,
+#voice-deafen-btn,
+#voice-view-mute-btn,
+#voice-view-deafen-btn,
+#voice-panel button,
+#voice-view .voice-view-controls button {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.12s ease;
+}
+
+.vc-btn svg,
+#voice-mute-btn svg,
+#voice-deafen-btn svg,
+#voice-panel button svg,
+#voice-view .voice-view-controls button svg {
+  width: 21px !important;
+  height: 21px !important;
+}
+
+/* Hover: инверсия — белая кнопка, чёрная иконка */
+.vc-btn:hover,
+#voice-mute-btn:hover,
+#voice-deafen-btn:hover,
+#voice-view-mute-btn:hover,
+#voice-view-deafen-btn:hover,
+#voice-panel button:hover,
+#voice-view .voice-view-controls button:hover {
+  background: #fff !important;
+  color: #000 !important;
+  border-color: #fff !important;
+  transform: translateY(-1px);
+}
+
+.vc-btn:active,
+#voice-panel button:active,
+#voice-view .voice-view-controls button:active {
+  transform: scale(0.94);
+}
+
+/* Активные состояния: мьют/deafen включён → залитая белым кнопка */
+.vc-btn.muted,
+.vc-btn.deafened,
+#voice-mute-btn.muted,
+#voice-deafen-btn.deafened,
+#voice-view-mute-btn.muted,
+#voice-view-deafen-btn.deafened {
+  background: #fff !important;
+  color: #000 !important;
+  border-color: #fff !important;
+}
+
+/* ── Кнопки полноэкранного Voice View — крупнее ────────────── */
+.vc-btn--lg,
+#voice-view-mute-btn,
+#voice-view-deafen-btn,
+#voice-view .voice-view-controls button {
+  width: 56px !important;
+  height: 56px !important;
+  min-width: 56px !important;
+  min-height: 56px !important;
+}
+
+.vc-btn--lg svg,
+#voice-view-mute-btn svg,
+#voice-view-deafen-btn svg,
+#voice-view .voice-view-controls button svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* ── «Отключиться» — самая заметная: белая с чёрной иконкой ── */
+.vc-btn--end,
+#voice-panel [id*="disconnect"],
+#voice-panel [id*="leave"],
+#voice-view [id*="disconnect"],
+#voice-view [id*="leave"] {
+  background: #fff !important;
+  color: #000 !important;
+  border-color: #fff !important;
+}
+
+.vc-btn--end:hover,
+#voice-panel [id*="disconnect"]:hover,
+#voice-panel [id*="leave"]:hover,
+#voice-view [id*="disconnect"]:hover,
+#voice-view [id*="leave"]:hover {
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: #000 !important;
+  transform: translateY(-1px) scale(1.03);
+}
+
+/* ── Иконки с жёстко прописанным fill/stroke → currentColor ── */
+.vc-btn svg [fill]:not([fill="none"]),
+#voice-panel button svg [fill]:not([fill="none"]),
+#voice-view .voice-view-controls button svg [fill]:not([fill="none"]) {
+  fill: currentColor;
+}
+
+.vc-btn svg [stroke]:not([stroke="none"]),
+#voice-panel button svg [stroke]:not([stroke="none"]),
+#voice-view .voice-view-controls button svg [stroke]:not([stroke="none"]) {
+  stroke: currentColor;
+}

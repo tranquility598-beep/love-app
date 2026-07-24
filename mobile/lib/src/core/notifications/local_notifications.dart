@@ -1,4 +1,21 @@
+import 'dart:ui';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+/// Имя порта, через который фоновый изолят передаёт нажатия кнопок
+/// уведомлений в основной изолят (слушает CallCenter).
+const String kLoveCallActionPort = 'love_call_actions';
+
+/// Обработчик кнопок уведомлений без открытия приложения
+/// (showsUserInterface: false). Работает в ОТДЕЛЬНОМ изоляте, поэтому
+/// не трогает состояние напрямую, а шлёт событие через IsolateNameServer.
+@pragma('vm:entry-point')
+void loveNotificationBackgroundHandler(NotificationResponse response) {
+  final action = response.actionId;
+  if (action == null || action.isEmpty) return;
+  final port = IsolateNameServer.lookupPortByName(kLoveCallActionPort);
+  port?.send('$action|${response.payload ?? ''}');
+}
 
 /// System-tray notifications for realtime events while the app process is alive
 /// (foreground or briefly backgrounded). For delivery when the app is fully
@@ -12,7 +29,10 @@ class LocalNotifications {
   static int _counter = 0;
   static void Function(String? payload)? onTap;
 
-  /// Кнопки в уведомлениях (принять/отклонить/микрофон/завершить).
+  /// Кнопки уведомлений, ОТКРЫВАЮЩИЕ приложение (сейчас — только
+  /// «Принять» у входящего звонка). Остальные кнопки (микрофон,
+  /// завершить, отклонить) работают БЕЗ открытия приложения — через
+  /// [loveNotificationBackgroundHandler] и порт [kLoveCallActionPort].
   static void Function(String actionId, String? payload)? onAction;
 
   /// Накопленные строки по каждому диалогу — сообщения одного человека
@@ -51,6 +71,8 @@ class LocalNotifications {
           onTap?.call(response.payload);
         }
       },
+      onDidReceiveBackgroundNotificationResponse:
+          loveNotificationBackgroundHandler,
     );
     final android_ = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -81,8 +103,7 @@ class LocalNotifications {
   }
 
   /// Уведомление о сообщении в диалоге: обновляет ОДНУ карточку со
-  /// стопкой последних строк. Каждое новое сообщение снова показывает
-  /// уведомление, даже если предыдущее смахнули.
+  /// стопкой последних строк.
   static Future<void> showMessage({
     required String conversationId,
     required String sender,
@@ -128,6 +149,8 @@ class LocalNotifications {
   // ── Звонки ──
 
   /// Входящий звонок: полноэкранное уведомление с «Принять»/«Отклонить».
+  /// «Принять» открывает приложение (полноэкранный звонок),
+  /// «Отклонить» отрабатывает БЕЗ открытия приложения.
   static Future<void> showIncomingCall({
     required String caller,
     String? payload,
@@ -145,7 +168,7 @@ class LocalNotifications {
         ongoing: true,
         autoCancel: false,
         icon: '@mipmap/ic_launcher',
-        actions: const <AndroidNotificationAction>[
+        actions: const [
           AndroidNotificationAction(
             'call_accept',
             'Принять',
@@ -154,7 +177,7 @@ class LocalNotifications {
           AndroidNotificationAction(
             'call_decline',
             'Отклонить',
-            showsUserInterface: true,
+            showsUserInterface: false,
             cancelNotification: true,
           ),
         ],
@@ -169,11 +192,14 @@ class LocalNotifications {
     );
   }
 
-  /// Звонок идёт: несмахиваемое уведомление с кнопками микрофона и
-  /// завершения. Обновляется без звука (onlyAlertOnce).
+  /// Звонок/войс идёт: несмахиваемое уведомление с кнопками микрофона и
+  /// завершения. Кнопки работают БЕЗ открытия приложения: нажал —
+  /// микрофон выключился, текст/кнопка в уведомлении обновились.
+  /// Обновляется без звука (onlyAlertOnce).
   static Future<void> showOngoingCall({
     required String peer,
     required bool muted,
+    String? body,
   }) async {
     if (!_ready) await init();
     final details = NotificationDetails(
@@ -189,16 +215,16 @@ class LocalNotifications {
         onlyAlertOnce: true,
         usesChronometer: true,
         icon: '@mipmap/ic_launcher',
-        actions: <AndroidNotificationAction>[
+        actions: [
           AndroidNotificationAction(
             'call_mute',
             muted ? 'Вкл. микрофон' : 'Выкл. микрофон',
-            showsUserInterface: true,
+            showsUserInterface: false,
           ),
           const AndroidNotificationAction(
             'call_hangup',
             'Завершить',
-            showsUserInterface: true,
+            showsUserInterface: false,
             cancelNotification: true,
           ),
         ],
@@ -207,7 +233,8 @@ class LocalNotifications {
     await _plugin.show(
       _ongoingCallId,
       peer,
-      muted ? 'Звонок идёт · микрофон выключен' : 'Звонок идёт',
+      body ??
+          (muted ? 'Звонок идёт · микрофон выключен' : 'Звонок идёт'),
       details,
     );
   }

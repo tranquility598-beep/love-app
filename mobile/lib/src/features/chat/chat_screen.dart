@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../config/app_config.dart';
 import '../../core/network/love_api.dart';
 import '../../core/notifications/in_app_notifications.dart';
 import '../../core/platform/audio_file_picker.dart';
@@ -15,8 +14,13 @@ import '../../widgets/love_background.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/notifications/local_notifications.dart';
 import '../../core/calls/call_center.dart';
+import '../profile/user_profile_screen.dart';
 import 'chat_models.dart';
 import 'dm_call_controller.dart';
+import '../calls/call_screen.dart';
+import '../calls/call_session.dart';
+import 'invite_card.dart';
+import 'message_media.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -45,7 +49,7 @@ class ChatScreen extends StatefulWidget {
   final bool showHeader;
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
@@ -63,6 +67,12 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _error;
   DmCallController? _callController;
 
+  /// Message the next send replies to («Ответить»).
+  ChatMessage? _replyTo;
+
+  /// Own message currently being edited («Редактировать»).
+  ChatMessage? _editing;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +83,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     widget.socket.on('message:new', _handleNewMessage);
     widget.socket.on('message:update', _handleMessageUpdate);
+    widget.socket.on('message:edited', _handleMessageEdited);
+    widget.socket.on('message:deleted', _handleMessageDeleted);
     widget.socket.on('dm:new_message', _handleDmMessage);
     _joinServerRoom();
     final peerId = widget.peerId;
@@ -106,6 +118,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     widget.socket.off('message:new', _handleNewMessage);
     widget.socket.off('message:update', _handleMessageUpdate);
+    widget.socket.off('message:edited', _handleMessageEdited);
+    widget.socket.off('message:deleted', _handleMessageDeleted);
     widget.socket.off('dm:new_message', _handleDmMessage);
     if (_recordingVoice) {
       ChatNativeFiles.cancelVoiceRecording();
@@ -129,30 +143,21 @@ class _ChatScreenState extends State<ChatScreen> {
             subtitle: widget.conversationId == null
                 ? 'Текстовый канал'
                 : 'Личный диалог',
+            onTitleTap: widget.peerId == null || widget.peerId!.isEmpty
+                ? null
+                : () => _openProfile(widget.peerId!),
             actions: [
               if (_callController != null)
-                AnimatedBuilder(
-                  animation: _callController!,
-                  builder: (context, _) => LoveActionButton(
-                    tooltip: 'Позвонить',
-                    icon: _callController!.isVisible
-                        ? Icons.call_rounded
-                        : Icons.call_outlined,
-                    onPressed: _callController!.canStart
-                        ? _callController!.startOutgoing
-                        : null,
-                  ),
+                LoveActionButton(
+                  tooltip: 'Позвонить',
+                  icon: Icons.call_outlined,
+                  onPressed: () => _openCall(),
                 ),
               if (_callController != null)
-                AnimatedBuilder(
-                  animation: _callController!,
-                  builder: (context, _) => LoveActionButton(
-                    tooltip: 'Видеозвонок',
-                    icon: Icons.videocam_outlined,
-                    onPressed: _callController!.canStart
-                        ? _callController!.startOutgoing
-                        : null,
-                  ),
+                LoveActionButton(
+                  tooltip: 'Видеозвонок',
+                  icon: Icons.videocam_outlined,
+                  onPressed: () => _openCall(video: true),
                 ),
               LoveActionButton(
                 tooltip: 'Поиск',
@@ -164,15 +169,12 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         Expanded(child: _body()),
-        if (_callController != null)
-          AnimatedBuilder(
-            animation: _callController!,
-            builder: (context, _) => _DmCallPanel(controller: _callController!),
-          ),
+        if (_replyTo != null || _editing != null) _composerBanner(),
         _Composer(
           controller: _message,
           sending: _sending,
           recordingVoice: _recordingVoice,
+          editing: _editing != null,
           attachments: _pendingAttachments,
           onAttach: _pickAttachment,
           onRemoveAttachment: _removeAttachment,
@@ -260,18 +262,258 @@ class _ChatScreenState extends State<ChatScreen> {
             prev.isOwn == message.isOwn &&
             prev.authorName == message.authorName &&
             message.createdAt.difference(prev.createdAt).inMinutes.abs() < 5;
-        return _MessageBubble(message: message, grouped: grouped);
+        final replySource = _replySourceOf(message);
+        return _MessageBubble(
+          message: message,
+          grouped: grouped,
+          api: widget.api,
+          replyAuthor: message.replyToAuthor.isNotEmpty
+              ? message.replyToAuthor
+              : (replySource?.authorName ?? ''),
+          replyContent: message.replyToContent.isNotEmpty
+              ? message.replyToContent
+              : (replySource?.content ?? ''),
+          onLongPress: () => _showMessageActions(message),
+          onAuthorTap: message.isOwn || message.authorId.isEmpty
+              ? null
+              : () => _openProfile(message.authorId),
+        );
       },
     );
   }
 
-  Future<void> _load() async {
+  ChatMessage? _replySourceOf(ChatMessage message) {
+    if (message.replyToId.isEmpty) return null;
+    for (final item in _messages) {
+      if (item.id == message.replyToId) return item;
+    }
+    return null;
+  }
+
+  void _openProfile(String userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UserProfileScreen(
+          userId: userId,
+          api: widget.api,
+          socket: widget.socket,
+        ),
+      ),
+    );
+  }
+
+  /// Открыть полноэкранный звонок (начинает вызов, если он ещё не начат).
+  void _openCall({bool video = false}) {
+    final call = _callController;
+    if (call == null) return;
+    if (call.canStart) {
+      call.startOutgoing();
+    }
+    CallScreen.open(context, DmCallSession(call));
+    if (video && !call.cameraOn && !call.screenSharing) {
+      call.toggleCamera();
+    }
+  }
+
+  Widget _composerBanner() {
+    final editing = _editing;
+    final replyTo = _replyTo;
+    final label = editing != null
+        ? 'Редактирование сообщения'
+        : 'Ответ для ${replyTo?.authorName ?? ''}';
+    final preview = editing?.content ?? replyTo?.content ?? '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: LoveColors.border),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              editing != null ? Icons.edit_rounded : Icons.reply_rounded,
+              size: 16,
+              color: LoveColors.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: LoveColors.textSecondary,
+                    ),
+                  ),
+                  if (preview.trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: LoveColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Отменить',
+              onPressed: () => setState(() {
+                if (_editing != null) _message.clear();
+                _editing = null;
+                _replyTo = null;
+              }),
+              iconSize: 18,
+              color: LoveColors.textSecondary,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMessageActions(ChatMessage message) async {
+    final isTemp =
+        message.id.startsWith('temp_') || message.id.startsWith('temp-');
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: LoveColors.surfaceStrong,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: LoveColors.borderActive),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isTemp)
+                _MessageActionTile(
+                  icon: Icons.reply_rounded,
+                  label: 'Ответить',
+                  onTap: () => Navigator.of(context).pop('reply'),
+                ),
+              if (message.content.trim().isNotEmpty)
+                _MessageActionTile(
+                  icon: Icons.copy_rounded,
+                  label: 'Копировать текст',
+                  onTap: () => Navigator.of(context).pop('copy'),
+                ),
+              if (message.isOwn &&
+                  !isTemp &&
+                  message.content.trim().isNotEmpty)
+                _MessageActionTile(
+                  icon: Icons.edit_rounded,
+                  label: 'Редактировать',
+                  onTap: () => Navigator.of(context).pop('edit'),
+                ),
+              if (message.isOwn && !isTemp)
+                _MessageActionTile(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Удалить',
+                  danger: true,
+                  onTap: () => Navigator.of(context).pop('delete'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'reply':
+        setState(() {
+          _editing = null;
+          _replyTo = message;
+        });
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: message.content));
+        _showSnack('Текст скопирован');
+      case 'edit':
+        setState(() {
+          _replyTo = null;
+          _editing = message;
+          _message.text = message.content;
+          _message.selection = TextSelection.collapsed(
+            offset: message.content.length,
+          );
+        });
+      case 'delete':
+        await _deleteMessage(message);
+    }
+  }
+
+  Future<void> _deleteMessage(ChatMessage message) async {
+    try {
+      widget.socket.kick();
+      if (widget.socket.isConnected) {
+        widget.socket.emit('message:delete', {'messageId': message.id});
+      } else {
+        await widget.api.deleteMessage(message.id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _messages.removeWhere((item) => item.id == message.id);
+        if (_editing?.id == message.id) {
+          _editing = null;
+          _message.clear();
+        }
+        if (_replyTo?.id == message.id) _replyTo = null;
+      });
+    } catch (error) {
+      _showSnack(error.toString());
+    }
+  }
+
+  Future<void> _applyEdit(ChatMessage editing, String content) async {
+    try {
+      widget.socket.kick();
+      if (widget.socket.isConnected) {
+        widget.socket.emit('message:edit', {
+          'messageId': editing.id,
+          'content': content,
+        });
+      } else {
+        await widget.api.editMessage(editing.id, content);
+      }
+      if (!mounted) return;
+      setState(() {
+        final index = _messages.indexWhere((item) => item.id == editing.id);
+        if (index != -1) {
+          _messages[index] =
+              _messages[index].copyWith(content: content, edited: true);
+        }
+        _editing = null;
+        _message.clear();
+      });
+    } catch (error) {
+      _showSnack(error.toString());
+    }
+  }
+
+  Future _load() async {
     setState(() {
       _loading = true;
       _slowLoad = false;
       _error = null;
     });
-    Future<void>.delayed(const Duration(seconds: 4), () {
+    Future.delayed(const Duration(seconds: 4), () {
       if (mounted && _loading) setState(() => _slowLoad = true);
     });
     try {
@@ -329,9 +571,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _send() async {
+  Future _send() async {
     final text = _message.text.trim();
+    final editing = _editing;
+    if (editing != null) {
+      if (text.isEmpty) return;
+      await _applyEdit(editing, text);
+      return;
+    }
+
     final channelId = _activeChannelId;
+    final replyTo = _replyTo;
     final pendingAttachments = List<_PendingAttachment>.of(_pendingAttachments);
     if (pendingAttachments.any((item) => item.uploading)) {
       _showSnack('Дождитесь загрузки файлов');
@@ -350,6 +600,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _sending = true;
       _message.clear();
       _pendingAttachments.clear();
+      _replyTo = null;
       _messages.add(
         ChatMessage(
           id: tempId,
@@ -372,6 +623,9 @@ class _ChatScreenState extends State<ChatScreen> {
               )
               .toList(),
           type: pendingAttachments.isEmpty ? 'default' : 'file',
+          replyToId: replyTo?.id ?? '',
+          replyToAuthor: replyTo?.authorName ?? '',
+          replyToContent: replyTo?.content ?? '',
         ),
       );
     });
@@ -380,8 +634,9 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final attachments = <Map<String, dynamic>>[];
       for (final pending in pendingAttachments) {
-        final uploaded =
-            pending.uploaded ?? await widget.api.uploadAttachment(pending.path, mimeType: pending.mimeType);
+        final uploaded = pending.uploaded ??
+            await widget.api
+                .uploadAttachment(pending.path, mimeType: pending.mimeType);
         attachments.add({
           'type': pending.typeFromUpload(uploaded),
           'url': asText(uploaded['url']),
@@ -391,16 +646,29 @@ class _ChatScreenState extends State<ChatScreen> {
           'mimetype': asText(uploaded['mimetype'], pending.mimeType),
         });
       }
+      widget.socket.kick();
       if (widget.socket.isConnected) {
         widget.socket.emit('message:send', {
           'channelId': channelId,
           'content': text,
           'attachments': attachments,
           'tempId': tempId,
+          if (replyTo != null &&
+              !replyTo.id.startsWith('temp_') &&
+              !replyTo.id.startsWith('temp-'))
+            'replyTo': replyTo.id,
         });
       } else {
         if (attachments.isEmpty) {
-          await widget.api.sendMessage(channelId, text);
+          await widget.api.sendMessage(
+            channelId,
+            text,
+            replyTo: replyTo != null &&
+                    !replyTo.id.startsWith('temp_') &&
+                    !replyTo.id.startsWith('temp-')
+                ? replyTo.id
+                : null,
+          );
         } else {
           throw const FormatException(
               'Нет realtime-соединения для отправки файла');
@@ -412,6 +680,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _pendingAttachments
           ..clear()
           ..addAll(pendingAttachments);
+        _replyTo = replyTo;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.toString())),
@@ -421,7 +690,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _pickAttachment() async {
+  Future _pickAttachment() async {
     try {
       final picked = await ChatNativeFiles.pickFile();
       if (picked == null || !mounted) return;
@@ -429,7 +698,8 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _pendingAttachments.add(pending);
       });
-      final uploaded = await widget.api.uploadAttachment(pending.path, mimeType: pending.mimeType);
+      final uploaded = await widget.api
+          .uploadAttachment(pending.path, mimeType: pending.mimeType);
       if (!mounted || !_pendingAttachments.contains(pending)) return;
       setState(() {
         pending
@@ -451,7 +721,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _pendingAttachments.removeAt(index));
   }
 
-  Future<void> _toggleVoiceRecording() async {
+  Future _toggleVoiceRecording() async {
     try {
       if (_recordingVoice) {
         final recorded = await ChatNativeFiles.stopVoiceRecording();
@@ -462,7 +732,8 @@ class _ChatScreenState extends State<ChatScreen> {
           setState(() {
             _pendingAttachments.add(pending);
           });
-          final uploaded = await widget.api.uploadAttachment(pending.path, mimeType: pending.mimeType);
+          final uploaded = await widget.api
+              .uploadAttachment(pending.path, mimeType: pending.mimeType);
           if (!mounted || !_pendingAttachments.contains(pending)) return;
           setState(() {
             pending
@@ -484,7 +755,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _showEmojiSheet() async {
+  Future _showEmojiSheet() async {
     const emojis = [
       '😀',
       '😂',
@@ -511,7 +782,7 @@ class _ChatScreenState extends State<ChatScreen> {
       '😴',
       '🥰',
     ];
-    final emoji = await showModalBottomSheet<String>(
+    final emoji = await showModalBottomSheet (
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => SafeArea(
@@ -552,7 +823,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final end = selection.isValid ? selection.end : text.length;
     _message.value = TextEditingValue(
       text: text.replaceRange(start, end, emoji),
-      selection: TextSelection.collapsed(offset: start + emoji.length),
+      selection: TextSelection.collapsed(offset: (start + emoji.length).toInt()),
     );
   }
 
@@ -601,6 +872,31 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages[index] = updated;
       }
     });
+  }
+
+  void _handleMessageEdited(dynamic data) {
+    if (data is! Map) return;
+    final raw = data.cast<String, dynamic>();
+    final message = raw['message'];
+    if (message is! Map) return;
+    if (_eventChannelId(raw, message) != _activeChannelId) return;
+    final updated = ChatMessage.fromJson(
+      message.cast<String, dynamic>(),
+      currentUserId: _currentUserId,
+    );
+    final index = _messages.indexWhere((item) => item.id == updated.id);
+    if (index == -1) return;
+    setState(() => _messages[index] = updated);
+  }
+
+  void _handleMessageDeleted(dynamic data) {
+    if (data is! Map) return;
+    final raw = data.cast<String, dynamic>();
+    final channelId = asId(raw['channelId']);
+    if (channelId.isNotEmpty && channelId != _activeChannelId) return;
+    final messageId = asId(raw['messageId']);
+    if (messageId.isEmpty) return;
+    setState(() => _messages.removeWhere((item) => item.id == messageId));
   }
 
   void _addSocketMessage(Map<String, dynamic>? data) {
@@ -661,19 +957,21 @@ class _ChatHeader extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.avatarUrl,
+    this.onTitleTap,
     this.actions = const [],
   });
 
   final String title;
   final String subtitle;
   final String? avatarUrl;
+  final VoidCallback? onTitleTap;
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: LoveColors.border)),
       ),
@@ -681,193 +979,100 @@ class _ChatHeader extends StatelessWidget {
         children: [
           IconButton(
             tooltip: 'Назад',
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).maybePop(),
             color: LoveColors.textSecondary,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
           ),
-          const SizedBox(width: 2),
-          LoveAvatar(label: title, imageUrl: avatarUrl, size: 38),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: LoveColors.textPrimary,
-                  ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onTitleTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 6,
                 ),
-                const SizedBox(height: 1),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: LoveColors.textSecondary,
-                    fontSize: 11.5,
-                  ),
+                child: Row(
+                  children: [
+                    LoveAvatar(label: title, imageUrl: avatarUrl, size: 38),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              color: LoveColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: LoveColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-          for (final action in actions) action,
+          ...actions,
+          const SizedBox(width: 4),
         ],
       ),
     );
   }
 }
 
-/// Ghost square icon button used in chat/action headers (web `.action-btn`:
-/// 36×36, 8px radius, transparent, secondary color, hover → faint fill).
 class LoveActionButton extends StatelessWidget {
   const LoveActionButton({
     required this.icon,
-    required this.onPressed,
-    this.tooltip,
+    required this.tooltip,
+    this.onPressed,
     super.key,
   });
 
   final IconData icon;
+  final String tooltip;
   final VoidCallback? onPressed;
-  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    final button = Material(
-      type: MaterialType.transparency,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(
-            icon,
-            size: 20,
-            color: onPressed == null
-                ? LoveColors.textMuted
-                : LoveColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
-  }
-}
-
-class _DmCallPanel extends StatelessWidget {
-  const _DmCallPanel({required this.controller});
-
-  final DmCallController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!controller.isVisible) return const SizedBox.shrink();
-
-    final incoming = controller.phase == DmCallPhase.incoming;
-    final connected = controller.phase == DmCallPhase.connected ||
-        controller.phase == DmCallPhase.connecting;
-    final error = controller.phase == DmCallPhase.error;
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: LoveColors.surfaceStrong,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: LoveColors.borderActive),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.26),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+      padding: const EdgeInsets.only(left: 4),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: LoveColors.border),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            LoveAvatar(
-              label: controller.displayName,
-              imageUrl: controller.peerAvatar,
-              size: 38,
+            child: Icon(
+              icon,
+              size: 18,
+              color: onPressed == null
+                  ? LoveColors.textMuted
+                  : LoveColors.textSecondary,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    controller.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    controller.statusText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: LoveColors.textMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (incoming) ...[
-              IconButton.filled(
-                tooltip: 'Принять',
-                onPressed: controller.acceptIncoming,
-                icon: const Icon(Icons.call_rounded),
-              ),
-              const SizedBox(width: 6),
-              IconButton.outlined(
-                tooltip: 'Отклонить',
-                onPressed: controller.declineIncoming,
-                icon: const Icon(Icons.call_end_rounded),
-              ),
-            ] else if (error) ...[
-              IconButton.outlined(
-                tooltip: 'Закрыть',
-                onPressed: controller.dismissError,
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ] else ...[
-              if (connected) ...[
-                IconButton.outlined(
-                  tooltip: controller.muted
-                      ? 'Включить микрофон'
-                      : 'Выключить микрофон',
-                  onPressed: controller.toggleMute,
-                  icon: Icon(
-                    controller.muted
-                        ? Icons.mic_off_rounded
-                        : Icons.mic_rounded,
-                  ),
-                ),
-                const SizedBox(width: 6),
-              ],
-              IconButton.filled(
-                tooltip: 'Завершить',
-                onPressed: controller.endCall,
-                icon: const Icon(Icons.call_end_rounded),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -875,134 +1080,152 @@ class _DmCallPanel extends StatelessWidget {
 }
 
 class _MessageBubble extends StatefulWidget {
-  const _MessageBubble({required this.message, this.grouped = false});
+  const _MessageBubble({
+    required this.message,
+    required this.api,
+    this.grouped = false,
+    this.replyAuthor = '',
+    this.replyContent = '',
+    this.onLongPress,
+    this.onAuthorTap,
+  });
 
   final ChatMessage message;
-
-  /// True when the previous message is from the same author within a short
-  /// window — hide the repeated avatar/name and tighten spacing.
+  final LoveApi api;
   final bool grouped;
+  final String replyAuthor;
+  final String replyContent;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onAuthorTap;
 
   @override
   State<_MessageBubble> createState() => _MessageBubbleState();
 }
 
 class _MessageBubbleState extends State<_MessageBubble> {
-  bool _expanded = false;
-
   @override
   Widget build(BuildContext context) {
     final message = widget.message;
-    final color =
-        message.isOwn ? LoveColors.bubbleOwn : LoveColors.bubblePartner;
-    final textColor =
-        message.isOwn ? LoveColors.bubbleOwnText : LoveColors.bubblePartnerText;
-    final metaColor = message.isOwn
-        ? Colors.black.withValues(alpha: 0.48)
-        : LoveColors.textMuted;
-    final bubble = ConstrainedBox(
+    final compact = LovePrefs.instance.compactMode.value;
+    final inviteCode = InviteCard.inviteCodeOf(message.content);
+    final displayText = inviteCode == null
+        ? message.content
+        : InviteCard.stripInviteLink(message.content);
+    final hasText = displayText.trim().isNotEmpty;
+    final hasMedia = inviteCode != null || message.attachments.isNotEmpty;
+    final timeText = Text(
+      '${_formatTime(message.createdAt)}${message.edited ? ' · изм.' : ''}',
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        color: (message.isOwn
+                ? LoveColors.bubbleOwnText
+                : LoveColors.bubblePartnerText)
+            .withValues(alpha: 0.5),
+      ),
+    );
+
+    final bubbleCore = ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.76,
       ),
-      child: DecoratedBox(
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 12,
+          vertical: compact ? 5 : 7,
+        ),
         decoration: BoxDecoration(
-          color: color,
+          color: message.isOwn
+              ? LoveColors.bubbleOwn
+              : LoveColors.bubblePartner,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(message.isOwn ? 18 : 6),
-            bottomRight: Radius.circular(message.isOwn ? 6 : 18),
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(message.isOwn ? 16 : 5),
+            bottomRight: Radius.circular(message.isOwn ? 5 : 16),
           ),
           border: message.isOwn
               ? null
-              : Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              : Border.all(color: LoveColors.border),
         ),
-        child: Padding(
-          padding: LovePrefs.instance.compactMode.value
-              ? const EdgeInsets.fromLTRB(12, 7, 12, 6)
-              : const EdgeInsets.fromLTRB(14, 10, 14, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message.content.trim().isNotEmpty)
-                    _ExpandableMessageText(
-                      text: message.content,
-                      color: textColor,
-                      expanded: _expanded,
-                      onToggle: () => setState(() => _expanded = !_expanded),
-                    ),
-                  if (message.attachments.isNotEmpty) ...[
-                    if (message.content.trim().isNotEmpty)
-                      const SizedBox(height: 8),
-                    for (final attachment in message.attachments)
-                      _AttachmentChip(
-                        attachment: attachment,
-                        own: message.isOwn,
-                      ),
-                  ],
-                ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.replyToId.isNotEmpty)
+              _ReplyPreview(
+                author: widget.replyAuthor,
+                content: widget.replyContent,
+                own: message.isOwn,
               ),
-              const SizedBox(height: 4),
-              Text(
-                _formatTime(message.createdAt),
-                style: TextStyle(
-                  color: metaColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
+            if (hasText)
+              _ExpandableMessageText(
+                text: displayText,
+                color: message.isOwn
+                    ? LoveColors.bubbleOwnText
+                    : LoveColors.bubblePartnerText,
+                trailing: hasMedia ? null : timeText,
               ),
+            if (inviteCode != null)
+              InviteCard(api: widget.api, code: inviteCode),
+            for (final attachment in message.attachments)
+              AttachmentView(attachment: attachment, own: message.isOwn),
+            if (hasMedia || !hasText) ...[
+              const SizedBox(height: 2),
+              Align(alignment: Alignment.bottomRight, child: timeText),
             ],
-          ),
+          ],
         ),
       ),
     );
 
-    final grouped = widget.grouped;
-
-    final compact = LovePrefs.instance.compactMode.value;
-
-    if (message.isOwn) {
-      return Padding(
-        padding: EdgeInsets.only(bottom: grouped ? 2 : (compact ? 5 : 10)),
-        child: Align(alignment: Alignment.centerRight, child: bubble),
-      );
-    }
+    final bubble = GestureDetector(
+      onLongPress: widget.onLongPress,
+      child: bubbleCore,
+    );
 
     return Padding(
-      padding: EdgeInsets.only(bottom: grouped ? 2 : (compact ? 6 : 12)),
+      padding: EdgeInsets.only(
+        top: widget.grouped ? 3 : (compact ? 8 : 12),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: message.isOwn
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
-          if (grouped)
-            const SizedBox(width: 38)
-          else ...[
-            LoveAvatar(
-              label: message.authorName,
-              imageUrl: message.authorAvatar,
-              size: 30,
-            ),
-            const SizedBox(width: 8),
+          if (!message.isOwn) ...[
+            if (widget.grouped)
+              const SizedBox(width: 34)
+            else
+              GestureDetector(
+                onTap: widget.onAuthorTap,
+                child: LoveAvatar(
+                  label: message.authorName,
+                  imageUrl: message.authorAvatar,
+                  size: 28,
+                ),
+              ),
+            const SizedBox(width: 6),
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: message.isOwn
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
-                if (!grouped)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 4),
-                    child: Text(
-                      message.authorName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: LoveColors.textMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                if (!message.isOwn && !widget.grouped)
+                  GestureDetector(
+                    onTap: widget.onAuthorTap,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 6, bottom: 3),
+                      child: Text(
+                        message.authorName,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: LoveColors.textMuted,
+                        ),
                       ),
                     ),
                   ),
@@ -1023,124 +1246,203 @@ class _MessageBubbleState extends State<_MessageBubble> {
   }
 }
 
-class _ExpandableMessageText extends StatelessWidget {
-  const _ExpandableMessageText({
-    required this.text,
-    required this.color,
-    required this.expanded,
-    required this.onToggle,
-  });
-
-  static const _collapseAtChars = 280;
-  static const _collapseAtLines = 7;
-
-  final String text;
-  final Color color;
-  final bool expanded;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final shouldCollapse = text.runes.length > _collapseAtChars ||
-        '\n'.allMatches(text).length >= _collapseAtLines;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          _wrapLongRuns(text),
-          maxLines: shouldCollapse && !expanded ? 6 : null,
-          overflow: shouldCollapse && !expanded
-              ? TextOverflow.fade
-              : TextOverflow.visible,
-          softWrap: true,
-          style: TextStyle(color: color, height: 1.35),
-        ),
-        if (shouldCollapse) ...[
-          const SizedBox(height: 4),
-          TextButton(
-            onPressed: onToggle,
-            style: TextButton.styleFrom(
-              foregroundColor: color.withValues(alpha: 0.76),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 28),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            child: Text(expanded ? 'Свернуть' : 'Посмотреть еще'),
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _wrapLongRuns(String value) {
-    return value.replaceAllMapped(
-      RegExp(r'(\S{24})(?=\S)'),
-      (match) => '${match.group(1)}\u{200B}',
-    );
-  }
-}
-
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({
-    required this.attachment,
+/// Quoted message preview inside a bubble (reply).
+class _ReplyPreview extends StatelessWidget {
+  const _ReplyPreview({
+    required this.author,
+    required this.content,
     required this.own,
   });
 
-  final ChatAttachment attachment;
+  final String author;
+  final String content;
   final bool own;
 
   @override
   Widget build(BuildContext context) {
-    final url = AppConfig.mediaUrl(attachment.url) ?? '';
-    final icon = attachment.isVoice
-        ? Icons.graphic_eq_rounded
-        : attachment.type == 'image'
-            ? Icons.image_outlined
-            : Icons.attach_file_rounded;
+    final base = own ? Colors.black : Colors.white;
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: url.isEmpty ? null : () => launchUrl(Uri.parse(url)),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: own
-                ? Colors.black.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.055),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: own
-                  ? Colors.black.withValues(alpha: 0.08)
-                  : LoveColors.border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 17),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  attachment.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+          color: base.withValues(alpha: 0.07),
+          child: IntrinsicHeight(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 3, color: base.withValues(alpha: 0.45)),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          author.isEmpty ? 'Сообщение' : author,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: base.withValues(alpha: 0.75),
+                          ),
+                        ),
+                        if (content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 1),
+                          Text(
+                            content,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: base.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MessageActionTile extends StatelessWidget {
+  const _MessageActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? LoveColors.danger : LoveColors.textPrimary;
+    return ListTile(
+      onTap: onTap,
+      leading: Icon(
+        icon,
+        size: 20,
+        color: danger ? LoveColors.danger : LoveColors.textSecondary,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+/// Long message text with collapse/expand («Показать полностью»).
+class _ExpandableMessageText extends StatefulWidget {
+  const _ExpandableMessageText({
+    required this.text,
+    required this.color,
+    this.trailing,
+  });
+
+  final String text;
+  final Color color;
+
+  /// Optional widget (timestamp) rendered inline at the end of the last line.
+  final Widget? trailing;
+
+  static const collapseChars = 280;
+  static const collapseLines = 7;
+
+  @override
+  State<_ExpandableMessageText> createState() =>
+      _ExpandableMessageTextState();
+}
+
+class _ExpandableMessageTextState extends State<_ExpandableMessageText> {
+  bool _expanded = false;
+
+  bool get _isLong =>
+      widget.text.length > _ExpandableMessageText.collapseChars ||
+      '\n'.allMatches(widget.text).length >=
+          _ExpandableMessageText.collapseLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = _wrapLongRuns(widget.text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text.rich(
+          TextSpan(
+            text: text,
+            children: [
+              if (widget.trailing != null)
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.bottom,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 7),
+                    child: widget.trailing!,
+                  ),
+                ),
+            ],
+          ),
+          maxLines: !_isLong || _expanded
+              ? null
+              : _ExpandableMessageText.collapseLines,
+          overflow: !_isLong || _expanded
+              ? TextOverflow.visible
+              : TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14.5,
+            height: 1.35,
+            color: widget.color,
+          ),
+        ),
+        if (_isLong)
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _expanded ? 'Свернуть' : 'Показать полностью',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: widget.color.withValues(alpha: 0.65),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Inserts zero-width breaks into very long unbroken runs so they wrap
+  /// instead of overflowing the bubble.
+  String _wrapLongRuns(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'\S{24}'),
+      (match) => '${match.group(0)}\u200B',
     );
   }
 }
@@ -1149,50 +1451,53 @@ class _PendingAttachment {
   _PendingAttachment({
     required this.path,
     required this.name,
+    required this.type,
     required this.mimeType,
     required this.size,
-    required this.type,
-    this.durationMs = 0,
+    this.isVoice = false,
   });
 
-  factory _PendingAttachment.file(PickedChatFile file) {
+  factory _PendingAttachment.file(PickedChatFile picked) {
     return _PendingAttachment(
-      path: file.path,
-      name: file.name,
-      mimeType: file.mimeType,
-      size: file.size,
-      type: file.isImage
+      path: picked.path,
+      name: picked.name,
+      type: picked.isImage
           ? 'image'
-          : file.isAudio
+          : picked.isAudio
               ? 'audio'
               : 'file',
+      mimeType: picked.mimeType,
+      size: picked.size,
     );
   }
 
-  factory _PendingAttachment.voice(RecordedVoiceMessage file) {
+  factory _PendingAttachment.voice(RecordedVoiceMessage recorded) {
     return _PendingAttachment(
-      path: file.path,
-      name: file.name,
-      mimeType: file.mimeType,
-      size: file.size,
+      path: recorded.path,
+      name: recorded.name,
       type: 'audio',
-      durationMs: file.durationMs,
+      mimeType: recorded.mimeType,
+      size: recorded.size,
+      isVoice: true,
     );
   }
 
   final String path;
   final String name;
+  final String type;
   final String mimeType;
   final int size;
-  final String type;
-  final int durationMs;
+  final bool isVoice;
+
   bool uploading = false;
   Map<String, dynamic>? uploaded;
 
-  String typeFromUpload(Map<String, dynamic> uploaded) {
-    final uploadedType = asText(uploaded['type']);
-    if (type == 'audio') return 'audio';
-    return uploadedType.isEmpty ? type : uploadedType;
+  String typeFromUpload(Map<String, dynamic> upload) {
+    final mime = asText(upload['mimetype'], mimeType);
+    if (mime.startsWith('image/')) return 'image';
+    if (mime.startsWith('audio/')) return 'audio';
+    if (mime.startsWith('video/')) return 'video';
+    return type;
   }
 }
 
@@ -1201,6 +1506,7 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.sending,
     required this.recordingVoice,
+    required this.editing,
     required this.attachments,
     required this.onAttach,
     required this.onRemoveAttachment,
@@ -1212,6 +1518,7 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
   final bool recordingVoice;
+  final bool editing;
   final List<_PendingAttachment> attachments;
   final VoidCallback onAttach;
   final void Function(int index) onRemoveAttachment;
@@ -1224,89 +1531,101 @@ class _Composer extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (attachments.isNotEmpty) ...[
+            if (attachments.isNotEmpty)
               _AttachmentPreviewStrip(
                 attachments: attachments,
                 onRemove: onRemoveAttachment,
               ),
-              const SizedBox(height: 8),
-            ],
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
-                border: Border.all(color: const Color(0x14FFFFFF)),
+                color: Colors.white.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: LoveColors.borderActive),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
                     tooltip: 'Прикрепить файл',
-                    onPressed: sending ? null : onAttach,
+                    onPressed: editing ? null : onAttach,
                     color: LoveColors.textSecondary,
-                    iconSize: 22,
-                    icon: const Icon(Icons.attach_file_rounded),
+                    icon: const Icon(Icons.add_rounded, size: 22),
                   ),
                   IconButton(
                     tooltip: 'Эмодзи',
-                    onPressed: sending ? null : onEmoji,
+                    onPressed: onEmoji,
                     color: LoveColors.textSecondary,
-                    iconSize: 22,
-                    icon: const Icon(Icons.sentiment_satisfied_outlined),
+                    icon: const Icon(
+                      Icons.emoji_emotions_outlined,
+                      size: 20,
+                    ),
                   ),
                   Expanded(
                     child: TextField(
                       controller: controller,
                       minLines: 1,
                       maxLines: 5,
-                      textCapitalization: TextCapitalization.sentences,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: 'Написать…',
-                        filled: false,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
+                      textAlignVertical: TextAlignVertical.center,
+                      textInputAction: TextInputAction.newline,
+                      style: const TextStyle(
+                        color: LoveColors.textPrimary,
+                        fontSize: 14.5,
                       ),
-                      onSubmitted: (_) => onSend(),
+                      decoration: InputDecoration(
+                        hintText: recordingVoice
+                            ? 'Идёт запись голосового...'
+                            : editing
+                                ? 'Изменить сообщение...'
+                                : 'Написать...',
+                        hintStyle: const TextStyle(
+                          color: LoveColors.textMuted,
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                      ),
                     ),
                   ),
+                  if (!editing)
+                    IconButton(
+                      tooltip: recordingVoice
+                          ? 'Остановить запись'
+                          : 'Голосовое сообщение',
+                      onPressed: onVoice,
+                      color: recordingVoice
+                          ? LoveColors.danger
+                          : LoveColors.textSecondary,
+                      icon: Icon(
+                        recordingVoice
+                            ? Icons.stop_circle_outlined
+                            : Icons.mic_none_rounded,
+                        size: 21,
+                      ),
+                    ),
                   IconButton(
-                    tooltip: 'Отправить',
+                    tooltip: editing ? 'Сохранить' : 'Отправить',
                     onPressed: sending ? null : onSend,
-                    color: LoveColors.textPrimary,
-                    iconSize: 22,
+                    color: Colors.white,
                     icon: sending
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: LoveColors.textSecondary,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.send_rounded),
-                  ),
-                  IconButton(
-                    tooltip: recordingVoice
-                        ? 'Остановить запись'
-                        : 'Голосовое сообщение',
-                    onPressed: sending ? null : onVoice,
-                    color: recordingVoice
-                        ? LoveColors.danger
-                        : LoveColors.textSecondary,
-                    iconSize: 22,
-                    icon: Icon(
-                      recordingVoice
-                          ? Icons.stop_circle_outlined
-                          : Icons.mic_none_rounded,
-                    ),
+                        : Icon(
+                            editing
+                                ? Icons.check_rounded
+                                : Icons.send_rounded,
+                            size: 20,
+                          ),
                   ),
                 ],
               ),
@@ -1329,28 +1648,19 @@ class _AttachmentPreviewStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: LoveColors.surfaceStrong,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: LoveColors.border),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < attachments.length; i++) ...[
-            _PendingAttachmentTile(
-              attachment: attachments[i],
-              onRemove: () => onRemove(i),
-            ),
-            if (i != attachments.length - 1)
-              Divider(
-                height: 12,
-                color: Colors.white.withValues(alpha: 0.06),
-              ),
-          ],
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: 44,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: attachments.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
+          itemBuilder: (context, index) => _PendingAttachmentTile(
+            attachment: attachments[index],
+            onRemove: () => onRemove(index),
+          ),
+        ),
       ),
     );
   }
@@ -1367,76 +1677,57 @@ class _PendingAttachmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = attachment.type == 'audio'
-        ? Icons.graphic_eq_rounded
-        : attachment.type == 'image'
-            ? Icons.image_outlined
-            : Icons.attach_file_rounded;
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: LoveColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            attachment.isVoice
+                ? Icons.mic_rounded
+                : attachment.type == 'image'
+                    ? Icons.image_outlined
+                    : Icons.attach_file_rounded,
+            size: 16,
+            color: LoveColors.textSecondary,
           ),
-          child: Icon(icon, size: 18),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                attachment.type == 'audio' && attachment.durationMs > 0
-                    ? 'Голосовое сообщение'
-                    : attachment.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              attachment.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: LoveColors.textPrimary,
               ),
-              const SizedBox(height: 2),
-              Text(
-                attachment.uploading
-                    ? 'Загрузка...'
-                    : attachment.durationMs > 0
-                        ? _formatDuration(attachment.durationMs)
-                        : _formatBytes(attachment.size),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: LoveColors.textMuted,
-                  fontSize: 11,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-        IconButton(
-          tooltip: 'Убрать',
-          onPressed: onRemove,
-          icon: const Icon(Icons.close_rounded),
-        ),
-      ],
+          const SizedBox(width: 4),
+          if (attachment.uploading)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            InkWell(
+              onTap: onRemove,
+              child: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: LoveColors.textMuted,
+              ),
+            ),
+        ],
+      ),
     );
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes <= 0) return 'Готово к отправке';
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
-  String _formatDuration(int ms) {
-    final total = (ms / 1000).round();
-    final minutes = total ~/ 60;
-    final seconds = (total % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 }

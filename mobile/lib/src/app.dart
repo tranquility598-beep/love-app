@@ -4,7 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
 import 'core/network/love_api.dart';
-import 'core/notifications/in_app_notifications.dart';
+import 'core/calls/call_center.dart';
 import 'core/prefs/love_prefs.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/shell/main_shell.dart';
@@ -48,7 +48,7 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
       session: session,
       child: MaterialApp(
         title: 'Love',
-        navigatorKey: InAppNotifications.navigatorKey,
+        navigatorKey: CallCenter.navigatorKey,
         scaffoldMessengerKey: _messengerKey,
         debugShowCheckedModeBanner: false,
         theme: LoveTheme.dark(),

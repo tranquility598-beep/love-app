@@ -158,39 +158,70 @@
     return wrap;
   }
 
+  function openLiveMediaFullscreen(stream, title, mirror) {
+    const old = document.querySelector('.love-voice-media-fullscreen');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'love-voice-media-fullscreen';
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.srcObject = stream;
+    if (mirror) video.classList.add('is-mirrored');
+    const close = document.createElement('button');
+    close.type = 'button'; close.className = 'love-voice-media-close';
+    close.setAttribute('aria-label', 'Закрыть полноэкранное видео'); close.textContent = '×';
+    const caption = document.createElement('div');
+    caption.className = 'love-voice-media-caption'; caption.textContent = title;
+    const dismiss = () => { video.srcObject = null; overlay.remove(); };
+    close.addEventListener('click', dismiss);
+    overlay.addEventListener('click', event => { if (event.target === overlay) dismiss(); });
+    overlay.append(video, close, caption);
+    document.body.appendChild(overlay);
+    video.play().catch(() => {});
+  }
+
+  function liveMediaFor(member) {
+    const manager = window.voiceManager;
+    if (!manager) return null;
+    const own = getUserId(member) === String(window.currentUser?._id || '');
+    const socketId = getSocketId(member);
+    const stream = own
+      ? (manager.screenStream || manager.cameraStream)
+      : manager.remoteVideoStreams?.get(socketId);
+    if (!stream || !stream.getVideoTracks || stream.getVideoTracks().length === 0) return null;
+    const screen = own ? !!manager.isScreenSharing : state.screenShares.has(socketId);
+    return { stream, screen, mirror: own && !screen && manager._cameraFacing !== 'environment' };
+  }
+
   function createMemberCard(member, target) {
     const userId = getUserId(member);
     const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'voice-pcard';
-    card.dataset.userId = userId;
-    card.setAttribute('role', 'listitem');
-
-    if (userId && userId === String(window.currentUser?._id || '')) {
-      card.classList.add('is-own');
+    card.type = 'button'; card.className = 'voice-pcard';
+    card.dataset.userId = userId; card.setAttribute('role', 'listitem');
+    const own = userId && userId === String(window.currentUser?._id || '');
+    if (own) card.classList.add('is-own');
+    if (state.speaking.has(userId)) card.classList.add('speaking');
+    if (target?.compact) card.classList.add('compact');
+    const media = liveMediaFor(member);
+    if (media) {
+      const video = document.createElement('video');
+      video.className = 'voice-live-media' + (media.mirror ? ' is-mirrored' : '');
+      video.autoplay = true; video.playsInline = true; video.muted = true; video.srcObject = media.stream;
+      card.classList.add('has-live-media');
+      const badge = document.createElement('span'); badge.className = 'voice-live-media-badge';
+      badge.textContent = media.screen ? 'ЭКРАН' : 'КАМЕРА';
+      card.append(video, badge);
+      card.addEventListener('click', () => openLiveMediaFullscreen(media.stream, `${media.screen ? 'Экран' : 'Камера'} · ${getDisplayName(member)}`, media.mirror));
+      video.play().catch(() => {});
+    } else {
+      const avatar = createAvatar(member); card.appendChild(avatar);
+      if (member?.muted || getMemberUser(member)?.muted) avatar.appendChild(createStatusBadge('mic-muted', MIC_MUTED_SVG));
+      if (member?.deafened || getMemberUser(member)?.deafened) avatar.appendChild(createStatusBadge('sound-muted', SOUND_MUTED_SVG));
     }
-    if (state.speaking.has(userId)) {
-      card.classList.add('speaking');
-    }
-    if (target?.compact) {
-      card.classList.add('compact');
-    }
-
-    const avatar = createAvatar(member);
-    card.appendChild(avatar);
-
-    if (member?.muted || getMemberUser(member)?.muted) {
-      avatar.appendChild(createStatusBadge('mic-muted', MIC_MUTED_SVG));
-    }
-    if (member?.deafened || getMemberUser(member)?.deafened) {
-      avatar.appendChild(createStatusBadge('sound-muted', SOUND_MUTED_SVG));
-    }
-
     const name = document.createElement('div');
-    name.className = 'voice-member-name';
-    name.textContent = getDisplayName(member);
-    card.appendChild(name);
-
+    name.className = 'voice-member-name'; name.textContent = getDisplayName(member); card.appendChild(name);
     return card;
   }
 

@@ -427,6 +427,7 @@ router.get('/invite/:code/preview', async (req, res) => {
     }
 
     res.json({
+      id: server._id.toString(),
       code,
       name: server.name,
       description: server.description || '',

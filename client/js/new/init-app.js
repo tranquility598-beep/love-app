@@ -180,13 +180,9 @@
     if (suppressed) {
       return;
     }
-    if (window.settingsManager && window.settingsManager.get('notif-messages') === false) {
-      return;
-    }
-    const showPreview = !window.settingsManager || window.settingsManager.get('notif-preview') !== false;
     window.showAppNotification({
       title: _esc(username || 'Новое сообщение'),
-      text: showPreview ? (text || '').toString().slice(0, 80) : 'Новое сообщение',
+      text: (text || '').toString().slice(0, 80),
       avatar: (username || '?').charAt(0).toUpperCase(),
       onClick: () => {
         // Переходим к нужному диалогу/каналу
@@ -204,7 +200,7 @@
     if (!document.hasFocus() && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
       window.electronAPI.showNotification(
         username || 'Новое сообщение',
-        showPreview ? (text || '').toString().slice(0, 120) : 'Новое сообщение',
+        (text || '').toString().slice(0, 120),
         { conversationId: targetChannelId }
       );
     }
@@ -1218,25 +1214,32 @@
   //    Intercepts form submits to send via real socket when applicable
   // ══════════════════════════════════════════════════════════════════════
 
-  window._sendRealDMMessage = function (conv, text, attachments) {
+  window._sendRealDMMessage = function (conv, text, attachments, replyTo) {
     if (!conv?._channelId || !window.socket) return false;
 
     // Emit via socket. attachments — массив объектов вложений (image/file/video/audio).
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: conv._channelId, content: text || '', tempId };
+    // Reply target выбирается UI после нажатия «Ответить».
+    const target = replyTo || window.__loveReplyTarget?.id;
+    if (target) payload.replyTo = target;
     if (attachments && attachments.length) payload.attachments = attachments;
     window.socket.emit('message:send', payload);
+    if (target) window.__loveReplyTarget = null;
 
     return true; // signal that message was sent via real socket
   };
 
-  window._sendRealChannelMessage = function (channelRealId, text, attachments) {
+  window._sendRealChannelMessage = function (channelRealId, text, attachments, replyTo) {
     if (!channelRealId || !window.socket) return false;
 
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: channelRealId, content: text || '', tempId };
+    const target = replyTo || window.__loveReplyTarget?.id;
+    if (target) payload.replyTo = target;
     if (attachments && attachments.length) payload.attachments = attachments;
     window.socket.emit('message:send', payload);
+    if (target) window.__loveReplyTarget = null;
 
     return true;
   };
@@ -1302,11 +1305,7 @@
               window._prependNotification(mapped);
             }
             // Показываем тост для уведомлений кроме DM-сообщений (те идут через showMessageNotification)
-            const notifBlocked = window.settingsManager && (
-              (n.type === 'mention' && window.settingsManager.get('notif-mentions') === false) ||
-              ((n.type === 'friend_request' || n.type === 'friend_accepted') && window.settingsManager.get('notif-friends') === false)
-            );
-            if (!notifBlocked && n.type !== 'new_dm' && typeof window.showAppNotification === 'function') {
+            if (n.type !== 'new_dm' && typeof window.showAppNotification === 'function') {
               const titles = {
                 mention: 'Упоминание',
                 friend_request: 'Запрос в друзья',

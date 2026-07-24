@@ -113,7 +113,6 @@
 
       if (!name || !email || !subject || !description) return showError(RU() ? 'Заполните все поля.' : 'Please fill in all fields.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError(RU() ? 'Введите корректный email.' : 'Please enter a valid email address.');
-      if (totalSize() > MAX_TOTAL) return showError(RU() ? 'Вложения превышают лимит 10 МБ.' : 'Attachments exceed the 10 MB limit.');
 
       var btn = document.getElementById('sf-submit');
       btn.disabled = true; btn.textContent = RU() ? 'Отправка...' : 'Sending...';

@@ -10,6 +10,8 @@ import '../../widgets/love_background.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/updates/app_updater.dart';
 import '../../core/calls/call_center.dart';
+import '../../core/voice/channel_voice_controller.dart';
+import '../../widgets/call_pill.dart';
 import '../../widgets/love_nav_icons.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
@@ -46,6 +48,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     LocalNotifications.onTap = _onNotificationTap;
     LocalNotifications.onAction = CallCenter.instance.handleNotificationAction;
     CallCenter.instance.init(_socket);
+    CallPill.mount();
+    ChannelVoiceController.instance.init(_socket);
     _socket.connect(
       onConnect: () {},
       onError: (_) {},

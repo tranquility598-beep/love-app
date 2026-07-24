@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
+import '../calls/call_center.dart';
 
 /// Tracks which DM conversation is currently open, so we don't show an in-app
 /// banner for a chat the user is already looking at.
@@ -19,8 +20,7 @@ class ActiveChat {
 class InAppNotifications {
   InAppNotifications._();
 
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
+  static GlobalKey<NavigatorState> get navigatorKey => CallCenter.navigatorKey;
 
   static OverlayEntry? _entry;
 

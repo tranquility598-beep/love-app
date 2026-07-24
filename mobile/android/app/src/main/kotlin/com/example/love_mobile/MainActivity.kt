@@ -15,6 +15,7 @@ import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val audioPickerChannel = "love_mobile/audio_picker"
+    private val screenShareChannel = "love_mobile/screen_share_service"
     private val audioPickerRequestCode = 41721
     private val filePickerRequestCode = 41722
     private var pendingAudioResult: MethodChannel.Result? = null
@@ -33,6 +34,29 @@ class MainActivity : FlutterActivity() {
                     "stopVoiceRecording" -> stopVoiceRecording(result)
                     "cancelVoiceRecording" -> cancelVoiceRecording(result)
                     else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, screenShareChannel)
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "start" -> {
+                            val intent = Intent(this, ScreenShareForegroundService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
+                            result.success(null)
+                        }
+                        "stop" -> {
+                            stopService(Intent(this, ScreenShareForegroundService::class.java))
+                            result.success(null)
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (error: Exception) {
+                    result.error("screen_share_service", error.message, null)
                 }
             }
     }

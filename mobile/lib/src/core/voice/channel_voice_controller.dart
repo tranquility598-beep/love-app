@@ -4,47 +4,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../core/prefs/love_prefs.dart';
-import '../../core/realtime/love_socket.dart';
-import '../../core/voice/screen_share_service.dart';
-import 'chat_models.dart';
+import '../../features/chat/chat_models.dart';
+import '../prefs/love_prefs.dart';
+import '../realtime/love_socket.dart';
+import 'screen_share_service.dart';
 
-enum DmCallPhase {
-  idle,
-  outgoing,
-  incoming,
-  connecting,
-  connected,
-  error,
-}
+/// Фазы голосового подключения к каналу.
+enum ChannelVoicePhase { idle, connecting, connected }
 
-/// Контроллер звонка в ЛС: аудио + камера + демонстрация экрана.
+/// Общий контроллер войса для голосовых каналов сфер и комнат.
 ///
-/// Изменения относительно старой версии:
-/// - переключение динамика УБРАНО — звук всегда через громкий динамик;
-/// - добавлены камера ([toggleCamera], [switchCamera]) и демонстрация
-///   экрана ([toggleScreenShare]) с renegotiation по тем же webrtc:*-событиям;
-/// - ICE-конфиг очищен до трёх STUN-серверов Google (мусорные записи
-///   из старого файла удалены);
-/// - [connectedAt] для таймера длительности на полноэкранном звонке.
-class DmCallController extends ChangeNotifier {
-  DmCallController({
-    required this.socket,
-    required this.conversationId,
-    required this.channelId,
-    required this.peerId,
-    required this.peerName,
-    required this.peerAvatar,
-  });
+/// Singleton: живёт всё время работы приложения, поэтому звук НЕ
+/// обрывается при навигации между экранами. Протокол тот же, что на
+/// десктопе и в ЛС: `voice:*` + `webrtc:*`.
+///
+/// Изменения относительно версии из love-voice-rework:
+/// - кнопка динамика УБРАНА — звук всегда через громкий динамик;
+/// - добавлены камера и демонстрация экрана с renegotiation.
+class ChannelVoiceController extends ChangeNotifier {
+  ChannelVoiceController._();
 
-  final LoveSocket socket;
-  final String conversationId;
-  String channelId;
-  final String peerId;
-  final String peerName;
-  final String peerAvatar;
+  static final ChannelVoiceController instance = ChannelVoiceController._();
 
-  DmCallPhase phase = DmCallPhase.idle;
+  LoveSocket? _socket;
+  bool _attached = false;
+
+  ChannelVoicePhase phase = ChannelVoicePhase.idle;
+  String channelId = '';
+  String channelTitle = '';
   bool muted = false;
   String? errorMessage;
   DateTime? connectedAt;
@@ -58,60 +45,28 @@ class DmCallController extends ChangeNotifier {
   /// Есть ли видео от конкретного пира (ключ — socketId).
   final remoteVideo = <String, bool>{};
 
-  /// Called when an incoming call was missed.
-  void Function(String peerName)? onMissedCall;
+  /// Актуальный состав канала (обновляется, пока мы подключены).
+  final members = <Map<String, dynamic>>[];
 
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
   final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
-
   MediaStream? _localStream;
   MediaStream? _videoStream;
-  String? _activeRoomId;
-  String? _activePeerId;
-  String? _incomingConversationId;
-  String? _incomingChannelId;
-  String? _incomingPeerName;
-  bool _attached = false;
-  bool _disposed = false;
 
-  bool get isVisible => phase != DmCallPhase.idle;
-  bool get canStart => phase == DmCallPhase.idle && peerId.isNotEmpty;
+  bool get isActive => phase != ChannelVoicePhase.idle;
+  bool get isConnected => phase == ChannelVoicePhase.connected;
 
-  String get displayName => _incomingPeerName ?? peerName;
+  /// Рендереры участников по socketId (для полноэкранного звонка).
+  Map<String, RTCVideoRenderer> get renderers => _remoteRenderers;
 
-  /// Рендерер собеседника (в ЛС пир один).
-  RTCVideoRenderer? get remoteRenderer =>
-      _remoteRenderers.isEmpty ? null : _remoteRenderers.values.first;
-
-  /// Собеседник сейчас передаёт видео (камера или экран).
-  bool get peerHasVideo => remoteVideo.values.any((value) => value);
-
-  String get statusText {
-    switch (phase) {
-      case DmCallPhase.outgoing:
-        return 'Ожидание ответа...';
-      case DmCallPhase.incoming:
-        return 'Входящий звонок';
-      case DmCallPhase.connecting:
-        return 'Подключение к звонку...';
-      case DmCallPhase.connected:
-        return 'Звонок идет';
-      case DmCallPhase.error:
-        return errorMessage ?? 'Звонок не удался';
-      case DmCallPhase.idle:
-        return '';
-    }
-  }
-
-  void attach() {
+  /// Подключить контроллер к сокету. Вызывается один раз из MainShell.
+  void init(LoveSocket socket) {
+    _socket = socket;
     if (_attached) return;
     _attached = true;
-    socket.on('call:incoming', _handleIncomingCall);
-    socket.on('call:response', _handleCallResponse);
-    socket.on('call:terminated', _handleCallTerminated);
-    socket.on('call:error', _handleCallError);
     socket.on('voice:existing_members', _handleExistingMembers);
+    socket.on('voice:members_update', _handleMembersUpdate);
     socket.on('voice:user_left', _handleUserLeft);
     socket.on('voice:left', _handleVoiceLeft);
     socket.on('webrtc:offer', _handleOffer);
@@ -119,100 +74,88 @@ class DmCallController extends ChangeNotifier {
     socket.on('webrtc:ice_candidate', _handleIceCandidate);
   }
 
-  void updateChannelId(String value) {
-    if (value.isNotEmpty) channelId = value;
-  }
+  /// Войти в голосовой канал. Если уже в другом канале — сначала выходим.
+  Future<bool> join({required String id, required String title}) async {
+    final socket = _socket;
+    if (socket == null || id.isEmpty) return false;
+    if (isActive && channelId == id) return true;
+    if (isActive) await leave();
 
-  Future<void> startOutgoing() async {
-    if (!canStart) return;
+    errorMessage = null;
     if (!socket.isConnected) {
-      _setError('Сокет еще не подключен');
-      return;
+      errorMessage = 'Сокет еще не подключен';
+      notifyListeners();
+      return false;
     }
-    _activePeerId = peerId;
-    phase = DmCallPhase.outgoing;
-    errorMessage = null;
-    _safeNotify();
-    socket.emit('call:request', {'targetUserId': peerId});
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      errorMessage = 'Нет доступа к микрофону';
+      notifyListeners();
+      return false;
+    }
+
+    phase = ChannelVoicePhase.connecting;
+    channelId = id;
+    channelTitle = title;
+    notifyListeners();
+
+    try {
+      await _ensureLocalStream();
+    } catch (_) {
+      await _abortJoin('Не удалось включить микрофон');
+      return false;
+    }
+    try {
+      // Динамик всегда включён — отдельной кнопки больше нет.
+      await Helper.setSpeakerphoneOn(true);
+    } catch (_) {
+      // Некоторые Android-сборки не дают менять аудио-маршрут — не критично.
+    }
+
+    final response =
+        await socket.emitWithAck('voice:join', {'channelId': id});
+    if (response['status'] != 'ok') {
+      await _abortJoin(asText(response['message'], 'Не удалось войти в войс'));
+      return false;
+    }
+
+    phase = ChannelVoicePhase.connected;
+    connectedAt = DateTime.now();
+    if (muted) {
+      socket.emit('voice:toggle_mute', {'channelId': id, 'muted': true});
+    }
+    notifyListeners();
+    return true;
   }
 
-  Future<void> acceptIncoming() async {
-    if (phase != DmCallPhase.incoming || _activePeerId == null) return;
-    final callerId = _activePeerId!;
-    socket.emit('call:response', {
-      'callerId': callerId,
-      'accepted': true,
-      'conversationId': _incomingConversationId ?? conversationId,
-      'channelId': _incomingChannelId ?? channelId,
-    });
-    await _joinCall(
-      _roomId(
-        _incomingConversationId ?? conversationId,
-        _incomingChannelId ?? channelId,
-        callerId,
-      ),
-    );
-  }
-
-  void declineIncoming() {
-    if (phase != DmCallPhase.incoming || _activePeerId == null) return;
-    socket.emit('call:response', {
-      'callerId': _activePeerId,
-      'accepted': false,
-      'conversationId': _incomingConversationId ?? conversationId,
-      'channelId': _incomingChannelId ?? channelId,
-    });
+  /// Выйти из голосового канала.
+  Future<void> leave() async {
+    if (channelId.isNotEmpty) {
+      _socket?.emit('voice:leave', {'channelId': channelId});
+    }
+    await _cleanupMedia();
     _resetToIdle();
   }
 
-  /// Accepts an incoming call event from CallCenter when the chat screen
-  /// is not open and the controller hasn't been created yet.
-  void adoptIncoming({
-    required String callerId,
-    required String conversationId,
-    required String channelId,
-    required String callerName,
-  }) {
-    if (phase != DmCallPhase.idle) return;
-    _activePeerId = callerId;
-    _incomingConversationId =
-        conversationId.isNotEmpty ? conversationId : null;
-    _incomingChannelId = channelId.isNotEmpty ? channelId : null;
-    _incomingPeerName = callerName.isNotEmpty ? callerName : null;
-    phase = DmCallPhase.incoming;
-    errorMessage = null;
-    _safeNotify();
-  }
-
-  Future<void> endCall() async {
-    final targetId = _activePeerId ?? peerId;
-    if (targetId.isNotEmpty && phase != DmCallPhase.idle) {
-      socket.emit('call:end', {'targetUserId': targetId});
-    }
-    await _leaveCall();
-    _resetToIdle();
-  }
-
-  Future<void> toggleMute() async {
-    final next = !muted;
+  /// Переключить микрофон.
+  void toggleMute() {
+    muted = !muted;
     final stream = _localStream;
     if (stream != null) {
       for (final track in stream.getAudioTracks()) {
         // track.enabled полностью останавливает отправку аудио.
         // Helper.setMicrophoneMute не используем: на части Android он
         // «залипает» и микрофон не возвращается после включения.
-        track.enabled = !next;
+        track.enabled = !muted;
       }
     }
-    muted = next;
-    final roomId = _activeRoomId;
-    if (roomId != null) {
-      socket.emit('voice:toggle_mute', {
-        'channelId': roomId,
+    if (channelId.isNotEmpty) {
+      _socket?.emit('voice:toggle_mute', {
+        'channelId': channelId,
         'muted': muted,
       });
     }
-    _safeNotify();
+    notifyListeners();
   }
 
   // ── Камера и демонстрация экрана ──
@@ -225,7 +168,7 @@ class DmCallController extends ChangeNotifier {
     final status = await Permission.camera.request();
     if (!status.isGranted) {
       errorMessage = 'Нет доступа к камере';
-      _safeNotify();
+      notifyListeners();
       return;
     }
     MediaStream stream;
@@ -240,7 +183,7 @@ class DmCallController extends ChangeNotifier {
       });
     } catch (_) {
       errorMessage = 'Не удалось включить камеру';
-      _safeNotify();
+      notifyListeners();
       return;
     }
     await _startVideo(stream, screen: false);
@@ -256,7 +199,7 @@ class DmCallController extends ChangeNotifier {
     } catch (_) {
       // На устройстве одна камера — ничего не меняем.
     }
-    _safeNotify();
+    notifyListeners();
   }
 
   Future<void> toggleScreenShare() async {
@@ -278,13 +221,13 @@ class DmCallController extends ChangeNotifier {
       });
     } catch (_) {
       errorMessage = 'Демонстрация экрана отменена или недоступна';
-      _safeNotify();
+      notifyListeners();
       return;
     }
     if (stream.getVideoTracks().isEmpty) {
       try { await stream.dispose(); } catch (_) {}
       errorMessage = 'Android не передал видеопоток демонстрации';
-      _safeNotify();
+      notifyListeners();
       return;
     }
     // Сначала действительно запускаем WebRTC-видео. Это важно для выбора
@@ -309,7 +252,6 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _startVideo(MediaStream stream, {required bool screen}) async {
-    // Камера и демонстрация взаимоисключающие — гасим предыдущее.
     if (_videoStream != null) {
       await stopVideo(silent: true);
     }
@@ -329,16 +271,16 @@ class DmCallController extends ChangeNotifier {
       try {
         await pc.addTrack(track, stream);
       } catch (_) {
-        // Пир в процессе переподключения — добавим трек при пересоздании.
+        // Пир в процессе переподключения.
       }
     }
     cameraOn = !screen;
     screenSharing = screen;
-    _safeNotify();
+    notifyListeners();
     await _renegotiateAll();
   }
 
-  /// Выключить камеру/демонстрацию (звонок продолжается).
+  /// Выключить камеру/демонстрацию (войс продолжается).
   Future<void> stopVideo({bool silent = false}) async {
     final hadVideo = _videoStream != null;
     final wasScreen = screenSharing;
@@ -369,14 +311,13 @@ class DmCallController extends ChangeNotifier {
     screenSharing = false;
     if (wasScreen) await ScreenShareService.stop();
     if (!silent) {
-      _safeNotify();
+      notifyListeners();
       if (hadVideo) await _renegotiateAll();
     }
   }
 
   Future<void> _renegotiateAll() async {
-    final roomId = _activeRoomId;
-    if (roomId == null) return;
+    if (channelId.isEmpty) return;
     for (final entry in _peerConnections.entries.toList()) {
       try {
         final offer = await entry.value.createOffer({
@@ -384,10 +325,10 @@ class DmCallController extends ChangeNotifier {
           'offerToReceiveVideo': true,
         });
         await entry.value.setLocalDescription(offer);
-        socket.emit('webrtc:offer', {
+        _socket?.emit('webrtc:offer', {
           'targetSocketId': entry.key,
           'offer': offer.toMap(),
-          'channelId': roomId,
+          'channelId': channelId,
         });
       } catch (_) {
         // Пир переподключится штатным путём.
@@ -396,91 +337,19 @@ class DmCallController extends ChangeNotifier {
   }
 
   void dismissError() {
-    if (phase == DmCallPhase.error) _resetToIdle();
-  }
-
-  void _handleIncomingCall(dynamic data) {
-    if (data is! Map) return;
-    final raw = data.cast<String, dynamic>();
-    final from = raw['from'] is Map
-        ? (raw['from'] as Map).cast<String, dynamic>()
-        : <String, dynamic>{};
-    final callerId = asId(from['_id']);
-    final incomingConversationId = asId(raw['conversationId']);
-    if (callerId != peerId && incomingConversationId != conversationId) {
-      return;
-    }
-    if (phase != DmCallPhase.idle) {
-      socket.emit('call:response', {
-        'callerId': callerId,
-        'accepted': false,
-        'conversationId': incomingConversationId,
-        'channelId': asId(raw['channelId']),
-      });
-      return;
-    }
-    _activePeerId = callerId;
-    _incomingConversationId = incomingConversationId;
-    _incomingChannelId = asId(raw['channelId']);
-    _incomingPeerName = userDisplayName(from);
-    phase = DmCallPhase.incoming;
     errorMessage = null;
-    _safeNotify();
+    notifyListeners();
   }
 
-  void _handleCallResponse(dynamic data) {
-    unawaited(_handleCallResponseAsync(data));
-  }
-
-  Future<void> _handleCallResponseAsync(dynamic data) async {
-    if (phase != DmCallPhase.outgoing || data is! Map) return;
-    final raw = data.cast<String, dynamic>();
-    final responderId = asId(raw['responderId']);
-    if (responderId.isNotEmpty && responderId != peerId) return;
-    if (raw['accepted'] != true) {
-      await _leaveCall();
-      _setError('Вызов отклонен');
-      return;
-    }
-    _activePeerId = responderId.isNotEmpty ? responderId : peerId;
-    await _joinCall(
-      _roomId(
-        asId(raw['conversationId']).isNotEmpty
-            ? asId(raw['conversationId'])
-            : conversationId,
-        asId(raw['channelId']).isNotEmpty ? asId(raw['channelId']) : channelId,
-        _activePeerId!,
-      ),
-    );
-  }
-
-  void _handleCallTerminated(dynamic data) {
-    if (phase == DmCallPhase.idle) return;
-    if (data is Map) {
-      final by = asId(data['by']);
-      if (by.isNotEmpty && _activePeerId != null && by != _activePeerId) {
-        return;
-      }
-    }
-    final missedFrom = phase == DmCallPhase.incoming ? displayName : null;
-    unawaited(_leaveCall());
-    _resetToIdle();
-    if (missedFrom != null) onMissedCall?.call(missedFrom);
-  }
-
-  void _handleCallError(dynamic data) {
-    final message = data is Map ? asText(data['message']) : '';
-    if (phase != DmCallPhase.idle) {
-      unawaited(_leaveCall());
-      _setError(message.isEmpty ? 'Звонок не удался' : message);
-    }
-  }
+  // ── Socket handlers ──────────────────────────────────
 
   void _handleExistingMembers(dynamic data) {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
-    final members = data['members'];
-    if (members is! List) return;
-    for (final item in members.whereType<Map>()) {
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
+    _applyMembers(data['members']);
+    final list = data['members'];
+    if (list is! List) return;
+    for (final item in list.whereType<Map>()) {
       final member = item.cast<String, dynamic>();
       final socketId = asText(member['socketId']);
       if (socketId.isNotEmpty) {
@@ -489,24 +358,46 @@ class DmCallController extends ChangeNotifier {
     }
   }
 
+  void _handleMembersUpdate(dynamic data) {
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
+    _applyMembers(data['members']);
+  }
+
   void _handleUserLeft(dynamic data) {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
     final socketId = asText(data['socketId']);
     if (socketId.isNotEmpty) unawaited(_removeConnection(socketId));
   }
 
   void _handleVoiceLeft(dynamic data) {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
+    // Сервер завершил наше участие (например, вход с другого устройства).
     unawaited(_cleanupMedia());
     _resetToIdle();
   }
+
+  void _applyMembers(Object? raw) {
+    if (raw is! List) return;
+    members
+      ..clear()
+      ..addAll(raw.whereType<Map>().map(
+            (item) => item.cast<String, dynamic>(),
+          ));
+    notifyListeners();
+  }
+
+  // ── WebRTC mesh (тот же подход, что в DmCallController) ─────
 
   void _handleOffer(dynamic data) {
     unawaited(_handleOfferAsync(data));
   }
 
   Future<void> _handleOfferAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
     final raw = data.cast<String, dynamic>();
     final fromSocketId = asText(raw['fromSocketId']);
     if (fromSocketId.isEmpty) return;
@@ -521,20 +412,19 @@ class DmCallController extends ChangeNotifier {
         pc = null;
       }
       // Существующее stable-соединение НЕ пересоздаём:
-      // renegotiation (вкл/выкл камеры и демонстрации) приходит
-      // обычным offer на том же соединении.
+      // renegotiation (камера/демонстрация) приходит обычным offer.
       pc ??= await _createPeerConnection(fromSocketId);
       await pc.setRemoteDescription(_sessionDescription(raw['offer']));
       await _flushIceCandidates(fromSocketId);
       final answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit('webrtc:answer', {
+      _socket?.emit('webrtc:answer', {
         'targetSocketId': fromSocketId,
         'answer': answer.toMap(),
-        'channelId': _activeRoomId,
+        'channelId': channelId,
       });
-    } catch (error) {
-      _setError('Не удалось принять WebRTC offer');
+    } catch (_) {
+      // Не роняем весь войс из-за одного неудачного пира.
     }
   }
 
@@ -543,7 +433,8 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _handleAnswerAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
     final raw = data.cast<String, dynamic>();
     final fromSocketId = asText(raw['fromSocketId']);
     final pc = _peerConnections[fromSocketId];
@@ -556,7 +447,7 @@ class DmCallController extends ChangeNotifier {
       await pc.setRemoteDescription(_sessionDescription(raw['answer']));
       await _flushIceCandidates(fromSocketId);
     } catch (_) {
-      _setError('Не удалось подключить ответ звонка');
+      // Ответ устарел (renegotiation) — пир переподключится сам.
     }
   }
 
@@ -565,7 +456,8 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _handleIceCandidateAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
     final raw = data.cast<String, dynamic>();
     final fromSocketId = asText(raw['fromSocketId']);
     if (fromSocketId.isEmpty) return;
@@ -587,32 +479,8 @@ class DmCallController extends ChangeNotifier {
     }
   }
 
-  Future<void> _joinCall(String roomId) async {
-    try {
-      phase = DmCallPhase.connecting;
-      errorMessage = null;
-      _safeNotify();
-      await _ensureLocalStream();
-      _activeRoomId = roomId;
-      try {
-        // Динамик всегда включён — отдельной кнопки больше нет.
-        await Helper.setSpeakerphoneOn(true);
-      } catch (_) {
-        // Часть сборок Android не даёт менять аудио-маршрут — не критично.
-      }
-      socket.emit('voice:join', {'channelId': roomId});
-    } catch (error) {
-      await _leaveCall();
-      _setError('Нет доступа к микрофону');
-    }
-  }
-
   Future<void> _ensureLocalStream() async {
     if (_localStream != null) return;
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      throw StateError('microphone-denied');
-    }
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': {
         'echoCancellation':
@@ -624,6 +492,11 @@ class DmCallController extends ChangeNotifier {
       },
       'video': false,
     });
+    if (muted) {
+      for (final track in _localStream!.getAudioTracks()) {
+        track.enabled = false;
+      }
+    }
   }
 
   Future<void> _initiateConnection(String socketId) async {
@@ -634,20 +507,21 @@ class DmCallController extends ChangeNotifier {
         'offerToReceiveVideo': true,
       });
       await pc.setLocalDescription(offer);
-      socket.emit('webrtc:offer', {
+      _socket?.emit('webrtc:offer', {
         'targetSocketId': socketId,
         'offer': offer.toMap(),
-        'channelId': _activeRoomId,
+        'channelId': channelId,
       });
     } catch (_) {
-      _setError('Не удалось начать WebRTC соединение');
+      // Пир недоступен — остальные соединения продолжают работать.
     }
   }
 
   Future<RTCPeerConnection> _createPeerConnection(String socketId) async {
     final existing = _peerConnections[socketId];
     if (existing != null &&
-        existing.signalingState != RTCSignalingState.RTCSignalingStateClosed) {
+        existing.signalingState !=
+            RTCSignalingState.RTCSignalingStateClosed) {
       return existing;
     }
 
@@ -656,10 +530,10 @@ class DmCallController extends ChangeNotifier {
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      socket.emit('webrtc:ice_candidate', {
+      _socket?.emit('webrtc:ice_candidate', {
         'targetSocketId': socketId,
         'candidate': candidate.toMap(),
-        'channelId': _activeRoomId,
+        'channelId': channelId,
       });
     };
 
@@ -669,25 +543,20 @@ class DmCallController extends ChangeNotifier {
         remoteVideo[socketId] = true;
       }
       unawaited(_attachRemoteStream(socketId, event.streams.first));
-      _safeNotify();
+      notifyListeners();
     };
 
     pc.onRemoveTrack = (stream, track) {
       if (track.kind == 'video') {
         remoteVideo[socketId] = false;
-        _safeNotify();
+        notifyListeners();
       }
     };
 
     pc.onConnectionState = (state) {
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        phase = DmCallPhase.connected;
-        connectedAt ??= DateTime.now();
-        errorMessage = null;
-        _safeNotify();
-      }
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state ==
+              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         unawaited(_removeConnection(socketId));
       }
@@ -727,7 +596,7 @@ class DmCallController extends ChangeNotifier {
       try {
         await pc.addCandidate(candidate);
       } catch (_) {
-        // Candidate became stale during renegotiation; ignore it.
+        // Кандидат устарел во время renegotiation — пропускаем.
       }
     }
   }
@@ -743,12 +612,15 @@ class DmCallController extends ChangeNotifier {
     remoteVideo.remove(socketId);
   }
 
-  Future<void> _leaveCall() async {
-    final roomId = _activeRoomId;
-    if (roomId != null) {
-      socket.emit('voice:leave', {'channelId': roomId});
-    }
+  Future<void> _abortJoin(String message) async {
     await _cleanupMedia();
+    phase = ChannelVoicePhase.idle;
+    channelId = '';
+    channelTitle = '';
+    connectedAt = null;
+    members.clear();
+    errorMessage = message;
+    notifyListeners();
   }
 
   Future<void> _cleanupMedia() async {
@@ -771,26 +643,16 @@ class DmCallController extends ChangeNotifier {
       await stream.dispose();
     }
     _localStream = null;
-    _activeRoomId = null;
-    muted = false;
-    connectedAt = null;
   }
 
   void _resetToIdle() {
-    phase = DmCallPhase.idle;
-    errorMessage = null;
-    _activePeerId = null;
-    _incomingConversationId = null;
-    _incomingChannelId = null;
-    _incomingPeerName = null;
+    phase = ChannelVoicePhase.idle;
+    channelId = '';
+    channelTitle = '';
     connectedAt = null;
-    _safeNotify();
-  }
-
-  void _setError(String message) {
-    phase = DmCallPhase.error;
-    errorMessage = message;
-    _safeNotify();
+    muted = false;
+    members.clear();
+    notifyListeners();
   }
 
   RTCSessionDescription _sessionDescription(Object? raw) {
@@ -808,19 +670,6 @@ class DmCallController extends ChangeNotifier {
     );
   }
 
-  String _roomId(String conversation, String channel, String fallbackPeer) {
-    final id = conversation.isNotEmpty
-        ? conversation
-        : channel.isNotEmpty
-            ? channel
-            : fallbackPeer;
-    return 'dm_call:$id';
-  }
-
-  void _safeNotify() {
-    if (!_disposed) notifyListeners();
-  }
-
   static const _iceConfiguration = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
@@ -828,37 +677,4 @@ class DmCallController extends ChangeNotifier {
       {'urls': 'stun:stun2.l.google.com:19302'},
     ],
   };
-
-  @override
-  void dispose() {
-    _disposed = true;
-    if (_attached) {
-      socket.off('call:incoming', _handleIncomingCall);
-      socket.off('call:response', _handleCallResponse);
-      socket.off('call:terminated', _handleCallTerminated);
-      socket.off('call:error', _handleCallError);
-      socket.off('voice:existing_members', _handleExistingMembers);
-      socket.off('voice:user_left', _handleUserLeft);
-      socket.off('voice:left', _handleVoiceLeft);
-      socket.off('webrtc:offer', _handleOffer);
-      socket.off('webrtc:answer', _handleAnswer);
-      socket.off('webrtc:ice_candidate', _handleIceCandidate);
-    }
-    final targetId = _activePeerId ?? peerId;
-    if (phase != DmCallPhase.idle && targetId.isNotEmpty) {
-      socket.emit('call:end', {'targetUserId': targetId});
-    }
-    final roomId = _activeRoomId;
-    if (roomId != null) {
-      socket.emit('voice:leave', {'channelId': roomId});
-    }
-    unawaited(_cleanupMedia());
-    final renderer = localRenderer;
-    localRenderer = null;
-    if (renderer != null) {
-      renderer.srcObject = null;
-      unawaited(renderer.dispose());
-    }
-    super.dispose();
-  }
 }

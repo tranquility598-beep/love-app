@@ -155,6 +155,21 @@ class LoveApi {
     );
   }
 
+  /// Публичный профиль пользователя (GET /users/:id).
+  Future<Map<String, dynamic>> userProfile(String userId) {
+    return api.get('/users/$userId');
+  }
+
+  /// REST-фолбэк редактирования (основной путь — сокет `message:edit`).
+  Future<Map<String, dynamic>> editMessage(String messageId, String content) {
+    return api.put('/messages/$messageId', body: {'content': content});
+  }
+
+  /// REST-фолбэк удаления (основной путь — сокет `message:delete`).
+  Future<Map<String, dynamic>> deleteMessage(String messageId) {
+    return api.delete('/messages/$messageId');
+  }
+
   Future<Map<String, dynamic>> uploadFile({
     required String filePath,
     required String channelId,

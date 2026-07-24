@@ -34,6 +34,10 @@ class ChatMessage {
     required this.isOwn,
     this.attachments = const [],
     this.type = 'default',
+    this.edited = false,
+    this.replyToId = '',
+    this.replyToAuthor = '',
+    this.replyToContent = '',
   });
 
   final String id;
@@ -47,6 +51,16 @@ class ChatMessage {
   final List<ChatAttachment> attachments;
   final String type;
 
+  /// True when the author edited this message (`edited` on the server model).
+  final bool edited;
+
+  /// Reply info. The server populates `replyTo` with the quoted message and
+  /// its author; realtime temp-broadcasts may carry only the id — the chat
+  /// screen then resolves author/content from the loaded message list.
+  final String replyToId;
+  final String replyToAuthor;
+  final String replyToContent;
+
   factory ChatMessage.fromJson(
     Map<String, dynamic> json, {
     required String currentUserId,
@@ -56,6 +70,23 @@ class ChatMessage {
         ? authorRaw.cast<String, dynamic>()
         : <String, dynamic>{};
     final authorId = author.isEmpty ? asId(authorRaw) : asId(author['_id']);
+
+    final replyRaw = json['replyTo'];
+    var replyToId = '';
+    var replyToAuthor = '';
+    var replyToContent = '';
+    if (replyRaw is Map) {
+      final reply = replyRaw.cast<String, dynamic>();
+      replyToId = asId(reply['_id']);
+      final replyAuthorRaw = reply['author'];
+      if (replyAuthorRaw is Map) {
+        replyToAuthor = userDisplayName(replyAuthorRaw.cast<String, dynamic>());
+      }
+      replyToContent = asText(reply['content']);
+    } else {
+      replyToId = asId(replyRaw);
+    }
+
     return ChatMessage(
       id: asId(json['_id']),
       channelId: asId(json['channel']),
@@ -67,6 +98,29 @@ class ChatMessage {
       isOwn: authorId == currentUserId,
       attachments: _attachments(json['attachments']),
       type: asText(json['type'], 'default'),
+      edited: asBool(json['edited']),
+      replyToId: replyToId,
+      replyToAuthor: replyToAuthor,
+      replyToContent: replyToContent,
+    );
+  }
+
+  ChatMessage copyWith({String? content, bool? edited}) {
+    return ChatMessage(
+      id: id,
+      channelId: channelId,
+      content: content ?? this.content,
+      authorName: authorName,
+      authorId: authorId,
+      authorAvatar: authorAvatar,
+      createdAt: createdAt,
+      isOwn: isOwn,
+      attachments: attachments,
+      type: type,
+      edited: edited ?? this.edited,
+      replyToId: replyToId,
+      replyToAuthor: replyToAuthor,
+      replyToContent: replyToContent,
     );
   }
 
@@ -117,4 +171,21 @@ class ChatAttachment {
       name.toLowerCase().endsWith('.mp3') ||
       name.toLowerCase().endsWith('.m4a') ||
       name.toLowerCase().endsWith('.ogg');
+
+  bool get isImage =>
+      type == 'image' ||
+      mimeType.startsWith('image/') ||
+      _hasExtension(const ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+
+  /// Note: `.webm` voice notes from desktop stay audio — [isVoice] wins in
+  /// the attachment dispatch, so only mime `video/*` or video extensions
+  /// land here.
+  bool get isVideo =>
+      mimeType.startsWith('video/') ||
+      _hasExtension(const ['.mp4', '.mov', '.m4v', '.avi', '.mkv']);
+
+  bool _hasExtension(List<String> extensions) {
+    final lower = name.toLowerCase();
+    return extensions.any(lower.endsWith);
+  }
 }

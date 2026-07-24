@@ -27,6 +27,7 @@ dependencies:
   flutter_displaymode: ^0.7.0
   ota_update: ^7.0.0
   package_info_plus: ^8.3.0
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:

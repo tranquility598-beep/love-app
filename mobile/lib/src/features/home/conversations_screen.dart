@@ -6,7 +6,6 @@ import '../../core/network/love_api.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
-import '../../widgets/async_value_view.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_search_field.dart';
@@ -30,18 +29,31 @@ class ConversationsScreen extends StatefulWidget {
 }
 
 class _ConversationsScreenState extends State<ConversationsScreen> {
-  late Future<List<Map<String, dynamic>>> _future;
   final _searchController = TextEditingController();
+
+  /// Live presence overrides received over the socket (userId -> status).
+  final _liveStatus = <String, String>{};
+
+  List<Map<String, dynamic>>? _conversations;
+  String? _error;
+  Timer? _refreshDebounce;
   String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _future = widget.api.conversations();
+    _load();
+    // Live updates: presence dots and new conversations/messages appear
+    // without reloading the tab.
+    widget.socket.on('user:status', _onUserStatus);
+    widget.socket.on('dm:new_message', _onDmActivity);
   }
 
   @override
   void dispose() {
+    widget.socket.off('user:status', _onUserStatus);
+    widget.socket.off('dm:new_message', _onDmActivity);
+    _refreshDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -64,68 +76,147 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             onChanged: (value) =>
                 setState(() => _query = value.trim().toLowerCase()),
           ),
-          Expanded(
-            child: AsyncValueView<List<Map<String, dynamic>>>(
-              future: _future,
-              onRetry: _reload,
-              builder: (context, conversations) {
-                final filtered = _filter(conversations);
-                return RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: filtered.isEmpty
-                      ? ListView(
-                          padding: const EdgeInsets.only(top: 60),
-                          children: [
-                            EmptyState(
-                              icon: Icons.chat_bubble_outline,
-                              title: _query.isEmpty
-                                  ? 'Диалогов пока нет'
-                                  : 'Ничего не найдено',
-                              message: _query.isEmpty
-                                  ? 'Найдите пользователя и начните личный чат.'
-                                  : 'Попробуйте другой запрос.',
-                              action: _query.isEmpty
-                                  ? FilledButton.icon(
-                                      onPressed: _openStartDmSheet,
-                                      icon: const Icon(
-                                          Icons.edit_square, size: 18),
-                                      label: const Text('Новая беседа'),
-                                    )
-                                  : null,
-                            ),
-                          ],
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final conversation = filtered[index];
-                            final other = _otherParticipant(conversation);
-                            final title = userDisplayName(other);
-                            final last = conversation['lastMessage'];
-                            final preview = last is Map
-                                ? asText(last['content'], '')
-                                : '';
-                            return _ConversationTile(
-                              title: title,
-                              subtitle: preview,
-                              status: other?['status']?.toString(),
-                              imageUrl: other?['avatar']?.toString(),
-                              unread: _unreadCount(conversation) > 0,
-                              timeLabel: _timeLabel(last),
-                              onTap: () =>
-                                  _openConversation(conversation, title),
-                            );
-                          },
-                        ),
-                );
-              },
-            ),
-          ),
+          Expanded(child: _body()),
         ],
       ),
     );
   }
+
+  Widget _body() {
+    final conversations = _conversations;
+    if (conversations == null) {
+      if (_error != null) {
+        return ListView(
+          padding: const EdgeInsets.only(top: 60),
+          children: [
+            EmptyState(
+              icon: Icons.wifi_off_rounded,
+              title: 'Не удалось загрузить',
+              message: _error!,
+              action: FilledButton(
+                onPressed: _load,
+                child: const Text('Повторить'),
+              ),
+            ),
+          ],
+        );
+      }
+      return const Center(child: CircularProgressIndicator());
+    }
+    final filtered = _filter(conversations);
+    return RefreshIndicator(
+      onRefresh: _silentRefresh,
+      child: filtered.isEmpty
+          ? ListView(
+              padding: const EdgeInsets.only(top: 60),
+              children: [
+                EmptyState(
+                  icon: Icons.chat_bubble_outline,
+                  title: _query.isEmpty
+                      ? 'Диалогов пока нет'
+                      : 'Ничего не найдено',
+                  message: _query.isEmpty
+                      ? 'Найдите пользователя и начните личный чат.'
+                      : 'Попробуйте другой запрос.',
+                  action: _query.isEmpty
+                      ? FilledButton.icon(
+                          onPressed: _openStartDmSheet,
+                          icon: const Icon(Icons.edit_square, size: 18),
+                          label: const Text('Новая беседа'),
+                        )
+                      : null,
+                ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final conversation = filtered[index];
+                final other = _otherParticipant(conversation);
+                final title = userDisplayName(other);
+                final last = conversation['lastMessage'];
+                final preview = last is Map ? asText(last['content'], '') : '';
+                return _ConversationTile(
+                  title: title,
+                  subtitle: preview,
+                  status: _statusOf(other),
+                  imageUrl: other?['avatar']?.toString(),
+                  unread: _unreadCount(conversation) > 0,
+                  timeLabel: _timeLabel(last),
+                  onTap: () => _openConversation(conversation, title),
+                );
+              },
+            ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Data loading
+  // -------------------------------------------------------------------------
+
+  Future<void> _load() async {
+    setState(() {
+      _error = null;
+    });
+    try {
+      final items = await widget.api.conversations();
+      if (!mounted) return;
+      setState(() => _conversations = items);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    }
+  }
+
+  /// Refreshes the list without dropping the current data (no flicker).
+  Future<void> _silentRefresh() async {
+    try {
+      final items = await widget.api.conversations();
+      if (!mounted) return;
+      setState(() => _conversations = items);
+    } catch (_) {
+      // Keep showing the current data.
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Socket events
+  // -------------------------------------------------------------------------
+
+  void _onDmActivity(dynamic data) {
+    // New message in any DM: refresh previews/unread and pick up brand-new
+    // conversations started by other users. Debounced to batch bursts.
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _silentRefresh();
+    });
+  }
+
+  void _onUserStatus(dynamic data) {
+    if (data is! Map) return;
+    final map = data.cast<String, dynamic>();
+    var id = '';
+    final rawUser = map['user'];
+    if (rawUser is Map) {
+      id = asId(rawUser['_id'] ?? rawUser['id']);
+    }
+    if (id.isEmpty) {
+      id = asId(map['userId'] ?? map['_id'] ?? map['id']);
+    }
+    final status = asText(map['status']);
+    if (id.isEmpty || status.isEmpty || !mounted) return;
+    setState(() => _liveStatus[id] = status);
+  }
+
+  String? _statusOf(Map<String, dynamic>? other) {
+    if (other == null) return null;
+    return _liveStatus[asId(other['_id'])] ?? other['status']?.toString();
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
 
   List<Map<String, dynamic>> _filter(List<Map<String, dynamic>> all) {
     if (_query.isEmpty) return all;
@@ -137,27 +228,25 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     }).toList();
   }
 
-  void _reload() {
-    setState(() {
-      _future = widget.api.conversations();
-    });
-  }
-
   void _openConversation(Map<String, dynamic> conversation, String title) {
     final other = _otherParticipant(conversation);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          title: title,
-          conversationId: asId(conversation['_id']),
-          channelId: asId(conversation['channel']),
-          peerId: asId(other?['_id']),
-          peerAvatar: asText(other?['avatar']),
-          api: widget.api,
-          socket: widget.socket,
-        ),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => ChatScreen(
+              title: title,
+              conversationId: asId(conversation['_id']),
+              channelId: asId(conversation['channel']),
+              peerId: asId(other?['_id']),
+              peerAvatar: asText(other?['avatar']),
+              api: widget.api,
+              socket: widget.socket,
+            ),
+          ),
+        )
+        .then((_) {
+      if (mounted) _silentRefresh();
+    });
   }
 
   Future<void> _openStartDmSheet() async {
@@ -169,7 +258,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       builder: (context) => _StartDmSheet(api: widget.api),
     );
     if (conversation == null || !mounted) return;
-    await _refresh();
+    await _silentRefresh();
+    if (!mounted) return;
     final other = _otherParticipant(conversation);
     _openConversation(conversation, userDisplayName(other));
   }
@@ -213,14 +303,6 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
     }
     return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _refresh() async {
-    final next = widget.api.conversations();
-    setState(() {
-      _future = next;
-    });
-    await next;
   }
 }
 

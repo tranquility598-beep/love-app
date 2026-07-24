@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../features/chat/chat_models.dart';
 import '../prefs/love_prefs.dart';
 import '../realtime/love_socket.dart';
-import 'screen_share_service.dart';
+import '../services/screen_share_manager.dart';
 
 /// Фазы голосового подключения к каналу.
 enum ChannelVoicePhase { idle, connecting, connected }
@@ -207,18 +207,13 @@ class ChannelVoiceController extends ChangeNotifier {
       await stopVideo();
       return;
     }
-    // Сначала запускаем системный picker Android. Никакой foreground-service
-    // до получения видеотрека: иначе targetSdk 36 убивает процесс.
     MediaStream stream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        'audio': false,
-        'video': {
-          'frameRate': 15,
-          'width': 1280,
-          'height': 720,
-        },
-      });
+      stream = await ScreenShareManager.startScreenShare();
+    } on ScreenShareException catch (e) {
+      errorMessage = e.message;
+      notifyListeners();
+      return;
     } catch (_) {
       errorMessage = 'Демонстрация экрана отменена или недоступна';
       notifyListeners();
@@ -226,29 +221,12 @@ class ChannelVoiceController extends ChangeNotifier {
     }
     if (stream.getVideoTracks().isEmpty) {
       try { await stream.dispose(); } catch (_) {}
+      await ScreenShareManager.stopScreenShare();
       errorMessage = 'Android не передал видеопоток демонстрации';
       notifyListeners();
       return;
     }
-    // Сначала действительно запускаем WebRTC-видео. Это важно для выбора
-    // «весь экран» И «одно приложение»: токен MediaProjection становится
-    // активным только после старта самого видеотрека.
     await _startVideo(stream, screen: true);
-    // FGS поднимаем с небольшой задержкой и никогда не обрываем захват,
-    // если прошивка временно отклонила foreground-service.
-    unawaited(_enableScreenShareBackgroundMode());
-  }
-
-  Future<void> _enableScreenShareBackgroundMode() async {
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (!screenSharing || _videoStream == null) return;
-    try {
-      await ScreenShareService.start();
-    } catch (_) {
-      // Видео уже работает. Не выключаем его и не падаем: на некоторых
-      // оболочках Android служба может быть разрешена повторной попыткой
-      // после возврата приложения на передний план.
-    }
   }
 
   Future<void> _startVideo(MediaStream stream, {required bool screen}) async {
@@ -309,7 +287,7 @@ class ChannelVoiceController extends ChangeNotifier {
     localRenderer?.srcObject = null;
     cameraOn = false;
     screenSharing = false;
-    if (wasScreen) await ScreenShareService.stop();
+    if (wasScreen) await ScreenShareManager.stopScreenShare();
     if (!silent) {
       notifyListeners();
       if (hadVideo) await _renegotiateAll();

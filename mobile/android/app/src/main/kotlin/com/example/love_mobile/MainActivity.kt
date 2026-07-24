@@ -6,7 +6,10 @@ import android.database.Cursor
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -15,7 +18,6 @@ import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val audioPickerChannel = "love_mobile/audio_picker"
-    private val screenShareChannel = "love_mobile/screen_share_service"
     private val audioPickerRequestCode = 41721
     private val filePickerRequestCode = 41722
     private var pendingAudioResult: MethodChannel.Result? = null
@@ -36,27 +38,43 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, screenShareChannel)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "love/screen_share")
             .setMethodCallHandler { call, result ->
-                try {
-                    when (call.method) {
-                        "start" -> {
-                            val intent = Intent(this, ScreenShareForegroundService::class.java)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                startForegroundService(intent)
-                            } else {
-                                startService(intent)
+                when (call.method) {
+                    "startScreenShareService" -> {
+                        if (ScreenShareService.isRunning) {
+                            result.success(true)
+                            return@setMethodCallHandler
+                        }
+                        var answered = false
+                        val answer: (Boolean) -> Unit = { ok ->
+                            if (!answered) {
+                                answered = true
+                                result.success(ok)
                             }
-                            result.success(null)
                         }
-                        "stop" -> {
-                            stopService(Intent(this, ScreenShareForegroundService::class.java))
-                            result.success(null)
+                        ScreenShareService.onStarted = { ok ->
+                            Handler(Looper.getMainLooper()).post { answer(ok) }
                         }
-                        else -> result.notImplemented()
+                        try {
+                            ContextCompat.startForegroundService(
+                                this,
+                                Intent(this, ScreenShareService::class.java)
+                            )
+                        } catch (e: Exception) {
+                            ScreenShareService.onStarted = null
+                            answer(false)
+                        }
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            ScreenShareService.onStarted = null
+                            answer(ScreenShareService.isRunning)
+                        }, 3000)
                     }
-                } catch (error: Exception) {
-                    result.error("screen_share_service", error.message, null)
+                    "stopScreenShareService" -> {
+                        ScreenShareService.stop(this)
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }

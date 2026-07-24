@@ -1,0 +1,210 @@
+/* LOVE — экран звонка на ПК в мобильном стиле (ч/б премиум) */
+
+.call-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #0a0a0a;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+  color: #fff;
+}
+
+/* ---- сетка участников / медиа-плиток ---- */
+.call-grid {
+  flex: 1;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-content: center;
+}
+
+.media-tile {
+  position: relative;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.media-tile:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+.media-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+.media-tile .tile-label {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.media-tile .tile-expand-hint {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  font-size: 13px;
+  pointer-events: none;
+}
+.media-tile:hover .tile-expand-hint { opacity: 1; }
+
+/* аватар-заглушка, когда нет видео */
+.media-tile .tile-avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.media-tile .tile-avatar .avatar-circle {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 600;
+}
+
+/* ---- нижняя панель — как на мобиле ---- */
+.call-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+}
+
+.ctl-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease,
+    border-color 0.15s ease;
+  user-select: none;
+}
+.ctl-btn:hover {
+  transform: scale(1.08);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.30);
+}
+.ctl-btn:active { transform: scale(0.96); }
+
+/* выключенное состояние (мик/камера off) */
+.ctl-btn.is-off {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0a0a0a;
+  border-color: transparent;
+}
+
+/* активная демка */
+.ctl-btn.is-active {
+  background: #fff;
+  color: #0a0a0a;
+  border-color: transparent;
+}
+
+/* завершить звонок */
+.ctl-btn.hangup {
+  background: #fff;
+  color: #0a0a0a;
+  width: 60px;
+  height: 52px;
+  border-radius: 999px;
+  border-color: transparent;
+}
+.ctl-btn.hangup:hover { background: #e6e6e6; }
+
+/* ---- полноэкранный просмотр (expandMedia) ---- */
+.media-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: lb-in 0.18s ease;
+}
+@keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+
+.media-lightbox video {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  cursor: grab;
+}
+.media-lightbox video.dragging { cursor: grabbing; }
+
+.media-lightbox .lb-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  z-index: 2;
+}
+.media-lightbox .lb-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+.media-lightbox .lb-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}

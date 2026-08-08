@@ -51,34 +51,6 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
     
-    const isLargeFile = file.size > 5 * 1024 * 1024;
-
-    if (isVideo || isLargeFile) {
-      // Локальное сохранение на сервере Hetzner
-      const localFolder = isVideo ? 'video' : (isImage ? 'images' : 'files');
-      const targetDir = path.join(__dirname, '..', 'uploads', localFolder);
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-
-      const safeName = generateSafeFilename(file.name, file.mimetype);
-      const targetPath = path.join(targetDir, safeName);
-
-      await file.mv(targetPath);
-
-      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${localFolder}/${safeName}`;
-
-      return res.json({
-        url: fileUrl,
-        filename: safeName,
-        originalName: validation.sanitizedName,
-        size: file.size,
-        type: isVideo ? 'video' : (isAudio ? 'audio' : (isImage ? 'image' : 'file')),
-        mimetype: file.mimetype,
-        storage: 'local'
-      });
-    }
-
     // Проверяем, настроен ли Cloudinary
     const cloudinaryConfigured = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
 
@@ -104,10 +76,12 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
 
-    // Загрузка в Cloudinary (изображения, аудио и файлы до 5 МБ)
+    // Загрузка в Cloudinary (все типы после валидации: лимиты image/audio 10MB,
+    // video 50MB, document 5MB укладываются в лимиты Cloudinary free tier)
     let folder = 'files';
     if (isImage) folder = 'images';
     if (isAudio) folder = 'audio';
+    if (isVideo) folder = 'video';
     
     let filePath;
     if (file.tempFilePath) {
@@ -153,7 +127,7 @@ router.post('/', authMiddleware, uploadLimiter, async (req, res) => {
       filename: path.basename(uploadResult.public_id),
       originalName: validation.sanitizedName,
       size: file.size,
-      type: isAudio ? 'audio' : (isImage ? 'image' : 'file'),
+      type: isVideo ? 'video' : (isAudio ? 'audio' : (isImage ? 'image' : 'file')),
       mimetype: file.mimetype,
       storage: 'cloudinary'
     });
@@ -199,36 +173,8 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
       });
     }
     
-    const isLargeFile = file.size > 5 * 1024 * 1024;
-
-    if (isVideo || isLargeFile) {
-      // Локальное сохранение на сервере Hetzner
-      const localFolder = isVideo ? 'video' : (isImage ? 'images' : 'files');
-      const targetDir = path.join(__dirname, '..', 'uploads', localFolder);
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-
-      const safeName = generateSafeFilename(file.name, file.mimetype);
-      const targetPath = path.join(targetDir, safeName);
-
-      await file.mv(targetPath);
-
-      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${localFolder}/${safeName}`;
-
-      return res.json({
-        url: fileUrl,
-        filename: safeName,
-        originalName: validation.sanitizedName,
-        size: file.size,
-        type: isVideo ? 'video' : (isImage ? 'image' : 'file'),
-        mimetype: file.mimetype,
-        storage: 'local'
-      });
-    }
-
-    // Загрузка в Cloudinary (файлы до 5 МБ)
-    const folder = isImage ? 'images' : 'files';
+    // Загрузка в Cloudinary (все типы после валидации)
+    const folder = isImage ? 'images' : (isVideo ? 'video' : (isAudio ? 'audio' : 'files'));
     
     let filePath;
     if (file.tempFilePath) {
@@ -274,7 +220,7 @@ router.post('/file', authMiddleware, uploadLimiter, async (req, res) => {
       filename: path.basename(uploadResult.public_id),
       originalName: validation.sanitizedName,
       size: file.size,
-      type: isImage ? 'image' : 'file',
+      type: isVideo ? 'video' : (isAudio ? 'audio' : (isImage ? 'image' : 'file')),
       mimetype: file.mimetype,
       storage: 'cloudinary'
     });

@@ -13,9 +13,23 @@ const DirectMessage = require('../models/DirectMessage');
 const { isFounderUser } = require('../utils/founder');
 const { checkAndRecord: checkMessageAntiSpam } = require('../middleware/messageAntiSpam');
 const { createNotification } = require('../utils/notify');
-const { normalizeContent } = require('../middleware/validation');
+const { normalizeContent, getUsernameValidationError } = require('../middleware/validation');
+const { normalizeUsername, findUserByUsername, getDuplicateField } = require('../utils/username');
+const { communicationRestriction, refreshModerationState } = require('../services/moderationService');
+const AnalyticsEvent = require('../models/AnalyticsEvent');
+const AdminSession = require('../models/AdminSession');
+const { isStaffRole } = require('../config/adminRoles');
+const { hashToken, safeEqual } = require('../utils/security');
+const registerAdminStaffSocket = require('./adminStaffSocket');
+const {
+  applyVoiceMediaMode,
+  normalizeVoiceMediaMode,
+  serializeVoiceMember
+} = require('../services/voiceMediaState');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
+const { getJwtSecret } = require('../utils/jwtSecret');
+
+const JWT_SECRET = getJwtSecret();
 
 function normalizeMessageAttachments(raw) {
   if (!raw || !Array.isArray(raw)) return [];
@@ -82,6 +96,35 @@ module.exports = (io) => {
 
       const decoded = jwt.verify(token, JWT_SECRET);
 
+      if (decoded.aud === 'admin-socket') {
+        if (decoded.iss !== 'love-admin' || !decoded.sid || !decoded.userId) {
+          return next(new Error('Недействительный административный socket token'));
+        }
+        const userAgentHash = hashToken(String(socket.handshake.headers['user-agent'] || '').trim());
+        if (!decoded.uaHash || !safeEqual(decoded.uaHash, userAgentHash)) {
+          return next(new Error('Параметры защищённой сессии изменились'));
+        }
+        const session = await AdminSession.findOne({ _id: decoded.sid, user: decoded.userId, revokedAt: null }).populate('user');
+        const now = Date.now();
+        if (!session || !session.user || session.expiresAt.getTime() <= now
+          || now - session.lastSeenAt.getTime() > 30 * 60 * 1000
+          || !isStaffRole(session.user.role) || !session.user.adminTotpEnabled
+          || session.user.isBanned || session.user.deactivatedAt) {
+          return next(new Error('Административная сессия недоступна'));
+        }
+        if (process.env.NODE_ENV === 'production') {
+          const forwarded = String(socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim();
+          const address = String(forwarded || socket.handshake.address || '').replace(/^::ffff:/, '');
+          if (!decoded.ipHash || !safeEqual(decoded.ipHash, hashToken(address))) {
+            return next(new Error('IP защищённой сессии изменился'));
+          }
+        }
+        socket.user = session.user;
+        socket.isAdminSocket = true;
+        socket.adminSessionId = String(session._id);
+        return next();
+      }
+
       // Жёсткая проверка: принимаем только токены, выпущенные именно для socket.
       if (decoded.aud !== 'socket') {
         console.warn('[socket-auth] failed: wrong audience for userId=', decoded.userId);
@@ -95,7 +138,13 @@ module.exports = (io) => {
         return next(new Error('Пользователь не найден'));
       }
 
+      await refreshModerationState(user);
       socket.user = user;
+      socket.restricted = user.deactivatedAt
+        ? { type: 'deactivated', reason: user.deactivationReason || '', actionId: user.activeDeactivationAction || null }
+        : user.isBanned
+          ? { type: 'ban', reason: user.banReason || '', expiresAt: user.banUntil || null, actionId: user.activeBanAction || null }
+          : null;
       console.log('[socket-auth] success userId=', decoded.userId);
       next();
 
@@ -107,8 +156,64 @@ module.exports = (io) => {
   });
 
   io.on('connection', async (socket) => {
+    if (socket.isAdminSocket) {
+      registerAdminStaffSocket(io, socket);
+      return;
+    }
     const userId = socket.user._id.toString();
     console.log(`✅ User connected: ${socket.user.username} (${socket.id})`);
+
+    if (socket.restricted) {
+      socket.join(`user:${userId}`);
+      socket.emit('moderation:restricted', socket.restricted);
+      console.log(`[socket-auth] restricted safety channel userId=${userId}`);
+      return;
+    }
+
+    const communicationEvents = new Set([
+      'message:send',
+      'message:edit',
+      'message:react',
+      'message:pin',
+      'message:unpin',
+      'typing:start',
+      'friend:request',
+      'friend:accepted',
+      'server:join',
+      'voice:join',
+      'voice:toggle_mute',
+      'voice:toggle_deafen',
+      'voice:speaking',
+      'webrtc:offer',
+      'webrtc:answer',
+      'webrtc:ice_candidate',
+      'screen:start',
+      'camera:start',
+      'call:request'
+    ]);
+
+    socket.use(async ([event, ...args], next) => {
+      const callResponse = event === 'call:response' && args[0]?.accepted !== false;
+      const mediaStateStarts = event === 'voice:media_state'
+        && normalizeVoiceMediaMode(args[0]?.mode) !== 'none';
+      if (!communicationEvents.has(event) && !callResponse && !mediaStateStarts) return next();
+
+      try {
+        const restriction = await communicationRestriction(userId);
+        if (!restriction.blocked) return next();
+
+        const payload = {
+          code: 'COMMUNICATION_RESTRICTED',
+          ...restriction
+        };
+        const acknowledgement = args.find(arg => typeof arg === 'function');
+        if (acknowledgement) acknowledgement({ status: 'error', ...payload });
+        socket.emit('moderation:blocked', payload);
+      } catch (error) {
+        console.error('[moderation] socket guard:', error);
+        next(new Error('Не удалось проверить ограничения аккаунта'));
+      }
+    });
     
     // Сохраняем соединение
     addConnectedSocket(userId, socket.id);
@@ -190,21 +295,6 @@ module.exports = (io) => {
 
         if (!channelId || (!content && normalizedAttachments.length === 0)) {
           return socket.emit('error', { message: 'Неверные данные сообщения' });
-        }
-
-        // Проверяем, не заглушен ли пользователь модератором
-        const user = await User.findById(userId);
-        if (user && user.isMuted) {
-          if (user.muteUntil && user.muteUntil < Date.now()) {
-            user.isMuted = false;
-            user.muteUntil = null;
-            await user.save();
-          } else {
-            const timeStr = user.muteUntil 
-              ? ` до ${user.muteUntil.toLocaleTimeString()}`
-              : ' бессрочно';
-            return socket.emit('error', { message: `Вы временно лишены права отправлять сообщения${timeStr}` });
-          }
         }
 
         // Per-user-per-channel anti-spam. Не используем 'error' event,
@@ -405,7 +495,7 @@ module.exports = (io) => {
             let match;
             while ((match = mentionRegex.exec(content)) !== null) {
               const mentionedUsername = match[1];
-              const mentionedUser = await User.findOne({ username: mentionedUsername });
+              const mentionedUser = await findUserByUsername(User, mentionedUsername);
               if (mentionedUser && mentionedUser._id.toString() !== userId) {
                 io.to(`user:${mentionedUser._id}`).emit('notification:mention', {
                   from: socket.user.username,
@@ -701,13 +791,9 @@ module.exports = (io) => {
           socket.join(`voice:${channelId}`);
           console.log(`⚠️ ${socket.user.username} already in voice channel ${channelId}, updated socketId`);
           // Отправляем ему существующих участников (без него) для WebRTC
-          const existingMembers = channelMembers.filter(m => m.userId !== userId).map(m => ({
-            userId: m.userId,
-            socketId: m.socketId,
-            username: m.username,
-            nickname: m.nickname,
-            avatar: m.avatar
-          }));
+          const existingMembers = channelMembers
+            .filter(m => m.userId !== userId)
+            .map(serializeVoiceMember);
           socket.emit('voice:existing_members', { channelId, members: existingMembers });
           // ВАЖНО: re-emit полного списка участников, чтобы UI после реконнекта
           // мог отрисовать свою карточку и список (иначе панель остаётся пустой)
@@ -717,7 +803,7 @@ module.exports = (io) => {
           }
           reemitter.emit('voice:members_update', {
             channelId,
-            members: channelMembers
+            members: channelMembers.map(serializeVoiceMember)
           });
           if (typeof callback === 'function') callback({ status: 'ok' });
           return;
@@ -735,15 +821,7 @@ module.exports = (io) => {
         }
         
         // Получаем список существующих участников для WebRTC
-        const existingMembers = channelMembers.map(m => ({
-          userId: m.userId,
-          socketId: m.socketId,
-          username: m.username,
-          nickname: m.nickname,
-          avatar: m.avatar,
-          muted: !!m.muted,
-          deafened: !!m.deafened
-        }));
+        const existingMembers = channelMembers.map(serializeVoiceMember);
         
         // Добавляем нового участника
         channelMembers.push({
@@ -756,6 +834,7 @@ module.exports = (io) => {
           deafened: false,
           // Состояние стримов участника — рассылается в voice:members_update,
           // чтобы все клиенты знали, кто шарит экран / включил камеру.
+          mediaMode: 'none',
           screenSharing: false,
           cameraOn: false
         });
@@ -806,7 +885,7 @@ module.exports = (io) => {
         }
         emitter.emit('voice:members_update', {
           channelId,
-          members: channelMembers
+          members: channelMembers.map(serializeVoiceMember)
         });
 
         console.log(`🎤 ${socket.user.username} joined voice channel ${channelId}`);
@@ -933,65 +1012,80 @@ module.exports = (io) => {
       });
     });
 
-    // Помечает флаг стрима участника и рассылает обновлённый состав, чтобы у
-    // всех клиентов синхронизировались hasShare/hasCam (источник истины — сервер).
-    const _setStreamFlag = (channelId, field, value) => {
+    const setVoiceMediaState = (data = {}, callback) => {
+      const channelId = String(data.channelId || '').trim();
+      const mode = normalizeVoiceMediaMode(data.mode);
       const members = voiceChannels.get(channelId);
-      if (!members) return null;
-      const member = members.find(m => m.userId === userId);
-      if (member) member[field] = value;
-      io.to(`voice:${channelId}`).emit('voice:members_update', { channelId, members });
-      return members;
+      const member = members?.find(item => item.socketId === socket.id && item.userId === userId);
+
+      if (!channelId || !mode) {
+        if (typeof callback === 'function') callback({ status: 'error', message: 'Некорректное состояние медиа' });
+        return;
+      }
+      if (!member || !socketIsInVoiceChannel(channelId, socket.id)) {
+        if (typeof callback === 'function') callback({ status: 'error', message: 'Сокет не подключён к голосовому каналу' });
+        return;
+      }
+
+      applyVoiceMediaMode(member, mode);
+      const payload = { channelId, userId, socketId: socket.id, mode };
+      io.to(`voice:${channelId}`).emit('voice:media_state', payload);
+
+      // Compatibility layer for clients that still listen to the old events.
+      if (mode === 'screen') {
+        socket.to(`voice:${channelId}`).emit('screen:started', {
+          channelId,
+          userId,
+          username: socket.user.username
+        });
+        socket.to(`voice:${channelId}`).emit('camera:stopped', { channelId, userId });
+      } else if (mode === 'camera') {
+        socket.to(`voice:${channelId}`).emit('camera:started', {
+          channelId,
+          userId,
+          username: socket.user.username
+        });
+        socket.to(`voice:${channelId}`).emit('screen:stopped', { channelId, userId });
+      } else {
+        socket.to(`voice:${channelId}`).emit('screen:stopped', { channelId, userId });
+        socket.to(`voice:${channelId}`).emit('camera:stopped', { channelId, userId });
+      }
+
+      io.to(`voice:${channelId}`).emit('voice:members_update', {
+        channelId,
+        members: members.map(serializeVoiceMember)
+      });
+      if (typeof callback === 'function') callback({ status: 'ok', ...payload });
     };
+
+    socket.on('voice:media_state', setVoiceMediaState);
 
     /**
      * Демонстрация экрана - начало
      */
     socket.on('screen:start', (data) => {
-      const { channelId } = data;
-      socket.to(`voice:${channelId}`).emit('screen:started', {
-        channelId,
-        userId,
-        username: socket.user.username
-      });
-      _setStreamFlag(channelId, 'screenSharing', true);
+      setVoiceMediaState({ channelId: data?.channelId, mode: 'screen' });
     });
 
     /**
      * Демонстрация экрана - остановка
      */
     socket.on('screen:stop', (data) => {
-      const { channelId } = data;
-      socket.to(`voice:${channelId}`).emit('screen:stopped', {
-        channelId,
-        userId
-      });
-      _setStreamFlag(channelId, 'screenSharing', false);
+      setVoiceMediaState({ channelId: data?.channelId, mode: 'none' });
     });
 
     /**
      * Камера - начало
      */
     socket.on('camera:start', (data) => {
-      const { channelId } = data;
-      socket.to(`voice:${channelId}`).emit('camera:started', {
-        channelId,
-        userId,
-        username: socket.user.username
-      });
-      _setStreamFlag(channelId, 'cameraOn', true);
+      setVoiceMediaState({ channelId: data?.channelId, mode: 'camera' });
     });
 
     /**
      * Камера - остановка
      */
     socket.on('camera:stop', (data) => {
-      const { channelId } = data;
-      socket.to(`voice:${channelId}`).emit('camera:stopped', {
-        channelId,
-        userId
-      });
-      _setStreamFlag(channelId, 'cameraOn', false);
+      setVoiceMediaState({ channelId: data?.channelId, mode: 'none' });
     });
 
     // ==================== СЕРВЕРЫ ====================
@@ -1076,6 +1170,7 @@ module.exports = (io) => {
      */
     socket.on('call:request', async (data) => {
       const { targetUserId } = data;
+      const kind = data?.kind === 'video' ? 'video' : 'audio';
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
       const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
@@ -1102,6 +1197,7 @@ module.exports = (io) => {
         io.to(`user:${targetIdStr}`).emit('call:incoming', {
           conversationId: conversation._id.toString(),
           channelId: conversation.channel.toString(),
+          kind,
           from: {
             _id: userId,
             username: socket.user.username,
@@ -1127,6 +1223,7 @@ module.exports = (io) => {
      */
     socket.on('call:response', (data) => {
       const { callerId, accepted, conversationId, channelId } = data;
+      const kind = data?.kind === 'video' ? 'video' : 'audio';
       const callerIdStr = callerId ? callerId.toString() : null;
       const callerIsOnline = !!connectedUsers.get(callerIdStr)?.size;
 
@@ -1135,9 +1232,18 @@ module.exports = (io) => {
           accepted,
           conversationId,
           channelId,
+          kind,
           responderId: userId
         });
         console.log(`📞 Call response from ${socket.user.username}: ${accepted ? 'ACCEPTED' : 'DECLINED'}`);
+      }
+      if (accepted) {
+        AnalyticsEvent.create({
+          type: 'call_started',
+          user: userId,
+          relatedUser: callerIdStr,
+          metadata: { conversationId, channelId }
+        }).catch(error => console.error('[analytics] call event:', error.message));
       }
     });
 
@@ -1245,7 +1351,7 @@ module.exports = (io) => {
         if (channel && channel.server) {
           io.to(`server:${channel.server}`).emit('voice:members_update', {
             channelId,
-            members: filtered
+            members: filtered.map(serializeVoiceMember)
           });
         }
       }
@@ -1362,17 +1468,16 @@ module.exports = (io) => {
       
       // Обработка имени
       if (username !== undefined && username !== socket.user.username) {
-        if (username.length < 2 || username.length > 32) {
-          return socket.emit('error', { message: 'Имя пользователя должно быть от 2 до 32 символов' });
-        }
+        const nextUsername = normalizeUsername(username);
+        const validationError = getUsernameValidationError(nextUsername);
+        if (validationError) return socket.emit('error', { message: validationError });
+
         // Проверка уникальности
-        const existingUser = await User.findOne({ username, _id: { $ne: userId } });
+        const existingUser = await findUserByUsername(User, nextUsername, userId);
         if (existingUser) {
           return socket.emit('error', { message: 'Имя пользователя уже занято' });
         }
-        updateData.username = username;
-        // Обновляем в сокете кэшированное имя
-        socket.user.username = username;
+        updateData.username = nextUsername;
       }
       
       if (bio !== undefined) updateData.bio = bio;
@@ -1387,8 +1492,10 @@ module.exports = (io) => {
       const updatedUser = await User.findByIdAndUpdate(
         userId,
         updateData,
-        { new: true }
+        { new: true, runValidators: true }
       ).select('-password');
+
+      if (updateData.username) socket.user.username = updateData.username;
       
       // Уведомляем всех о обновлении профиля
       io.emit('profile:updated', {
@@ -1400,6 +1507,9 @@ module.exports = (io) => {
       
     } catch (error) {
       console.error('Error updating profile:', error);
+      if (getDuplicateField(error) === 'username') {
+        return socket.emit('error', { message: 'Имя пользователя уже занято' });
+      }
       socket.emit('error', { message: 'Ошибка обновления профиля' });
     }
   });

@@ -1,6 +1,7 @@
 node_modules/
 temp/
 server/uploads/
+server/private-uploads/
 .env
 build/dist/
 .DS_Store

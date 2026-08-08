@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../../config/app_config.dart';
+import '../../core/network/api_client.dart';
+import '../../core/network/love_api.dart';
+import '../../core/diagnostics/safe_diagnostic_log.dart';
+import '../../core/realtime/app_events.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_background.dart';
+import '../../widgets/love_avatar.dart';
+import '../../widgets/staff_role_badge.dart';
+import '../chat/chat_models.dart';
 import '../settings/settings_widgets.dart';
 import '../shell/screen_frame.dart';
 
-/// Love Hub — the community bento dashboard, ported 1:1 from the desktop
-/// `#view-hub`. It is fully static/local (no server): hero, version stat,
-/// useful links (rules / roadmap), Dev Log with voting, and update history.
+/// Love Hub community dashboard backed by the shared Love API.
 class LoveHubScreen extends StatelessWidget {
   const LoveHubScreen({super.key});
 
@@ -117,8 +122,8 @@ class LoveHubScreen extends StatelessWidget {
                     const SizedBox(height: 6),
                     const Text(
                       'установлена',
-                      style:
-                          TextStyle(color: LoveColors.textMuted, fontSize: 12.5),
+                      style: TextStyle(
+                          color: LoveColors.textMuted, fontSize: 12.5),
                     ),
                   ],
                 ),
@@ -134,8 +139,8 @@ class LoveHubScreen extends StatelessWidget {
                   children: [
                     const Text(
                       'Голосование за идеи',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -155,8 +160,8 @@ class LoveHubScreen extends StatelessWidget {
                   children: [
                     const Text(
                       'Полезное',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
                     _LinkRow(
@@ -259,12 +264,7 @@ class LoveHubScreen extends StatelessWidget {
     showLoveSheet<void>(
       context,
       title: 'Идеи сообщества',
-      builder: (context) => const _HubEmptyState(
-        emoji: '💡',
-        title: 'Голосование за идеи',
-        text: 'Раздел предложений и народного голосования появится в '
-            'следующем обновлении после запуска админ-панели.',
-      ),
+      builder: (context) => _CommunityIdeasList(api: LoveApi()),
     );
   }
 
@@ -272,28 +272,7 @@ class LoveHubScreen extends StatelessWidget {
     showLoveSheet<void>(
       context,
       title: isBug ? 'Сообщить об ошибке' : 'Предложить идею',
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _HubEmptyState(
-            emoji: isBug ? '🐛' : '💡',
-            title: isBug ? 'Раздел в разработке' : 'Функция появится позже',
-            text: isBug
-                ? 'Отправка баг-репортов и публичное отслеживание ошибок '
-                    'будут реализованы в ближайшем обновлении.'
-                : 'Раздел народных предложений и голосования за идеи находится '
-                    'на стадии проектирования.',
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Понятно'),
-            ),
-          ),
-        ],
-      ),
+      builder: (context) => _CommunityCaseForm(api: LoveApi(), isBug: isBug),
     );
   }
 
@@ -306,11 +285,13 @@ class LoveHubScreen extends StatelessWidget {
         children: [
           Text(
             info.lead,
-            style: const TextStyle(color: LoveColors.textSecondary, height: 1.5),
+            style:
+                const TextStyle(color: LoveColors.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < info.items.length; i++)
-            _InfoItem(index: i + 1, item: info.items[i], numbered: info.numbered),
+            _InfoItem(
+                index: i + 1, item: info.items[i], numbered: info.numbered),
           if (info.note != null) ...[
             const SizedBox(height: 12),
             LoveBanner(info.note!),
@@ -324,7 +305,363 @@ class LoveHubScreen extends StatelessWidget {
     showLoveSheet<void>(
       context,
       title: 'Dev Log',
-      builder: (context) => const _DevLogFeed(),
+      builder: (context) => _DevLogFeed(api: LoveApi()),
+    );
+  }
+}
+
+class _CommunityIdeasList extends StatefulWidget {
+  const _CommunityIdeasList({required this.api});
+  final LoveApi api;
+
+  @override
+  State<_CommunityIdeasList> createState() => _CommunityIdeasListState();
+}
+
+class _CommunityIdeasListState extends State<_CommunityIdeasList> {
+  late Future<List<Map<String, dynamic>>> _future = widget.api.communityIdeas();
+
+  void _reload() {
+    setState(() => _future = widget.api.communityIdeas());
+  }
+
+  Future<void> _vote(Map<String, dynamic> idea, int value) async {
+    final id = idea['_id']?.toString();
+    if (id == null) return;
+    try {
+      final result = await widget.api.voteIdea(id, value);
+      if (!mounted) return;
+      setState(() {
+        idea['score'] = result['score'] ?? idea['score'];
+        idea['_myVote'] = value;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return _NetworkError(
+            message: snapshot.error.toString(),
+            onRetry: _reload,
+          );
+        }
+        final ideas = snapshot.data ?? const [];
+        if (ideas.isEmpty) {
+          return const _IconEmptyState(
+            icon: Icons.lightbulb_outline_rounded,
+            title: 'Пока нет опубликованных идей',
+            text: 'Предложите первую идею. После проверки она появится здесь.',
+          );
+        }
+        return Column(
+          children: [
+            for (final idea in ideas)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: LoveColors.border),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              LoveBadge(
+                                  _ideaCategory(asText(idea['category']))),
+                              LoveBadge(_ideaStatus(asText(idea['status']))),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          Text(
+                            idea['title']?.toString() ?? 'Без названия',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            idea['summary']?.toString() ?? 'Без описания',
+                            style: const TextStyle(
+                              color: LoveColors.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      children: [
+                        IconButton(
+                          tooltip: 'Поддержать',
+                          onPressed: () => _vote(idea, 1),
+                          icon: Icon(
+                            Icons.keyboard_arrow_up_rounded,
+                            color: idea['_myVote'] == 1
+                                ? Colors.white
+                                : LoveColors.textMuted,
+                          ),
+                        ),
+                        Text(
+                          '${idea['score'] ?? 0}',
+                          style: const TextStyle(
+                            fontFamily: LoveFonts.mono,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Не поддержать',
+                          onPressed: () => _vote(idea, -1),
+                          icon: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: idea['_myVote'] == -1
+                                ? Colors.white
+                                : LoveColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CommunityCaseForm extends StatefulWidget {
+  const _CommunityCaseForm({required this.api, required this.isBug});
+  final LoveApi api;
+  final bool isBug;
+
+  @override
+  State<_CommunityCaseForm> createState() => _CommunityCaseFormState();
+}
+
+class _CommunityCaseFormState extends State<_CommunityCaseForm> {
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  bool _diagnostics = false;
+  bool _submitting = false;
+  String _priority = 'normal';
+  String _category = 'other';
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_title.text.trim().length < 3 || _description.text.trim().length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Добавьте название и подробное описание.')),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final result = await widget.api.createCommunityCase(
+        kind: widget.isBug ? 'bug' : 'idea',
+        title: _title.text,
+        description: _description.text,
+        diagnosticsConsent: widget.isBug && _diagnostics,
+        priority: widget.isBug ? _priority : 'normal',
+        category: widget.isBug ? 'other' : _category,
+        safeLog: widget.isBug && _diagnostics
+            ? SafeDiagnosticLog.instance.snapshot()
+            : '',
+      );
+      if (!mounted) return;
+      final item = result['case'];
+      final number = item is Map ? item['number'] : null;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'Обращение отправлено${number == null ? '' : ': $number'}')),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          widget.isBug
+              ? 'Опишите, что произошло, что ожидалось и как повторить ошибку.'
+              : 'Расскажите, что стоит добавить и какую проблему это решает.',
+          style: const TextStyle(color: LoveColors.textSecondary, height: 1.45),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _title,
+          maxLength: 160,
+          decoration: const InputDecoration(labelText: 'Название'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _description,
+          minLines: 4,
+          maxLines: 8,
+          maxLength: 10000,
+          decoration: const InputDecoration(labelText: 'Подробное описание'),
+        ),
+        const SizedBox(height: 10),
+        if (widget.isBug)
+          DropdownButtonFormField<String>(
+            initialValue: _priority,
+            decoration: const InputDecoration(labelText: 'Риск ошибки'),
+            items: const [
+              DropdownMenuItem(
+                  value: 'low', child: Text('Низкий — косметическая проблема')),
+              DropdownMenuItem(
+                  value: 'normal',
+                  child: Text('Обычный — функция работает неверно')),
+              DropdownMenuItem(
+                  value: 'high', child: Text('Высокий — функция недоступна')),
+              DropdownMenuItem(
+                  value: 'critical',
+                  child: Text('Критический — безопасность или потеря данных')),
+            ],
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _priority = value ?? 'normal'),
+          )
+        else
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            decoration: const InputDecoration(labelText: 'Категория идеи'),
+            items: const [
+              DropdownMenuItem(value: 'messaging', child: Text('Сообщения')),
+              DropdownMenuItem(value: 'voice', child: Text('Голос и звонки')),
+              DropdownMenuItem(value: 'servers', child: Text('Серверы')),
+              DropdownMenuItem(value: 'profile', child: Text('Профиль')),
+              DropdownMenuItem(
+                  value: 'mobile', child: Text('Мобильное приложение')),
+              DropdownMenuItem(value: 'safety', child: Text('Безопасность')),
+              DropdownMenuItem(
+                  value: 'accessibility', child: Text('Доступность')),
+              DropdownMenuItem(value: 'other', child: Text('Другое')),
+            ],
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _category = value ?? 'other'),
+          ),
+        if (widget.isBug)
+          CheckboxListTile(
+            value: _diagnostics,
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _diagnostics = value ?? false),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              'Приложить версию приложения, сведения об ОС и безопасный технический журнал',
+              style: TextStyle(fontSize: 13),
+            ),
+            subtitle: const Text('Токены и переписки не отправляются.'),
+          ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: Text(_submitting ? 'Отправляем...' : 'Отправить'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NetworkError extends StatelessWidget {
+  const _NetworkError({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Не удалось загрузить данные',
+      text: message.replaceFirst('ApiException: ', ''),
+      action: OutlinedButton.icon(
+        onPressed: onRetry,
+        icon: const Icon(Icons.refresh_rounded),
+        label: const Text('Повторить'),
+      ),
+    );
+  }
+}
+
+class _IconEmptyState extends StatelessWidget {
+  const _IconEmptyState({
+    required this.icon,
+    required this.title,
+    required this.text,
+    this.action,
+  });
+  final IconData icon;
+  final String title;
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, size: 38, color: LoveColors.textMuted),
+          const SizedBox(height: 12),
+          Text(title,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 7),
+          Text(text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: LoveColors.textSecondary, height: 1.4)),
+          if (action != null) ...[const SizedBox(height: 16), action!],
+        ],
+      ),
     );
   }
 }
@@ -404,8 +741,7 @@ class _BentoTag extends StatelessWidget {
       decoration: BoxDecoration(
         color: solid ? Colors.white : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
-        border:
-            solid ? null : Border.all(color: LoveColors.borderActive),
+        border: solid ? null : Border.all(color: LoveColors.borderActive),
       ),
       child: Text(
         text.toUpperCase(),
@@ -583,50 +919,6 @@ class _UpdateItem extends StatelessWidget {
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
-
-class _HubEmptyState extends StatelessWidget {
-  const _HubEmptyState({
-    required this.emoji,
-    required this.title,
-    required this.text,
-  });
-
-  final String emoji;
-  final String title;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-      child: Column(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 44)),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: LoveFonts.serif,
-              fontStyle: FontStyle.italic,
-              fontSize: 19,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: LoveColors.textSecondary, height: 1.45),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Info modal content (rules / roadmap) ──────────────────────────────────────
 
 class _HubInfo {
@@ -658,12 +950,14 @@ const _rulesInfo = _HubInfo(
       'придерживайтесь нескольких простых правил.',
   numbered: true,
   items: [
-    _InfoRow('Уважение.',
+    _InfoRow(
+        'Уважение.',
         'Никаких оскорблений, травли и дискриминации. Относитесь к другим '
             'так, как хотели бы, чтобы относились к вам.'),
     _InfoRow('Без спама.',
         'Не засоряйте чаты рекламой, флудом и повторяющимися сообщениями.'),
-    _InfoRow('Безопасность.',
+    _InfoRow(
+        'Безопасность.',
         'Не делитесь чужими личными данными и не выдавайте себя за других '
             'людей.'),
     _InfoRow('Контент 18+.',
@@ -768,6 +1062,10 @@ class _DevLogPost {
     required this.text,
     required this.hearts,
     required this.broken,
+    required this.authorName,
+    required this.authorAvatar,
+    required this.authorRole,
+    required this.commentCount,
   });
 
   final String id;
@@ -775,37 +1073,55 @@ class _DevLogPost {
   final String text;
   final int hearts;
   final int broken;
+  final String authorName;
+  final String authorAvatar;
+  final String authorRole;
+  final int commentCount;
+
+  factory _DevLogPost.fromJson(Map<String, dynamic> json) {
+    final published = DateTime.tryParse(
+      (json['publishedAt'] ?? json['createdAt'] ?? '').toString(),
+    );
+    final author = json['author'] is Map
+        ? (json['author'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    return _DevLogPost(
+      id: json['_id']?.toString() ?? '',
+      date: published == null
+          ? 'сегодня'
+          : '${published.toLocal().day.toString().padLeft(2, '0')}.${published.toLocal().month.toString().padLeft(2, '0')}.${published.toLocal().year}',
+      text: [json['title'], json['body']]
+          .where((value) => value != null && value.toString().trim().isNotEmpty)
+          .map((value) => value.toString().trim())
+          .join('\n\n'),
+      hearts: (json['upVotes'] as num?)?.toInt() ?? 0,
+      broken: (json['downVotes'] as num?)?.toInt() ?? 0,
+      authorName: asText(
+          author['nickname'], asText(author['username'], 'Команда Love')),
+      authorAvatar: asText(author['avatar']),
+      authorRole: asText(author['role']),
+      commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  _DevLogPost copyWith({int? hearts, int? broken, int? commentCount}) {
+    return _DevLogPost(
+      id: id,
+      date: date,
+      text: text,
+      hearts: hearts ?? this.hearts,
+      broken: broken ?? this.broken,
+      authorName: authorName,
+      authorAvatar: authorAvatar,
+      authorRole: authorRole,
+      commentCount: commentCount ?? this.commentCount,
+    );
+  }
 }
 
-const _devLogSeed = <_DevLogPost>[
-  _DevLogPost(
-    id: 'dl1',
-    date: '10 июня',
-    text: 'Переработал экран голосовых каналов — участники теперь в виде '
-        '«орбов присутствия» с живой аурой у говорящего. Как вам такой подход?',
-    hearts: 42,
-    broken: 6,
-  ),
-  _DevLogPost(
-    id: 'dl2',
-    date: '8 июня',
-    text: 'Думаю добавить авто-переключение тёмной/светлой темы по системным '
-        'настройкам. Нужно вам это?',
-    hearts: 88,
-    broken: 12,
-  ),
-  _DevLogPost(
-    id: 'dl3',
-    date: '5 июня',
-    text: 'Веб-версия Love — делать её в первую очередь, или сначала довести '
-        'десктоп и мобильный билд?',
-    hearts: 65,
-    broken: 33,
-  ),
-];
-
 class _DevLogFeed extends StatefulWidget {
-  const _DevLogFeed();
+  const _DevLogFeed({required this.api});
+  final LoveApi api;
 
   @override
   State<_DevLogFeed> createState() => _DevLogFeedState();
@@ -813,22 +1129,165 @@ class _DevLogFeed extends StatefulWidget {
 
 class _DevLogFeedState extends State<_DevLogFeed> {
   late Map<String, String> _votes = LovePrefs.instance.devLogVotes();
+  List<_DevLogPost> _posts = const [];
+  bool _loading = true;
+  bool _loadingMore = false;
+  int _page = 1;
+  int _pages = 1;
+  int _seenRevision = 0;
+  String? _error;
 
-  void _vote(String id, String choice) {
-    final current = _votes[id];
-    final next = current == choice ? null : choice;
-    setState(() {
-      if (next == null) {
-        _votes = {..._votes}..remove(id);
-      } else {
-        _votes = {..._votes, id: next};
+  @override
+  void initState() {
+    super.initState();
+    _seenRevision = AppEvents.instance.devLogRevision;
+    AppEvents.instance.addListener(_handleRealtime);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    AppEvents.instance.removeListener(_handleRealtime);
+    super.dispose();
+  }
+
+  void _handleRealtime() {
+    final events = AppEvents.instance;
+    if (_seenRevision == events.devLogRevision) return;
+    _seenRevision = events.devLogRevision;
+    final update = events.lastDevLogUpdate;
+    final postId = asId(update['postId']);
+    if (asBool(update['removed']) && postId.isNotEmpty) {
+      setState(
+          () => _posts = _posts.where((post) => post.id != postId).toList());
+      return;
+    }
+    final index = _posts.indexWhere((post) => post.id == postId);
+    if (index >= 0) {
+      setState(() {
+        final current = _posts[index];
+        _posts[index] = current.copyWith(
+          hearts: (update['upVotes'] as num?)?.toInt(),
+          broken: (update['downVotes'] as num?)?.toInt(),
+          commentCount: (update['commentCount'] as num?)?.toInt(),
+        );
+      });
+    } else if (asBool(update['refresh'])) {
+      _load(quiet: true);
+    }
+  }
+
+  Future<void> _load({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final result = await widget.api.devLogPage();
+      final posts = result['posts'] is List
+          ? (result['posts'] as List)
+              .whereType<Map>()
+              .map((item) => _DevLogPost.fromJson(item.cast<String, dynamic>()))
+              .toList()
+          : <_DevLogPost>[];
+      final pagination = result['pagination'] is Map
+          ? (result['pagination'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        _posts = posts;
+        _page = (pagination['page'] as num?)?.toInt() ?? 1;
+        _pages = (pagination['pages'] as num?)?.toInt() ?? 1;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _page >= _pages) return;
+    setState(() => _loadingMore = true);
+    try {
+      final result = await widget.api.devLogPage(page: _page + 1);
+      final next = result['posts'] is List
+          ? (result['posts'] as List)
+              .whereType<Map>()
+              .map((item) => _DevLogPost.fromJson(item.cast<String, dynamic>()))
+              .toList()
+          : <_DevLogPost>[];
+      final pagination = result['pagination'] is Map
+          ? (result['pagination'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        _posts = [
+          ..._posts,
+          ...next.where((item) => !_posts.any((old) => old.id == item.id))
+        ];
+        _page = (pagination['page'] as num?)?.toInt() ?? _page + 1;
+        _pages = (pagination['pages'] as num?)?.toInt() ?? _pages;
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
       }
-    });
-    LovePrefs.instance.setDevLogVote(id, next);
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _vote(String id, String choice) async {
+    try {
+      final result =
+          await widget.api.voteDevLog(id, choice == 'heart' ? 1 : -1);
+      if (!mounted) return;
+      setState(() {
+        _votes = {..._votes, id: choice};
+        _posts = _posts.map((post) {
+          if (post.id != id) return post;
+          return post.copyWith(
+            hearts: (result['upVotes'] as num?)?.toInt(),
+            broken: (result['downVotes'] as num?)?.toInt(),
+          );
+        }).toList();
+      });
+      LovePrefs.instance.setDevLogVote(id, choice);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (_posts.isEmpty) {
+      if (_error != null) {
+        return _NetworkError(message: _error!, onRetry: _load);
+      }
+      return const _IconEmptyState(
+        icon: Icons.article_outlined,
+        title: 'Dev Log пока пуст',
+        text: 'Новые заметки команды появятся здесь.',
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -839,35 +1298,70 @@ class _DevLogFeedState extends State<_DevLogFeed> {
             style: TextStyle(color: LoveColors.textMuted, fontSize: 12.5),
           ),
         ),
-        for (final post in _devLogSeed)
+        if (_error != null) ...[
+          LoveBanner(
+              'Не удалось обновить ленту. Уже загруженные записи сохранены.'),
+          const SizedBox(height: 12),
+        ],
+        for (final post in _posts)
           _DevLogCard(
+            api: widget.api,
             post: post,
             vote: _votes[post.id],
             onVote: (choice) => _vote(post.id, choice),
+          ),
+        if (_page < _pages)
+          OutlinedButton.icon(
+            onPressed: _loadingMore ? null : _loadMore,
+            icon: _loadingMore
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.expand_more_rounded),
+            label: const Text('Показать ещё'),
           ),
       ],
     );
   }
 }
 
-class _DevLogCard extends StatelessWidget {
+class _DevLogCard extends StatefulWidget {
   const _DevLogCard({
+    required this.api,
     required this.post,
     required this.vote,
     required this.onVote,
   });
 
+  final LoveApi api;
   final _DevLogPost post;
   final String? vote;
   final ValueChanged<String> onVote;
 
   @override
+  State<_DevLogCard> createState() => _DevLogCardState();
+}
+
+class _DevLogCardState extends State<_DevLogCard> {
+  final _comment = TextEditingController();
+  List<Map<String, dynamic>> _comments = const [];
+  Map<String, dynamic>? _replyTo;
+  bool _expanded = false;
+  bool _loadingComments = false;
+  bool _sendingComment = false;
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Apply the local vote on top of the seed counts.
-    var hearts = post.hearts;
-    var broken = post.broken;
-    if (vote == 'heart') hearts += 1;
-    if (vote == 'broken') broken += 1;
+    final post = widget.post;
+    final hearts = post.hearts;
+    final broken = post.broken;
     final total = hearts + broken;
     final pct = total == 0 ? 0 : (hearts / total * 100).round();
 
@@ -893,12 +1387,19 @@ class _DevLogCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.08),
                   border: Border.all(color: LoveColors.border),
                 ),
-                child: const Text('А',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                child: LoveAvatar(
+                    label: post.authorName,
+                    imageUrl: post.authorAvatar,
+                    size: 34),
               ),
               const SizedBox(width: 10),
-              const Text('Александр',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+              Flexible(
+                  child: Text(post.authorName,
+                      style: const TextStyle(fontWeight: FontWeight.w700))),
+              if (staffRoleLabel(post.authorRole).isNotEmpty) ...[
+                const SizedBox(width: 7),
+                StaffRoleLabel(role: post.authorRole, compact: true),
+              ],
               const Spacer(),
               Text(post.date,
                   style: const TextStyle(
@@ -917,8 +1418,7 @@ class _DevLogCard extends StatelessWidget {
               value: total == 0 ? 0 : hearts / total,
               minHeight: 6,
               backgroundColor: Colors.white.withValues(alpha: 0.06),
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             ),
           ),
           const SizedBox(height: 12),
@@ -927,15 +1427,15 @@ class _DevLogCard extends StatelessWidget {
               _VoteButton(
                 icon: Icons.favorite_rounded,
                 count: hearts,
-                active: vote == 'heart',
-                onTap: () => onVote('heart'),
+                active: widget.vote == 'heart',
+                onTap: () => widget.onVote('heart'),
               ),
               const SizedBox(width: 10),
               _VoteButton(
                 icon: Icons.heart_broken_rounded,
                 count: broken,
-                active: vote == 'broken',
-                onTap: () => onVote('broken'),
+                active: widget.vote == 'broken',
+                onTap: () => widget.onVote('broken'),
               ),
               const Spacer(),
               Text('$pct% за',
@@ -945,9 +1445,211 @@ class _DevLogCard extends StatelessWidget {
                       fontWeight: FontWeight.w600)),
             ],
           ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _toggleComments,
+              icon: Icon(
+                  _expanded
+                      ? Icons.expand_less_rounded
+                      : Icons.chat_bubble_outline_rounded,
+                  size: 18),
+              label: Text(_expanded
+                  ? 'Скрыть комментарии'
+                  : 'Комментарии (${post.commentCount})'),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            child: _expanded ? _commentsBody() : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _toggleComments() async {
+    setState(() => _expanded = !_expanded);
+    if (_expanded && _comments.isEmpty) await _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() => _loadingComments = true);
+    try {
+      final comments = await widget.api.devLogComments(widget.post.id);
+      if (mounted) setState(() => _comments = comments);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingComments = false);
+    }
+  }
+
+  Widget _commentsBody() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.only(top: 12),
+      decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: LoveColors.border))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_loadingComments)
+            const Center(
+                child: Padding(
+                    padding: EdgeInsets.all(18),
+                    child: CircularProgressIndicator()))
+          else if (_comments.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Text('Комментариев пока нет.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: LoveColors.textMuted)),
+            )
+          else
+            for (final comment in _comments) _commentTile(comment),
+          if (_replyTo != null)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                children: [
+                  Expanded(
+                      child: Text('Ответ для ${_commentAuthor(_replyTo!)}',
+                          style: const TextStyle(
+                              color: LoveColors.textSecondary, fontSize: 12))),
+                  IconButton(
+                      tooltip: 'Отменить ответ',
+                      onPressed: () => setState(() => _replyTo = null),
+                      icon: const Icon(Icons.close_rounded),
+                      iconSize: 17),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _comment,
+                  minLines: 1,
+                  maxLines: 4,
+                  maxLength: 2000,
+                  decoration: const InputDecoration(
+                      hintText: 'Написать комментарий', counterText: ''),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: 'Отправить комментарий',
+                onPressed: _sendingComment ? null : _sendComment,
+                icon: _sendingComment
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.send_rounded),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _commentTile(Map<String, dynamic> comment) {
+    final author = comment['author'] is Map
+        ? (comment['author'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    final nested = asId(comment['parent']).isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(nested ? 24 : 0, 0, 0, 10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.025),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: LoveColors.border)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                LoveAvatar(
+                    label: _commentAuthor(comment),
+                    imageUrl: asText(author['avatar']),
+                    size: 24),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: Text(_commentAuthor(comment),
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w800))),
+                if (staffRoleLabel(asText(author['role'])).isNotEmpty)
+                  StaffRoleLabel(role: asText(author['role']), compact: true),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(asText(comment['body']),
+                style: const TextStyle(
+                    color: LoveColors.textSecondary, height: 1.4)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => setState(() => _replyTo = comment),
+                style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.only(top: 6)),
+                child: const Text('Ответить'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _commentAuthor(Map<String, dynamic> comment) {
+    final author = comment['author'] is Map
+        ? (comment['author'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    return asText(author['nickname'], asText(author['username'], 'Love user'));
+  }
+
+  Future<void> _sendComment() async {
+    final body = _comment.text.trim();
+    if (body.isEmpty) return;
+    setState(() => _sendingComment = true);
+    try {
+      final result = await widget.api.addDevLogComment(
+        widget.post.id,
+        body,
+        parent: _replyTo == null ? null : asId(_replyTo!['_id']),
+      );
+      final raw = result['comment'];
+      if (raw is Map && mounted) {
+        setState(() {
+          _comments = [..._comments, raw.cast<String, dynamic>()];
+          _comment.clear();
+          _replyTo = null;
+        });
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _sendingComment = false);
+    }
   }
 }
 
@@ -1001,3 +1703,28 @@ class _VoteButton extends StatelessWidget {
 }
 
 const _hubFill = Color(0x08FFFFFF);
+
+String _ideaCategory(String value) {
+  return const {
+        'messaging': 'Сообщения',
+        'voice': 'Голос и звонки',
+        'servers': 'Серверы',
+        'profile': 'Профиль',
+        'mobile': 'Мобильное',
+        'safety': 'Безопасность',
+        'accessibility': 'Доступность',
+        'other': 'Другое',
+      }[value.toLowerCase()] ??
+      'Другое';
+}
+
+String _ideaStatus(String value) {
+  return const {
+        'under_review': 'На рассмотрении',
+        'planned': 'Запланировано',
+        'in_progress': 'В разработке',
+        'completed': 'Готово',
+        'declined': 'Отклонено',
+      }[value.toLowerCase()] ??
+      'На рассмотрении';
+}

@@ -14,6 +14,92 @@ function escHTML(s) {
 }
 window.escHTML = escHTML;
 
+const STAFF_ROLE_LABELS = {
+    support: "Support",
+    junior_moderator: "Младший модератор",
+    senior_moderator: "Старший модератор",
+    junior_admin: "Младший администратор",
+    senior_admin: "Старший администратор",
+    deputy_developer: "Зам. разработчика",
+    developer: "Разработчик",
+    founder: "Разработчик"
+};
+
+const STAFF_ROLE_ALIASES = {
+    founder: "developer",
+    admin: "senior_admin",
+    moderator: "senior_moderator"
+};
+
+const STAFF_ROLE_ICONS = {
+    support: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><path d="M4 13a2 2 0 0 1 2-2h1v6H6a2 2 0 0 1-2-2zM20 13a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2z"/><path d="M17 17c-.8 2-2.4 3-5 3"/></svg>',
+    junior_moderator: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6z"/><path d="M9 12h6"/></svg>',
+    senior_moderator: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>',
+    junior_admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 7-7 2 2-2 2 1.5 1.5-2 2L16 11l-2 2"/></svg>',
+    senior_admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 4 4 4-7 4 7 4-4-2 10H6z"/><path d="M6 18h12"/></svg>',
+    deputy_developer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/><path d="M18.5 3.5v3M17 5h3"/></svg>',
+    developer: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M13 15h4"/><path d="M17.5 3v3M16 4.5h3"/></svg>'
+};
+
+function normalizeStaffRole(role) {
+    const value = String(role || "").toLowerCase();
+    return STAFF_ROLE_ALIASES[value] || value;
+}
+
+function staffRoleLabel(role) {
+    const original = String(role || "").toLowerCase();
+    return STAFF_ROLE_LABELS[original] || STAFF_ROLE_LABELS[normalizeStaffRole(original)] || "";
+}
+
+function appendStaffBadge(container, role) {
+    const label = staffRoleLabel(role);
+    const normalizedRole = normalizeStaffRole(role);
+    const icon = STAFF_ROLE_ICONS[normalizedRole];
+    if (!container || !label || !icon) return;
+    const badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = `message-staff-badge rank-${normalizedRole}`;
+    badge.setAttribute("aria-label", label);
+    badge.setAttribute("data-tooltip", label);
+    badge.innerHTML = icon;
+    badge.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        document.querySelectorAll(".message-staff-badge.is-tooltip-open").forEach(item => {
+            if (item !== badge) item.classList.remove("is-tooltip-open");
+        });
+        badge.classList.toggle("is-tooltip-open");
+        clearTimeout(badge._tooltipTimer);
+        if (badge.classList.contains("is-tooltip-open")) {
+            badge._tooltipTimer = setTimeout(() => badge.classList.remove("is-tooltip-open"), 2400);
+        }
+    });
+    badge.addEventListener("blur", () => badge.classList.remove("is-tooltip-open"));
+
+    const senderName = container.querySelector(":scope > .msg-sender-name");
+    if (senderName) {
+        const authorLine = document.createElement("span");
+        authorLine.className = "message-author-line";
+        container.insertBefore(authorLine, senderName);
+        authorLine.appendChild(senderName);
+        authorLine.appendChild(badge);
+        return;
+    }
+    container.appendChild(badge);
+}
+
+function updateProfileStaffBadge(user) {
+    const badge = document.getElementById("profile-staff-rank");
+    if (!badge) return;
+    const role = user?.staffRank || user?.role;
+    const label = user?.staffRankLabel || staffRoleLabel(role);
+    badge.textContent = label || "";
+    badge.classList.toggle("hidden", !label);
+    badge.classList.toggle("developer", normalizeStaffRole(role) === "developer");
+}
+
+window.updateProfileStaffBadge = updateProfileStaffBadge;
+
 // ── Аватары: показываем реальную картинку, если есть, иначе буквы ──────
 // rawAvatar — строка-URL (или имя файла) от бэкенда; пусто → буквенный fallback.
 function avatarStyle(rawAvatar) {
@@ -169,6 +255,8 @@ navButtons.forEach(btn => {
                     const firstId = keys[0];
                     const kind = mockServers[firstId]._kind || mockServers[firstId].kind || (mockServers[firstId].channels ? 'server' : 'room');
                     selectServerOrRoom(firstId, kind);
+                } else {
+                    showServersEmptyState();
                 }
             }
         } else if (targetViewId === "view-friends") {
@@ -177,6 +265,9 @@ navButtons.forEach(btn => {
             loadHub();
         } else if (targetViewId === "view-notifications") {
             loadNotifications();
+            if (typeof window.loadRealNotifications === "function") {
+                window.loadRealNotifications().catch(() => {});
+            }
         }
     });
 });
@@ -368,6 +459,128 @@ function createEmptyState(title, text, buttonText, onClick) {
     return wrap;
 }
 
+function createMainEmptyState(id, title, text, actions = []) {
+    const wrap = document.createElement("div");
+    wrap.id = id;
+    wrap.className = "empty-state-panel empty-state-main";
+    const buttons = actions.map((action, index) => `
+        <button type="button" class="empty-state-btn${index > 0 ? " empty-state-btn-secondary" : ""}" data-empty-action="${index}">
+            ${escHTML(action.label)}
+        </button>
+    `).join("");
+
+    wrap.innerHTML = `
+        <div class="empty-state-mark">+</div>
+        <h3>${escHTML(title)}</h3>
+        <p>${escHTML(text)}</p>
+        ${buttons ? `<div class="empty-state-actions">${buttons}</div>` : ""}
+    `;
+
+    wrap.querySelectorAll("[data-empty-action]").forEach(btn => {
+        const action = actions[Number(btn.dataset.emptyAction)];
+        if (action && typeof action.onClick === "function") {
+            btn.addEventListener("click", action.onClick);
+        }
+    });
+
+    return wrap;
+}
+
+function openAddFriendFlow() {
+    const friendsBtn = document.getElementById("nav-friends");
+    if (friendsBtn) friendsBtn.click();
+    setTimeout(() => {
+        if (typeof window.openFriendsAddPanel === "function") {
+            window.openFriendsAddPanel();
+        } else if (typeof loadFriends === "function") {
+            loadFriends("add");
+        }
+    }, 80);
+}
+
+function openCreateSpaceModal(type = "server") {
+    const modal = document.getElementById("create-space-modal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    if (typeof window._resetCreateSpaceModal === "function") {
+        window._resetCreateSpaceModal();
+    }
+    const targetBtn = modal.querySelector(`.create-space-type-btn[data-type="${type}"]`);
+    if (targetBtn && !targetBtn.classList.contains("active")) {
+        targetBtn.click();
+    }
+}
+
+function setChatChromeVisible(visible) {
+    const chatArea = document.querySelector("#view-chats > .chat-area");
+    if (!chatArea) return;
+    chatArea.querySelector(".chat-header")?.classList.toggle("hidden", !visible);
+    chatArea.querySelector(".chat-input-area")?.classList.toggle("hidden", !visible);
+    chatFeedContainer?.classList.toggle("hidden", !visible);
+}
+
+function showChatsEmptyState() {
+    activeConversationId = "";
+    window.currentDMConversationId = null;
+    window.currentDMConversation = null;
+    if (headerName) headerName.textContent = "";
+    if (headerStatus) headerStatus.textContent = "";
+    applyAvatar(headerAvatar, "", "");
+    if (chatFeedContainer) chatFeedContainer.innerHTML = "";
+    if (actionCall) actionCall.classList.add("hidden");
+    if (actionVideo) actionVideo.classList.add("hidden");
+
+    const membersSidebar = document.getElementById("chat-members-sidebar");
+    if (membersSidebar) membersSidebar.classList.add("hidden");
+    const toggleMembersBtn = document.getElementById("action-toggle-members");
+    if (toggleMembersBtn) toggleMembersBtn.classList.add("hidden");
+
+    setChatChromeVisible(false);
+
+    const chatArea = document.querySelector("#view-chats > .chat-area");
+    if (!chatArea || document.getElementById("dm-empty-state")) return;
+    chatArea.appendChild(createMainEmptyState(
+        "dm-empty-state",
+        "Пока нет личных сообщений",
+        "Добавьте друга, чтобы начать переписку или созвон без лишнего пустого чата.",
+        [{ label: "Добавить друга", onClick: openAddFriendFlow }]
+    ));
+}
+
+function hideChatsEmptyState() {
+    document.getElementById("dm-empty-state")?.remove();
+    setChatChromeVisible(true);
+}
+
+function showServersEmptyState() {
+    activeServerId = "";
+    activeServerChannelId = "";
+
+    const wrapper = document.querySelector("#view-servers .server-content-wrapper");
+    const chatPanel = document.getElementById("server-chat-panel");
+    const roomPanel = document.getElementById("server-room-panel");
+    const voicePanel = document.getElementById("server-voice-panel");
+    if (chatPanel) chatPanel.classList.add("hidden");
+    if (roomPanel) roomPanel.classList.add("hidden");
+    if (voicePanel) voicePanel.classList.add("hidden");
+    if (serverChatFeed) serverChatFeed.innerHTML = "";
+
+    if (!wrapper || document.getElementById("servers-empty-state")) return;
+    wrapper.appendChild(createMainEmptyState(
+        "servers-empty-state",
+        "Нет сфер и комнат",
+        "Создайте первую сферу или войдите по приглашению, чтобы здесь появился чат.",
+        [
+            { label: "Создать сферу", onClick: () => openCreateSpaceModal("server") },
+            { label: "Войти по ссылке", onClick: () => openCreateSpaceModal("join") }
+        ]
+    ));
+}
+
+function hideServersEmptyState() {
+    document.getElementById("servers-empty-state")?.remove();
+}
+
 function renderMembersSidebar(members, isServer = false, ownerId = null) {
     const countSpan = document.getElementById("chat-members-count");
     const listContainer = document.getElementById("chat-members-list");
@@ -433,15 +646,16 @@ function renderConversationsList(filterQuery = "") {
     );
 
     if (filtered.length === 0) {
+        if (mockConversations.length === 0) {
+            showChatsEmptyState();
+        }
         conversationsContainer.appendChild(createEmptyState(
-            "Пока нет личных чатов",
-            "Еще никого не добавили? Перейдите в друзья и найдите первого собеседника.",
-            "Добавить друга",
-            () => {
-                const friendsBtn = document.getElementById("nav-friends");
-                if (friendsBtn) friendsBtn.click();
-                setTimeout(() => loadFriends("add"), 80);
-            }
+            mockConversations.length === 0 ? "Пока нет личных чатов" : "Ничего не найдено",
+            mockConversations.length === 0
+                ? "Еще никого не добавили? Перейдите в друзья и найдите первого собеседника."
+                : "Попробуйте другой запрос или очистите поиск.",
+            mockConversations.length === 0 ? "Добавить друга" : "",
+            mockConversations.length === 0 ? openAddFriendFlow : null
         ));
         return;
     }
@@ -484,11 +698,15 @@ function selectConversation(id) {
     activeConversationId = id;
     const conv = mockConversations.find(c => c.id === id);
     if (!conv) {
-        // Нет реального диалога — прячем кнопки звонков
-        if (actionCall) actionCall.classList.add("hidden");
-        if (actionVideo) actionVideo.classList.add("hidden");
+        if (mockConversations.length === 0) {
+            showChatsEmptyState();
+        } else {
+            selectConversation(mockConversations[0].id);
+        }
         return;
     }
+
+    hideChatsEmptyState();
 
     // Кнопки звонков: только для ЛС (не группа), только если есть реальный собеседник
     const isDM = conv.status !== "группа" && conv._otherUser;
@@ -603,6 +821,7 @@ function renderChatMessages(conv) {
 
             groupContent = document.createElement("div");
             groupContent.className = "message-group-content";
+            appendStaffBadge(groupContent, msg.authorRole || (msg.sender === 'own' ? window.currentUser?.role : conv._otherUser?.role));
             
             groupContainer.appendChild(avatar);
             groupContainer.appendChild(groupContent);
@@ -718,9 +937,24 @@ if (messageForm) {
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         // Real backend: send via socket
-        if (conv._realId && typeof window._sendRealDMMessage === 'function' && window._sendRealDMMessage(conv, text)) {
+        const replyTarget = window.__loveReplyTarget;
+        const sentTempId = conv._realId && typeof window._sendRealDMMessage === 'function'
+            ? window._sendRealDMMessage(conv, text)
+            : null;
+        if (sentTempId) {
             // Add optimistic message
-            conv.messages.push({ sender: "own", text: text, time: timeStr, _pending: true });
+            conv.messages.push({
+                sender: "own",
+                text: text,
+                time: timeStr,
+                _pending: true,
+                _tempId: sentTempId,
+                replyTo: replyTarget ? {
+                    id: replyTarget.message?._id || replyTarget.id,
+                    text: replyTarget.text || replyTarget.message?.text || '',
+                    author: replyTarget.author || ''
+                } : null
+            });
             messageInput.value = "";
             autoresizeComposer(messageInput);
             renderChatMessages(conv);
@@ -839,11 +1073,10 @@ function showVideoGrid() {
 function hideVideoGrid() {
     const callVoiceProfile = document.getElementById("call-voice-profile");
     const callVideoGrid = document.getElementById("call-video-grid");
-    animatePresence(callVideoGrid, false, { duration: 230, from: "translateY(12px) scale(0.96)" }).then(() => {
-        callVideoGrid?.classList.remove("layout-remote-max", "layout-local-max");
-        callVideoGrid?.classList.add("layout-split");
-    });
-    animatePresence(callVoiceProfile, true, { duration: 320, from: "translateY(10px) scale(0.97)" });
+    callVideoGrid?.classList.remove("hidden", "layout-remote-max", "layout-local-max");
+    callVideoGrid?.classList.add("layout-split");
+    callVoiceProfile?.classList.add("hidden");
+    window.CallStageController?.renderDm();
 }
 
 function animateCallModalToMini() {
@@ -1031,6 +1264,7 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUse
 
     // Сохраняем ID партнера для завершения звонка
     window.currentCallPartnerId = partnerUserId;
+    window.pendingDMCallKind = isVideo ? 'video' : 'audio';
 
     // 2. Установка инфо партнера в UI звонка
     const callModal = document.getElementById("call-modal");
@@ -1106,6 +1340,11 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUse
         ], { duration: 430, easing: EASE_OUT, fill: "both" });
     }
     document.getElementById("call-mini-bar")?.classList.add("hidden");
+    window.CallStageController?.openDm({
+        userId: partnerUserId,
+        name: partnerName,
+        avatar: partnerAvatarUrl || partnerAvatar
+    });
 
     // 6. Инициализация соединения
     if (isIncoming) {
@@ -1118,7 +1357,7 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUse
         if (partnerUserId) {
             // Реальный звонок на бэкенде
             if (typeof socketRequestCall === 'function') {
-                socketRequestCall(partnerUserId);
+                socketRequestCall(partnerUserId, isVideo ? 'video' : 'audio');
             }
             if (window.SoundManager) {
                 window.SoundManager.play('call_outgoing');
@@ -1496,24 +1735,24 @@ function renderUnifiedSidebar() {
         return { id, kind, subtitle };
     });
 
+    if (spaces.length === 0) {
+        accordion.innerHTML = "";
+        accordion.appendChild(createEmptyState(
+            "Нет сфер",
+            "Создайте первую сферу или комнату, чтобы собрать людей в одном месте.",
+            "Создать",
+            () => openCreateSpaceModal("server")
+        ));
+        showServersEmptyState();
+        return;
+    }
+
+    hideServersEmptyState();
+
     // Если сайдбар еще не отрендерен (нет дочерних карточек), создаем структуру
     const existingCards = accordion.querySelectorAll(".space-card");
     if (existingCards.length === 0) {
         accordion.innerHTML = ""; // Очищаем на всякий случай
-
-        if (spaces.length === 0) {
-            accordion.appendChild(createEmptyState(
-                "Нет сфер",
-                "Создайте первую сферу или комнату, чтобы собрать людей в одном месте.",
-                "Создать",
-                () => {
-                    const modal = document.getElementById("create-space-modal");
-                    if (modal) modal.classList.remove("hidden");
-                    if (typeof window._resetCreateSpaceModal === 'function') window._resetCreateSpaceModal();
-                }
-            ));
-            return;
-        }
         
         spaces.forEach(space => {
             const serverData = mockServers[space.id];
@@ -1637,9 +1876,7 @@ function renderUnifiedSidebar() {
             </button>
         `;
         addBtnContainer.querySelector("button").addEventListener("click", () => {
-            const modal = document.getElementById("create-space-modal");
-            if (modal) modal.classList.remove("hidden");
-            if (typeof window._resetCreateSpaceModal === 'function') window._resetCreateSpaceModal();
+            openCreateSpaceModal("server");
         });
         accordion.appendChild(addBtnContainer);
     }
@@ -1720,6 +1957,20 @@ function transitionPanels(panelToShow, panelsToHide, callback) {
 function selectServerOrRoom(serverId, kind, preventCollapse = false) {
     activeServerId = serverId;
     const serverData = mockServers[serverId];
+    if (!serverData) {
+        const keys = Object.keys(mockServers);
+        if (keys.length > 0) {
+            const firstId = keys[0];
+            const firstKind = mockServers[firstId]._kind || mockServers[firstId].kind || (mockServers[firstId].channels ? 'server' : 'room');
+            selectServerOrRoom(firstId, firstKind, preventCollapse);
+            return;
+        }
+
+        showServersEmptyState();
+        return;
+    }
+
+    hideServersEmptyState();
     const resolvedKind = kind || serverData?._kind || serverData?.kind || 'server';
     
     // Сворачиваем сайдбар только на узких экранах для UX фокуса
@@ -2275,6 +2526,10 @@ function _doRenderVoiceChannel() {
     const memberCountText = document.getElementById("voice-member-count-text");
 
     if (!gridConstellation) return;
+
+    if (window.CallStageController?.renderServer(window.voiceMembers || [])) {
+        return;
+    }
 
     if (memberCountText) {
         memberCountText.textContent = `${voiceMembers.length} в канале`;
@@ -3045,6 +3300,7 @@ function renderRoomChat() {
                 nameSpan.style.marginBottom = "2px";
                 groupContent.appendChild(nameSpan);
             }
+            appendStaffBadge(groupContent, msg.authorRole || (isOwn ? window.currentUser?.role : null));
             
             groupContainer.appendChild(avatar);
             groupContainer.appendChild(groupContent);
@@ -3337,6 +3593,19 @@ window.joinSpaceByCode = joinSpaceByCode;
 
 function loadServer(serverId) {
     const chatPanel = document.getElementById("server-chat-panel");
+    if (!serverId || !mockServers[serverId]) {
+        const keys = Object.keys(mockServers);
+        if (keys.length > 0) {
+            const firstId = keys[0];
+            selectServerOrRoom(firstId, mockServers[firstId]._kind || mockServers[firstId].kind || 'server');
+            return;
+        }
+
+        showServersEmptyState();
+        return;
+    }
+
+    hideServersEmptyState();
     
     // Плавное затухание
     if (chatPanel) {
@@ -3347,7 +3616,10 @@ function loadServer(serverId) {
     setTimeout(() => {
         if (activeServerId !== serverId) return; // Предотвращаем race condition при быстром клике
         const serverData = mockServers[serverId];
-        if (!serverData) return;
+        if (!serverData) {
+            showServersEmptyState();
+            return;
+        }
 
         if (serverTitleDisplay) {
             serverTitleDisplay.textContent = serverData.name;
@@ -3376,6 +3648,20 @@ function renderServerChat() {
     // Иначе серверный чат (он прячет roomPanel и показывает chatPanel) перекроет
     // комнату. Это случается при socket-эхо отправленного сообщения и т.п.
     const _activeSrv = mockServers[activeServerId];
+    if (!_activeSrv) {
+        const keys = Object.keys(mockServers);
+        if (keys.length > 0) {
+            const firstId = keys[0];
+            selectServerOrRoom(firstId, mockServers[firstId]._kind || mockServers[firstId].kind || 'server');
+            return;
+        }
+
+        showServersEmptyState();
+        return;
+    }
+
+    hideServersEmptyState();
+
     if (_activeSrv && (_activeSrv._kind === 'room' || _activeSrv.kind === 'room')) {
         if (typeof renderRoomChat === 'function') renderRoomChat();
         return;
@@ -3391,10 +3677,16 @@ function renderServerChat() {
     _saveVideoStates(serverChatFeed);
     serverChatFeed.innerHTML = "";
     const serverData = mockServers[activeServerId];
-    if (!serverData) return;
+    if (!serverData) {
+        showServersEmptyState();
+        return;
+    }
 
     const channel = serverData.channels.find(ch => ch.id === activeServerChannelId);
-    if (!channel) return;
+    if (!channel) {
+        showServersEmptyState();
+        return;
+    }
 
     serverChannelName.textContent = channel.name;
     serverMessageInput.placeholder = `написать в //${channel.name}...`;
@@ -3434,6 +3726,7 @@ function renderServerChat() {
                 nameSpan.style.marginBottom = "2px";
                 groupContent.appendChild(nameSpan);
             }
+            appendStaffBadge(groupContent, msg.authorRole || (isOwn ? window.currentUser?.role : null));
             
             groupContainer.appendChild(avatar);
             groupContainer.appendChild(groupContent);
@@ -3566,11 +3859,26 @@ serverMessageForm.addEventListener("submit", (e) => {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     // Real backend: send via socket
-    if (channel._realId && typeof window._sendRealChannelMessage === 'function' && window._sendRealChannelMessage(channel._realId, text)) {
+    const replyTarget = window.__loveReplyTarget;
+    const sentTempId = channel._realId && typeof window._sendRealChannelMessage === 'function'
+        ? window._sendRealChannelMessage(channel._realId, text)
+        : null;
+    if (sentTempId) {
         // Оптимистичное сообщение. ВАЖНО: sender='own', иначе appendMessage не
         // смёржит его с входящим эхо (он ищет pending с sender==='own') и своё
         // сообщение задвоится — слева как «партнёр», справа как своё.
-        channel.messages.push({ sender: 'own', text: text, time: timeStr, _pending: true });
+        channel.messages.push({
+            sender: 'own',
+            text: text,
+            time: timeStr,
+            _pending: true,
+            _tempId: sentTempId,
+            replyTo: replyTarget ? {
+                id: replyTarget.message?._id || replyTarget.id,
+                text: replyTarget.text || replyTarget.message?.text || '',
+                author: replyTarget.author || ''
+            } : null
+        });
         serverMessageInput.value = "";
         autoresizeComposer(serverMessageInput);
         renderServerChat();
@@ -3653,6 +3961,7 @@ document.addEventListener('keydown', (e) => {
 
     const composer = getActiveChatComposer();
     if (!composer?.input) return;
+    if (composer.form?.classList.contains("hidden") || composer.input.offsetParent === null) return;
 
     const target = e.target;
     if (target === composer.input) return;
@@ -3679,8 +3988,18 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
     if (activeView === 'view-chats') {
         const conv = mockConversations.find(c => c.id === activeConversationId);
         if (!conv || !conv._realId) return false;
-        if (window._sendRealDMMessage && window._sendRealDMMessage(conv, text, attachments)) {
-            conv.messages.push({ sender: 'own', text: text || '', time: timeStr, _pending: true, attachments: attachments || [] });
+        const replyTarget = window.__loveReplyTarget;
+        const sentTempId = window._sendRealDMMessage && window._sendRealDMMessage(conv, text, attachments);
+        if (sentTempId) {
+            conv.messages.push({
+                sender: 'own', text: text || '', time: timeStr, _pending: true,
+                _tempId: sentTempId, attachments: attachments || [],
+                replyTo: replyTarget ? {
+                    id: replyTarget.message?._id || replyTarget.id,
+                    text: replyTarget.text || replyTarget.message?.text || '',
+                    author: replyTarget.author || ''
+                } : null
+            });
             renderChatMessages(conv);
             if (typeof renderConversationsList === 'function') renderConversationsList(typeof searchInput !== 'undefined' && searchInput ? searchInput.value : "");
             return true;
@@ -3696,8 +4015,18 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         let channel = serverData.channels.find(ch => ch.id === activeServerChannelId);
         if (!channel || channel.type === 'voice') channel = serverData.channels.find(ch => ch.type === 'text');
         if (!channel || !channel._realId) return false;
-        if (window._sendRealChannelMessage && window._sendRealChannelMessage(channel._realId, text, attachments)) {
-            channel.messages.push({ sender: 'own', text: text || '', time: timeStr, _pending: true, attachments: attachments || [] });
+        const replyTarget = window.__loveReplyTarget;
+        const sentTempId = window._sendRealChannelMessage && window._sendRealChannelMessage(channel._realId, text, attachments);
+        if (sentTempId) {
+            channel.messages.push({
+                sender: 'own', text: text || '', time: timeStr, _pending: true,
+                _tempId: sentTempId, attachments: attachments || [],
+                replyTo: replyTarget ? {
+                    id: replyTarget.message?._id || replyTarget.id,
+                    text: replyTarget.text || replyTarget.message?.text || '',
+                    author: replyTarget.author || ''
+                } : null
+            });
             if (kind === 'room') renderRoomChat(); else renderServerChat();
             return true;
         }
@@ -4210,6 +4539,7 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
     const EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
     const COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
     const DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    const REPORT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>';
 
     let menu = null;
     let suppressNextClick = false;
@@ -4231,7 +4561,7 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         if (msg) {
             if (String(msg.sender) === 'own') return true;
             if (String(msg.sender) === 'partner') return false;
-            if (msg.author != null && window.currentUser) return String(msg.author) === String(window.currentUser._id);
+            if (msg.author != null && window.currentUser) return String(msg.author?._id || msg.author) === String(window.currentUser._id);
         }
         return !!wrap.closest('.message-group.own');
     }
@@ -4251,6 +4581,9 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         const items = [];
         if (isOwn && editBtn && text) items.push({ label: 'Изменить', icon: EDIT_SVG, action: () => editBtn.click() });
         if (text) items.push({ label: 'Копировать', icon: COPY_SVG, action: () => { try { navigator.clipboard.writeText(text); showToast('Скопировано', 'Текст в буфере.'); } catch (_) {} } });
+        const realMessageId = (wrap._msgData && (wrap._msgData._id || wrap._msgData.id)) || messageId;
+        const reportable = !isOwn && realMessageId && !String(realMessageId).startsWith('temp-') && !String(realMessageId).startsWith('temp_');
+        if (reportable) items.push({ label: 'Пожаловаться', icon: REPORT_SVG, action: () => window.openMessageReport?.({ messageId: realMessageId, preview: text }) });
         if (isOwn) items.push({
             label: 'Удалить', icon: DEL_SVG, danger: true, action: () => {
                 // Предпочитаем штатную кнопку удаления (она чистит модель и
@@ -4352,21 +4685,28 @@ window.sendFriendRequest = async function (username, opts = {}) {
     };
     username = (username || '').trim();
     if (!username) return fail('error', 'Ошибка', 'Введите никнейм.');
-    const exists = mockFriends.find(f => f.name.toLowerCase() === username.toLowerCase());
+    const normalizedUsername = username.toLocaleLowerCase();
+    const exists = mockFriends.find(f => String(f.name || '').toLocaleLowerCase() === normalizedUsername);
     if (exists) return fail('exists', 'Уже в списке', `Связь с ${username} уже существует или отправлена.`);
 
     let realId = null;
     if (typeof UsersAPI !== 'undefined' && typeof FriendsAPI !== 'undefined') {
         try {
             const searchRes = await UsersAPI.search(username);
-            const users = searchRes.users || searchRes;
-            const user = users.find(u => u.username === username || u.nickname === username);
+            const users = Array.isArray(searchRes?.users)
+                ? searchRes.users
+                : (Array.isArray(searchRes) ? searchRes : []);
+            const user = users.find(u =>
+                String(u.username || '').toLocaleLowerCase() === normalizedUsername ||
+                String(u.nickname || '').toLocaleLowerCase() === normalizedUsername
+            );
             if (!user) return fail('notfound', 'Ошибка', `Пользователь ${username} не найден.`);
             await FriendsAPI.sendRequest(user._id);
             realId = user._id;
             if (typeof socketNotifyFriendRequest === 'function') socketNotifyFriendRequest(user._id);
             else if (window.socket) window.socket.emit('friend:request', { targetUserId: user._id });
         } catch (err) {
+            console.error('[friends] Failed to send friend request:', err);
             return fail('error', 'Ошибка', 'Не удалось отправить запрос.');
         }
     }
@@ -4422,16 +4762,21 @@ window.sendFriendRequest = async function (username, opts = {}) {
     });
 })();
 
+window.openFriendsAddPanel = function () {
+    document.getElementById("add-friend-modal")?.classList.add("hidden");
+    friendTabs.forEach(t => t.classList.remove("active"));
+    const addTab = document.querySelector(".friends-filter-nav .filter-tab[data-tab='add']");
+    if (addTab) addTab.classList.add("active");
+    if (friendsInlineSearchBar) friendsInlineSearchBar.classList.add("hidden");
+    if (friendsLocalSearchInput) friendsLocalSearchInput.value = "";
+    if (friendsClearSearchBtn) friendsClearSearchBtn.style.display = "none";
+    loadFriends("add");
+    requestAnimationFrame(() => document.getElementById("friend-username-input")?.focus());
+};
+
 if (friendsAddToggleBtn) {
     friendsAddToggleBtn.addEventListener("click", () => {
-        // Всегда открываем полноценную вкладку «Добавить» (не всплывающее окно).
-        friendTabs.forEach(t => t.classList.remove("active"));
-        const addTab = document.querySelector(".filter-tab[data-tab='add']");
-        if (addTab) addTab.classList.add("active");
-        if (friendsInlineSearchBar) friendsInlineSearchBar.classList.add("hidden");
-        if (friendsLocalSearchInput) friendsLocalSearchInput.value = "";
-        if (friendsClearSearchBtn) friendsClearSearchBtn.style.display = "none";
-        loadFriends("add");
+        window.openFriendsAddPanel();
     });
 }
 
@@ -4461,9 +4806,8 @@ if (friendsClearSearchBtn) {
 friendTabs.forEach(tab => {
     tab.addEventListener("click", () => {
         const tabType = tab.getAttribute("data-tab");
-        // На ПК вкладка «Добавить» открывает модалку, а не меняет содержимое.
-        if (tabType === "add" && window.innerWidth > 768 && typeof window.openAddFriendModal === 'function') {
-            window.openAddFriendModal();
+        if (tabType === "add") {
+            window.openFriendsAddPanel();
             return;
         }
         friendTabs.forEach(t => t.classList.remove("active"));
@@ -4680,17 +5024,31 @@ function loadFriends(type) {
         document.getElementById("add-friend-inner-form").addEventListener("submit", async (e) => {
             e.preventDefault();
             const username = (tabInput && tabInput.value.trim()) || "";
+            const submitBtn = e.currentTarget.querySelector("button[type='submit']");
+            if (submitBtn?.disabled) return;
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = "Добавляем...";
+            }
             setTabStatus("Проверяем…", null);
-            const code = await window.sendFriendRequest(username, { silent: true });
-            if (code === 'sent') {
-                setTabStatus("Заявка отправлена.", 'success');
-                if (tabInput) tabInput.value = "";
-            } else if (code === 'exists') {
-                setTabStatus("Пользователь уже в списке или заявка уже отправлена.", 'error');
-            } else if (code === 'notfound') {
-                setTabStatus("Пользователь не найден. Проверьте правильность никнейма.", 'error');
-            } else {
-                setTabStatus("Не удалось отправить заявку. Попробуйте позже.", 'error');
+            try {
+                const code = await window.sendFriendRequest(username, { silent: true });
+                if (code === 'sent') {
+                    setTabStatus("Заявка отправлена.", 'success');
+                    if (tabInput) tabInput.value = "";
+                    updateFriendsTabCounters();
+                } else if (code === 'exists') {
+                    setTabStatus("Пользователь уже в списке или заявка уже отправлена.", 'error');
+                } else if (code === 'notfound') {
+                    setTabStatus("Пользователь не найден. Проверьте правильность никнейма.", 'error');
+                } else {
+                    setTabStatus("Не удалось отправить заявку. Попробуйте позже.", 'error');
+                }
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Добавить";
+                }
             }
         });
         return;
@@ -4777,7 +5135,7 @@ function loadFriends(type) {
             type === "online" ? "Никого нет в сети" : "Пока нет друзей",
             "Добавьте первого человека, чтобы быстро писать, звонить и видеть статус.",
             "Добавить",
-            () => loadFriends("add")
+            () => window.openFriendsAddPanel()
         ));
         return;
     }
@@ -4984,7 +5342,108 @@ function renderUpdatesList(container) {
 
 // ─── Открытие большого окна-списка ──────────────────────────────────────
 
-function openHubListModal(type) {
+function hubLoadingState(message) {
+    return `<div class="hub-list-empty"><span class="hub-loading-ring" aria-hidden="true"></span>${escapeHTML(message)}</div>`;
+}
+
+const HUB_IDEA_CATEGORY_LABELS = {
+    messaging: "Чаты и сообщения",
+    voice: "Голос и звонки",
+    servers: "Серверы",
+    profile: "Профиль",
+    mobile: "Мобильное приложение",
+    safety: "Безопасность",
+    accessibility: "Доступность",
+    other: "Другое"
+};
+
+const HUB_COMMUNITY_STATUS_LABELS = {
+    under_review: "На рассмотрении",
+    planned: "Запланировано",
+    in_progress: "В разработке",
+    completed: "Реализовано",
+    declined: "Не планируется"
+};
+
+function hubCommunityLabel(labels, value, fallback) {
+    return labels[value] || fallback;
+}
+
+function renderCommunityItems(container, items, type) {
+    if (!items.length) {
+        container.innerHTML = `<div class="hub-list-empty"><strong>${type === "ideas" ? "Пока нет опубликованных идей" : "Пока нет опубликованных багов"}</strong><span>${type === "ideas" ? "Предложите первую идею, и после проверки она появится здесь." : "Проверенные ошибки будут появляться здесь вместе со статусом."}</span></div>`;
+        return;
+    }
+
+    container.innerHTML = "";
+    items.forEach((item) => {
+        const card = document.createElement("article");
+        card.className = "hub-list-item hub-community-item";
+        const score = Number(item.score || 0);
+        const status = item.status || "under_review";
+        const statusLabel = hubCommunityLabel(HUB_COMMUNITY_STATUS_LABELS, status, "На рассмотрении");
+        const categoryLabel = hubCommunityLabel(HUB_IDEA_CATEGORY_LABELS, item.category, "Другое");
+        card.innerHTML = `
+            <div class="hub-item-left">
+                <div class="hub-item-meta">
+                    <span class="bento-tag ${type === "bugs" ? "bug" : ""}">${escapeHTML(type === "ideas" ? categoryLabel : `#${item.number || "—"}`)}</span>
+                    <span class="hub-community-status status-${escapeHTML(status.replace(/_/g, "-"))}">${escapeHTML(statusLabel)}</span>
+                </div>
+                <strong class="hub-item-title">${escapeHTML(item.title)}</strong>
+                <p class="hub-item-desc">${escapeHTML(item.summary || "Без описания")}</p>
+            </div>
+            ${type === "ideas" ? `
+                <div class="hub-item-right">
+                    <button class="hub-upvote-btn" data-vote="1" title="Поддержать идею" aria-label="Поддержать идею">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+                    </button>
+                    <span class="hub-item-votes">${score}</span>
+                    <button class="hub-upvote-btn" data-vote="-1" title="Не поддержать идею" aria-label="Не поддержать идею">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                </div>` : ""}
+        `;
+        if (type === "ideas") {
+            card.querySelectorAll("[data-vote]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const value = Number(button.dataset.vote);
+                    card.querySelectorAll("button").forEach(btn => { btn.disabled = true; });
+                    try {
+                        const result = await CommunityAPI.voteIdea(item._id, value);
+                        card.querySelector(".hub-item-votes").textContent = result.score;
+                        card.querySelectorAll("[data-vote]").forEach(btn => btn.classList.toggle("voted", Number(btn.dataset.vote) === value));
+                    } catch (error) {
+                        showToast("Не удалось проголосовать", error.message);
+                    } finally {
+                        card.querySelectorAll("button").forEach(btn => { btn.disabled = false; });
+                    }
+                });
+            });
+        }
+        container.appendChild(card);
+    });
+}
+
+function collectSafeBugDiagnostics() {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
+    const platform = window.electronAPI?.platform || navigator.userAgentData?.platform || navigator.platform || "unknown";
+    const screenSize = window.screen ? `${window.screen.width}x${window.screen.height}` : "unknown";
+    return {
+        appVersion: APP_VERSION,
+        platform: window.electronAPI ? `Electron (${platform})` : `Web (${platform})`,
+        osVersion: navigator.userAgent || platform,
+        safeLog: [
+            `language=${navigator.language || "unknown"}`,
+            `online=${navigator.onLine}`,
+            `viewport=${window.innerWidth}x${window.innerHeight}`,
+            `screen=${screenSize}`,
+            `timezone=${timezone}`,
+            `cpuThreads=${navigator.hardwareConcurrency || "unknown"}`
+        ].join("\n")
+    };
+}
+
+async function openHubListModal(type) {
     currentModalType = type;
     const modal = document.getElementById("hub-list-modal");
     const title = document.getElementById("hub-modal-title");
@@ -4993,26 +5452,27 @@ function openHubListModal(type) {
 
     if (type === "ideas") {
         title.textContent = "Идеи сообщества";
-        listContainer.innerHTML = `
-            <div class="hub-list-empty" style="padding: 40px 20px; text-align: center;">
-                <div style="font-size: 40px; margin-bottom: 12px;">💡</div>
-                <strong style="color: #fff; font-size: 15px; display: block; margin-bottom: 8px;">Голосование за идеи</strong>
-                Раздел предложений и народного голосования появится в следующем обновлении после запуска админ-панели.
-            </div>`;
+        listContainer.innerHTML = hubLoadingState("Загружаем идеи...");
     } else if (type === "bugs") {
         title.textContent = "Баг-трекер";
-        listContainer.innerHTML = `
-            <div class="hub-list-empty" style="padding: 40px 20px; text-align: center;">
-                <div style="font-size: 40px; margin-bottom: 12px;">🐛</div>
-                <strong style="color: #fff; font-size: 15px; display: block; margin-bottom: 8px;">Публичный баг-трекер</strong>
-                Отслеживание ошибок и ход их исправления разработчиками будут доступны в ближайшее время.
-            </div>`;
+        listContainer.innerHTML = hubLoadingState("Загружаем баг-трекер...");
     } else if (type === "updates") {
         title.textContent = "История обновлений";
         renderUpdatesList(listContainer);
     }
 
     modal.classList.remove("hidden");
+
+    if (type === "ideas" || type === "bugs") {
+        try {
+            const result = type === "ideas" ? await CommunityAPI.topIdeas() : await CommunityAPI.bugs("limit=50");
+            if (currentModalType !== type) return;
+            renderCommunityItems(listContainer, result[type] || [], type);
+        } catch (error) {
+            listContainer.innerHTML = `<div class="hub-list-empty"><strong>Не удалось загрузить раздел</strong><span>${escapeHTML(error.message)}</span><button class="submit-action-btn hub-retry-btn">Повторить</button></div>`;
+            listContainer.querySelector(".hub-retry-btn")?.addEventListener("click", () => openHubListModal(type));
+        }
+    }
 }
 
 // ─── Кастомный выпадающий список (как в настройках) ─────────────────────
@@ -5026,8 +5486,14 @@ function initHubSelect(root) {
     btn.addEventListener("click", (e) => {
         e.stopPropagation();
         // Закрыть другие открытые селекты
-        document.querySelectorAll(".hub-select.open").forEach(s => { if (s !== root) s.classList.remove("open"); });
+        document.querySelectorAll(".hub-select.open").forEach(s => {
+            if (s !== root) {
+                s.classList.remove("open");
+                s.querySelector(".hub-select-btn")?.setAttribute("aria-expanded", "false");
+            }
+        });
         root.classList.toggle("open");
+        btn.setAttribute("aria-expanded", String(root.classList.contains("open")));
     });
 
     items.forEach(li => {
@@ -5037,12 +5503,16 @@ function initHubSelect(root) {
             items.forEach(i => i.classList.remove("selected"));
             li.classList.add("selected");
             root.classList.remove("open");
+            btn.setAttribute("aria-expanded", "false");
         });
     });
 
     // Клик вне — закрыть
     document.addEventListener("click", (e) => {
-        if (!root.contains(e.target)) root.classList.remove("open");
+        if (!root.contains(e.target)) {
+            root.classList.remove("open");
+            btn.setAttribute("aria-expanded", "false");
+        }
     });
 }
 
@@ -5069,27 +5539,52 @@ function openHubFormModal(type) {
     if (type === "idea") {
         title.textContent = "Предложить идею";
         container.innerHTML = `
-            <div style="text-align: center; padding: 16px 8px; font-family: var(--font-sans);">
-                <div style="font-size: 44px; margin-bottom: 12px;">💡</div>
-                <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #fff;">Функция появится позже</h3>
-                <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin-bottom: 20px;">
-                    Раздел народных предложений и голосования за идеи находится на стадии проектирования.
-                </p>
-                <button type="button" class="submit-action-btn" data-hub-dismiss style="width: 100%; padding: 12px; font-size: 14px;">Понятно</button>
-            </div>
+            <form id="hub-case-form" class="hub-case-form">
+                <p class="hub-form-hint">Расскажите, что стоит добавить или улучшить. После проверки идея появится в каталоге с понятным статусом.</p>
+                <label class="hub-form-field" for="hub-case-title"><span>Название</span><input id="hub-case-title" name="idea-title" class="profile-status-input" maxlength="160" placeholder="Например: папки для личных чатов" autocomplete="off"></label>
+                <label class="hub-form-field"><span>Раздел приложения</span>
+                    <div class="hub-select" id="hub-idea-category" data-value="other">
+                        <button class="hub-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="hub-select-value">Другое</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+                        <ul class="hub-select-menu" role="listbox">
+                            <li data-value="messaging">Чаты и сообщения</li><li data-value="voice">Голос и звонки</li><li data-value="servers">Серверы</li><li data-value="profile">Профиль</li><li data-value="mobile">Мобильное приложение</li><li data-value="safety">Безопасность</li><li data-value="accessibility">Доступность</li><li class="selected" data-value="other">Другое</li>
+                        </ul>
+                    </div>
+                </label>
+                <label class="hub-form-field" for="hub-case-description"><span>Описание</span><textarea id="hub-case-description" name="idea-description" class="profile-status-input hub-case-description" maxlength="10000" rows="6" placeholder="Как это должно работать и какую проблему решает?"></textarea></label>
+                <button type="submit" id="hub-submit-case" class="submit-action-btn">Отправить идею</button>
+            </form>
         `;
+        initHubSelect(container.querySelector("#hub-idea-category"));
     } else if (type === "bug") {
         title.textContent = "Сообщить об ошибке";
         container.innerHTML = `
-            <div style="text-align: center; padding: 16px 8px; font-family: var(--font-sans);">
-                <div style="font-size: 44px; margin-bottom: 12px;">🐛</div>
-                <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #fff;">Раздел в разработке</h3>
-                <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin-bottom: 20px;">
-                    Отправка баг-репортов и публичное отслеживание ошибок будут реализованы в ближайшем обновлении.
-                </p>
-                <button type="button" class="submit-action-btn" data-hub-dismiss style="width: 100%; padding: 12px; font-size: 14px;">Понятно</button>
-            </div>
+            <form id="hub-case-form" class="hub-case-form">
+                <p class="hub-form-hint">Баг попадёт в закрытую очередь команды. Мы отметим его как принятый, возьмём в работу и закроем после исправления.</p>
+                <label class="hub-form-field" for="hub-case-title"><span>Что сломалось</span><input id="hub-case-title" name="bug-title" class="profile-status-input" maxlength="160" placeholder="Короткое название ошибки" autocomplete="off"></label>
+                <fieldset class="hub-risk-fieldset">
+                    <legend>Насколько ошибка мешает</legend>
+                    <div class="hub-risk-options">
+                        <label class="hub-risk-option"><input type="radio" name="hub-bug-priority" value="low"><span><strong>Низкий</strong><small>Внешний вид или мелкое неудобство</small></span></label>
+                        <label class="hub-risk-option"><input type="radio" name="hub-bug-priority" value="normal" checked><span><strong>Средний</strong><small>Функция работает неправильно</small></span></label>
+                        <label class="hub-risk-option"><input type="radio" name="hub-bug-priority" value="high"><span><strong>Высокий</strong><small>Мешает важному действию</small></span></label>
+                        <label class="hub-risk-option"><input type="radio" name="hub-bug-priority" value="critical"><span><strong>Критический</strong><small>Запуск, данные или безопасность</small></span></label>
+                    </div>
+                </fieldset>
+                <label class="hub-form-field" for="hub-case-description"><span>Как повторить</span><textarea id="hub-case-description" name="bug-description" class="profile-status-input hub-case-description" maxlength="10000" rows="7" placeholder="1. Что вы сделали\n2. Что произошло\n3. Что должно было произойти"></textarea></label>
+                <label class="hub-diagnostics-consent"><input id="hub-diagnostics-consent" name="diagnostics-consent" type="checkbox"><span><strong>Приложить технические сведения</strong><small>Версия Love, ОС, язык, размер окна и состояние сети. Переписки, пароли и токены не отправляются.</small></span></label>
+                <div class="hub-diagnostics-preview hidden" id="hub-diagnostics-preview" aria-live="polite"></div>
+                <button type="submit" id="hub-submit-case" class="submit-action-btn">Отправить баг-репорт</button>
+            </form>
         `;
+        const diagnosticsCheckbox = container.querySelector("#hub-diagnostics-consent");
+        const diagnosticsPreview = container.querySelector("#hub-diagnostics-preview");
+        diagnosticsCheckbox?.addEventListener("change", () => {
+            const details = collectSafeBugDiagnostics();
+            diagnosticsPreview.classList.toggle("hidden", !diagnosticsCheckbox.checked);
+            diagnosticsPreview.innerHTML = diagnosticsCheckbox.checked
+                ? `<strong>Будет отправлено</strong><span>Love ${escapeHTML(details.appVersion)} · ${escapeHTML(details.platform)}</span><span>${escapeHTML(details.osVersion)}</span>`
+                : "";
+        });
     } else if (type === "update") {
         title.textContent = "Опубликовать обновление";
         container.innerHTML = `
@@ -5158,6 +5653,42 @@ function openHubFormModal(type) {
             const listModal = document.getElementById("hub-list-modal");
             if (listModal && !listModal.classList.contains("hidden") && currentModalType === "updates") {
                 renderUpdatesList(document.getElementById("hub-modal-list-container"));
+            }
+        });
+    }
+
+    if (type === "idea" || type === "bug") {
+        const form = container.querySelector("#hub-case-form");
+        const submit = container.querySelector("#hub-submit-case");
+        form?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const titleValue = container.querySelector("#hub-case-title")?.value.trim() || "";
+            const description = container.querySelector("#hub-case-description")?.value.trim() || "";
+            if (titleValue.length < 3 || description.length < 10) {
+                showToast("Нужно больше деталей", "Добавьте название и подробное описание.");
+                return;
+            }
+            submit.disabled = true;
+            submit.textContent = "Отправляем...";
+            const diagnosticsConsent = Boolean(container.querySelector("#hub-diagnostics-consent")?.checked);
+            const priority = container.querySelector('input[name="hub-bug-priority"]:checked')?.value;
+            const category = container.querySelector("#hub-idea-category")?.dataset.value;
+            try {
+                const result = await CasesAPI.create({
+                    kind: type,
+                    title: titleValue,
+                    description,
+                    priority: type === "bug" ? priority : undefined,
+                    category: type === "idea" ? category : undefined,
+                    diagnosticsConsent,
+                    diagnostics: diagnosticsConsent ? collectSafeBugDiagnostics() : undefined
+                });
+                modal.classList.add("hidden");
+                showToast(type === "idea" ? "Идея отправлена" : "Баг принят", `Номер: ${result.case?.number || "создан"}`);
+            } catch (error) {
+                showToast("Не удалось отправить", error.message);
+                submit.disabled = false;
+                submit.textContent = type === "idea" ? "Отправить идею" : "Отправить баг-репорт";
             }
         });
     }
@@ -5307,6 +5838,72 @@ let devLogPosts = [
     { id: "dl3", author: "Александр", date: "5 июня", text: "Веб-версия Love — делать её в первую очередь, или сначала довести десктоп и мобильный билд?", hearts: 65, broken: 33 }
 ];
 
+function normalizeDevLogPost(post) {
+    const author = post.author?.nickname || post.author?.username || "Команда Love";
+    const published = post.publishedAt || post.createdAt;
+    return {
+        id: post._id,
+        author,
+        date: published ? new Date(published).toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) : "сегодня",
+        title: post.title || "",
+        text: post.body || "",
+        hearts: Number(post.upVotes || 0),
+        broken: Number(post.downVotes || 0),
+        comments: Number(post.commentCount || 0),
+        remote: true
+    };
+}
+
+async function loadDevLog() {
+    const feed = document.getElementById("devlog-feed");
+    if (feed) feed.innerHTML = hubLoadingState("Загружаем Dev Log...");
+    try {
+        const result = await CommunityAPI.devLog(1, 20);
+        devLogPosts = (result.posts || []).map(normalizeDevLogPost);
+        renderDevLog();
+    } catch (error) {
+        renderDevLog();
+        showToast("Dev Log недоступен", "Показываем сохранённые записи. " + error.message);
+    }
+}
+
+function updateDevLogCardCounters(post) {
+    const card = Array.from(document.querySelectorAll(".devlog-post[data-id]"))
+        .find(item => String(item.dataset.id) === String(post.id));
+    if (!card) return;
+
+    const total = post.hearts + post.broken;
+    const percent = total > 0 ? Math.round((post.hearts / total) * 100) : 0;
+    const heartCount = card.querySelector(".devlog-react-btn.heart .devlog-react-count");
+    const brokenCount = card.querySelector(".devlog-react-btn.broken .devlog-react-count");
+    const commentCount = card.querySelector(".devlog-comments-btn span");
+    const voteFill = card.querySelector(".devlog-vote-fill");
+    const votePercent = card.querySelector(".devlog-vote-percent");
+    if (heartCount) heartCount.textContent = String(post.hearts);
+    if (brokenCount) brokenCount.textContent = String(post.broken);
+    if (commentCount) commentCount.textContent = String(post.comments || 0);
+    if (voteFill) voteFill.style.width = `${percent}%`;
+    if (votePercent) votePercent.textContent = `${percent}% за`;
+}
+
+window.applyDevLogLiveUpdate = function (data) {
+    if (data?.removed) {
+        devLogPosts = devLogPosts.filter(item => String(item.id) !== String(data.postId));
+        renderDevLog();
+        return;
+    }
+    if (data?.refresh) {
+        loadDevLog();
+        return;
+    }
+    const post = devLogPosts.find(item => String(item.id) === String(data?.postId));
+    if (!post) return;
+    if (data.upVotes !== undefined) post.hearts = Number(data.upVotes) || 0;
+    if (data.downVotes !== undefined) post.broken = Number(data.downVotes) || 0;
+    if (data.commentCount !== undefined) post.comments = Number(data.commentCount) || 0;
+    updateDevLogCardCounters(post);
+};
+
 function getDevLogVotes() {
     try { return JSON.parse(localStorage.getItem("love_devlog_votes") || "{}"); } catch (e) { return {}; }
 }
@@ -5323,8 +5920,8 @@ function initDevLog() {
     if (!modal || !openBtn) return;
 
     const openDevLog = () => {
-        renderDevLog();
         modal.classList.remove("hidden");
+        loadDevLog();
     };
     openBtn.addEventListener("click", openDevLog);
 
@@ -5378,6 +5975,7 @@ function renderDevLog() {
                     <div class="devlog-post-date">${escapeHTML(p.date)}</div>
                 </div>
             </div>
+            ${p.title ? `<strong class="devlog-post-title">${escapeHTML(p.title)}</strong>` : ""}
             <p class="devlog-post-text">${escapeHTML(p.text)}</p>
             <div class="devlog-vote-bar"><div class="devlog-vote-fill" style="width:${pct}%"></div></div>
             <div class="devlog-reactions">
@@ -5389,21 +5987,37 @@ function renderDevLog() {
                     <span class="devlog-react-icon">${DEVLOG_BROKEN_SVG}</span>
                     <span class="devlog-react-count">${p.broken}</span>
                 </button>
+                ${p.remote ? `<button class="devlog-comments-btn" title="Комментарии"><span>${p.comments || 0}</span> комментариев</button>` : ""}
                 <span class="devlog-vote-percent">${pct}% за</span>
             </div>
+            ${p.remote ? `<div class="devlog-comments hidden"></div>` : ""}
         `;
         card.querySelectorAll(".devlog-react-btn").forEach(btn => {
             btn.addEventListener("click", () => handleDevLogVote(p.id, btn.dataset.vote));
         });
+        card.querySelector(".devlog-comments-btn")?.addEventListener("click", () => toggleDevLogComments(p, card));
         feed.appendChild(card);
     });
 }
 
-function handleDevLogVote(id, vote) {
+async function handleDevLogVote(id, vote) {
     const post = devLogPosts.find(p => p.id === id);
     if (!post) return;
     const votes = getDevLogVotes();
     const prev = votes[id] || null;
+
+    if (post.remote) {
+        try {
+            const result = await CommunityAPI.voteDevLog(id, vote === "heart" ? 1 : -1);
+            post.hearts = result.upVotes;
+            post.broken = result.downVotes;
+            persistDevLogVote(id, vote);
+            updateDevLogCardCounters(post);
+        } catch (error) {
+            showToast("Не удалось проголосовать", error.message);
+        }
+        return;
+    }
 
     if (prev === "heart") post.hearts = Math.max(0, post.hearts - 1);
     if (prev === "broken") post.broken = Math.max(0, post.broken - 1);
@@ -5425,6 +6039,46 @@ function handleDevLogVote(id, vote) {
             btn.classList.add("pop");
             btn.addEventListener("animationend", () => btn.classList.remove("pop"), { once: true });
         }
+    }
+}
+
+async function toggleDevLogComments(post, card) {
+    const panel = card.querySelector(".devlog-comments");
+    if (!panel) return;
+    if (!panel.classList.contains("hidden")) {
+        panel.classList.add("hidden");
+        return;
+    }
+    panel.classList.remove("hidden");
+    panel.innerHTML = hubLoadingState("Загружаем комментарии...");
+    try {
+        const result = await CommunityAPI.comments(post.id);
+        const comments = result.comments || [];
+        panel.innerHTML = `
+            <div class="devlog-comment-list">${comments.length ? comments.map(comment => `
+                <div class="devlog-comment"><strong>${escapeHTML(comment.author?.nickname || comment.author?.username || "Пользователь")}</strong><p>${escapeHTML(comment.body)}</p></div>
+            `).join("") : `<span class="devlog-no-comments">Комментариев пока нет.</span>`}</div>
+            <form class="devlog-comment-form"><input maxlength="2000" placeholder="Написать комментарий"><button type="submit">Отправить</button></form>
+        `;
+        panel.querySelector("form")?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const input = event.currentTarget.querySelector("input");
+            const body = input.value.trim();
+            if (!body) return;
+            const button = event.currentTarget.querySelector("button");
+            button.disabled = true;
+            try {
+                await CommunityAPI.addComment(post.id, body);
+                post.comments += 1;
+                await toggleDevLogComments(post, card);
+                await toggleDevLogComments(post, card);
+            } catch (error) {
+                showToast("Комментарий не отправлен", error.message);
+                button.disabled = false;
+            }
+        });
+    } catch (error) {
+        panel.innerHTML = `<div class="hub-list-empty">${escapeHTML(error.message)}</div>`;
     }
 }
 
@@ -5467,6 +6121,35 @@ document.addEventListener("keydown", (e) => {
 // ─── Редактирование вывески (Hero Block) ────────────────────────────────
 
 const hubHeroEditBtn = document.getElementById("hub-hero-edit-btn");
+let activeHubAnnouncementId = null;
+
+window.applyHubAnnouncement = function (announcement) {
+    if (!announcement) return;
+    activeHubAnnouncementId = String(announcement.id || announcement._id || '');
+    const heroTitle = document.getElementById("hub-hero-title");
+    const heroDesc = document.getElementById("hub-hero-desc");
+    if (heroTitle) heroTitle.textContent = announcement.title || 'Love Hub';
+    if (heroDesc) heroDesc.textContent = announcement.content || announcement.message || '';
+};
+
+window.removeHubAnnouncement = function (id) {
+    if (!id || String(id) !== activeHubAnnouncementId) return;
+    activeHubAnnouncementId = null;
+    if (typeof CommunityAPI !== 'undefined') {
+        CommunityAPI.announcements(1).then(result => {
+            const latest = result.announcements?.[0];
+            if (latest) window.applyHubAnnouncement(latest);
+        }).catch(() => {});
+    }
+};
+
+if (typeof CommunityAPI !== 'undefined') {
+    CommunityAPI.announcements(1).then(result => {
+        const latest = result.announcements?.[0];
+        if (latest) window.applyHubAnnouncement(latest);
+    }).catch(() => {});
+}
+
 if (hubHeroEditBtn) {
     hubHeroEditBtn.addEventListener("click", () => {
         const heroTitle = document.getElementById("hub-hero-title");
@@ -5560,6 +6243,42 @@ function checkUnreadNotifications() {
         notifBadge.classList.remove("visible");
     }
 }
+
+function notificationsViewIsOpen() {
+    const view = document.getElementById("view-notifications");
+    return Boolean(view && !view.classList.contains("panel-hidden"));
+}
+
+window._applyServerNotifications = function(list) {
+    mockNotifications = Array.isArray(list) ? list : [];
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+};
+
+window._prependNotification = function(notification) {
+    if (!notification) return;
+    if (notification._realId) {
+        mockNotifications = mockNotifications.filter(item => String(item._realId || '') !== String(notification._realId));
+    }
+    mockNotifications.unshift(notification);
+    mockNotifications = mockNotifications.slice(0, 50);
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+};
+
+window._markCaseNotificationsRead = function(caseId) {
+    if (!caseId) return;
+    const changed = mockNotifications.filter(item => item.unread && String(item.caseId || '') === String(caseId));
+    if (!changed.length) return;
+    changed.forEach(item => {
+        item.unread = false;
+        if (item._realId && typeof NotificationsAPI !== "undefined") {
+            NotificationsAPI.markRead(item._realId).catch(() => {});
+        }
+    });
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+};
 
 // Делегированные слушатели секции уведомлений — навешиваются один раз,
 // чтобы не накапливаться при ре-рендерах внутри loadNotifications().
@@ -5746,7 +6465,7 @@ function loadNotifications() {
 
         item.addEventListener("click", (e) => {
             // Если кликнули на инпут или кнопку внутри карточки, не обрабатываем клик по самой карточке
-            if (e.target.closest("button:not(.notif-close-btn)") || e.target.closest("input") || e.target.closest("form")) {
+            if (e.target.closest("button, input, form")) {
                 return;
             }
             notif.unread = false;
@@ -5754,6 +6473,12 @@ function loadNotifications() {
             const dot = item.querySelector(".notif-unread-dot");
             if (dot) dot.remove();
             checkUnreadNotifications();
+            if (notif._realId && typeof NotificationsAPI !== "undefined") {
+                NotificationsAPI.markRead(notif._realId).catch(() => {});
+            }
+            if (notif.caseId && typeof window.openSupportCase === "function") {
+                window.openSupportCase(notif.caseId);
+            }
         });
 
         notifFeedContainer.appendChild(item);
@@ -5840,7 +6565,11 @@ if (markAllReadNotifsBtn) {
 document.querySelectorAll('[data-notif-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
         notifActiveTab = tab.getAttribute('data-notif-tab') || 'normal';
-        document.querySelectorAll('[data-notif-tab]').forEach(t => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('[data-notif-tab]').forEach(t => {
+            const active = t === tab;
+            t.classList.toggle('active', active);
+            t.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
         loadNotifications();
     });
 });
@@ -6115,11 +6844,13 @@ function showProfileModal(profileName = "own", realId = null) {
     if (profileName === "own") {
         // --- СОБСТВЕННЫЙ ПРОФИЛЬ (только просмотр, редактирование в настройках) ---
         refreshProfileVitrine();
+        updateProfileStaffBadge(window.currentUser);
         window.__viewingMusic = { isOwn: true, cloudUrl: (window.ownProfileData && window.ownProfileData.musicCloudUrl) || "" };
         if (profileConfigureBtn) profileConfigureBtn.style.display = "block";
         if (friendActionsContainer) friendActionsContainer.style.display = "none";
     } else {
         // --- ПРОФИЛЬ ДРУГА ---
+        updateProfileStaffBadge(null);
         
         // Asynchronously load real user data if possible
         if (realId && typeof UsersAPI !== 'undefined') {
@@ -6129,6 +6860,7 @@ function showProfileModal(profileName = "own", realId = null) {
                 // настроение падало в «в сети»). Разворачиваем .user.
                 const user = (resp && resp.user) ? resp.user : resp;
                 if (!user) return;
+                updateProfileStaffBadge(user);
 
                 if (nameDisplay) nameDisplay.textContent = user.nickname || user.username || profileName;
                 if (usernameDisplay) usernameDisplay.textContent = "@" + (user.username || "");
@@ -6787,7 +7519,11 @@ if (avatarUpload && previewModal) {
 
 // Инициализация по умолчанию
 renderConversationsList();
-selectConversation("maria");
+if (mockConversations.length > 0) {
+    selectConversation(mockConversations[0].id);
+} else {
+    showChatsEmptyState();
+}
 checkUnreadNotifications();
 updateFriendsBadges();
 updateFriendsTabCounters();
@@ -8521,6 +9257,14 @@ function syncVoiceMiniBarButtons() {
 
 (function initVoiceMiniBar() {
     document.addEventListener('click', (e) => {
+        // Плашка свёрнута за край — любой клик по язычку вытаскивает её обратно,
+        // а не возвращает в войс и тем более не жмёт мик/выход.
+        const docked = e.target.closest('#voice-mini-bar');
+        if (docked && docked.dataset.dock && docked.dataset.dock !== 'none') {
+            if (docked.dataset.suppressClick) return;
+            docked.dispatchEvent(new CustomEvent('vmb:undock'));
+            return;
+        }
         // Вернуться на войс-экран (но не если только что перетаскивали)
         if (e.target.closest('#vmb-return')) {
             const bar = document.getElementById('voice-mini-bar');
@@ -8546,14 +9290,59 @@ function syncVoiceMiniBarButtons() {
         }
     });
 
-    // Перетаскивание капсулы по всему экрану с плавным lerp (как у плеера/трей-бара)
+    // Перетаскивание капсулы по всему экрану с плавным lerp (как у плеера/трей-бара).
+    // Плюс — утащить/смахнуть за боковой край: плашка уезжает туда сама, остаётся
+    // торчать «язычок», клик по нему или вытягивание пальцем/мышью возвращает её.
     const bar = document.getElementById('voice-mini-bar');
     if (bar) {
         let dragging = false, moved = false;
         let startX = 0, startY = 0, originLeft = 0, originTop = 0;
         let targetX = 0, targetY = 0, renderX = 0, renderY = 0, rafId = null;
+        let lastX = 0, lastT = 0, velX = 0;
+        let dock = 'none'; // none | left | right
         const THRESHOLD = 4;
         const EASE = 0.16;
+        const HANDLE = 30;   // сколько плашки торчит из-за края в свёрнутом виде
+        const GAP = 8;       // отступ от края, к которому плашка прижимается
+        const FLING = 0.7;   // px/ms — с такой скоростью бросок улетает за край
+
+        const hiddenLeftX  = () => -bar.offsetWidth + HANDLE;
+        const hiddenRightX = () => window.innerWidth - HANDLE;
+        const clampVisibleX = (x) => {
+            const max = window.innerWidth - bar.offsetWidth - GAP;
+            return max <= GAP ? GAP : Math.max(GAP, Math.min(x, max));
+        };
+
+        const applyDock = (next) => {
+            dock = next;
+            bar.dataset.dock = next;
+            bar.classList.toggle('docked', next !== 'none');
+            bar.classList.toggle('docked-left', next === 'left');
+            bar.classList.toggle('docked-right', next === 'right');
+        };
+
+        // Доводка до места переиспользует тот же lerp, что и перетаскивание.
+        const glideTo = (x) => {
+            targetX = x;
+            bar.classList.add('is-moved');
+            if (!rafId) rafId = requestAnimationFrame(tick);
+        };
+
+        bar.addEventListener('vmb:undock', () => {
+            const target = dock === 'left'
+                ? GAP
+                : window.innerWidth - bar.offsetWidth - GAP;
+            applyDock('none');
+            glideTo(clampVisibleX(target));
+        });
+
+        // Свёрнутую плашку держим у края и после ресайза окна.
+        window.addEventListener('resize', () => {
+            if (dock === 'none') return;
+            const x = dock === 'left' ? hiddenLeftX() : hiddenRightX();
+            renderX = targetX = x;
+            bar.style.setProperty('--vmb-left', x + 'px');
+        });
 
         const tick = () => {
             renderX += (targetX - renderX) * EASE;
@@ -8583,6 +9372,9 @@ function syncVoiceMiniBarButtons() {
             targetY = renderY = rect.top;
             dragging = true;
             moved = false;
+            lastX = e.clientX;
+            lastT = performance.now();
+            velX = 0;
             try { bar.setPointerCapture(e.pointerId); } catch (_) {}
         };
         const onMove = (e) => {
@@ -8595,20 +9387,35 @@ function syncVoiceMiniBarButtons() {
                 bar.classList.add('dragging', 'is-moved');
                 if (!rafId) rafId = requestAnimationFrame(tick);
             }
-            const w = bar.offsetWidth;
+            const now = performance.now();
+            if (now > lastT) velX = (e.clientX - lastX) / (now - lastT);
+            lastX = e.clientX;
+            lastT = now;
+
             const h = bar.offsetHeight;
-            targetX = Math.max(8, Math.min(originLeft + dx, window.innerWidth - w - 8));
-            targetY = Math.max(8, Math.min(originTop + dy, window.innerHeight - h - 8));
+            // По горизонтали пускаем и за край — иначе плашку не спрятать.
+            targetX = Math.max(hiddenLeftX(), Math.min(originLeft + dx, hiddenRightX()));
+            targetY = Math.max(GAP, Math.min(originTop + dy, window.innerHeight - h - GAP));
         };
         const onUp = () => {
             if (!dragging) return;
             dragging = false;
             bar.classList.remove('dragging');
-            if (moved) {
-                // подавляем последующий click по телу (#vmb-return), чтобы не вернуло на войс-экран
-                bar.dataset.suppressClick = '1';
-                setTimeout(() => { delete bar.dataset.suppressClick; }, 0);
-            }
+            if (!moved) return;
+            // подавляем последующий click по телу (#vmb-return), чтобы не вернуло на войс-экран
+            bar.dataset.suppressClick = '1';
+            setTimeout(() => { delete bar.dataset.suppressClick; }, 0);
+
+            const w = bar.offsetWidth;
+            // Быстрый бросок — уважаем направление.
+            if (velX < -FLING)      { applyDock('left');  glideTo(hiddenLeftX()); return; }
+            if (velX > FLING)       { applyDock('right'); glideTo(hiddenRightX()); return; }
+            // Утащил больше трети за край — плавно доводим до конца.
+            if (targetX + w < w * 0.66) { applyDock('left');  glideTo(hiddenLeftX()); return; }
+            if (targetX > window.innerWidth - w * 0.66) { applyDock('right'); glideTo(hiddenRightX()); return; }
+            // Иначе — остаёмся видимыми, мягко возвращаемся в границы.
+            applyDock('none');
+            glideTo(clampVisibleX(targetX));
         };
         bar.addEventListener('pointerdown', onDown);
         bar.addEventListener('pointermove', onMove);

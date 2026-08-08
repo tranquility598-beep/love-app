@@ -8,6 +8,7 @@ import 'core/calls/call_center.dart';
 import 'core/prefs/love_prefs.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/shell/main_shell.dart';
+import 'features/support/restricted_access_screen.dart';
 import 'session/app_session.dart';
 import 'theme/love_theme.dart';
 
@@ -76,6 +77,9 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
             }
             if (!session.isAuthenticated) {
               return const AuthScreen();
+            }
+            if (session.isRestricted) {
+              return const RestrictedAccessScreen();
             }
             return const MainShell();
           },

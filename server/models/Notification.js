@@ -38,6 +38,7 @@ const notificationSchema = new mongoose.Schema({
   channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', default: null },
   serverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Server', default: null },
   serverName: { type: String, default: '' },
+  caseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Case', default: null },
 
   read: { type: Boolean, default: false },
 

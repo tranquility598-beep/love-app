@@ -6,9 +6,11 @@ import '../../core/updates/app_updater.dart';
 import '../../core/updates/current_version.dart';
 import '../../core/network/love_api.dart';
 import '../../core/prefs/love_prefs.dart';
+import '../../core/realtime/app_events.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_background.dart';
 import '../shell/screen_frame.dart';
+import '../support/support_center_screen.dart';
 import 'settings_account_section.dart';
 import 'settings_profile_section.dart';
 import 'settings_widgets.dart';
@@ -18,6 +20,7 @@ enum SettingsSection {
   profile,
   account,
   privacy,
+  support,
   appearance,
   notifications,
   voice,
@@ -43,12 +46,21 @@ const _sectionGroups = <String, List<_SectionMeta>>{
         'Почта, пароль и безопасность'),
     _SectionMeta(SettingsSection.privacy, Icons.shield_outlined,
         'Конфиденциальность', 'Кто и что видит о вас'),
+    _SectionMeta(
+      SettingsSection.support,
+      Icons.health_and_safety_outlined,
+      'Помощь и нарушения',
+      'Обращения, ответы команды, предупреждения и апелляции',
+    ),
   ],
   'Приложение': [
     _SectionMeta(SettingsSection.appearance, Icons.palette_outlined,
         'Внешний вид', 'Тема, масштаб и эффекты'),
-    _SectionMeta(SettingsSection.notifications, Icons.notifications_none_rounded,
-        'Уведомления', 'Что и где вам показывать'),
+    _SectionMeta(
+        SettingsSection.notifications,
+        Icons.notifications_none_rounded,
+        'Уведомления',
+        'Что и где вам показывать'),
     _SectionMeta(SettingsSection.voice, Icons.mic_none_rounded, 'Голос и звук',
         'Микрофон, динамики и обработка'),
     _SectionMeta(SettingsSection.hub, Icons.favorite_border_rounded, 'Love Hub',
@@ -92,11 +104,16 @@ class SettingsScreen extends StatelessWidget {
                     meta: meta,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => SettingsDetailPage(
-                          section: meta.section,
-                          title: meta.title,
-                          api: api ?? LoveApi(),
-                        ),
+                        builder: (_) => meta.section == SettingsSection.support
+                            ? SupportCenterScreen(
+                                api: api ?? LoveApi(),
+                                events: AppEvents.instance,
+                              )
+                            : SettingsDetailPage(
+                                section: meta.section,
+                                title: meta.title,
+                                api: api ?? LoveApi(),
+                              ),
                       ),
                     ),
                   ),
@@ -215,6 +232,8 @@ class SettingsDetailPage extends StatelessWidget {
         return AccountSettingsSection(api: api);
       case SettingsSection.privacy:
         return const _PrivacySection();
+      case SettingsSection.support:
+        return const SizedBox.shrink();
       case SettingsSection.appearance:
         return const _AppearanceSection();
       case SettingsSection.notifications:
@@ -503,8 +522,7 @@ class _NotificationsSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Love',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('Love', style: TextStyle(fontWeight: FontWeight.w800)),
                     SizedBox(height: 2),
                     Text('Так будут выглядеть ваши уведомления',
                         style: TextStyle(
@@ -910,8 +928,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
               onChanged: (_) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content:
-                        Text('Изменение вступит в силу после перезапуска'),
+                    content: Text('Изменение вступит в силу после перезапуска'),
                   ),
                 );
               },
@@ -985,8 +1002,8 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
           SizedBox(
             width: 96,
             child: Text(label,
-                style: const TextStyle(
-                    color: LoveColors.textMuted, fontSize: 13)),
+                style:
+                    const TextStyle(color: LoveColors.textMuted, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,

@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:label="love_mobile"
+        android:label="Love"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

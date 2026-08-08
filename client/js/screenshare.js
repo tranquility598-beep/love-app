@@ -208,9 +208,15 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
   console.log('[ScreenShare] Video track readyState:', videoTrack.readyState, 'enabled:', videoTrack.enabled);
 
   if (window.voiceManager) {
+    if (window.voiceManager.isCameraOn && typeof window.voiceManager.stopCamera === 'function') {
+      await window.voiceManager.stopCamera();
+    }
     window.voiceManager.screenStream = stream;
     window.voiceManager.isScreenSharing = true;
-    window.voiceManager.peerConnections.forEach(async (pc, socketId) => {
+    if (typeof socketSetVoiceMediaState === 'function') {
+      socketSetVoiceMediaState(window.voiceManager.channelId, 'screen');
+    }
+    for (const [socketId, pc] of window.voiceManager.peerConnections) {
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
       if (sender) {
         await sender.replaceTrack(videoTrack);
@@ -218,8 +224,8 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
         pc.addTrack(videoTrack, stream);
       }
       // Renegotiate WebRTC to let peers know about the new track
-      window.voiceManager.renegotiate(socketId);
-    });
+      await window.voiceManager.renegotiate(socketId);
+    }
 
     // Show local preview of the screen share
     if (typeof showScreenShareVideo === 'function') {
@@ -233,11 +239,6 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
       _triggerVoiceRerender();
     } else if (typeof renderVoiceChannel === 'function') {
       renderVoiceChannel();
-    }
-
-    // Notify signalling server
-    if (typeof socket !== 'undefined' && socket) {
-      socket.emit('screen:start', { channelId: window.voiceManager.channelId });
     }
 
     videoTrack.onended = () => {

@@ -5,13 +5,13 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { canonicalRole, ROLE_LABELS, isStaffRole } = require('../config/adminRoles');
 
 const userSchema = new mongoose.Schema({
   // Основные данные
   username: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
     minlength: 2,
     maxlength: 32
@@ -55,7 +55,13 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'owner', 'admin', 'founder', 'moderator', 'support'],
+    enum: [
+      'user', 'owner', 'support',
+      'moderator', 'admin', 'founder',
+      'junior_moderator', 'senior_moderator',
+      'junior_admin', 'senior_admin',
+      'deputy_developer', 'developer'
+    ],
     default: 'user'
   },
   bio: {
@@ -195,6 +201,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  verifiedAt: {
+    type: Date,
+    default: null
+  },
   otpCode: {
     type: String,
     default: null
@@ -241,15 +251,99 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  adminTotpEnabled: {
+    type: Boolean,
+    default: false
+  },
+  adminTotpSecret: {
+    type: String,
+    default: null,
+    select: false
+  },
+  adminTotpPendingSecret: {
+    type: String,
+    default: null,
+    select: false
+  },
+  adminRecoveryCodeHashes: {
+    type: [String],
+    default: [],
+    select: false
+  },
+  adminBootstrapConsumedAt: {
+    type: Date,
+    default: null
+  },
+  adminPolicyRequiredVersion: {
+    type: String,
+    default: ''
+  },
+  adminPolicyAcceptedVersion: {
+    type: String,
+    default: ''
+  },
+  adminPolicyAcceptedAt: {
+    type: Date,
+    default: null
+  },
+  isMuted: {
+    type: Boolean,
+    default: false
+  },
+  muteUntil: {
+    type: Date,
+    default: null
+  },
+  muteReason: {
+    type: String,
+    default: ''
+  },
+  activeMuteAction: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ModerationAction',
+    default: null
+  },
   isBanned: {
     type: Boolean,
     default: false
   },
+  banUntil: {
+    type: Date,
+    default: null
+  },
   banReason: {
     type: String,
     default: ''
+  },
+  activeBanAction: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ModerationAction',
+    default: null
+  },
+  deactivatedAt: {
+    type: Date,
+    default: null
+  },
+  deactivationReason: {
+    type: String,
+    default: ''
+  },
+  activeDeactivationAction: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ModerationAction',
+    default: null
   }
 });
+
+// Usernames are unique regardless of letter case: Alex, alex and ALEX are one name.
+userSchema.index(
+  { username: 1 },
+  {
+    name: 'username_unique_ci',
+    unique: true,
+    collation: { locale: 'en', strength: 2 }
+  }
+);
 
 // Хешируем пароль перед сохранением
 userSchema.pre('save', async function(next) {
@@ -272,11 +366,14 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Метод для получения публичного профиля (без пароля)
 userSchema.methods.toPublicJSON = function() {
+  const staffRank = canonicalRole(this.role);
   return {
     _id: this._id,
     username: this.username,
     nickname: this.nickname || this.username,
     role: this.role,
+    staffRank: isStaffRole(staffRank) ? staffRank : null,
+    staffRankLabel: isStaffRole(staffRank) ? ROLE_LABELS[staffRank] : null,
     avatar: this.avatar,
     bio: this.bio,
     badges: this.badges,
@@ -290,6 +387,10 @@ userSchema.methods.toPublicJSON = function() {
     usernameChangedAt: this.usernameChangedAt,
     googleOnboardingComplete: this.googleOnboardingComplete,
     twoFactorEnabled: this.twoFactorEnabled,
+    isMuted: Boolean(this.isMuted),
+    muteUntil: this.muteUntil,
+    isBanned: Boolean(this.isBanned),
+    banUntil: this.banUntil,
     status: this.status,
     customStatus: this.customStatus,
     createdAt: this.createdAt,

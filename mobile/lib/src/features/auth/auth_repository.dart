@@ -4,8 +4,35 @@ import '../../config/app_config.dart';
 
 enum AuthResultType {
   authenticated,
+  restricted,
   needsOtp,
   needsTwoFactor,
+}
+
+class AccountRestriction {
+  const AccountRestriction({
+    required this.type,
+    required this.reason,
+    this.expiresAt,
+    this.actionId,
+  });
+
+  final String type;
+  final String reason;
+  final DateTime? expiresAt;
+  final String? actionId;
+
+  bool get isPermanent => expiresAt == null;
+
+  factory AccountRestriction.fromJson(Map<String, dynamic> json) {
+    final expiresText = json['expiresAt']?.toString() ?? '';
+    return AccountRestriction(
+      type: json['type']?.toString() ?? 'ban',
+      reason: json['reason']?.toString() ?? '',
+      expiresAt: expiresText.isEmpty ? null : DateTime.tryParse(expiresText),
+      actionId: json['actionId']?.toString(),
+    );
+  }
 }
 
 class AuthUser {
@@ -116,6 +143,7 @@ class AuthResult {
     this.email,
     this.pendingToken,
     this.message,
+    this.restriction,
   });
 
   final AuthResultType type;
@@ -123,11 +151,25 @@ class AuthResult {
   final String? email;
   final String? pendingToken;
   final String? message;
+  final AccountRestriction? restriction;
 
   factory AuthResult.authenticated(AuthUser user, {String? message}) {
     return AuthResult._(
       type: AuthResultType.authenticated,
       user: user,
+      message: message,
+    );
+  }
+
+  factory AuthResult.restricted(
+    AuthUser user,
+    AccountRestriction restriction, {
+    String? message,
+  }) {
+    return AuthResult._(
+      type: AuthResultType.restricted,
+      user: user,
+      restriction: restriction,
       message: message,
     );
   }
@@ -164,15 +206,36 @@ class AuthRepository {
   final ApiClient api;
   final AuthTokenStore tokenStore;
 
-  Future<AuthUser?> restoreSession() async {
+  Future<AuthResult?> restoreSession() async {
     final token = await tokenStore.readToken();
     if (token == null || token.isEmpty) return null;
     try {
+      final restricted = await api.get('/auth/restriction');
+      return _restrictedFromResponse(restricted);
+    } on ApiException catch (error) {
+      if (error.statusCode != 404) {
+        if (error.statusCode == 401) await tokenStore.clear();
+        if (error.statusCode == 401) return null;
+      }
+    }
+    try {
       final response = await api.get('/auth/me');
-      return AuthUser.fromJson(response['user'] as Map<String, dynamic>);
-    } catch (_) {
-      await tokenStore.clear();
+      return AuthResult.authenticated(
+        AuthUser.fromJson(response['user'] as Map<String, dynamic>),
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) await tokenStore.clear();
       return null;
+    }
+  }
+
+  Future<AuthResult?> restrictionState() async {
+    try {
+      final response = await api.get('/auth/restriction');
+      return _restrictedFromResponse(response);
+    } on ApiException catch (error) {
+      if (error.statusCode == 404 || error.statusCode == 401) return null;
+      rethrow;
     }
   }
 
@@ -287,8 +350,32 @@ class AuthRepository {
       await tokenStore.saveToken(token);
     }
     final user = AuthUser.fromJson(response['user'] as Map<String, dynamic>);
+    if (response['accountRestricted'] == true &&
+        response['restriction'] is Map) {
+      return AuthResult.restricted(
+        user,
+        AccountRestriction.fromJson(
+          (response['restriction'] as Map).cast<String, dynamic>(),
+        ),
+        message: response['message']?.toString(),
+      );
+    }
     return AuthResult.authenticated(
       user,
+      message: response['message']?.toString(),
+    );
+  }
+
+  AuthResult _restrictedFromResponse(Map<String, dynamic> response) {
+    final user = AuthUser.fromJson(
+      (response['user'] as Map).cast<String, dynamic>(),
+    );
+    final restriction = AccountRestriction.fromJson(
+      (response['restriction'] as Map).cast<String, dynamic>(),
+    );
+    return AuthResult.restricted(
+      user,
+      restriction,
       message: response['message']?.toString(),
     );
   }

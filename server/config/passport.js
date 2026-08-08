@@ -1,6 +1,7 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
+const { generateAvailableUsername } = require('../utils/username');
 
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
@@ -34,8 +35,13 @@ passport.use(new GoogleStrategy({
       }
       
       // Если пользователя нет совсем — создаем нового
+      const availableUsername = await generateAvailableUsername(
+        User,
+        profile.displayName || 'user',
+        profile.id
+      );
       const newUser = new User({
-        username: profile.displayName || `user${profile.id.substring(0, 5)}`,
+        username: availableUsername,
         email: userEmail.toLowerCase(),
         googleId: profile.id,
         avatar: profile.photos[0].value,

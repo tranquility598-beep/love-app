@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/network/love_api.dart';
+import '../../core/realtime/app_events.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/async_value_view.dart';
 import '../../widgets/love_avatar.dart';
@@ -9,9 +10,16 @@ import '../chat/chat_models.dart';
 import '../shell/screen_frame.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({required this.api, super.key});
+  const NotificationsScreen({
+    required this.api,
+    required this.events,
+    required this.onOpenCase,
+    super.key,
+  });
 
   final LoveApi api;
+  final AppEvents events;
+  final ValueChanged<String> onOpenCase;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -23,19 +31,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   int _tab = 0; // 0 = normal, 1 = system
 
   static const _systemKeywords = [
-    'call', 'join', 'system', 'accept', 'announce', 'release', 'update', 'welcome',
+    'call',
+    'join',
+    'system',
+    'accept',
+    'announce',
+    'release',
+    'update',
+    'welcome',
+    'support',
+    'case',
+    'moderation',
+    'warning',
+    'ban',
+    'mute',
   ];
 
   @override
   void initState() {
     super.initState();
+    widget.events.addListener(_syncEvents);
+    _items = widget.events.notifications;
     _load();
+  }
+
+  @override
+  void dispose() {
+    widget.events.removeListener(_syncEvents);
+    super.dispose();
+  }
+
+  void _syncEvents() {
+    if (mounted) setState(() => _items = widget.events.notifications);
   }
 
   void _load() {
     _future = widget.api.notifications()
       ..then((list) {
-        if (mounted) setState(() => _items = list);
+        if (mounted) widget.events.replaceNotifications(list);
       });
   }
 
@@ -69,9 +102,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               future: _future,
               onRetry: _refresh,
               builder: (context, _) {
-                final items = _items
-                    .where((n) => _isSystem(n) == (_tab == 1))
-                    .toList();
+                final items =
+                    _items.where((n) => _isSystem(n) == (_tab == 1)).toList();
                 return RefreshIndicator(
                   onRefresh: _refresh,
                   child: items.isEmpty
@@ -80,7 +112,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             const SizedBox(height: 120),
                             Center(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 40),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 40),
                                 child: Text(
                                   _tab == 0
                                       ? 'Ответы, упоминания, заявки в друзья и звонки появятся здесь.'
@@ -99,19 +132,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                           itemCount: items.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             final n = items[index];
                             return _NotificationCard(
                               notification: n,
-                              onTap: () => _markRead(n),
+                              onTap: () => _tapNotification(n),
                               onClose: () => _dismiss(n),
-                              onAccept: _isFriendRequest(n)
-                                  ? () => _accept(n)
-                                  : null,
-                              onReject: _isFriendRequest(n)
-                                  ? () => _reject(n)
-                                  : null,
+                              onAccept:
+                                  _isFriendRequest(n) ? () => _accept(n) : null,
+                              onReject:
+                                  _isFriendRequest(n) ? () => _reject(n) : null,
                             );
                           },
                         ),
@@ -131,13 +163,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _markRead(Map<String, dynamic> n) {
     if (asBool(n['read'])) return;
-    setState(() => n['read'] = true);
-    widget.api.markNotificationsRead(id: asId(n['_id']));
+    final id = asId(n['_id']);
+    widget.events.markRead(id);
+    widget.api.markNotificationsRead(id: id);
+  }
+
+  void _tapNotification(Map<String, dynamic> n) {
+    _markRead(n);
+    final caseId = asId(n['caseId']);
+    if (caseId.isNotEmpty) widget.onOpenCase(caseId);
   }
 
   Future<void> _dismiss(Map<String, dynamic> n) async {
-    setState(() => _items = _items.where((e) => e['_id'] != n['_id']).toList());
-    await widget.api.markNotificationsRead(id: asId(n['_id']));
+    final id = asId(n['_id']);
+    widget.events.removeNotification(id);
+    await widget.api.markNotificationsRead(id: id);
   }
 
   Future<void> _accept(Map<String, dynamic> n) async {
@@ -159,17 +199,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAllRead() async {
-    setState(() {
-      for (final n in _items) {
-        n['read'] = true;
-      }
-    });
+    widget.events.markAllRead();
     await widget.api.markNotificationsRead();
   }
 
   Future<void> _clearAll() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _items = const []);
+    widget.events.clearNotifications();
     await widget.api.clearNotifications();
     messenger.showSnackBar(const SnackBar(content: Text('Удалено')));
   }
@@ -178,12 +214,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final next = widget.api.notifications();
     setState(() => _future = next);
     final list = await next;
-    if (mounted) setState(() => _items = list);
+    if (mounted) widget.events.replaceNotifications(list);
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

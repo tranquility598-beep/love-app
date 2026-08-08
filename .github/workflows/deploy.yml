@@ -1,28 +1,99 @@
-name: Deploy Backend to VDSina
+name: Deploy backend to production
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - 'server/**'
-      - 'package.json'
-      - '.github/workflows/deploy.yml'
+      - "server/**"
+      - "client/**"
+      - "sandbox/public/**"
+      - "ops/production/**"
+      - "package.json"
+      - ".github/workflows/deploy.yml"
+
+concurrency:
+  group: love-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
+  verify-and-deploy:
     runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Check out the exact revision
+        uses: actions/checkout@v4
+
+      - name: Use the production Node version
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }} # Использует SSH-ключ. Если настроили пароль, замените на 'password: secrets.SSH_PASSWORD'
-          port: 22
-          script: |
-            cd /var/www/love-app
-            git fetch origin main
-            git reset --hard origin/main
-            npm install --production
-            pm2 reload love-backend --update-env
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix server --ignore-scripts
+
+      - name: Reject high severity dependency issues
+        run: npm audit --prefix server --omit=dev --audit-level=high
+
+      - name: Run backend tests
+        run: npm test --prefix server
+
+      - name: Build immutable release archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          printf '{"gitSha":"%s","builtAt":"%s"}\n' "$GITHUB_SHA" "$(date -u +%FT%TZ)" > release-manifest.json
+          tar \
+            --exclude='server/.env' \
+            --exclude='server/node_modules' \
+            --exclude='server/uploads' \
+            --exclude='server/private-uploads' \
+            --exclude='server/temp' \
+            -czf love-release.tgz \
+            release-manifest.json package.json server client sandbox/public ops/production
+          sha256sum love-release.tgz > love-release.tgz.sha256
+
+      - name: Configure strict SSH host verification
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$SSH_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload verified candidate
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USERNAME"
+          scp -P 22 love-release.tgz love-release.tgz.sha256 \
+            "$SSH_USERNAME@$SSH_HOST:/var/www/love-staging/"
+
+      - name: Backup, smoke test, migrate and switch
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          set -Eeuo pipefail
+          ssh -p 22 "$SSH_USERNAME@$SSH_HOST" \
+            'sudo -n /usr/local/sbin/love-deploy-release'

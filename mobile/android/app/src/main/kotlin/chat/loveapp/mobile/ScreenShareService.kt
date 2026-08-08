@@ -1,4 +1,4 @@
-package com.example.love_mobile
+package chat.loveapp.mobile
 
 import android.app.Notification
 import android.app.NotificationChannel

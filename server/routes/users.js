@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const { findUserByUsername, getDuplicateField } = require('../utils/username');
 const authMiddleware = require('../middleware/auth');
 const { validateBio, validateCustomStatus, validateUsername, validateEmail, sanitizeBody, sanitizeString } = require('../middleware/validation');
 const path = require('path');
@@ -63,7 +64,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
-    res.json({ user });
+    res.json({ user: user.toPublicJSON() });
     
   } catch (error) {
     console.error('Get user error:', error);
@@ -190,7 +191,7 @@ router.put('/account', authMiddleware, sanitizeBody, validateUsername, validateE
       }
 
       // Проверяем уникальность имени
-      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: req.user._id } });
+      const existingUser = await findUserByUsername(User, nextUsername, req.user._id);
       if (existingUser) {
         return res.status(400).json({ message: 'Имя пользователя уже занято' });
       }
@@ -221,7 +222,7 @@ router.put('/account', authMiddleware, sanitizeBody, validateUsername, validateE
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       updateData,
-      { new: true }
+      { new: true, runValidators: true }
     ).select('+password');
 
     let msg = 'Настройки аккаунта обновлены';
@@ -236,6 +237,9 @@ router.put('/account', authMiddleware, sanitizeBody, validateUsername, validateE
     res.json({ user: buildPublicUser(updatedUser), message: msg });
   } catch (error) {
     console.error('Update account error:', error);
+    if (getDuplicateField(error) === 'username') {
+      return res.status(400).json({ message: 'Имя пользователя уже занято' });
+    }
     res.status(500).json({ message: 'Ошибка сервера при обновлении настроек аккаунта' });
   }
 });
@@ -341,6 +345,25 @@ router.post('/report', authMiddleware, async (req, res) => {
     });
     
     await newReport.save();
+
+    const Case = require('../models/Case');
+    await Case.findOneAndUpdate(
+      { sourceReport: newReport._id },
+      {
+        $setOnInsert: {
+          kind: 'report',
+          reporter: req.user._id,
+          subjectUser: offenderId || undefined,
+          title: `Жалоба: ${reason}`,
+          description: newReport.description,
+          priority: 'high',
+          sourceReport: newReport._id,
+          tags: [reason, 'legacy-api'],
+          activity: [{ actor: req.user._id, action: 'created_via_legacy_api' }]
+        }
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
     
     const io = req.app.get('io');
     if (io) {

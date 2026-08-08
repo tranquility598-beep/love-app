@@ -63,7 +63,9 @@ window.getAvatarUrl = function(avatar, name, userId) {
   if (avatar.startsWith('http')) return avatar;
   
   let isPackaged = false;
-  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+  if (window.electronAPI && window.electronAPI.getBackendModeSync) {
+    isPackaged = window.electronAPI.getBackendModeSync()?.production === true;
+  } else if (window.electronAPI && window.electronAPI.isPackagedSync) {
     isPackaged = window.electronAPI.isPackagedSync();
   }
   
@@ -112,41 +114,37 @@ class VoiceManager {
     // ICE candidate buffer: store candidates that arrive before remote description is set
     this._iceCandidateBuffer = new Map(); // socketId -> Array of RTCIceCandidate
 
-    // ICE серверы для WebRTC
+    // ICE серверы для WebRTC.
+    // TURN-credentials намеренно НЕ хранятся в клиентском коде: они
+    // запрашиваются у API (GET /api/webrtc/ice-config) перед входом в канал.
+    // До получения ответа используется STUN-only конфигурация.
     this.iceServers = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        // Свой coturn на VDSina (приоритетный релей — стабильнее бесплатного).
-        {
-          urls: 'turn:87.199.197.158:3478',
-          username: 'loveturn',
-          credential: 'Lv2026Turn_Xk9q'
-        },
-        {
-          urls: 'turn:87.199.197.158:3478?transport=tcp',
-          username: 'loveturn',
-          credential: 'Lv2026Turn_Xk9q'
-        },
-        // Бесплатный TURN как резерв, если свой недоступен.
-        {
-          urls: 'turn:free.expressturn.com:3478',
-          username: '000000002095347409',
-          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
-        },
-        {
-          urls: 'turn:free.expressturn.com:3478?transport=tcp',
-          username: '000000002095347409',
-          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
-        },
-        {
-          urls: 'turns:free.expressturn.com:443?transport=tcp',
-          username: '000000002095347409',
-          credential: 'W1fE2z8UXd7ookqQdKtFKpC9cnA='
-        }
+        { urls: 'stun:stun2.l.google.com:19302' }
       ]
     };
+    this._iceConfigFetchedAt = 0;
+  }
+
+  /**
+   * Запросить актуальную ICE-конфигурацию у сервера (временные TURN credentials).
+   * При ошибке сохраняет STUN-only конфигурацию — звонок не блокируется.
+   */
+  async refreshIceServers(force = false) {
+    const isFresh = Date.now() - this._iceConfigFetchedAt < 10 * 60 * 1000;
+    if (!force && isFresh) return;
+    try {
+      if (typeof apiFetch !== 'function') return;
+      const data = await apiFetch('/api/webrtc/ice-config');
+      if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+        this.iceServers = { iceServers: data.iceServers };
+        this._iceConfigFetchedAt = Date.now();
+      }
+    } catch (error) {
+      console.warn('🎙️ Не удалось получить ICE-конфигурацию, используется STUN-only:', error.message || error);
+    }
   }
 
   /**
@@ -170,6 +168,9 @@ class VoiceManager {
       const audioConstraints = typeof getVoiceAudioConstraints === 'function'
         ? getVoiceAudioConstraints()
         : true;
+
+      // Обновляем ICE-конфигурацию (временные TURN credentials) до создания peer-подключений
+      await this.refreshIceServers();
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
           audio: audioConstraints,
@@ -208,7 +209,10 @@ class VoiceManager {
       this.setupAudioAnalyser();
 
       // Уведомляем сервер о входе в канал
-      socketJoinVoice(channelId);
+      const joinResult = await socketJoinVoice(channelId);
+      if (joinResult?.status !== 'ok') {
+        throw new Error(joinResult?.message || 'Сервер не подтвердил вход в войс');
+      }
 
       // Звук входа (Discord-style)
       if (window.playVoiceSound) window.playVoiceSound('join');
@@ -304,7 +308,8 @@ class VoiceManager {
     this.isDeafened = false;
     this.isSpeaking = false;
 
-    // Убираем видео демонстрации
+    // Убираем все живые превью и ссылки на MediaStream.
+    window.CallStageController?.reset();
     hideScreenShareVideo();
 
     console.log('🔇 Left voice channel');
@@ -649,6 +654,7 @@ class VoiceManager {
         // была ли активна демонстрация экрана от этого участника (screen:started).
         this.remoteVideoStreams.set(socketId, stream);
         const isScreen = this.screenActiveSockets.has(socketId);
+        window.CallStageController?.setRemoteMedia(socketId, stream, isScreen ? 'screen' : 'camera');
         if (isScreen) {
           // Демонстрация экрана от другого пользователя.
           // showScreenShareVideo handles both creating new and updating existing
@@ -927,6 +933,9 @@ class VoiceManager {
       });
 
       this.isScreenSharing = true;
+      if (typeof socketSetVoiceMediaState === 'function') {
+        socketSetVoiceMediaState(this.channelId, 'screen');
+      }
 
       // Добавляем видеотрек во все существующие peer connections
       const videoTrack = this.screenStream.getVideoTracks()[0];
@@ -958,11 +967,6 @@ class VoiceManager {
       // Перерисовываем констелляцию нового дизайна — теперь screenStream готов
       if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 
-      // Уведомляем сервер
-      if (socket) {
-        socket.emit('screen:start', { channelId: this.channelId });
-      }
-
       // Обрабатываем остановку демонстрации через системный UI
       videoTrack.onended = () => {
         console.warn('[Voice] videoTrack.onended fired in voice.js! readyState:', videoTrack.readyState);
@@ -987,6 +991,9 @@ class VoiceManager {
   async stopScreenShare() {
     console.log('[Voice] stopScreenShare called. isScreenSharing:', this.isScreenSharing, 'screenStream:', !!this.screenStream, 'Stack:', new Error().stack);
     if (!this.isScreenSharing || !this.screenStream) return;
+    if (typeof socketSetVoiceMediaState === 'function') {
+      socketSetVoiceMediaState(this.channelId, 'none');
+    }
 
     // Удаляем видеотрек из всех peer connections (sequential to avoid glare)
     const videoTrack = this.screenStream.getVideoTracks()[0];
@@ -1035,11 +1042,6 @@ class VoiceManager {
       roomBtn.classList.add('muted-state');
     }
 
-    // Уведомляем сервер
-    if (socket) {
-      socket.emit('screen:stop', { channelId: this.channelId });
-    }
-
     // Синхронизируем визуальное состояние нового дизайна (например, если
     // демонстрация остановлена системным UI, а не нашей кнопкой).
     if (window.voiceState) window.voiceState.shareActive = false;
@@ -1086,6 +1088,9 @@ class VoiceManager {
 
     this.isCameraOn = true;
     this._cameraStarting = false;
+    if (typeof socketSetVoiceMediaState === 'function') {
+      socketSetVoiceMediaState(this.channelId, 'camera');
+    }
 
     const videoTrack = this.cameraStream.getVideoTracks()[0];
 
@@ -1111,11 +1116,6 @@ class VoiceManager {
       showLocalCameraVideo(this.cameraStream);
     }
 
-    // Уведомляем сервер — состояние камеры разойдётся всем в members_update.
-    if (socket) {
-      socket.emit('camera:start', { channelId: this.channelId });
-    }
-
     // Если камеру выключили на уровне ОС/драйвера — гасим состояние
     videoTrack.onended = () => {
       console.warn('[Voice] camera videoTrack.onended fired');
@@ -1131,6 +1131,9 @@ class VoiceManager {
    */
   async stopCamera() {
     if (!this.isCameraOn || !this.cameraStream) return;
+    if (typeof socketSetVoiceMediaState === 'function') {
+      socketSetVoiceMediaState(this.channelId, 'none');
+    }
 
     const renegotiateList = [];
     for (const [socketId, pc] of this.peerConnections) {
@@ -1156,11 +1159,6 @@ class VoiceManager {
 
     if (typeof hideLocalCameraVideo === 'function') {
       hideLocalCameraVideo();
-    }
-
-    // Уведомляем сервер об остановке камеры.
-    if (socket) {
-      socket.emit('camera:stop', { channelId: this.channelId });
     }
 
     console.log('[Voice] Camera stopped');
@@ -1551,6 +1549,11 @@ function hideVoicePanel() {
  * Показать видео демонстрации экрана
  */
 function showScreenShareVideo(stream, sourceId) {
+  if (window.CallStageController) {
+    if (sourceId === 'local') window.CallStageController.setLocalMedia(stream, 'screen');
+    else window.CallStageController.setRemoteMedia(sourceId, stream, 'screen');
+    return;
+  }
   const container = document.getElementById('screen-share-container'); // Container above chat
   const gridContainer = document.getElementById('voice-view-grid'); // Fullscreen grid container
 
@@ -1691,6 +1694,10 @@ function showScreenShareVideo(stream, sourceId) {
  * Скрыть видео демонстрации экрана
  */
 function hideScreenShareVideo() {
+  if (window.CallStageController) {
+    window.CallStageController.setLocalMedia(null, 'none');
+    return;
+  }
   const videos = document.querySelectorAll('.screen-share-video');
   videos.forEach(v => {
     v.srcObject = null;
@@ -1711,6 +1718,10 @@ function hideScreenShareVideo() {
  * Скрыть видео демонстрации экрана от конкретного пользователя
  */
 function hideScreenShareVideoForUser(socketId) {
+  if (window.CallStageController) {
+    window.CallStageController.removeRemoteMedia(socketId);
+    return;
+  }
   const video = document.getElementById('screen-share-video-' + socketId);
   if (video) {
     video.srcObject = null;
@@ -1759,18 +1770,22 @@ function _triggerVoiceRerender() {
 }
 
 function showLocalCameraVideo(stream) {
+  window.CallStageController?.setLocalMedia(stream, 'camera');
   _triggerVoiceRerender();
 }
 
 function hideLocalCameraVideo() {
+  window.CallStageController?.setLocalMedia(null, 'none');
   _triggerVoiceRerender();
 }
 
 function showRemoteCameraVideo(stream, socketId) {
+  window.CallStageController?.setRemoteMedia(socketId, stream, 'camera');
   _triggerVoiceRerender();
 }
 
 function hideRemoteCameraVideo(socketId) {
+  window.CallStageController?.removeRemoteMedia(socketId);
   _triggerVoiceRerender();
 }
 
@@ -2044,6 +2059,7 @@ function showIncomingDMCallOverlay(call) {
   if (!overlay || !call?.from) return;
   const avatar = document.getElementById('incoming-call-avatar');
   const name = document.getElementById('incoming-call-name');
+  const title = overlay.querySelector('.incoming-call-title');
   const displayName = call.from.nickname || call.from.username || 'Входящий звонок';
   window.pendingDMCall = call;
   if (avatar) {
@@ -2062,6 +2078,7 @@ function showIncomingDMCallOverlay(call) {
     }
   }
   if (name) name.textContent = displayName;
+  if (title) title.textContent = call.kind === 'video' ? 'Входящий видеозвонок' : 'Входящий голосовой звонок';
   overlay.classList.remove('hidden');
 }
 
@@ -2080,11 +2097,13 @@ async function acceptIncomingDMCall() {
   hideIncomingDMCallOverlay();
   socketSendCallResponse(call.from._id, true, {
     conversationId: call.conversationId,
-    channelId: call.channelId
+    channelId: call.channelId,
+    kind: call.kind
   });
   await startWebRTCCall(call.from._id, {
     conversationId: call.conversationId,
-    channelId: call.channelId
+    channelId: call.channelId,
+    kind: call.kind
   });
 }
 
@@ -2203,6 +2222,9 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
   }
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
+  if (window.pendingDMCallKind === 'video') {
+    await window.voiceManager.startCamera();
+  }
 }
 
 window.handleDMCallResponse = handleDMCallResponse;
@@ -2226,6 +2248,8 @@ function handleDMCallEnd() {
     window.voiceManager.leaveChannel();
     window.voiceManager = null;
   }
+  window.pendingDMCallKind = null;
+  window.CallStageController?.reset();
   
   console.log('[Voice] Call ended');
 }
@@ -2248,7 +2272,8 @@ async function startWebRTCCall(callerId, meta = {}) {
     // Open the real call modal interface for the receiver!
     if (typeof window.startDirectCall === 'function') {
       const avatarVal = caller.avatar ? caller.avatar.charAt(0).toUpperCase() : (caller.username ? caller.username.charAt(0).toUpperCase() : 'C');
-      window.startDirectCall(caller.nickname || caller.username, avatarVal, false, caller._id, true, caller.avatar || '');
+      const isVideo = (meta.kind || window.pendingDMCall?.kind) === 'video';
+      window.startDirectCall(caller.nickname || caller.username, avatarVal, isVideo, caller._id, true, caller.avatar || '');
     }
   }
 
@@ -2259,6 +2284,9 @@ async function startWebRTCCall(callerId, meta = {}) {
   }
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
+  if ((meta.kind || window.pendingDMCall?.kind) === 'video') {
+    await window.voiceManager.startCamera();
+  }
   if (window.SoundManager) window.SoundManager.play('user_join');
 }
 

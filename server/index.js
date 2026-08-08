@@ -4,6 +4,7 @@
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+require('./config/security').assertProductionSecurity();
 
 const express = require('express');
 const http = require('http');
@@ -16,10 +17,44 @@ const fs = require('fs');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const hpp = require('hpp');
+const cookieParser = require('cookie-parser');
+const { adminSecurityHeaders, adminOriginGuard } = require('./middleware/adminSecurity');
 
 const app = express();
 const server = http.createServer(app);
 const passport = require('./config/passport');
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean)
+  : [
+      'http://localhost:5555',
+      'http://127.0.0.1:5555',
+      'http://26.237.63.189:5555',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://localhost',
+      'capacitor://localhost',
+      'https://loveapp.chat',
+      'https://admin.loveapp.chat',
+      'https://api.loveapp.chat',
+      'https://loveapp-landing.onrender.com'
+    ];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  const normalized = origin.replace(/\/$/, '');
+  return allowedOrigins.includes(normalized)
+    || (process.env.NODE_ENV !== 'production'
+      && (normalized.startsWith('http://localhost:') || normalized.startsWith('http://127.0.0.1:')));
+}
+
+function isAllowedSocketOrigin(origin) {
+  if (isAllowedOrigin(origin)) return true;
+  const normalized = String(origin || '').toLowerCase();
+  // Packaged Electron pages use file://. Socket authentication still requires
+  // a short-lived user or admin token, while regular HTTP CORS remains unchanged.
+  return normalized === 'file://' || normalized === 'file:' || normalized.startsWith('file://');
+}
 
 // Trust proxy configuration for rate limiting security
 // - Development (local): false - use direct IP
@@ -36,8 +71,13 @@ app.use(passport.initialize());
 // Настройка Socket.io с CORS
 const io = socketIO(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin(origin, callback) {
+      if (isAllowedSocketOrigin(origin)) return callback(null, true);
+      console.warn(`[socket-security] blocked origin: ${origin}`);
+      return callback(new Error('Origin is not allowed'));
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 app.set('io', io);
@@ -49,8 +89,18 @@ const PORT = process.env.PORT || 5555;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ Connected to MongoDB');
+    try {
+      const User = require('./models/User');
+      const { ensureCaseInsensitiveUsernameIndex } = require('./utils/username');
+      const created = await ensureCaseInsensitiveUsernameIndex(User);
+      console.log(created
+        ? '✅ Case-insensitive username index created'
+        : '✅ Case-insensitive username index ready');
+    } catch (indexError) {
+      console.error('❌ Username uniqueness index error:', indexError.message);
+    }
   })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);
@@ -107,33 +157,13 @@ app.use(mongoSanitize({
 app.use(hpp());
 
 // CORS настройка с whitelist
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : [
-      'http://localhost:5555',
-      'http://26.237.63.189:5555',
-      'http://localhost:5173',
-      'https://localhost',
-      'capacitor://localhost',
-      'https://loveapp.chat',
-      'https://api.loveapp.chat',
-      'https://loveapp-landing.onrender.com'
-    ];
+app.use('/api/admin', adminSecurityHeaders, adminOriginGuard);
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Разрешаем запросы без origin (Electron, Postman, мобильные приложения)
-    if (!origin) return callback(null, true);
-    
-    if (
-      allowedOrigins.indexOf(origin) !== -1 || 
-      (process.env.NODE_ENV !== 'production' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')))
-    ) {
-      callback(null, true);
-    } else {
-      console.warn(`⚠️  Blocked CORS request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    console.warn(`⚠️  Blocked CORS request from origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
@@ -142,6 +172,7 @@ app.use(cors({
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser());
 
 // Настройка загрузки файлов
 app.use(fileUpload({
@@ -181,10 +212,16 @@ const friendRoutes = require('./routes/friends');
 const dmRoutes = require('./routes/directMessages');
 const uploadRoutes = require('./routes/upload');
 const adminRoutes = require('./routes/admin');
+const adminAuthRoutes = require('./routes/adminAuth');
+const casesRoutes = require('./routes/cases');
+const communityRoutes = require('./routes/community');
+const staffCommsRoutes = require('./routes/staffComms');
 const updatesRoutes = require('./routes/updates');
 const earlyAccessRoutes = require('./routes/earlyAccess');
 const releaseRoutes = require('./routes/release');
 const notificationRoutes = require('./routes/notifications');
+const webrtcRoutes = require('./routes/webrtc');
+const { featureFlags, requireFeature } = require('./config/featureFlags');
 
 // Rate Limiting для всех API роутов
 const { generalLimiter } = require('./middleware/rateLimiter');
@@ -199,15 +236,29 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/dm', dmRoutes);
 app.use('/api/upload', uploadRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin/auth', requireFeature('adminV1'), adminAuthRoutes);
+app.use('/api/admin/staff', requireFeature('staffCommsV1'), staffCommsRoutes);
+app.use('/api/admin', requireFeature('adminV1'), adminRoutes);
+app.use('/api/cases', requireFeature('casesV1'), casesRoutes);
+app.use('/api/community', requireFeature('communityV1'), communityRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/early-access', earlyAccessRoutes);
 app.use('/api/release', releaseRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/webrtc', webrtcRoutes);
 
-// Базовый роут для проверки работы сервера
+// Базовый роут для проверки работы сервера.
+// Отражает реальную деградацию: без подключения к MongoDB API нефункционален,
+// поэтому мониторинг должен видеть 503, а не «ok».
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Love Server is running' });
+  const dbReady = mongoose.connection.readyState === 1;
+  const payload = {
+    status: dbReady ? 'ok' : 'degraded',
+    message: 'Love Server is running',
+    db: dbReady ? 'connected' : 'disconnected',
+    features: featureFlags
+  };
+  res.status(dbReady ? 200 : 503).json(payload);
 });
 
 // Роут для корня - отдаем index.html
@@ -242,11 +293,17 @@ app.get('/reset-password', (req, res) => {
 
 // Инициализация Socket.io обработчиков
 const socketHandler = require('./socket/socketHandler');
-socketHandler(io);
+const presence = socketHandler(io);
+app.set('presence', presence);
+const { startAnalyticsCollector } = require('./services/analyticsService');
+if (featureFlags.analyticsV1) startAnalyticsCollector(presence);
 
-// Запуск сервера с обработкой занятого порта
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Запуск сервера с обработкой занятого порта.
+// В production за Nginx задайте HOST=127.0.0.1, чтобы backend не был доступен
+// напрямую из интернета в обход reverse proxy. По умолчанию — 0.0.0.0 (dev).
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on ${HOST}:${PORT}`);
   console.log(`📡 Socket.io ready`);
   console.log(`🌐 API available at http://26.237.63.189:${PORT}/api`);
 }).on('error', (err) => {

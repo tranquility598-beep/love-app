@@ -1,7 +1,13 @@
 let isPackaged = false;
+let usesProductionBackend = false;
 try {
-  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+  if (window.electronAPI && window.electronAPI.getBackendModeSync) {
+    const mode = window.electronAPI.getBackendModeSync();
+    usesProductionBackend = mode?.production === true;
+    isPackaged = window.electronAPI.isPackagedSync?.() === true;
+  } else if (window.electronAPI && window.electronAPI.isPackagedSync) {
     isPackaged = window.electronAPI.isPackagedSync();
+    usesProductionBackend = isPackaged;
   } else if (!window.electronAPI) {
     // Fallback if opened in a regular web browser (e.g. hosted on Vercel/Netlify)
     const isCapacitor = Boolean(window.Capacitor) || window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost' && window.location.protocol === 'https:';
@@ -11,6 +17,7 @@ try {
     // В Electron-приложении (даже не упакованном) и на хостинге используем логику адекватного определения продакшена
     if (!isLocalhost && !isFileProtocol && !isNgrok) {
       isPackaged = true; // Use production API if hosted anywhere else
+      usesProductionBackend = true;
     }
   }
 } catch (e) {
@@ -22,11 +29,11 @@ try {
 const currentHost = window.location.origin;
 const isNgrokHost = window.location.hostname.includes('ngrok');
 const isCapacitorRuntime = Boolean(window.Capacitor) || window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost');
-window.BASE_URL = (isPackaged || isCapacitorRuntime) ? 'https://api.loveapp.chat' : (isNgrokHost ? currentHost : 'http://localhost:5555');
+window.BASE_URL = (usesProductionBackend || isCapacitorRuntime) ? 'https://api.loveapp.chat' : (isNgrokHost ? currentHost : 'http://localhost:5555');
 let API_BASE = window.BASE_URL + '/api';
 window.API_BASE = API_BASE;
 
-if (isPackaged) {
+if (usesProductionBackend) {
   console.log('🌐 Production mode: using remote API', API_BASE);
 } else {
   console.log('🛠 Development mode: using local API', API_BASE);
@@ -313,6 +320,9 @@ async function apiUpload(endpoint, formData, method = 'POST') {
 
 // ===== AUTH API =====
 const AuthAPI = {
+  checkUsername: (username) =>
+    apiFetch(`/auth/username-availability?username=${encodeURIComponent(username)}`),
+
   register: (username, email, password) =>
     apiFetch('/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password }) }),
 
@@ -324,6 +334,8 @@ const AuthAPI = {
 
   verifyTwoFactor: (pendingToken, code) =>
     apiFetch('/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }),
+
+  getRestriction: () => apiFetch('/auth/restriction'),
     
   resendOtp: (email) =>
     apiFetch('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
@@ -620,3 +632,54 @@ const NotificationsAPI = {
   clearAll: () =>
     apiFetch('/notifications', { method: 'DELETE' })
 };
+
+// ===== COMMUNITY & CASES API =====
+// Public reads work without a token. Voting, comments and submissions use the
+// same authenticated request path as the rest of the client.
+const CommunityAPI = {
+  topIdeas: () => apiFetch('/community/ideas/top'),
+  ideas: (query = '') => apiFetch(`/community/ideas${query ? `?${query}` : ''}`),
+  bugs: (query = '') => apiFetch(`/community/bugs${query ? `?${query}` : ''}`),
+  announcements: (limit = 20) => apiFetch(`/community/announcements?limit=${limit}`),
+  devLog: (page = 1, limit = 20) => apiFetch(`/community/devlog?page=${page}&limit=${limit}`),
+  voteIdea: (id, value) => apiFetch(`/community/ideas/${id}/vote`, {
+    method: 'PUT',
+    body: JSON.stringify({ value })
+  }),
+  removeIdeaVote: (id) => apiFetch(`/community/ideas/${id}/vote`, { method: 'DELETE' }),
+  voteDevLog: (id, value) => apiFetch(`/community/devlog/${id}/vote`, {
+    method: 'PUT',
+    body: JSON.stringify({ value })
+  }),
+  comments: (id) => apiFetch(`/community/devlog/${id}/comments`),
+  addComment: (id, body, parent = null) => apiFetch(`/community/devlog/${id}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body, parent })
+  })
+};
+
+const CasesAPI = {
+  create: (payload) => apiFetch('/cases', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  mine: () => apiFetch('/cases/mine'),
+  get: (id) => apiFetch(`/cases/${id}`),
+  status: () => apiFetch('/cases/status'),
+  reportTaxonomy: () => apiFetch('/cases/message-report-taxonomy'),
+  reportMessage: (messageId, path, description = '') => apiFetch('/cases/message-reports', {
+    method: 'POST',
+    body: JSON.stringify({ messageId, path, description })
+  }),
+  reply: (id, body) => apiFetch(`/cases/${id}/replies`, {
+    method: 'POST',
+    body: JSON.stringify({ body })
+  }),
+  appeal: (moderationAction, description) => apiFetch('/cases/appeals', {
+    method: 'POST',
+    body: JSON.stringify({ moderationAction, description })
+  })
+};
+
+window.CommunityAPI = CommunityAPI;
+window.CasesAPI = CasesAPI;

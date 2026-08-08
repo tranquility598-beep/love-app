@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../config/app_config.dart';
+import '../diagnostics/safe_diagnostic_log.dart';
 import '../../features/auth/auth_repository.dart';
 
 typedef SocketEventHandler = void Function(dynamic data);
@@ -142,10 +143,24 @@ class LoveSocket with WidgetsBindingObserver {
       );
       _socket = socket;
       socket
-        ..onConnect((_) => _onConnect?.call())
-        ..onConnectError((error) => _onError?.call(error))
-        ..onError((error) => _onError?.call(error))
-        ..onDisconnect((_) => _scheduleQuickCheck());
+        ..onConnect((_) {
+          SafeDiagnosticLog.instance.socket('connected');
+          _onConnect?.call();
+        })
+        ..onConnectError((error) {
+          SafeDiagnosticLog.instance
+              .socket('connect_error ${error.runtimeType}');
+          _onError?.call(error);
+        })
+        ..onError((error) {
+          SafeDiagnosticLog.instance.socket('error ${error.runtimeType}');
+          _onError?.call(error);
+        })
+        ..onDisconnect((reason) {
+          SafeDiagnosticLog.instance
+              .socket('disconnected ${reason.runtimeType}');
+          _scheduleQuickCheck();
+        });
       _attachSavedHandlers(socket);
 
       socket.io.on('reconnect_attempt', (_) async {

@@ -227,10 +227,125 @@ function handleFounderStats(data) {
 }
 
 function handleFounderAnnouncement(data) {
-  if (typeof showGlobalAnnouncementBanner === 'function') {
-    showGlobalAnnouncementBanner(data);
-  } else {
-    showNotification('info', data.message, '📢 Объявление от ' + (data.from || ''));
+  if (typeof window.applyHubAnnouncement === 'function') window.applyHubAnnouncement(data);
+  if (data.type === 'silent') return;
+  const normalized = { ...data, message: data.content || data.message || '' };
+  if (data.type === 'global' && typeof showGlobalAnnouncementBanner === 'function') {
+    showGlobalAnnouncementBanner(normalized);
+    return;
+  }
+  showNotification('info', normalized.message, data.title || 'Объявление Love');
+}
+
+function handleAnnouncementRemoved(data) {
+  if (typeof window.removeHubAnnouncement === 'function') window.removeHubAnnouncement(data?.id);
+}
+
+function handleDevLogUpdate(data) {
+  if (typeof window.applyDevLogLiveUpdate === 'function') window.applyDevLogLiveUpdate(data);
+}
+
+function handleSupportUpdate(data) {
+  if (typeof window.refreshSupportCenter === 'function') window.refreshSupportCenter(data);
+  const exactCaseIsOpen = typeof window.isSupportCaseVisible === 'function'
+    ? window.isSupportCaseVisible(data?.caseId)
+    : window.isSupportCenterVisible?.();
+  if (data?.kind === 'staff_reply' && !exactCaseIsOpen) {
+    let pill = document.getElementById('support-reply-pill');
+    if (!pill) {
+      pill = document.createElement('button');
+      pill.type = 'button';
+      pill.id = 'support-reply-pill';
+      pill.className = 'support-reply-pill';
+      pill.innerHTML = '<span class="support-reply-pill-icon">♥</span><span class="support-reply-pill-copy"><strong>Вам пришёл ответ от сотрудника</strong><small></small></span><span class="support-reply-pill-action">Открыть</span>';
+      document.body.appendChild(pill);
+    }
+    pill.querySelector('small').textContent = data.number ? `${data.number} · ${data.title || 'Обращение'}` : 'Центр помощи Love';
+    pill.onclick = () => {
+      pill.classList.remove('visible');
+      window.openSupportCase?.(data.caseId);
+    };
+    window.clearTimeout(window.__supportReplyPillTimer);
+    requestAnimationFrame(() => pill.classList.add('visible'));
+    window.__supportReplyPillTimer = window.setTimeout(() => pill.classList.remove('visible'), 12000);
+  }
+}
+
+function handleNotificationNew(notification) {
+  if (!notification) return;
+  const mapped = typeof window._mapServerNotification === 'function'
+    ? window._mapServerNotification(notification)
+    : null;
+  const exactCaseIsOpen = Boolean(notification.caseId && window.isSupportCaseVisible?.(notification.caseId));
+
+  if (mapped) {
+    if (exactCaseIsOpen) mapped.unread = false;
+    window._prependNotification?.(mapped);
+  }
+
+  if (exactCaseIsOpen) {
+    if (notification._id && typeof NotificationsAPI !== 'undefined') {
+      NotificationsAPI.markRead(notification._id).catch(() => {});
+    }
+    return;
+  }
+
+  if (notification.caseId) {
+    const visiblePill = document.getElementById('support-reply-pill')?.classList.contains('visible');
+    if (!visiblePill) {
+      handleSupportUpdate({
+        kind: 'staff_reply',
+        caseId: notification.caseId,
+        title: 'Обращение',
+        preview: notification.preview || ''
+      });
+    }
+    return;
+  }
+
+  if (notification.type === 'new_dm' || typeof window.showAppNotification !== 'function') return;
+  const titles = {
+    mention: 'Упоминание',
+    friend_request: 'Запрос в друзья',
+    friend_accepted: 'Запрос принят',
+    missed_call: 'Пропущенный звонок'
+  };
+  const title = titles[notification.type] || 'Уведомление';
+  const preview = String(notification.preview || '');
+  const targetView = ['friend_request', 'friend_accepted'].includes(notification.type)
+    ? 'view-contacts'
+    : 'view-notifications';
+  window.showAppNotification({
+    title,
+    text: preview,
+    avatar: String(notification.actorName || '?').charAt(0).toUpperCase(),
+    onClick: () => document.querySelector(`[data-target="${targetView}"]`)?.click()
+  });
+  if (!document.hasFocus() && window.electronAPI?.showNotification) {
+    window.electronAPI.showNotification(title, preview.slice(0, 120), { view: targetView });
+  }
+}
+
+function handleModerationRestricted(restriction) {
+  if (typeof window.showRestrictedAccess === 'function') {
+    window.showRestrictedAccess({ accountRestricted: true, restriction });
+  }
+}
+
+async function handleModerationUpdate(data) {
+  handleSupportUpdate(data);
+  if (data?.revoked && document.querySelector('.auth-restricted-form.active')) {
+    try {
+      const result = await AuthAPI.getMe();
+      window.currentUser = result.user;
+      localStorage.setItem('user', JSON.stringify(result.user));
+      if (typeof window.enterLoveApp === 'function') window.enterLoveApp('Ограничение снято');
+      disconnectSocket();
+      await initSocket();
+    } catch {
+      showNotification('info', 'Ограничение снято. Войдите снова, чтобы восстановить полную сессию.', 'Love Safety');
+      if (typeof window.showAuthScreen === 'function') window.showAuthScreen();
+    }
   }
 }
 
@@ -332,10 +447,8 @@ function handleMessageNew(data) {
 }
 
 function handleMessageEdited(data) {
-  const { channelId, message } = data;
-  if (window.currentChannelId?.toString() === channelId?.toString()) {
-    updateMessageInDOM(message);
-  }
+  const { message } = data;
+  updateMessageInDOM(message);
 }
 
 function handleMessageUpdate(data) {
@@ -345,16 +458,14 @@ function handleMessageUpdate(data) {
     tempIdMapping.set(tempId, message._id);
   }
   
-  if (window.currentChannelId?.toString() === channelId?.toString()) {
-    updateTempMessageInDOM(tempId, message);
-  }
+  // Reconcile the model even when another chat is open. Otherwise a message
+  // sent from this PC or another device can keep its temporary ID forever.
+  updateTempMessageInDOM(tempId, message);
 }
 
 function handleMessageDeleted(data) {
-  const { channelId, messageId } = data;
-  if (window.currentChannelId?.toString() === channelId?.toString()) {
-    removeMessageFromDOM(messageId);
-  }
+  const { messageId } = data;
+  removeMessageFromDOM(messageId);
 }
 
 function handleMessageReaction(data) {
@@ -477,7 +588,34 @@ function handleVoiceUserLeft(data) {
 
 function handleVoiceMembersUpdate(data) {
   const { channelId, members } = data;
+  if (window.voiceManager && window.voiceManager.channelId === channelId) {
+    window.voiceManager.channelMembers = Array.isArray(members) ? members : [];
+    window.CallStageController?.syncMembers(members);
+  }
   updateVoiceChannelMembersUI(channelId, members);
+}
+
+function handleVoiceMediaState(data) {
+  const { channelId, userId, socketId, mode } = data || {};
+  if (!channelId || !['none', 'camera', 'screen'].includes(mode)) return;
+  const manager = window.voiceManager;
+  if (manager && manager.channelId === channelId) {
+    const member = manager.channelMembers?.find(item =>
+      String(item.socketId) === String(socketId) || String(item.userId) === String(userId));
+    if (member) {
+      member.mediaMode = mode;
+      member.cameraOn = mode === 'camera';
+      member.screenSharing = mode === 'screen';
+    }
+    if (socketId) {
+      if (mode === 'screen') manager.screenActiveSockets.add(socketId);
+      else manager.screenActiveSockets.delete(socketId);
+    }
+  }
+  if (manager && manager.channelId === channelId) {
+    window.CallStageController?.updateMediaState(data);
+  }
+  if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
 
 function handleVoiceUserSpeaking(data) {
@@ -599,11 +737,11 @@ function handleWebRTCIceCandidate(data) {
 // ===== CALL SCOPE HANDLERS =====
 
 function handleCallIncoming(data) {
-  const { from, conversationId, channelId } = data;
+  const { from, conversationId, channelId, kind = 'audio' } = data;
   console.log('📞 Incoming call from:', from.username);
-  window.pendingDMCall = { from, conversationId, channelId };
+  window.pendingDMCall = { from, conversationId, channelId, kind };
   if (window.showIncomingDMCallOverlay) {
-    window.showIncomingDMCallOverlay({ from, conversationId, channelId });
+    window.showIncomingDMCallOverlay({ from, conversationId, channelId, kind });
   }
 }
 
@@ -910,6 +1048,13 @@ function attachGlobalSocketListeners() {
   attachListener('global', 'friend:request_accepted', handleFriendRequestAccepted);
   attachListener('global', 'founder:stats', handleFounderStats);
   attachListener('global', 'founder:announcement', handleFounderAnnouncement);
+  attachListener('global', 'admin:announcement', handleFounderAnnouncement);
+  attachListener('global', 'admin:announcement_removed', handleAnnouncementRemoved);
+  attachListener('global', 'community:devlog:update', handleDevLogUpdate);
+  attachListener('global', 'support:updated', handleSupportUpdate);
+  attachListener('global', 'notification:new', handleNotificationNew);
+  attachListener('global', 'moderation:updated', handleModerationUpdate);
+  attachListener('global', 'moderation:restricted', handleModerationRestricted);
   attachListener('global', 'founder:logs', handleFounderLogs);
   attachListener('global', 'error', handleSocketError);
   
@@ -960,6 +1105,7 @@ function attachAllSocketListeners() {
   attachListener('voice', 'voice:user_joined', handleVoiceUserJoined);
   attachListener('voice', 'voice:user_left', handleVoiceUserLeft);
   attachListener('voice', 'voice:members_update', handleVoiceMembersUpdate);
+  attachListener('voice', 'voice:media_state', handleVoiceMediaState);
   attachListener('voice', 'voice:user_speaking', handleVoiceUserSpeaking);
   attachListener('voice', 'voice:user_muted', handleVoiceUserMuted);
   attachListener('voice', 'voice:user_deafened', handleVoiceUserDeafened);
@@ -1217,9 +1363,17 @@ function socketStopTyping(channelId) {
  * Голосовой канал
  */
 function socketJoinVoice(channelId) {
-  if (socket) {
-    socket.emit('voice:join', { channelId });
-  }
+  if (!socket) return Promise.resolve({ status: 'error', message: 'Сокет не подключен' });
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value || { status: 'ok' });
+    };
+    socket.emit('voice:join', { channelId }, finish);
+    setTimeout(() => finish({ status: 'error', message: 'Сервер не подтвердил вход в войс' }), 10000);
+  });
 }
 
 function socketLeaveVoice(channelId) {
@@ -1312,12 +1466,35 @@ function socketStopScreen(channelId) {
   }
 }
 
+function socketSetVoiceMediaState(channelId, mode) {
+  if (!socket || !channelId || !['none', 'camera', 'screen'].includes(mode)) return;
+  const previousMode = window.voiceManager?.isScreenSharing
+    ? 'screen'
+    : window.voiceManager?.isCameraOn ? 'camera' : null;
+  const fallback = () => {
+    const legacyMode = mode === 'none' ? previousMode : mode;
+    if (legacyMode === 'screen') socket.emit(mode === 'none' ? 'screen:stop' : 'screen:start', { channelId });
+    if (legacyMode === 'camera') socket.emit(mode === 'none' ? 'camera:stop' : 'camera:start', { channelId });
+  };
+
+  if (typeof socket.timeout !== 'function') {
+    socket.emit('voice:media_state', { channelId, mode });
+    return;
+  }
+  socket.timeout(3000).emit('voice:media_state', { channelId, mode }, (error, response) => {
+    if (error || response?.status !== 'ok') fallback();
+  });
+}
+
 /**
  * Инициализация звонка (сигналинг)
  */
-function socketRequestCall(targetUserId) {
+function socketRequestCall(targetUserId, kind = 'audio') {
   if (socket && targetUserId) {
-    socket.emit('call:request', { targetUserId: targetUserId.toString() });
+    socket.emit('call:request', {
+      targetUserId: targetUserId.toString(),
+      kind: kind === 'video' ? 'video' : 'audio'
+    });
   }
 }
 
@@ -1327,7 +1504,8 @@ function socketSendCallResponse(callerId, accepted, meta = {}) {
       callerId: callerId.toString(),
       accepted,
       conversationId: meta.conversationId,
-      channelId: meta.channelId
+      channelId: meta.channelId,
+      kind: meta.kind
     });
   }
 }
@@ -1341,13 +1519,13 @@ function socketEndCall(targetUserId) {
 // Обработка ответа из Electron-попапа (для получателя)
 if (window.electronAPI && window.electronAPI.onCallResponseFromPopup) {
   window.electronAPI.onCallResponseFromPopup((data) => {
-    const { accepted, callerId, conversationId, channelId } = data;
+    const { accepted, callerId, conversationId, channelId, kind } = data;
     socketSendCallResponse(callerId, accepted, { conversationId, channelId });
     
     if (accepted) {
       // Если приняли - инициируем WebRTC
       if (window.startWebRTCCall) {
-        window.startWebRTCCall(callerId, { conversationId, channelId });
+        window.startWebRTCCall(callerId, { conversationId, channelId, kind });
       }
     }
     if (!accepted) {
@@ -1436,3 +1614,4 @@ window.addEventListener('focus', () => {
 window.socket = socket;
 window.socketJoinServer = socketJoinServer;
 window.socketLeaveServer = socketLeaveServer;
+window.socketSetVoiceMediaState = socketSetVoiceMediaState;

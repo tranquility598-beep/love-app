@@ -30,6 +30,7 @@ class ChatMessage {
     required this.authorName,
     required this.authorId,
     required this.authorAvatar,
+    this.authorRole = '',
     required this.createdAt,
     required this.isOwn,
     this.attachments = const [],
@@ -46,6 +47,7 @@ class ChatMessage {
   final String authorName;
   final String authorId;
   final String authorAvatar;
+  final String authorRole;
   final DateTime createdAt;
   final bool isOwn;
   final List<ChatAttachment> attachments;
@@ -94,6 +96,7 @@ class ChatMessage {
       authorName: userDisplayName(author),
       authorId: authorId,
       authorAvatar: asText(author['avatar']),
+      authorRole: asText(author['role'], asText(author['staffRank'])),
       createdAt: DateTime.tryParse(asText(json['createdAt'])) ?? DateTime.now(),
       isOwn: authorId == currentUserId,
       attachments: _attachments(json['attachments']),
@@ -113,6 +116,7 @@ class ChatMessage {
       authorName: authorName,
       authorId: authorId,
       authorAvatar: authorAvatar,
+      authorRole: authorRole,
       createdAt: createdAt,
       isOwn: isOwn,
       attachments: attachments,

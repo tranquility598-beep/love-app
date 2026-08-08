@@ -1,0 +1,46 @@
+{
+  "name": "love-backend",
+  "version": "2.0.6",
+  "private": true,
+  "description": "Love API and realtime backend",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test tests/*.test.js",
+    "security:preflight": "node -e \"require('./config/security').assertProductionSecurity()\"",
+    "admin:backup": "node scripts/backup-admin-v1.js",
+    "admin:migrate:dry": "node scripts/migrate-admin-v1.js",
+    "admin:migrate": "node scripts/migrate-admin-v1.js --apply",
+    "admin:indexes": "node scripts/ensure-retention-indexes.js"
+  },
+  "dependencies": {
+    "axios": "^1.19.0",
+    "bcryptjs": "^2.4.3",
+    "bson": "^6.10.4",
+    "cloudinary": "^2.10.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "express-fileupload": "^1.5.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.3.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.2",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.3",
+    "otplib": "^12.0.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
+    "streamifier": "^0.1.1",
+    "uuid": "^11.1.1"
+  }
+}

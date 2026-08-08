@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
+import '../../widgets/screen_share_viewer.dart';
 import 'call_session.dart';
 
 /// Полноэкранный звонок — один экран для ЛС и войса сфер (ч/б стиль).
@@ -192,9 +193,8 @@ class _CallScreenState extends State<CallScreen> {
   // ── Входящий звонок ──
 
   Widget _incomingBody() {
-    final peer = session.participants.isEmpty
-        ? null
-        : session.participants.first;
+    final peer =
+        session.participants.isEmpty ? null : session.participants.first;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -287,22 +287,30 @@ class _CallScreenState extends State<CallScreen> {
     }
 
     if (!showSelfPreview) return grid;
-    return Stack(
-      children: [
-        Positioned.fill(child: grid),
-        Positioned(
-          top: 12,
-          right: 12,
-          width: 108,
-          height: 148,
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.25),
+    // Своя камера/демка — плавающее окно: таскается, меняет размер щипком,
+    // сворачивается двойным тапом и прячется за край, как войс-таблетка.
+    // Границы берём у самого Stack: он уже внутри SafeArea и отступов,
+    // так что MediaQuery дал бы съехавшие координаты.
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(child: grid),
+          DraggablePipTile(
+            bounds: constraints.biggest,
+            width: 108,
+            height: 148,
+            onExpand: () => Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute<void>(
+                fullscreenDialog: true,
+                builder: (_) => CallVideoFullscreen(
+                  renderer: session.localRenderer!,
+                  title: session.screenSharing
+                      ? 'Ваша демонстрация'
+                      : 'Ваша камера',
+                  mirror: session.cameraOn && session.frontCamera,
+                ),
               ),
-              color: Colors.black,
             ),
             child: RTCVideoView(
               session.localRenderer!,
@@ -310,8 +318,8 @@ class _CallScreenState extends State<CallScreen> {
               objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -386,92 +394,92 @@ class _ParticipantTile extends StatelessWidget {
               )
           : null,
       child: Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.045),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (renderer != null && participant.hasVideo)
-            RTCVideoView(
-              renderer,
-              mirror: participant.mirror,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            )
-          else
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  LoveAvatar(
-                    label: participant.name,
-                    imageUrl: participant.avatar,
-                    size: 68,
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(
-                      participant.isSelf
-                          ? '${participant.name} (вы)'
-                          : participant.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: Colors.white.withValues(alpha: 0.045),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (renderer != null && participant.hasVideo)
+              RTCVideoView(
+                renderer,
+                mirror: participant.mirror,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              )
+            else
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LoveAvatar(
+                      label: participant.name,
+                      imageUrl: participant.avatar,
+                      size: 68,
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        participant.isSelf
+                            ? '${participant.name} (вы)'
+                            : participant.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          if (renderer != null && participant.hasVideo)
-            Positioned(
-              left: 8,
-              bottom: 8,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(10),
+                  ],
                 ),
-                child: Text(
-                  participant.isSelf
-                      ? '${participant.name} (вы)'
-                      : participant.name,
-                  style: const TextStyle(
+              ),
+            if (renderer != null && participant.hasVideo)
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    participant.isSelf
+                        ? '${participant.name} (вы)'
+                        : participant.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            if (participant.muted)
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mic_off_rounded,
                     color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    size: 15,
                   ),
                 ),
               ),
-            ),
-          if (participant.muted)
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.mic_off_rounded,
-                  color: Colors.white,
-                  size: 15,
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -509,9 +517,8 @@ class _RoundCallButton extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: filled
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.06),
+              color:
+                  filled ? Colors.white : Colors.white.withValues(alpha: 0.06),
               border: Border.all(
                 color: filled
                     ? Colors.white
@@ -539,7 +546,6 @@ class _RoundCallButton extends StatelessWidget {
   }
 }
 
-
 /// Полноэкранный просмотр удалённой камеры или демонстрации экрана.
 class CallVideoFullscreen extends StatefulWidget {
   const CallVideoFullscreen({
@@ -557,21 +563,69 @@ class CallVideoFullscreen extends StatefulWidget {
   State<CallVideoFullscreen> createState() => _CallVideoFullscreenState();
 }
 
-class _CallVideoFullscreenState extends State<CallVideoFullscreen> {
+class _CallVideoFullscreenState extends State<CallVideoFullscreen>
+    with SingleTickerProviderStateMixin {
   bool _controls = true;
+
+  final TransformationController _transform = TransformationController();
+  late final AnimationController _resetAnim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+  Animation<Matrix4>? _resetTween;
+
+  @override
+  void initState() {
+    super.initState();
+    _resetAnim.addListener(() {
+      if (_resetTween != null) _transform.value = _resetTween!.value;
+    });
+    _transform.addListener(() {
+      final zoomed = _transform.value.getMaxScaleOnAxis() > 1.01;
+      if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
+    });
+  }
+
+  bool _zoomed = false;
+
+  @override
+  void dispose() {
+    _resetAnim.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    _resetTween = Matrix4Tween(
+      begin: _transform.value,
+      end: Matrix4.identity(),
+    ).animate(
+      CurvedAnimation(parent: _resetAnim, curve: Curves.easeOutCubic),
+    );
+    _resetAnim.forward(from: 0);
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: Colors.black,
         body: GestureDetector(
           onTap: () => setState(() => _controls = !_controls),
+          onDoubleTap: _resetZoom,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              RTCVideoView(
-                widget.renderer,
-                mirror: widget.mirror,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+              // Щипок — зум 1x..5x, двойной тап — сброс. Пока приближено,
+              // видео двигается пальцем.
+              InteractiveViewer(
+                transformationController: _transform,
+                minScale: 1,
+                maxScale: 5,
+                clipBehavior: Clip.none,
+                child: RTCVideoView(
+                  widget.renderer,
+                  mirror: widget.mirror,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                ),
               ),
               AnimatedOpacity(
                 opacity: _controls ? 1 : 0,
@@ -587,7 +641,8 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen> {
                           IconButton(
                             tooltip: 'Закрыть',
                             onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close_rounded, color: Colors.white),
+                            icon: const Icon(Icons.close_rounded,
+                                color: Colors.white),
                           ),
                           Expanded(
                             child: Padding(
@@ -605,7 +660,17 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 48),
+                          if (_zoomed)
+                            IconButton(
+                              tooltip: 'Сбросить зум',
+                              onPressed: _resetZoom,
+                              icon: const Icon(
+                                Icons.zoom_out_map_rounded,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 48),
                         ],
                       ),
                     ),

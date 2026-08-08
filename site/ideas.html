@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Публичный каталог идей сообщества Love.">
+  <title>Идеи сообщества - Love</title>
+  <link rel="stylesheet" href="community.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><span></span>LOVE</a>
+      <div class="nav-links">
+        <a href="changelog.html">Что нового</a>
+        <a href="support.html">Поддержка</a>
+        <a class="active" href="ideas.html">Идеи</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <header class="page-head">
+      <p class="eyebrow">LOVE COMMUNITY</p>
+      <h1>Идеи сообщества</h1>
+      <p>Предложения, которые прошли проверку команды. Голосовать и отправлять новые идеи можно из Love Hub в приложении.</p>
+    </header>
+
+    <section class="catalog" aria-labelledby="catalog-title">
+      <div class="catalog-toolbar">
+        <div>
+          <h2 id="catalog-title">Каталог</h2>
+          <span id="ideas-count">Загрузка...</span>
+        </div>
+        <div class="controls">
+          <label class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+            <input id="idea-search" type="search" placeholder="Поиск по идеям" autocomplete="off">
+          </label>
+          <select id="idea-sort" aria-label="Сортировка">
+            <option value="score">По рейтингу</option>
+            <option value="new">Сначала новые</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="ideas-status" class="status" role="status">Загружаем идеи...</div>
+      <div id="ideas-grid" class="ideas-grid" hidden></div>
+      <div class="pagination" id="ideas-pagination" hidden>
+        <button id="ideas-prev" type="button" aria-label="Предыдущая страница">Назад</button>
+        <span id="ideas-page"></span>
+        <button id="ideas-next" type="button" aria-label="Следующая страница">Вперёд</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>© 2026 LOVE</span>
+    <div><a href="terms.html">Условия</a><a href="privacy.html">Конфиденциальность</a></div>
+  </footer>
+  <script src="community.js" defer></script>
+</body>
+</html>

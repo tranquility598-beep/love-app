@@ -29,8 +29,16 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Build and Publish
-        run: npm run build:server && npx electron-builder build --publish always
+      - name: Build Artifacts
+        run: npm run build:server && npx electron-builder build --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Verify no secrets in build output
+        run: node ops/check-build-secrets.cjs
+
+      - name: Publish Release
+        run: npx electron-builder build --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false

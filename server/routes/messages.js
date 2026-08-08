@@ -12,6 +12,7 @@ const authMiddleware = require('../middleware/auth');
 const { messageLimiter } = require('../middleware/rateLimiter');
 const { messageAntiSpamMiddleware } = require('../middleware/messageAntiSpam');
 const { validateMessageContent, sanitizeBody } = require('../middleware/validation');
+const { requireCanCommunicate } = require('../services/moderationService');
 
 /**
  * GET /api/messages/search
@@ -97,24 +98,11 @@ router.get('/:channelId', authMiddleware, async (req, res) => {
  */
 // messageAntiSpamMiddleware — per-user-per-channel защита от флуда (10/5s, cooldown 10s).
 // Идёт ПОСЛЕ authMiddleware (нужен req.user) и messageLimiter (общий IP-limit).
-router.post('/:channelId', authMiddleware, messageLimiter, messageAntiSpamMiddleware, sanitizeBody, validateMessageContent, async (req, res) => {
+router.post('/:channelId', authMiddleware, requireCanCommunicate, messageLimiter, messageAntiSpamMiddleware, sanitizeBody, validateMessageContent, async (req, res) => {
   try {
     const { channelId } = req.params;
     const { content, replyTo } = req.body;
 
-    if (req.user.isMuted) {
-      if (req.user.muteUntil && req.user.muteUntil < Date.now()) {
-        req.user.isMuted = false;
-        req.user.muteUntil = null;
-        await req.user.save();
-      } else {
-        const timeStr = req.user.muteUntil 
-          ? ` до ${req.user.muteUntil.toLocaleTimeString()}`
-          : ' бессрочно';
-        return res.status(403).json({ message: `Вы временно лишены права отправлять сообщения${timeStr}` });
-      }
-    }
-    
     if (!content && (!req.files || Object.keys(req.files).length === 0)) {
       return res.status(400).json({ message: 'Сообщение не может быть пустым' });
     }
@@ -169,7 +157,7 @@ router.post('/:channelId', authMiddleware, messageLimiter, messageAntiSpamMiddle
  * PUT /api/messages/:id
  * Редактировать сообщение
  */
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const { content } = req.body;
     
@@ -245,7 +233,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
  * POST /api/messages/:id/react
  * Добавить/убрать реакцию на сообщение
  */
-router.post('/:id/react', authMiddleware, async (req, res) => {
+router.post('/:id/react', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const { emoji } = req.body;
     

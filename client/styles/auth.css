@@ -21,6 +21,14 @@
   visibility: hidden;
   pointer-events: none;
 }
+.auth-screen.auth-screen--restricted {
+  align-items: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.auth-screen.auth-screen--restricted .auth-card {
+  margin: max(24px, env(safe-area-inset-top)) auto max(24px, env(safe-area-inset-bottom));
+}
 
 /* ───────────── Анимированный фон ───────────── */
 .auth-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
@@ -178,6 +186,34 @@
 .auth-forms { position: relative; }
 .auth-form { display: none; flex-direction: column; gap: 15px; }
 .auth-form.active { display: flex; animation: authFormIn 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+.auth-restricted-form { gap: 13px; }
+.auth-restriction-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 3px;
+  border: 1px solid rgba(239,108,108,.3);
+  border-radius: 50%;
+  color: #ef6c6c;
+  background: rgba(239,108,108,.08);
+}
+.auth-restriction-icon svg { width: 25px; height: 25px; }
+.auth-restriction-reason {
+  padding: 11px 13px;
+  border: 1px solid rgba(239,108,108,.2);
+  border-radius: 8px;
+  background: rgba(239,108,108,.05);
+}
+.auth-restriction-reason span {
+  display: block;
+  margin-bottom: 4px;
+  color: #ef8a8a;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.auth-restriction-reason p { margin: 0; color: rgba(255,255,255,.82); font-size: 13px; line-height: 1.45; }
+.auth-restriction-text { min-height: 104px; resize: vertical; padding: 12px 14px; line-height: 1.45; }
 @keyframes authFormIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }

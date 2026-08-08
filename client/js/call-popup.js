@@ -79,7 +79,9 @@ function getAvatarUrl(avatar) {
   
   // Определяем базовый URL сервера динамически
   let isPackaged = false;
-  if (window.electronAPI && window.electronAPI.isPackagedSync) {
+  if (window.electronAPI && window.electronAPI.getBackendModeSync) {
+    isPackaged = window.electronAPI.getBackendModeSync()?.production === true;
+  } else if (window.electronAPI && window.electronAPI.isPackagedSync) {
     isPackaged = window.electronAPI.isPackagedSync();
   }
   

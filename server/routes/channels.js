@@ -8,6 +8,7 @@ const router = express.Router();
 const Channel = require('../models/Channel');
 const Server = require('../models/Server');
 const authMiddleware = require('../middleware/auth');
+const { requireCanCommunicate } = require('../services/moderationService');
 const { validateChannelName, sanitizeBody } = require('../middleware/validation');
 const { canManageServerChannels } = require('../utils/serverPermissions');
 
@@ -15,7 +16,7 @@ const { canManageServerChannels } = require('../utils/serverPermissions');
  * POST /api/channels
  * Создать новый канал
  */
-router.post('/', authMiddleware, sanitizeBody, validateChannelName, async (req, res) => {
+router.post('/', authMiddleware, requireCanCommunicate, sanitizeBody, validateChannelName, async (req, res) => {
   try {
     const { name, type, serverId, topic, category } = req.body;
     

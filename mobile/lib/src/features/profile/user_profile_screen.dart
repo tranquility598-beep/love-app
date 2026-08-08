@@ -6,6 +6,7 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/profile_music_player.dart';
+import '../../widgets/staff_role_badge.dart';
 import '../chat/chat_models.dart';
 import '../chat/chat_screen.dart';
 import '../shell/screen_frame.dart';
@@ -247,6 +248,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             color: LoveColors.textMuted,
           ),
         ),
+        if (staffRoleLabel(asText(user['role'], asText(user['staffRank'])))
+            .isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Center(
+            child: StaffRoleLabel(
+              role: asText(user['role'], asText(user['staffRank'])),
+            ),
+          ),
+        ],
         if (status.isNotEmpty) ...[
           const SizedBox(height: 14),
           Center(
@@ -283,8 +293,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             color: Colors.black,
                           ),
                         )
-                      : const Icon(Icons.chat_bubble_outline_rounded,
-                          size: 18),
+                      : const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                   label: const Text('Написать'),
                 ),
               ),
@@ -337,7 +346,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           ),
-        if (musicUrl.isNotEmpty || musicTitle.isNotEmpty || listening.isNotEmpty)
+        if (musicUrl.isNotEmpty ||
+            musicTitle.isNotEmpty ||
+            listening.isNotEmpty)
           _Section(
             label: 'Сейчас слушает',
             child: musicUrl.isEmpty

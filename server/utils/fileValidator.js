@@ -148,7 +148,7 @@ function isAllowedMimeType(mimetype, isImage) {
 /**
  * Полная валидация файла
  */
-async function validateFile(file, isImage = false, fileCategory = 'document') {
+async function validateFile(file, isImage = false, fileCategory = 'document', options = {}) {
   const errors = [];
 
   if (!file || (!file.data && !file.tempFilePath)) {
@@ -198,6 +198,9 @@ async function validateFile(file, isImage = false, fileCategory = 'document') {
   if (fileCategory === 'image') maxSize = MAX_IMAGE_SIZE;
   else if (fileCategory === 'audio') maxSize = MAX_AUDIO_SIZE;
   else if (fileCategory === 'video') maxSize = MAX_VIDEO_SIZE;
+
+  const customMaxSize = Number(options.maxSize);
+  if (Number.isFinite(customMaxSize) && customMaxSize > 0) maxSize = customMaxSize;
 
   if (file.size > maxSize) {
     const maxSizeMB = maxSize / (1024 * 1024);

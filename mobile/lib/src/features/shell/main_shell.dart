@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/network/love_api.dart';
 import '../../core/notifications/in_app_notifications.dart';
 import '../../core/notifications/local_notifications.dart';
 import '../../core/realtime/love_socket.dart';
+import '../../core/realtime/app_events.dart';
+import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/fade_indexed_stack.dart';
 import '../../widgets/love_background.dart';
@@ -14,12 +18,14 @@ import '../../core/voice/channel_voice_controller.dart';
 import '../../widgets/call_pill.dart';
 import '../../widgets/love_nav_icons.dart';
 import '../chat/chat_models.dart';
+import '../auth/auth_repository.dart';
 import '../chat/chat_screen.dart';
 import '../friends/friends_screen.dart';
 import '../home/conversations_screen.dart';
 import '../more/more_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../servers/servers_screen.dart';
+import '../support/support_center_screen.dart';
 
 /// Height of the bottom bar chrome (excluding the safe-area inset).
 const double kBottomNavHeight = 60;
@@ -34,6 +40,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final _api = LoveApi();
   final _socket = LoveSocket();
+  final _events = AppEvents.instance;
 
   int _index = 0;
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
@@ -82,6 +89,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _socket.off('friend:request_received', _onFriendRequest);
     _socket.off('friend:request_accepted', _onFriendAccepted);
     _socket.off('admin:announcement', _onAnnouncement);
+    _socket.off('notification:new', _onNotificationNew);
+    _socket.off('support:updated', _onSupportUpdated);
+    _socket.off('moderation:updated', _onModerationUpdated);
+    _socket.off('moderation:restricted', _onModerationRestricted);
+    _socket.off('community:devlog:update', _onDevLogUpdated);
     _socket.disconnect();
     super.dispose();
   }
@@ -94,6 +106,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (mounted) setState(() => _index = 2);
       case 'notifications':
         if (mounted) setState(() => _index = 3);
+      default:
+        if (payload != null && payload.startsWith('case:')) {
+          _openSupport(payload.substring(5));
+        }
     }
   }
 
@@ -139,6 +155,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _socket.on('friend:request_received', _onFriendRequest);
     _socket.on('friend:request_accepted', _onFriendAccepted);
     _socket.on('admin:announcement', _onAnnouncement);
+    _socket.on('notification:new', _onNotificationNew);
+    _socket.on('support:updated', _onSupportUpdated);
+    _socket.on('moderation:updated', _onModerationUpdated);
+    _socket.on('moderation:restricted', _onModerationRestricted);
+    _socket.on('community:devlog:update', _onDevLogUpdated);
   }
 
   Map<String, dynamic> _map(Object? value) =>
@@ -222,6 +243,75 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     );
   }
 
+  void _onNotificationNew(dynamic data) {
+    final payload = _map(data);
+    if (payload.isEmpty) return;
+    _events.addNotification(payload);
+    final caseId = asId(payload['caseId']);
+    if (caseId.isNotEmpty) return;
+    final preview = asText(payload['preview'], 'Новое уведомление');
+    _deliver(
+      title: asText(payload['actorName'], 'Love'),
+      body: preview,
+      icon: Icons.notifications_none_rounded,
+      payload: 'notifications',
+      onTap: () => setState(() => _index = 3),
+    );
+  }
+
+  void _onSupportUpdated(dynamic data) {
+    final payload = _map(data);
+    final caseId = asId(payload['caseId']);
+    _events.supportChanged(caseId: caseId, payload: payload);
+    if (caseId.isEmpty || _events.activeCaseId == caseId) return;
+    final title = asText(payload['title'], 'Ответ от команды Love');
+    final preview =
+        asText(payload['preview'], 'В обращении появилось новое сообщение');
+    _deliver(
+      title: 'Вам ответил сотрудник Love',
+      body: '$title · $preview',
+      icon: Icons.support_agent_rounded,
+      payload: 'case:$caseId',
+      onTap: () => _openSupport(caseId),
+    );
+  }
+
+  void _onModerationUpdated(dynamic data) {
+    _events.moderationChanged();
+    final payload = _map(data);
+    final type = asText(payload['type']);
+    if (type == 'ban' || type == 'deactivate' || asBool(payload['revoked'])) {
+      unawaited(AppSessionScope.of(context).refreshRestriction());
+    }
+  }
+
+  void _onModerationRestricted(dynamic data) {
+    final payload = _map(data);
+    if (payload.isEmpty) return;
+    AppSessionScope.of(context).applyRestriction(
+      AccountRestriction.fromJson(payload),
+    );
+    _events.moderationChanged();
+  }
+
+  void _onDevLogUpdated(dynamic data) {
+    _events.devLogChanged(_map(data));
+  }
+
+  void _openSupport(String caseId) {
+    final navigator = InAppNotifications.navigatorKey.currentState;
+    if (navigator == null) return;
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => SupportCenterScreen(
+          api: _api,
+          events: _events,
+          initialCaseId: caseId.isEmpty ? null : caseId,
+        ),
+      ),
+    );
+  }
+
   void _openDm({
     required String conversationId,
     required String channelId,
@@ -250,7 +340,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ConversationsScreen(api: _api, socket: _socket),
       ServersScreen(api: _api, socket: _socket),
       FriendsScreen(api: _api, socket: _socket),
-      NotificationsScreen(api: _api),
+      NotificationsScreen(
+        api: _api,
+        events: _events,
+        onOpenCase: _openSupport,
+      ),
       const MoreScreen(),
     ];
 
@@ -302,7 +396,8 @@ class _BottomLoveNav extends StatelessWidget {
       height: kBottomNavHeight + bottomInset,
       padding: EdgeInsets.only(bottom: bottomInset, left: 16, right: 16),
       decoration: const BoxDecoration(
-        color: LoveColors.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
+        color:
+            LoveColors.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
         border: Border(
           top: BorderSide(color: Color(0x14FFFFFF)), // rgba(255,255,255,0.08)
         ),

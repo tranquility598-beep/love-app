@@ -11,6 +11,7 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
+import '../../widgets/staff_role_badge.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/notifications/local_notifications.dart';
 import '../../core/calls/call_center.dart';
@@ -21,6 +22,7 @@ import '../calls/call_screen.dart';
 import '../calls/call_session.dart';
 import 'invite_card.dart';
 import 'message_media.dart';
+import 'message_report_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -306,11 +308,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void _openCall({bool video = false}) {
     final call = _callController;
     if (call == null) return;
-    if (call.canStart) {
-      call.startOutgoing();
+    final starting = call.canStart;
+    if (starting) {
+      call.startOutgoing(video: video);
     }
     CallScreen.open(context, DmCallSession(call));
-    if (video && !call.cameraOn && !call.screenSharing) {
+    if (video && !starting && !call.cameraOn && !call.screenSharing) {
       call.toggleCamera();
     }
   }
@@ -415,9 +418,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   label: 'Копировать текст',
                   onTap: () => Navigator.of(context).pop('copy'),
                 ),
-              if (message.isOwn &&
-                  !isTemp &&
-                  message.content.trim().isNotEmpty)
+              if (message.isOwn && !isTemp && message.content.trim().isNotEmpty)
                 _MessageActionTile(
                   icon: Icons.edit_rounded,
                   label: 'Редактировать',
@@ -429,6 +430,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   label: 'Удалить',
                   danger: true,
                   onTap: () => Navigator.of(context).pop('delete'),
+                ),
+              if (!message.isOwn && !isTemp)
+                _MessageActionTile(
+                  icon: Icons.flag_outlined,
+                  label: 'Пожаловаться',
+                  danger: true,
+                  onTap: () => Navigator.of(context).pop('report'),
                 ),
             ],
           ),
@@ -456,6 +464,13 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       case 'delete':
         await _deleteMessage(message);
+      case 'report':
+        final sent = await MessageReportFlow.open(
+          context,
+          api: widget.api,
+          message: message,
+        );
+        if (sent == true) _showSnack('Жалоба отправлена команде модерации');
     }
   }
 
@@ -782,7 +797,7 @@ class _ChatScreenState extends State<ChatScreen> {
       '😴',
       '🥰',
     ];
-    final emoji = await showModalBottomSheet (
+    final emoji = await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => SafeArea(
@@ -823,7 +838,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final end = selection.isValid ? selection.end : text.length;
     _message.value = TextEditingValue(
       text: text.replaceRange(start, end, emoji),
-      selection: TextSelection.collapsed(offset: (start + emoji.length).toInt()),
+      selection:
+          TextSelection.collapsed(offset: (start + emoji.length).toInt()),
     );
   }
 
@@ -1135,18 +1151,15 @@ class _MessageBubbleState extends State<_MessageBubble> {
           vertical: compact ? 5 : 7,
         ),
         decoration: BoxDecoration(
-          color: message.isOwn
-              ? LoveColors.bubbleOwn
-              : LoveColors.bubblePartner,
+          color:
+              message.isOwn ? LoveColors.bubbleOwn : LoveColors.bubblePartner,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(message.isOwn ? 16 : 5),
             bottomRight: Radius.circular(message.isOwn ? 5 : 16),
           ),
-          border: message.isOwn
-              ? null
-              : Border.all(color: LoveColors.border),
+          border: message.isOwn ? null : Border.all(color: LoveColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1190,9 +1203,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: message.isOwn
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            message.isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!message.isOwn) ...[
             if (widget.grouped)
@@ -1215,18 +1227,30 @@ class _MessageBubbleState extends State<_MessageBubble> {
                   : CrossAxisAlignment.start,
               children: [
                 if (!message.isOwn && !widget.grouped)
-                  GestureDetector(
-                    onTap: widget.onAuthorTap,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 6, bottom: 3),
-                      child: Text(
-                        message.authorName,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: LoveColors.textMuted,
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, bottom: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: GestureDetector(
+                            onTap: widget.onAuthorTap,
+                            child: Text(
+                              message.authorName,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: LoveColors.textMuted,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (staffRoleLabel(message.authorRole).isNotEmpty) ...[
+                          const SizedBox(width: 5),
+                          StaffRoleIcon(role: message.authorRole, size: 25),
+                        ],
+                      ],
                     ),
                   ),
                 bubble,
@@ -1373,8 +1397,7 @@ class _ExpandableMessageText extends StatefulWidget {
   static const collapseLines = 7;
 
   @override
-  State<_ExpandableMessageText> createState() =>
-      _ExpandableMessageTextState();
+  State<_ExpandableMessageText> createState() => _ExpandableMessageTextState();
 }
 
 class _ExpandableMessageTextState extends State<_ExpandableMessageText> {
@@ -1621,9 +1644,7 @@ class _Composer extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Icon(
-                            editing
-                                ? Icons.check_rounded
-                                : Icons.send_rounded,
+                            editing ? Icons.check_rounded : Icons.send_rounded,
                             size: 20,
                           ),
                   ),

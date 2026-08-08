@@ -198,6 +198,7 @@ const sendEmail = async (to, subject, html) => {
 };
 
 module.exports = {
+  escapeHtml,
   generateOTP,
   sendEmail,
   sendOTPEmail: async (email, code, type = 'verification') => {

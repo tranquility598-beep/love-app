@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="styles/fonts.css">
     <link rel="stylesheet" href="styles/titlebar.css">
     <link rel="stylesheet" href="styles/style.css">
+    <link rel="stylesheet" href="styles/calls.css">
     <link rel="stylesheet" href="styles/settings.css">
     <link rel="stylesheet" href="styles/auth.css">
     <link rel="stylesheet" href="styles/perf-android.css">
@@ -177,12 +178,12 @@
               <p class="auth-form-note" id="otp-subtitle">Мы отправили код на вашу почту</p>
             </div>
             <div class="otp-input-container">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" name="otp-1" aria-label="Первая цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code">
+              <input class="otp-digit" name="otp-2" aria-label="Вторая цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" name="otp-3" aria-label="Третья цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" name="otp-4" aria-label="Четвёртая цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" name="otp-5" aria-label="Пятая цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="otp-digit" name="otp-6" aria-label="Шестая цифра кода" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
             </div>
             <span class="auth-message auth-message--error hidden" id="otp-error"></span>
             <button type="submit" class="auth-submit" id="otp-submit" disabled>Подтвердить</button>
@@ -218,12 +219,12 @@
               <p class="auth-form-note" id="reset-subtitle">Введите код из письма и новый пароль</p>
             </div>
             <div class="otp-input-container">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
-              <input class="reset-otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" name="reset-otp-1" aria-label="Первая цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code">
+              <input class="reset-otp-digit" name="reset-otp-2" aria-label="Вторая цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" name="reset-otp-3" aria-label="Третья цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" name="reset-otp-4" aria-label="Четвёртая цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" name="reset-otp-5" aria-label="Пятая цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
+              <input class="reset-otp-digit" name="reset-otp-6" aria-label="Шестая цифра кода восстановления" type="text" inputmode="numeric" maxlength="1" autocomplete="off">
             </div>
             <div class="auth-field">
               <label class="auth-label" for="reset-password">Новый пароль</label>
@@ -812,6 +813,11 @@
                                 <div class="room-header-subtitle">Голосовая связь сервера</div>
                             </div>
                         </div>
+                        <div class="voice-header-actions">
+                            <button type="button" class="voice-stage-collapse" id="voice-stage-collapse" title="Свернуть звонок" aria-label="Свернуть звонок">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/></svg>
+                            </button>
+                        </div>
                     </header>
 
                     <div class="voice-channel-panel" id="voice-channel-container">
@@ -983,7 +989,6 @@
                         <button class="hub-btn hub-btn-primary" id="hub-devlog-btn">Dev Log</button>
                         <button class="hub-btn hub-btn-ghost" id="hub-view-updates-btn">История обновлений</button>
                         <button class="hub-btn hub-btn-ghost" id="hub-view-ideas-btn">Все идеи</button>
-                        <button class="hub-btn hub-btn-ghost admin-only hidden" id="hub-view-bugs-btn">Все баги</button>
                         <button class="hub-btn hub-btn-primary admin-only hidden" id="hub-add-update-btn">Написать обновление</button>
                         <button class="hub-btn hub-btn-ghost" id="hub-suggest-btn">Предложить идею</button>
                         <button class="hub-btn hub-btn-ghost" id="hub-report-bug-btn">Сообщить об ошибке</button>
@@ -1112,16 +1117,18 @@
             <main class="notifications-unified-panel">
                 <div class="unified-glass-card">
                     <header class="notifications-unified-header">
-                        <h1 class="friends-title">Уведомления</h1>
+                        <div class="notifications-heading-group">
+                            <h1 class="friends-title">Уведомления</h1>
+                            <div class="notif-filter-nav" role="tablist" aria-label="Тип уведомлений">
+                                <button class="filter-tab active" type="button" role="tab" aria-selected="true" data-notif-tab="normal">Обычные</button>
+                                <button class="filter-tab" type="button" role="tab" aria-selected="false" data-notif-tab="system">Системные</button>
+                            </div>
+                        </div>
                         <div class="notif-actions-top">
                             <button class="notif-action-text-btn" id="mark-all-read-notifs">Прочитать<br>все</button>
                             <button class="notif-action-text-btn" id="clear-all-notifs">Очистить<br>все</button>
                         </div>
                     </header>
-                    <div class="friends-filter-nav notif-filter-nav">
-                        <button class="filter-tab active" data-notif-tab="normal">Обычные</button>
-                        <button class="filter-tab" data-notif-tab="system">Системные</button>
-                    </div>
                     <div class="notifications-feed-list" id="notif-feed-container">
                         <!-- Заполняется динамически -->
                                                                 </div>
@@ -1159,6 +1166,12 @@
             <button class="settings-nav-item" data-settings-section="settings-privacy">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               <span>Конфиденциальность</span>
+            </button>
+
+            <div class="settings-nav-group">Помощь</div>
+            <button class="settings-nav-item" data-settings-section="settings-support">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+              <span>Помощь и нарушения</span>
             </button>
 
             <div class="settings-nav-group">Приложение</div>
@@ -1378,7 +1391,7 @@
                 <div class="lvs-section-subtitle">Видимость</div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Статус «в сети»</div><div class="lvs-row-sub">Показывать, когда вы онлайн</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="show-online-status" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Кто видит профиль</div></div>
@@ -1387,7 +1400,7 @@
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Показывать активность</div><div class="lvs-row-sub">Что вы слушаете и во что играете</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="show-activity" checked><span class="lvs-toggle-track"></span></label>
                 </div>
               </div>
 
@@ -1441,15 +1454,15 @@
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Компактный режим</div><div class="lvs-row-sub">Плотнее размещать сообщения</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" data-setting-key="compact-mode"><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="compact-mode" data-setting-key="compact-mode"><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Анимации</div><div class="lvs-row-sub">Плавные переходы интерфейса</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" data-setting-key="animations" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="animations" data-setting-key="animations" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Эффекты прозрачности</div><div class="lvs-row-sub">Размытие и стекло</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="transparency-effects" checked><span class="lvs-toggle-track"></span></label>
                 </div>
               </div>
             </section>
@@ -1474,27 +1487,27 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Уведомления на рабочем столе</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="desktop-notifications" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Push на телефон</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="push-notifications" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Сообщения</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="message-notifications" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Упоминания</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="mention-notifications" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Обновления приложения</div></div>
-                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="app-update-notifications"><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Love Hub</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="hub-notifications" checked><span class="lvs-toggle-track"></span></label>
                 </div>
               </div>
             </section>
@@ -1546,15 +1559,15 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Шумоподавление</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="noise-suppression" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Эхоподавление</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="echo-cancellation" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Активация по голосу</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="voice-activation" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Push-to-Talk</div><div class="lvs-row-sub">Говорить при зажатой клавише</div></div>
@@ -1573,25 +1586,83 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Анонсы</div><div class="lvs-row-sub">Новости и важные объявления</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="announcement-updates" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Dev Log</div><div class="lvs-row-sub">Заметки разработки</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="devlog-updates" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Идеи</div><div class="lvs-row-sub">Предложения сообщества</div></div>
-                  <label class="lvs-toggle"><input type="checkbox"><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="idea-updates"><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Обратная связь</div><div class="lvs-row-sub">Ответы на ваши отзывы</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="feedback-updates" checked><span class="lvs-toggle-track"></span></label>
                 </div>
               </div>
 
               <div class="lvs-info-banner">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                 <span>Вы подписаны на <b>3 из 4</b> каналов Love Hub.</span>
+              </div>
+            </section>
+
+            <!-- ━━━━━━━━━ ПОМОЩЬ И НАРУШЕНИЯ ━━━━━━━━━ -->
+            <section class="settings-section" id="settings-support">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title">Помощь и нарушения</h1>
+                <p class="lvs-section-desc">Обращения в команду Love, ответы поддержки и состояние аккаунта</p>
+              </header>
+
+              <div class="support-reputation-card" id="support-reputation-card">
+                <div class="support-reputation-copy">
+                  <span class="support-kicker">Состояние аккаунта</span>
+                  <strong id="support-reputation-label">Загрузка...</strong>
+                  <p id="support-reputation-summary">Проверяем предупреждения и ограничения.</p>
+                </div>
+                <div class="support-trust-score"><strong id="support-trust-score">—</strong><span>из 100</span></div>
+              </div>
+
+              <div class="support-center-tabs" role="tablist" aria-label="Помощь и нарушения">
+                <button type="button" class="active" data-support-tab="cases">Обращения <span id="support-cases-count">0</span></button>
+                <button type="button" data-support-tab="violations">Нарушения <span id="support-warnings-count">0</span></button>
+              </div>
+
+              <div class="support-pane active" data-support-pane="cases">
+                <div class="support-pane-head"><div><h2>Ваши обращения</h2><p>Переписка с командой остаётся доступна даже при ограничении аккаунта.</p></div><button type="button" class="lvs-btn" id="support-new-case-btn">Новое обращение</button></div>
+                <form class="support-new-case hidden" id="support-new-case-form">
+                  <label><span>Тема</span><input id="support-case-title" name="support-case-title" maxlength="160" required placeholder="Кратко опишите вопрос"></label>
+                  <label><span>Описание</span><textarea id="support-case-description" name="support-case-description" maxlength="10000" rows="5" required placeholder="Расскажите, что произошло и чем команда может помочь"></textarea></label>
+                  <label><span>Приоритет</span><select id="support-case-priority" name="support-case-priority">
+                    <option value="low">Низкий — вопрос не мешает работе</option>
+                    <option value="normal" selected>Обычный — нужна помощь</option>
+                    <option value="high">Высокий — важная функция недоступна</option>
+                    <option value="critical">Критический — безопасность или потеря доступа</option>
+                  </select></label>
+                  <p class="support-priority-note">Выбирайте срочность честно. Заведомо ложный высокий приоритет сотрудник может расценить как злоупотребление и выдать предупреждение.</p>
+                  <div><button type="button" class="lvs-btn support-secondary-btn" id="support-new-case-cancel">Отмена</button><button type="submit" class="lvs-btn">Отправить</button></div>
+                </form>
+                <div class="support-case-workspace">
+                  <div class="support-case-list" id="support-case-list"><div class="support-loading">Загружаем обращения...</div></div>
+                  <article class="support-case-thread" id="support-case-thread"><div class="support-thread-empty">Выберите обращение, чтобы открыть переписку.</div></article>
+                </div>
+              </div>
+
+              <div class="support-pane" data-support-pane="violations">
+                <div class="warning-progress-card">
+                  <div><span>Активные предупреждения</span><strong><b id="support-warning-current">0</b> / 7</strong></div>
+                  <div class="warning-progress-track"><span id="support-warning-progress"></span><i style="left:42.86%"></i><i style="left:71.43%"></i><i style="left:100%"></i></div>
+                  <div class="warning-thresholds" id="support-warning-thresholds"></div>
+                </div>
+                <div class="support-active-restriction hidden" id="support-active-restriction"></div>
+                <div class="support-violation-list" id="support-violation-list"><div class="support-loading">Загружаем историю...</div></div>
+                <form class="support-appeal-form hidden" id="support-appeal-form">
+                  <input type="hidden" id="support-appeal-action" name="support-appeal-action">
+                  <div><strong>Апелляция</strong><button type="button" id="support-appeal-cancel" aria-label="Закрыть">×</button></div>
+                  <textarea id="support-appeal-description" name="support-appeal-description" rows="5" maxlength="10000" placeholder="Объясните, почему наказание нужно пересмотреть" required></textarea>
+                  <button type="submit" class="lvs-btn">Отправить апелляцию</button>
+                </form>
               </div>
             </section>
 
@@ -1783,9 +1854,8 @@
                             <div class="call-avatar large pulsing" id="call-video-avatar-remote">М</div>
                             <span class="video-label">Камера собеседника выключена</span>
                         </div>
-                        <div class="mock-stream-canvas remote-feed hidden" id="call-remote-feed">
-                            <div class="starlight-stream-effect"></div>
-                        </div>
+                        <video class="call-live-video remote-feed hidden" id="call-remote-feed" autoplay playsinline muted></video>
+                        <span class="call-media-kind" id="call-remote-media-kind"></span>
                     </div>
                     <!-- Local Video Stream -->
                     <div class="video-stream-box local-video">
@@ -1801,9 +1871,8 @@
                             <div class="call-avatar small" id="call-video-avatar-local">F</div>
                             <span class="video-label">Ваша камера</span>
                         </div>
-                        <div class="mock-stream-canvas local-feed hidden" id="call-local-feed">
-                            <div class="starlight-stream-effect local"></div>
-                        </div>
+                        <video class="call-live-video local-feed hidden" id="call-local-feed" autoplay playsinline muted></video>
+                        <span class="call-media-kind" id="call-local-media-kind"></span>
                     </div>
                 </div>
 
@@ -2027,6 +2096,7 @@
                     <h2 class="profile-name" id="profile-name-display"></h2>
                 </div>
                 <span class="profile-username" id="profile-username-display"></span>
+                <span class="profile-staff-rank hidden" id="profile-staff-rank"></span>
                 
                 <div class="profile-divider">
                     <span class="divider-heart">
@@ -2317,6 +2387,7 @@
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="js/socket.js"></script>
     <script src="js/voice.js"></script>
+    <script src="js/call-stage.js"></script>
     <script src="js/screenshare.js"></script>
     <script src="js/sound-manager.js"></script>
     <script src="js/settings.js"></script>
@@ -2590,6 +2661,7 @@
     <script src="js/new/settings-ui.js"></script>
     <script src="js/new/script.js"></script>
     <script src="js/new/init-app.js"></script>
+    <script src="js/new/message-reports.js"></script>
     <script src="js/new/desktop-message-actions.js"></script>
     <script src="js/new/updates.js"></script>
     <script src="js/new/space-settings.js"></script>

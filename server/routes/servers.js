@@ -9,6 +9,7 @@ const Server = require('../models/Server');
 const Channel = require('../models/Channel');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+const { requireCanCommunicate } = require('../services/moderationService');
 const { validateServerName, sanitizeBody } = require('../middleware/validation');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -98,7 +99,7 @@ router.get('/', authMiddleware, async (req, res) => {
  * POST /api/servers
  * Создать новый сервер
  */
-router.post('/', authMiddleware, sanitizeBody, validateServerName, async (req, res) => {
+router.post('/', authMiddleware, requireCanCommunicate, sanitizeBody, validateServerName, async (req, res) => {
   try {
     const { name, description } = req.body;
     
@@ -282,7 +283,7 @@ router.get('/rooms', authMiddleware, async (req, res) => {
  * POST /api/servers/rooms
  * Создать комнату: 1 text channel + 1 voice channel, без категорий.
  */
-router.post('/rooms', authMiddleware, sanitizeBody, validateServerName, async (req, res) => {
+router.post('/rooms', authMiddleware, requireCanCommunicate, sanitizeBody, validateServerName, async (req, res) => {
   // Создаваемые каналы трекаем во внешней области, чтобы при любом
   // последующем сбое (room.save / User.findByIdAndUpdate / populate)
   // удалить их и не оставить orphan-документы.
@@ -575,7 +576,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
  * POST /api/servers/:id/invite
  * Создать инвайт-ссылку
  */
-router.post('/:id/invite', authMiddleware, async (req, res) => {
+router.post('/:id/invite', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const server = await Server.findById(req.params.id);
     
@@ -616,7 +617,7 @@ router.post('/:id/invite', authMiddleware, async (req, res) => {
  * POST /api/servers/join/:code
  * Присоединиться к серверу по инвайт-коду
  */
-router.post('/join/:code', authMiddleware, async (req, res) => {
+router.post('/join/:code', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const { code } = req.params;
     

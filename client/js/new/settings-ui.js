@@ -24,6 +24,7 @@
     initVersions(shell);
     initAdvanced(shell);
     initAccount(shell);
+    initSupportCenter(shell);
     initPrefsPersistence(shell);
     initDirtyTracking(shell);
   }
@@ -65,6 +66,315 @@
     if (backBtn) {
       backBtn.addEventListener('click', () => shell.classList.remove('section-open'));
     }
+  }
+
+  /* ───────────────  Помощь, обращения и нарушения  ─────────────── */
+
+  function initSupportCenter(shell) {
+    const section = shell.querySelector('#settings-support');
+    if (!section || typeof window.CasesAPI === 'undefined') return;
+
+    const safe = value => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const formatDate = value => value
+      ? new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : '—';
+    const statusLabels = {
+      new: 'Новое', triaged: 'Принято', in_progress: 'В работе', waiting_user: 'Ждёт ответа',
+      resolved: 'Решено', rejected: 'Отклонено', archived: 'Архив'
+    };
+    const kindLabels = { support: 'Поддержка', appeal: 'Апелляция', report: 'Жалоба', bug: 'Баг', idea: 'Идея' };
+    const actionLabels = { warning: 'Предупреждение', mute: 'Мут', ban: 'Блокировка', deactivate: 'Деактивация' };
+    let cases = [];
+    let selectedCaseId = null;
+    let statusData = null;
+    let loading = false;
+
+    const list = section.querySelector('#support-case-list');
+    const thread = section.querySelector('#support-case-thread');
+    const newForm = section.querySelector('#support-new-case-form');
+    const appealForm = section.querySelector('#support-appeal-form');
+
+    function supportNoteMarkup(note, forceOwn = null) {
+      const own = forceOwn == null
+        ? String(note.author?._id || note.author) === String(window.currentUser?._id)
+        : Boolean(forceOwn);
+      const author = own ? 'Вы' : (note.author?.nickname || note.author?.username || 'Love Support');
+      return `<article class="${own ? 'own' : 'staff'}" data-note-id="${safe(note._id)}"><div><strong>${safe(author)}</strong><time>${safe(formatDate(note.createdAt))}</time></div><p>${safe(note.body)}</p></article>`;
+    }
+
+    function appendSupportNote(note, forceOwn = null) {
+      const messages = thread.querySelector('.support-thread-messages');
+      if (!messages || !note?._id || messages.querySelector(`[data-note-id="${String(note._id).replace(/"/g, '\\"')}"]`)) return;
+      messages.querySelector('.support-thread-empty')?.remove();
+      messages.insertAdjacentHTML('beforeend', supportNoteMarkup(note, forceOwn));
+      messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+    }
+
+    function touchCase(caseId, changes = {}) {
+      const item = cases.find(entry => String(entry._id) === String(caseId));
+      if (!item) return null;
+      Object.assign(item, changes);
+      renderCaseList();
+      return item;
+    }
+
+    function remainingLabel(action) {
+      if (action.permanent || !action.expiresAt) return 'Бессрочно';
+      const milliseconds = new Date(action.expiresAt).getTime() - Date.now();
+      if (milliseconds <= 0) return 'Завершено';
+      const hours = Math.ceil(milliseconds / 3600000);
+      if (hours < 24) return `Осталось ${hours} ч.`;
+      return `Осталось ${Math.ceil(hours / 24)} дн.`;
+    }
+
+    function renderCaseList() {
+      section.querySelector('#support-cases-count').textContent = cases.length;
+      if (!cases.length) {
+        list.innerHTML = '<div class="support-thread-empty"><strong>Обращений пока нет</strong><span>Создайте обращение, и переписка с командой появится здесь.</span></div>';
+        thread.innerHTML = '<div class="support-thread-empty">Выберите обращение, чтобы открыть переписку.</div>';
+        return;
+      }
+      list.innerHTML = cases.map(item => `
+        <button type="button" class="support-case-item ${String(item._id) === String(selectedCaseId) ? 'active' : ''}" data-case-id="${safe(item._id)}">
+          <span><b>${safe(kindLabels[item.kind] || item.kind)}</b><i>${safe(statusLabels[item.status] || item.status)}</i></span>
+          <strong>${safe(item.title)}</strong>
+          ${item._hasLiveReply ? '<em class="support-case-live-reply">Новый ответ</em>' : ''}
+          <small>${safe(item.number)} · ${safe(formatDate(item.updatedAt || item.createdAt))}</small>
+        </button>`).join('');
+      list.querySelectorAll('[data-case-id]').forEach(button => {
+        button.addEventListener('click', () => openCase(button.dataset.caseId));
+      });
+    }
+
+    async function openCase(id) {
+      selectedCaseId = id;
+      const selectedItem = cases.find(item => String(item._id) === String(id));
+      if (selectedItem) selectedItem._hasLiveReply = false;
+      window._markCaseNotificationsRead?.(id);
+      renderCaseList();
+      thread.innerHTML = '<div class="support-loading">Открываем переписку...</div>';
+      try {
+        const result = await window.CasesAPI.get(id);
+        const item = result.case || result;
+        const closed = ['resolved', 'rejected', 'archived'].includes(item.status);
+        const notes = item.notes || [];
+        thread.innerHTML = `
+          <header><div><span>${safe(item.number)} · ${safe(kindLabels[item.kind] || item.kind)}</span><h3>${safe(item.title)}</h3></div><i>${safe(statusLabels[item.status] || item.status)}</i></header>
+          <p class="support-case-description">${safe(item.description)}</p>
+          <div class="support-thread-messages">
+            ${notes.length ? notes.map(note => supportNoteMarkup(note)).join('') : '<div class="support-thread-empty">Команда ещё не ответила.</div>'}
+          </div>
+          ${closed ? `<div class="support-case-closed">Обращение закрыто со статусом «${safe(statusLabels[item.status] || item.status)}».</div>` : `
+            <form class="support-thread-reply"><textarea name="support-thread-reply" rows="3" maxlength="4000" placeholder="Ответить команде Love" aria-label="Ответ команде Love" required></textarea><button type="submit" class="lvs-btn" title="Отправить ответ сотруднику">Отправить</button></form>`}`;
+        thread.querySelector('.support-thread-reply')?.addEventListener('submit', async event => {
+          event.preventDefault();
+          const textarea = event.currentTarget.querySelector('textarea');
+          const button = event.currentTarget.querySelector('button');
+          const body = textarea.value.trim();
+          if (!body) return;
+          button.disabled = true;
+          try {
+            const result = await window.CasesAPI.reply(item._id, body);
+            appendSupportNote(result.note, true);
+            textarea.value = '';
+            button.disabled = false;
+            touchCase(item._id, { status: 'triaged', updatedAt: result.note?.createdAt || new Date().toISOString() });
+          } catch (error) {
+            _toast('Ответ не отправлен', error.message || 'Попробуйте ещё раз.');
+            button.disabled = false;
+          }
+        });
+      } catch (error) {
+        thread.innerHTML = `<div class="support-thread-empty">${safe(error.message || 'Не удалось открыть обращение')}</div>`;
+      }
+    }
+
+    function renderStatus() {
+      if (!statusData) return;
+      const count = Math.min(7, Number(statusData.warningCount) || 0);
+      const reputation = statusData.reputation || { label: 'Состояние неизвестно', tone: 'attention' };
+      const reputationCard = section.querySelector('#support-reputation-card');
+      reputationCard.dataset.tone = reputation.tone;
+      section.querySelector('#support-reputation-label').textContent = reputation.label;
+      section.querySelector('#support-trust-score').textContent = Number(statusData.trustScore) || 0;
+      section.querySelector('#support-warnings-count').textContent = statusData.warningCount || 0;
+      section.querySelector('#support-warning-current').textContent = statusData.warningCount || 0;
+      section.querySelector('#support-warning-progress').style.width = `${Math.min(100, (count / 7) * 100)}%`;
+      section.querySelector('#support-reputation-summary').textContent = count === 0
+        ? 'Активных предупреждений и ограничений нет.'
+        : `Активных предупреждений: ${statusData.warningCount}. Срок предупреждения составляет 90 дней.`;
+      section.querySelector('#support-warning-thresholds').innerHTML = (statusData.thresholds || []).map(item => `<span><b>${safe(item.count)}</b>${safe(item.consequence)}</span>`).join('');
+
+      const restriction = section.querySelector('#support-active-restriction');
+      if (statusData.activeRestriction) {
+        const action = statusData.activeRestriction;
+        restriction.classList.remove('hidden');
+        restriction.innerHTML = `<div><strong>${safe(actionLabels[action.type] || action.type)} действует</strong><span>${safe(remainingLabel(action))}</span></div><p>${safe(action.reason)}</p>`;
+      } else {
+        restriction.classList.add('hidden');
+        restriction.innerHTML = '';
+      }
+
+      const violationList = section.querySelector('#support-violation-list');
+      const actions = statusData.actions || [];
+      violationList.innerHTML = actions.length ? actions.map(action => `
+        <article class="support-violation ${action.active ? 'active' : ''}">
+          <div><span><strong>${safe(actionLabels[action.type] || action.type)}</strong><i>${action.active ? safe(remainingLabel(action)) : (action.revoked ? 'Снято' : 'Завершено')}</i></span><time>${safe(formatDate(action.startsAt))}</time></div>
+          <p>${safe(action.reason)}</p>
+          <footer>${action.appeal
+            ? `<span>Апелляция ${safe(action.appeal.number)} · ${safe(statusLabels[action.appeal.status] || action.appeal.status)}</span>`
+            : action.canAppeal
+              ? `<button class="support-appeal-btn" type="button" data-appeal-action="${safe(action._id)}" title="Попросить команду Love пересмотреть это наказание">Подать апелляцию</button>`
+              : action.revoked
+                ? '<span class="support-appeal-unavailable">Наказание снято, апелляция не требуется</span>'
+                : ''}</footer>
+        </article>`).join('') : '<div class="support-thread-empty"><strong>История чистая</strong><span>Нарушений и наказаний нет.</span></div>';
+      violationList.querySelectorAll('[data-appeal-action]').forEach(button => {
+        button.addEventListener('click', () => {
+          section.querySelector('#support-appeal-action').value = button.dataset.appealAction;
+          appealForm.classList.remove('hidden');
+          section.querySelector('#support-appeal-description').focus();
+        });
+      });
+    }
+
+    async function load(showLoader = true) {
+      if (loading) return;
+      loading = true;
+      if (showLoader) list.innerHTML = '<div class="support-loading">Загружаем обращения...</div>';
+      try {
+        const [caseResult, moderationResult] = await Promise.all([
+          window.CasesAPI.mine(),
+          window.CasesAPI.status()
+        ]);
+        cases = caseResult.cases || [];
+        statusData = moderationResult;
+        if (selectedCaseId && !cases.some(item => String(item._id) === String(selectedCaseId))) selectedCaseId = null;
+        renderCaseList();
+        renderStatus();
+      } catch (error) {
+        list.innerHTML = `<div class="support-thread-empty">${safe(error.message || 'Центр помощи временно недоступен')}</div>`;
+      } finally {
+        loading = false;
+      }
+    }
+
+    window.refreshSupportCenter = async function (eventData = {}) {
+      if (loading) {
+        window.setTimeout(() => window.refreshSupportCenter?.(eventData), 180);
+        return;
+      }
+      if (eventData.kind === 'staff_reply' && eventData.caseId && eventData.note) {
+        const isOpen = String(selectedCaseId || '') === String(eventData.caseId);
+        const changes = {
+          updatedAt: eventData.updatedAt || eventData.note.createdAt || new Date().toISOString(),
+          _hasLiveReply: !isOpen
+        };
+        if (eventData.status) changes.status = eventData.status;
+        const item = touchCase(eventData.caseId, changes);
+        if (!item) {
+          await load(false);
+          return;
+        }
+        if (isOpen) {
+          appendSupportNote(eventData.note, false);
+          const status = thread.querySelector('header > i');
+          if (status && eventData.status) status.textContent = statusLabels[eventData.status] || eventData.status;
+        }
+        return;
+      }
+      await load(false);
+      if (selectedCaseId) await openCase(selectedCaseId);
+    };
+
+    window.isSupportCenterVisible = function () {
+      const settingsView = document.getElementById('view-settings');
+      return !document.hidden
+        && settingsView && !settingsView.classList.contains('panel-hidden')
+        && section.classList.contains('active');
+    };
+
+    window.isSupportCaseVisible = function (caseId) {
+      return window.isSupportCenterVisible()
+        && Boolean(selectedCaseId)
+        && String(selectedCaseId) === String(caseId || '');
+    };
+
+    window.openSupportCase = async function (caseId) {
+      document.getElementById('nav-settings')?.click();
+      const supportNav = shell.querySelector('[data-settings-section="settings-support"]');
+      supportNav?.click();
+      const casesTab = section.querySelector('[data-support-tab="cases"]');
+      casesTab?.click();
+      await load(false);
+      if (caseId && cases.some(item => String(item._id) === String(caseId))) await openCase(caseId);
+    };
+
+    section.querySelectorAll('[data-support-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        section.querySelectorAll('[data-support-tab]').forEach(item => item.classList.toggle('active', item === button));
+        section.querySelectorAll('[data-support-pane]').forEach(pane => pane.classList.toggle('active', pane.dataset.supportPane === button.dataset.supportTab));
+      });
+    });
+
+    section.querySelector('#support-new-case-btn').addEventListener('click', () => newForm.classList.remove('hidden'));
+    section.querySelector('#support-new-case-cancel').addEventListener('click', () => newForm.classList.add('hidden'));
+    newForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const title = section.querySelector('#support-case-title').value.trim();
+      const description = section.querySelector('#support-case-description').value.trim();
+      const priority = section.querySelector('#support-case-priority').value;
+      const submit = newForm.querySelector('[type="submit"]');
+      submit.disabled = true;
+      try {
+        const result = await window.CasesAPI.create({ kind: 'support', title, description, priority });
+        newForm.reset();
+        newForm.classList.add('hidden');
+        selectedCaseId = result.case?._id || null;
+        await load();
+        if (selectedCaseId) await openCase(selectedCaseId);
+        _toast('Обращение создано', 'Команда Love увидит его в центре обращений.');
+      } catch (error) {
+        _toast('Не удалось создать обращение', error.message || 'Проверьте введённые данные.');
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    section.querySelector('#support-appeal-cancel').addEventListener('click', () => appealForm.classList.add('hidden'));
+    appealForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const actionId = section.querySelector('#support-appeal-action').value;
+      const description = section.querySelector('#support-appeal-description').value.trim();
+      if (description.length < 20) {
+        _toast('Добавьте подробности', 'Для апелляции нужно минимум 20 символов.');
+        return;
+      }
+      const submit = appealForm.querySelector('[type="submit"]');
+      submit.disabled = true;
+      try {
+        await window.CasesAPI.appeal(actionId, description);
+        appealForm.reset();
+        appealForm.classList.add('hidden');
+        await load(false);
+        _toast('Апелляция отправлена', 'Ответ появится в ваших обращениях.');
+      } catch (error) {
+        _toast('Апелляция не отправлена', error.message || 'Попробуйте ещё раз.');
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    shell.querySelector('[data-settings-section="settings-support"]')?.addEventListener('click', () => load());
+    load();
+    window.setInterval(() => {
+      if (section.classList.contains('active') && !document.hidden) load(false);
+    }, 15_000);
   }
 
   /* ───────────────  Модальное окно: открытие/закрытие перенесено в initDirtyTracking  ─────────────── */

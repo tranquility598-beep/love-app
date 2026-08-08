@@ -21,7 +21,7 @@ router.get('/', authMiddleware, async (req, res) => {
       participants: req.user._id,
       hiddenBy: { $ne: req.user._id }
     })
-    .populate('participants', 'username nickname avatar status discriminator customStatus')
+    .populate('participants', 'username nickname avatar status discriminator customStatus role')
     .populate('channel', '_id name type')
     .populate('lastMessage', 'content createdAt author')
     .sort({ updatedAt: -1 });
@@ -55,7 +55,7 @@ router.post('/:userId', authMiddleware, async (req, res) => {
     let conversation = await DirectMessage.findOne({
       participants: { $all: [req.user._id, targetUserId] }
     })
-      .populate('participants', 'username nickname avatar status discriminator')
+      .populate('participants', 'username nickname avatar status discriminator role')
       .populate('channel', '_id name type');
     
     if (!conversation) {
@@ -80,7 +80,7 @@ router.post('/:userId', authMiddleware, async (req, res) => {
       
       await conversation.save();
       
-      await conversation.populate('participants', 'username nickname avatar status discriminator');
+      await conversation.populate('participants', 'username nickname avatar status discriminator role');
       await conversation.populate('channel', '_id name type');
     } else {
       // Если диалог найден, убираем текущего пользователя из списка скрывших
@@ -133,7 +133,7 @@ router.get('/:conversationId/messages', authMiddleware, async (req, res) => {
     }
     
     const messages = await Message.find(query)
-      .populate('author', 'username nickname avatar discriminator')
+      .populate('author', 'username nickname avatar discriminator role')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit));
     

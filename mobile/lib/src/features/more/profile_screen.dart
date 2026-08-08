@@ -7,6 +7,7 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
 import '../../widgets/profile_music_player.dart';
+import '../../widgets/staff_role_badge.dart';
 import '../chat/chat_models.dart';
 import '../settings/settings_screen.dart';
 import '../shell/screen_frame.dart';
@@ -50,7 +51,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
             children: [
-              Center(child: _Avatar(
+              Center(
+                  child: _Avatar(
                 user: user,
                 uploading: _uploadingAvatar,
                 onEdit: () => _changeAvatar(session),
@@ -78,6 +80,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: LoveColors.textMuted,
                 ),
               ),
+              if (staffRoleLabel(user?.role).isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Center(child: StaffRoleLabel(role: user?.role)),
+              ],
               if (status.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 Center(child: _StatusPill(text: status)),
@@ -117,16 +123,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-              if (musicTitle.isNotEmpty || musicUrl.isNotEmpty || listening.isNotEmpty)
+              if (musicTitle.isNotEmpty ||
+                  musicUrl.isNotEmpty ||
+                  listening.isNotEmpty)
                 _Section(
                   label: 'Сейчас слушает',
                   child: musicUrl.isEmpty
                       ? Text(
                           listening.isNotEmpty ? listening : musicTitle,
-                          style: const TextStyle(color: LoveColors.textPrimary, fontSize: 15),
+                          style: const TextStyle(
+                              color: LoveColors.textPrimary, fontSize: 15),
                         )
                       : ProfileMusicPlayer(
-                          title: musicTitle.isNotEmpty ? musicTitle : 'Музыка профиля',
+                          title: musicTitle.isNotEmpty
+                              ? musicTitle
+                              : 'Музыка профиля',
                           url: musicUrl,
                         ),
                 ),
@@ -183,7 +194,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 String _text(String? value) => value?.trim() ?? '';
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.user, required this.uploading, required this.onEdit});
+  const _Avatar(
+      {required this.user, required this.uploading, required this.onEdit});
 
   final dynamic user;
   final bool uploading;

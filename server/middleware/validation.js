@@ -7,6 +7,18 @@
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usernameRegex = /^[a-zA-Z0-9_а-яА-ЯёЁ]{2,32}$/;
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
+const forbiddenUsernames = ['admin', 'root', 'system', 'moderator', 'owner'];
+
+const getUsernameValidationError = (username) => {
+  const value = String(username || '');
+  if (!usernameRegex.test(value)) {
+    return 'Имя пользователя должно быть 2-32 символа и содержать только буквы, цифры и _';
+  }
+  if (forbiddenUsernames.includes(value.toLowerCase())) {
+    return 'Это имя пользователя зарезервировано';
+  }
+  return null;
+};
 
 /**
  * Валидация email
@@ -28,19 +40,8 @@ const validateUsername = (req, res, next) => {
   const { username } = req.body;
   
   if (username) {
-    if (!usernameRegex.test(username)) {
-      return res.status(400).json({ 
-        message: 'Имя пользователя должно быть 2-32 символа и содержать только буквы, цифры и _' 
-      });
-    }
-    
-    // Проверка на запрещенные имена
-    const forbiddenNames = ['admin', 'root', 'system', 'moderator', 'owner'];
-    if (forbiddenNames.includes(username.toLowerCase())) {
-      return res.status(400).json({ 
-        message: 'Это имя пользователя зарезервировано' 
-      });
-    }
+    const validationError = getUsernameValidationError(username);
+    if (validationError) return res.status(400).json({ message: validationError });
   }
   
   next();
@@ -205,5 +206,6 @@ module.exports = {
   validateCustomStatus,
   sanitizeBody,
   sanitizeString,
-  normalizeContent
+  normalizeContent,
+  getUsernameValidationError
 };

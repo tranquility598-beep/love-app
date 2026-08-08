@@ -126,8 +126,7 @@ class CallCenter extends ChangeNotifier {
     if (!identical(controller, _temp)) return;
     if (_temp!.phase == DmCallPhase.idle) {
       _dropTemp();
-    } else if (_controller == null ||
-        _controller!.phase == DmCallPhase.idle) {
+    } else if (_controller == null || _controller!.phase == DmCallPhase.idle) {
       // Во временном контроллере начался звонок — делаем его основным.
       _dropController();
       _controller = _temp;
@@ -233,6 +232,7 @@ class CallCenter extends ChangeNotifier {
     final conversationId = asId(raw['conversationId']);
     final channelId = asId(raw['channelId']);
     final callerName = userDisplayName(from);
+    final kind = raw['kind'] == 'video' ? 'video' : 'audio';
     if (callerId.isEmpty) return;
 
     final covered = (_controller != null &&
@@ -261,6 +261,7 @@ class CallCenter extends ChangeNotifier {
         conversationId: conversationId,
         channelId: channelId,
         callerName: callerName,
+        kind: kind,
       );
     }
 
@@ -329,9 +330,7 @@ class CallCenter extends ChangeNotifier {
         LocalNotifications.showOngoingCall(
           peer: voice.channelTitle.isEmpty ? 'Войс' : voice.channelTitle,
           muted: voice.muted,
-          body: voice.muted
-              ? 'Вы в войсе · микрофон выключен'
-              : 'Вы в войсе',
+          body: voice.muted ? 'Вы в войсе · микрофон выключен' : 'Вы в войсе',
         );
       }
     } else if (_lastVoiceActive || force) {

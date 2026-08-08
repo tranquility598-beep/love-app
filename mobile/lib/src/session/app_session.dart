@@ -9,17 +9,20 @@ class AppSession extends ChangeNotifier {
   final AuthRepository authRepository;
 
   AuthUser? user;
+  AccountRestriction? restriction;
   bool isBooting = true;
   bool isBusy = false;
   String? error;
 
   bool get isAuthenticated => user != null;
+  bool get isRestricted => user != null && restriction != null;
 
   Future<void> restore() async {
     isBooting = true;
     notifyListeners();
     final restored = await authRepository.restoreSession();
-    user ??= restored;
+    user ??= restored?.user;
+    restriction ??= restored?.restriction;
     isBooting = false;
     notifyListeners();
   }
@@ -74,6 +77,27 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshRestriction() async {
+    final wasRestricted = restriction != null;
+    final result = await authRepository.restrictionState();
+    if (result == null) {
+      restriction = null;
+      if (wasRestricted) {
+        await authRepository.logout();
+        user = null;
+      }
+    } else {
+      user = result.user ?? user;
+      restriction = result.restriction;
+    }
+    notifyListeners();
+  }
+
+  void applyRestriction(AccountRestriction nextRestriction) {
+    restriction = nextRestriction;
+    notifyListeners();
+  }
+
   void updateUserFromJson(Map<String, dynamic> json) {
     updateUser(AuthUser.fromJson(json));
   }
@@ -83,6 +107,7 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
     await authRepository.logout();
     user = null;
+    restriction = null;
     isBusy = false;
     notifyListeners();
   }
@@ -93,8 +118,10 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await action();
-      if (result.type == AuthResultType.authenticated) {
+      if (result.type == AuthResultType.authenticated ||
+          result.type == AuthResultType.restricted) {
         user = result.user;
+        restriction = result.restriction;
       }
       return result;
     } catch (e) {

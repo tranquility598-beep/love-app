@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import '../../config/app_config.dart';
+import '../../features/support/support_models.dart';
 import 'api_client.dart';
 
 class LoveApi {
@@ -269,7 +273,8 @@ class LoveApi {
     await api.post('/auth/logout-all');
   }
 
-  Future<Map<String, dynamic>> uploadAvatar(String filePath, {String? mimeType}) {
+  Future<Map<String, dynamic>> uploadAvatar(String filePath,
+      {String? mimeType}) {
     return api.upload(
       '/users/avatar',
       filePath: filePath,
@@ -279,7 +284,8 @@ class LoveApi {
     );
   }
 
-  Future<Map<String, dynamic>> uploadMusic(String filePath, {String? mimeType}) {
+  Future<Map<String, dynamic>> uploadMusic(String filePath,
+      {String? mimeType}) {
     return api.upload(
       '/upload',
       filePath: filePath,
@@ -302,11 +308,182 @@ class LoveApi {
     return api.get('/release');
   }
 
+  Future<List<Map<String, dynamic>>> communityIdeas({bool top = true}) async {
+    final response =
+        await api.get(top ? '/community/ideas/top' : '/community/ideas');
+    return _list(response['ideas']);
+  }
+
+  Future<List<Map<String, dynamic>>> communityBugs() async {
+    final response = await api.get('/community/bugs', query: {'limit': '50'});
+    return _list(response['bugs']);
+  }
+
+  Future<List<Map<String, dynamic>>> devLog({int page = 1}) async {
+    final response = await api.get(
+      '/community/devlog',
+      query: {'page': '$page', 'limit': '20'},
+    );
+    return _list(response['posts']);
+  }
+
+  Future<Map<String, dynamic>> devLogPage({int page = 1, int limit = 20}) {
+    return api.get(
+      '/community/devlog',
+      query: {'page': '$page', 'limit': '$limit'},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> devLogComments(String postId) async {
+    final response = await api.get('/community/devlog/$postId/comments');
+    return _list(response['comments']);
+  }
+
+  Future<Map<String, dynamic>> addDevLogComment(
+    String postId,
+    String body, {
+    String? parent,
+  }) {
+    return api.post(
+      '/community/devlog/$postId/comments',
+      body: {
+        'body': body.trim(),
+        if (parent != null && parent.isNotEmpty) 'parent': parent,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> voteIdea(String id, int value) {
+    return api.put('/community/ideas/$id/vote', body: {'value': value});
+  }
+
+  Future<Map<String, dynamic>> voteDevLog(String id, int value) {
+    return api.put('/community/devlog/$id/vote', body: {'value': value});
+  }
+
+  Future<Map<String, dynamic>> createCommunityCase({
+    required String kind,
+    required String title,
+    required String description,
+    bool diagnosticsConsent = false,
+    String priority = 'normal',
+    String category = 'other',
+    String safeLog = '',
+    List<Map<String, dynamic>> attachments = const [],
+  }) {
+    return api.post('/cases', body: {
+      'kind': kind,
+      'title': title.trim(),
+      'description': description.trim(),
+      'diagnosticsConsent': diagnosticsConsent,
+      'priority': priority,
+      'category': category,
+      if (attachments.isNotEmpty) 'attachments': attachments,
+      if (diagnosticsConsent)
+        'diagnostics': {
+          'appVersion': AppConfig.productVersion,
+          'platform': 'Flutter ${Platform.operatingSystem}',
+          'osVersion': Platform.operatingSystemVersion,
+          'safeLog': _scrubSafeLog(safeLog),
+        },
+    });
+  }
+
+  Future<List<SupportCase>> myCases() async {
+    final response = await api.get('/cases/mine');
+    return _list(response['cases']).map(SupportCase.fromJson).toList();
+  }
+
+  Future<SupportCase> caseDetails(String caseId) async {
+    final response = await api.get('/cases/$caseId');
+    return SupportCase.fromJson(
+      (response['case'] as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<ModerationStatus> moderationStatus() async {
+    return ModerationStatus.fromJson(await api.get('/cases/status'));
+  }
+
+  Future<SupportCase> createSupportCase({
+    required String title,
+    required String description,
+    String priority = 'normal',
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
+    final response = await api.post('/cases', body: {
+      'kind': 'support',
+      'title': title.trim(),
+      'description': description.trim(),
+      'priority': priority,
+      if (attachments.isNotEmpty) 'attachments': attachments,
+    });
+    return SupportCase.fromJson(
+      (response['case'] as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<SupportNote> replyToCase(String caseId, String body) async {
+    final response = await api.post(
+      '/cases/$caseId/replies',
+      body: {'body': body.trim()},
+    );
+    return SupportNote.fromJson(
+      (response['note'] as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<SupportCase> createAppeal({
+    required String moderationActionId,
+    required String description,
+  }) async {
+    final response = await api.post('/cases/appeals', body: {
+      'moderationAction': moderationActionId,
+      'description': description.trim(),
+    });
+    return SupportCase.fromJson(
+      (response['case'] as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<List<ReportReason>> messageReportTaxonomy() async {
+    final response = await api.get('/cases/message-report-taxonomy');
+    return _list(response['categories']).map(ReportReason.fromJson).toList();
+  }
+
+  Future<SupportCase> reportMessage({
+    required String messageId,
+    required List<String> path,
+    String description = '',
+  }) async {
+    final response = await api.post('/cases/message-reports', body: {
+      'messageId': messageId,
+      'path': path,
+      'description': description.trim(),
+    });
+    return SupportCase.fromJson(
+      (response['case'] as Map).cast<String, dynamic>(),
+    );
+  }
+
   List<Map<String, dynamic>> _list(Object? value) {
     if (value is! List) return const [];
     return value
         .whereType<Map>()
         .map((item) => item.cast<String, dynamic>())
         .toList();
+  }
+
+  String _scrubSafeLog(String value) {
+    final scrubbed = value
+        .replaceAll(
+            RegExp(r'Bearer\s+\S+', caseSensitive: false), 'Bearer [REDACTED]')
+        .replaceAll(
+          RegExp(r'(token|password|secret|authorization)\s*[:=]\s*\S+',
+              caseSensitive: false),
+          r'$1=[REDACTED]',
+        );
+    return scrubbed.substring(
+        0, scrubbed.length > 12000 ? 12000 : scrubbed.length);
   }
 }

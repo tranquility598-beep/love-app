@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isPackaged: () => ipcRenderer.invoke('get-is-packaged'),
   getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
   isPackagedSync: () => ipcRenderer.sendSync('get-is-packaged-sync'),
+  getBackendMode: () => ipcRenderer.invoke('get-backend-mode'),
+  getBackendModeSync: () => ipcRenderer.sendSync('get-backend-mode-sync'),
   
   // Автообновления
   onUpdateMessage: (callback) => ipcRenderer.on('updater-message', (_event, data) => callback(data)),

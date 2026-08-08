@@ -10,15 +10,29 @@ const axios = require('axios');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 const { authLimiter, registerLimiter, otpLimiter, passwordResetLimiter } = require('../middleware/rateLimiter');
-const { validateEmail, validateUsername, validatePassword, sanitizeBody } = require('../middleware/validation');
+const {
+  validateEmail,
+  validateUsername,
+  validatePassword,
+  sanitizeBody,
+  getUsernameValidationError
+} = require('../middleware/validation');
+const {
+  normalizeUsername,
+  findUserByUsername,
+  getDuplicateField
+} = require('../utils/username');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
+const { getJwtSecret } = require('../utils/jwtSecret');
+
+const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 const TWO_FACTOR_TOKEN_EXPIRES = '10m';
 
 const { generateOTP, sendOTPEmail, sendPasswordResetEmail } = require('../utils/emailService');
 const LoginLog = require('../models/LoginLog');
 const { isFounderUser } = require('../utils/founder');
+const { refreshModerationState } = require('../services/moderationService');
 
 // Регулярка для пароля: минимум 8 символов, 1 буква и 1 цифра
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
@@ -113,12 +127,32 @@ async function getLoginNetworkInfo(req) {
 }
 
 /**
+ * GET /api/auth/username-availability?username=...
+ * Public check used by the registration form. The unique DB index remains authoritative.
+ */
+router.get('/username-availability', async (req, res) => {
+  try {
+    const username = normalizeUsername(req.query.username);
+    const validationError = getUsernameValidationError(username);
+    if (validationError) return res.status(400).json({ available: false, message: validationError });
+
+    const existingUser = await findUserByUsername(User, username);
+    return res.json({ available: !existingUser });
+  } catch (error) {
+    console.error('Username availability error:', error);
+    return res.status(500).json({ message: 'Не удалось проверить имя пользователя' });
+  }
+});
+
+/**
  * POST /api/auth/register
  * Регистрация нового пользователя с OTP
  */
 router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateUsername, validatePassword, async (req, res) => {
   try {
     const { username, email, password } = req.body;
+    const nextUsername = normalizeUsername(username);
+    const nextEmail = String(email || '').trim().toLowerCase();
     
     // Валидация
     if (!username || !email || !password) {
@@ -133,26 +167,29 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     }
     
     // Проверяем существование пользователя
-    const existingUser = await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { username }]
-    });
+    const [usernameOwner, emailOwner] = await Promise.all([
+      findUserByUsername(User, nextUsername),
+      User.findOne({ email: nextEmail })
+    ]);
     
     const COOLDOWN_MS = 60 * 1000;
     
-    if (existingUser) {
-      // Если пользователь есть но не верифицирован — проверяем кулдаун, затем удаляем и создаем заново
-      if (!existingUser.isVerified) {
-        if (existingUser.otpLastSentAt && (Date.now() - existingUser.otpLastSentAt.getTime() < COOLDOWN_MS)) {
-          const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - existingUser.otpLastSentAt.getTime())) / 1000);
-          return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
-        }
-        await User.deleteOne({ _id: existingUser._id });
-      } else {
-        if (existingUser.email === email.toLowerCase()) {
-          return res.status(400).json({ message: 'Email уже используется' });
-        }
-        return res.status(400).json({ message: 'Имя пользователя уже занято' });
+    if (usernameOwner && usernameOwner.email.toLowerCase() !== nextEmail) {
+      return res.status(400).json({ message: 'Имя пользователя уже занято' });
+    }
+
+    if (emailOwner?.isVerified || usernameOwner?.isVerified) {
+      return res.status(400).json({ message: 'Email уже используется' });
+    }
+
+    const pendingUser = emailOwner || usernameOwner;
+    if (pendingUser) {
+      // A pending registration reserves its username. The same email can retry after cooldown.
+      if (pendingUser.otpLastSentAt && (Date.now() - pendingUser.otpLastSentAt.getTime() < COOLDOWN_MS)) {
+        const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - pendingUser.otpLastSentAt.getTime())) / 1000);
+        return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
       }
+      await User.deleteOne({ _id: pendingUser._id });
     }
     
     // Генерация OTP
@@ -165,8 +202,8 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     
     // Создаем пользователя (пока не верифицирован)
     const user = new User({
-      username,
-      email: email.toLowerCase(),
+      username: nextUsername,
+      email: nextEmail,
       password,
       role,
       otpCode: otp,
@@ -195,6 +232,13 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     
   } catch (error) {
     console.error('Register error:', error);
+    const duplicateField = getDuplicateField(error);
+    if (duplicateField === 'username') {
+      return res.status(400).json({ message: 'Имя пользователя уже занято' });
+    }
+    if (duplicateField === 'email') {
+      return res.status(400).json({ message: 'Email уже используется' });
+    }
     res.status(500).json({ message: 'Ошибка сервера при регистрации' });
   }
 });
@@ -317,14 +361,6 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       return res.status(401).json({ message: 'Неверный email или пароль' });
     }
 
-    if (user.isBanned) {
-      return res.status(403).json({ 
-        message: `Ваш аккаунт заблокирован${user.banReason ? ': ' + user.banReason : ''}`,
-        isBanned: true,
-        reason: user.banReason || ''
-      });
-    }
-
     // --- ЛОГИКА БЛОКИРОВКИ (Account Lockout) ---
     if (user.lockUntil && user.lockUntil > Date.now()) {
       const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
@@ -370,6 +406,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     // Сбрасываем попытки при успешном входе
     user.loginAttempts = 0;
     user.lockUntil = null;
+    await refreshModerationState(user);
     
     // Проверяем верификацию
     if (!user.isVerified) {
@@ -423,7 +460,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       await user.save();
 
       const pendingToken = jwt.sign(
-        { userId: user._id, purpose: '2fa-login' },
+        { userId: user._id, purpose: '2fa-login', restricted: Boolean(user.isBanned || user.deactivatedAt) },
         JWT_SECRET,
         { expiresIn: TWO_FACTOR_TOKEN_EXPIRES }
       );
@@ -433,6 +470,33 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
         pendingToken,
         email: user.email,
         message: 'Код входа отправлен на почту'
+      });
+    }
+
+    if (user.isBanned || user.deactivatedAt) {
+      await user.save();
+      const log = await LoginLog.create({
+        userId: user._id,
+        email: user.email,
+        ip,
+        userAgent,
+        location,
+        loginMethod: 'password',
+        status: 'success'
+      });
+      const token = jwt.sign(
+        { userId: user._id, sid: log._id, restricted: true },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+      return res.json({
+        message: 'Доступ ограничен. Доступны поддержка и апелляция.',
+        token,
+        user: buildAuthUser(user),
+        accountRestricted: true,
+        restriction: user.deactivatedAt
+          ? { type: 'deactivated', reason: user.deactivationReason || '', actionId: user.activeDeactivationAction || null }
+          : { type: 'ban', reason: user.banReason || '', expiresAt: user.banUntil || null, actionId: user.activeBanAction || null }
       });
     }
 
@@ -489,8 +553,12 @@ router.post('/verify-2fa', otpLimiter, async (req, res) => {
 
     user.twoFactorCode = null;
     user.twoFactorExpires = null;
-    user.status = user.statusPreference || 'online';
-    user.lastSeen = new Date();
+    await refreshModerationState(user);
+    const restricted = Boolean(user.isBanned || user.deactivatedAt || decoded.restricted);
+    if (!restricted) {
+      user.status = user.statusPreference || 'online';
+      user.lastSeen = new Date();
+    }
     await user.save();
 
     const userAgent = req.headers['user-agent'] || 'unknown';
@@ -506,15 +574,21 @@ router.post('/verify-2fa', otpLimiter, async (req, res) => {
     });
 
     const token = jwt.sign(
-      { userId: user._id, sid: log._id },
+      { userId: user._id, sid: log._id, ...(restricted ? { restricted: true } : {}) },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+      { expiresIn: restricted ? '2h' : JWT_EXPIRES }
     );
 
     res.json({
-      message: 'Вход подтвержден',
+      message: restricted ? 'Доступ ограничен. Доступны поддержка и апелляция.' : 'Вход подтвержден',
       token,
-      user: buildAuthUser(user)
+      user: buildAuthUser(user),
+      accountRestricted: restricted,
+      ...(restricted ? {
+        restriction: user.deactivatedAt
+          ? { type: 'deactivated', reason: user.deactivationReason || '', actionId: user.activeDeactivationAction || null }
+          : { type: 'ban', reason: user.banReason || '', expiresAt: user.banUntil || null, actionId: user.activeBanAction || null }
+      } : {})
     });
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
@@ -523,6 +597,28 @@ router.post('/verify-2fa', otpLimiter, async (req, res) => {
     console.error('Verify 2FA error:', error);
     res.status(500).json({ message: 'Ошибка проверки 2FA' });
   }
+});
+
+router.get('/restriction', authMiddleware, (req, res) => {
+  if (!req.user.isBanned && !req.user.deactivatedAt) {
+    return res.status(404).json({ message: 'Ограничение аккаунта не найдено' });
+  }
+  res.json({
+    user: buildAuthUser(req.user),
+    accountRestricted: true,
+    restriction: req.user.deactivatedAt
+      ? {
+          type: 'deactivated',
+          reason: req.user.deactivationReason || '',
+          actionId: req.user.activeDeactivationAction || null
+        }
+      : {
+          type: 'ban',
+          reason: req.user.banReason || '',
+          expiresAt: req.user.banUntil || null,
+          actionId: req.user.activeBanAction || null
+        }
+  });
 });
 
 /**
@@ -675,8 +771,8 @@ router.post('/google-onboarding', authMiddleware, sanitizeBody, validateUsername
     if (!user.googleId) return res.status(400).json({ message: 'Аккаунт не привязан к Google' });
 
     if (!keepCurrent && username && username !== user.username) {
-      const nextUsername = String(username).trim();
-      const existingUser = await User.findOne({ username: nextUsername, _id: { $ne: user._id } });
+      const nextUsername = normalizeUsername(username);
+      const existingUser = await findUserByUsername(User, nextUsername, user._id);
       if (existingUser) return res.status(400).json({ message: 'Имя пользователя уже занято' });
       user.username = nextUsername;
       user.usernameChangedAt = new Date();
@@ -689,6 +785,9 @@ router.post('/google-onboarding', authMiddleware, sanitizeBody, validateUsername
     res.json({ user: buildAuthUser(user, { onboardingPending: shouldStartOnboarding }), message: 'Настройка завершена' });
   } catch (error) {
     console.error('Google onboarding error:', error);
+    if (getDuplicateField(error) === 'username') {
+      return res.status(400).json({ message: 'Имя пользователя уже занято' });
+    }
     res.status(500).json({ message: 'Ошибка настройки аккаунта' });
   }
 });
@@ -751,7 +850,7 @@ router.post('/logout-all', authMiddleware, async (req, res) => {
 router.post('/socket-token', authMiddleware, async (req, res) => {
   try {
     const token = jwt.sign(
-      { userId: req.user._id, aud: 'socket' },
+      { userId: req.user._id, aud: 'socket', restricted: Boolean(req.user.isBanned || req.user.deactivatedAt) },
       JWT_SECRET,
       { expiresIn: '5m' }
     );
@@ -885,6 +984,26 @@ router.get('/google/callback',
   async (req, res) => {
     // Успешная авторизация
     const user = req.user;
+
+    if (user.isBanned || user.deactivatedAt) {
+      const userAgent = req.headers['user-agent'] || 'unknown';
+      const { ip, location } = await getLoginNetworkInfo(req);
+      const log = await LoginLog.create({
+        userId: user._id,
+        email: user.email,
+        ip,
+        userAgent,
+        location,
+        loginMethod: 'google',
+        status: 'success'
+      });
+      const token = jwt.sign(
+        { userId: user._id, sid: log._id, restricted: true },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+      return res.redirect(`/api/auth/google/success?token=${encodeURIComponent(token)}`);
+    }
     
     if (user.isBanned) {
       return res.status(403).send(`

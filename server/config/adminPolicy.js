@@ -1,0 +1,3 @@
+const ADMIN_POLICY_VERSION = '2026-08-01';
+
+module.exports = { ADMIN_POLICY_VERSION };

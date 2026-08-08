@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../../config/app_config.dart';
+import '../diagnostics/safe_diagnostic_log.dart';
 import '../storage/auth_token_store.dart';
 
 class ApiException implements Exception {
@@ -78,8 +79,10 @@ class ApiClient {
       final streamed = await _http.send(request).timeout(timeout);
       final response =
           await http.Response.fromStream(streamed).timeout(timeout);
+      SafeDiagnosticLog.instance.network(method, path, response.statusCode);
       return _decodeResponse(response);
     } on TimeoutException {
+      SafeDiagnosticLog.instance.add('network $method $path timeout');
       throw const ApiException(
         'Сервер долго не отвечает. Проверьте интернет и попробуйте еще раз.',
       );
@@ -124,8 +127,10 @@ class ApiClient {
       final streamed = await _http.send(request).timeout(timeout);
       final response =
           await http.Response.fromStream(streamed).timeout(timeout);
+      SafeDiagnosticLog.instance.network(method, path, response.statusCode);
       return _decodeResponse(response);
     } on TimeoutException {
+      SafeDiagnosticLog.instance.add('upload $method $path timeout');
       throw const ApiException(
         'Загрузка заняла слишком много времени. Попробуйте еще раз.',
       );

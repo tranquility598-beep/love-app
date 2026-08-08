@@ -4,10 +4,16 @@
   "description": "Love - A beautiful chat application",
   "main": "client/main.js",
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run electron\"",
-    "electron": "wait-on http://localhost:5555 && electron .",
+    "start": "npm run electron",
+    "electron": "electron . --backend=production",
+    "electron:local": "electron . --backend=local",
     "server": "node server/index.js",
-    "dev": "concurrently \"npm run server\" \"wait-on http://localhost:5555 && electron .\"",
+    "admin:backup": "node server/scripts/backup-admin-v1.js",
+    "admin:migrate:dry": "node server/scripts/migrate-admin-v1.js",
+    "admin:migrate": "node server/scripts/migrate-admin-v1.js --apply",
+    "admin:indexes": "node server/scripts/ensure-retention-indexes.js",
+    "test:server": "node --test server/tests/*.test.js",
+    "dev": "npm run electron:local",
     "build": "npm run build:server && electron-builder build --win",
     "build:mac": "npm run build:server && electron-builder build --mac",
     "build:all": "npm run build:server && electron-builder build --win --mac",
@@ -24,7 +30,9 @@
       "client/**/*",
       "server/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "!**/.env",
+      "!**/.env.*"
     ],
     "win": {
       "target": [
@@ -45,7 +53,9 @@
         "from": "server",
         "to": "server",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/.env",
+          "!**/.env.*"
         ]
       }
     ],
@@ -130,6 +140,7 @@
     "bcryptjs": "^2.4.3",
     "canvas": "^3.2.3",
     "cloudinary": "^2.10.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dompurify": "^3.3.3",
     "dotenv": "^16.3.1",
@@ -146,8 +157,10 @@
     "mongoose": "^8.0.3",
     "multer": "^2.1.1",
     "nodemailer": "^6.9.13",
+    "otplib": "^12.0.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "qrcode": "^1.5.4",
     "resend": "^6.10.0",
     "socket.io": "^4.6.1",
     "socket.io-client": "^4.6.1",

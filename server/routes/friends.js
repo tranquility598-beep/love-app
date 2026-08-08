@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+const { requireCanCommunicate } = require('../services/moderationService');
 
 /**
  * GET /api/friends
@@ -35,7 +36,7 @@ router.get('/', authMiddleware, async (req, res) => {
  * POST /api/friends/request/:userId
  * Отправить запрос в друзья
  */
-router.post('/request/:userId', authMiddleware, async (req, res) => {
+router.post('/request/:userId', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const targetUserId = req.params.userId;
     
@@ -105,7 +106,7 @@ router.post('/request/:userId', authMiddleware, async (req, res) => {
  * POST /api/friends/accept/:userId
  * Принять запрос в друзья
  */
-router.post('/accept/:userId', authMiddleware, async (req, res) => {
+router.post('/accept/:userId', authMiddleware, requireCanCommunicate, async (req, res) => {
   try {
     const fromUserId = req.params.userId;
     

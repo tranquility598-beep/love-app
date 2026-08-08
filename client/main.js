@@ -53,26 +53,27 @@ const appIcon = process.platform === 'win32'
 // Путь к серверу
 const serverPath = path.join(__dirname, '..', 'server', 'index.js');
 const isPackaged = app.isPackaged;
+const requestedBackendMode = process.argv
+  .find(argument => argument.startsWith('--backend='))
+  ?.slice('--backend='.length)
+  .trim()
+  .toLowerCase();
+const usesProductionBackend = isPackaged || requestedBackendMode === 'production';
+const backendOrigin = usesProductionBackend
+  ? 'https://api.loveapp.chat'
+  : 'http://127.0.0.1:5555';
+console.log(`[Backend] ${usesProductionBackend ? 'production' : 'local'}: ${backendOrigin}`);
 
 /**
  * Запускает backend сервер как дочерний процесс
  */
 function startServer() {
-  if (isPackaged) {
-    // В упакованном приложении сервер находится в resources
-    const resourcesPath = process.resourcesPath;
-    const serverIndexPath = path.join(resourcesPath, 'server', 'index.js');
-    serverProcess = spawn('node', [serverIndexPath], {
-      env: { ...process.env, NODE_ENV: 'production' },
-      stdio: 'pipe'
-    });
-  } else {
-    // В режиме разработки
-    serverProcess = spawn('node', [serverPath], {
-      env: { ...process.env, NODE_ENV: 'development' },
-      stdio: 'pipe'
-    });
-  }
+  if (usesProductionBackend) return;
+
+  serverProcess = spawn('node', [serverPath], {
+    env: { ...process.env, NODE_ENV: 'development' },
+    stdio: 'pipe'
+  });
 
   serverProcess.stdout.on('data', (data) => {
     console.log(`Server: ${data}`);
@@ -349,8 +350,6 @@ ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null,
     // FIX (Windows + Node 18+): используем 127.0.0.1 вместо localhost, иначе undici
     // fetch резолвит localhost в ::1 (IPv6), а сервер слушает только 0.0.0.0 (IPv4) →
     // ECONNREFUSED. Это даёт "transport error" на всех запросах в dev-режиме.
-    const isPackaged = app.isPackaged;
-    const backendOrigin = isPackaged ? 'https://api.loveapp.chat' : 'http://127.0.0.1:5555';
     const url = `${backendOrigin}/api${path}`;
 
     // 3. Формируем заголовки
@@ -432,8 +431,6 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
     }
     
     // Тот же fix IPv4 для api-upload (см. комментарий выше).
-    const isPackaged = app.isPackaged;
-    const backendOrigin = isPackaged ? 'https://api.loveapp.chat' : 'http://127.0.0.1:5555';
     // Для загрузки иногда /api/upload, а иногда /api/servers/...
     const url = `${backendOrigin}${path.startsWith('/api') ? path : '/api' + path}`;
 
@@ -495,6 +492,11 @@ ipcMain.handle('get-is-packaged', () => {
   return app.isPackaged;
 });
 
+ipcMain.handle('get-backend-mode', () => ({
+  production: usesProductionBackend,
+  origin: backendOrigin
+}));
+
 // Обработчик для получения версии приложения
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
@@ -521,6 +523,13 @@ ipcMain.handle('get-screen-sources', async () => {
 // Синхронный обработчик
 ipcMain.on('get-is-packaged-sync', (event) => {
   event.returnValue = app.isPackaged;
+});
+
+ipcMain.on('get-backend-mode-sync', (event) => {
+  event.returnValue = {
+    production: usesProductionBackend,
+    origin: backendOrigin
+  };
 });
 
 // Обработчик для получения пути к папке загрузок
@@ -784,7 +793,7 @@ if (!gotTheLock) {
       });
     });
 
-    if (!isPackaged) {
+    if (!usesProductionBackend) {
       startServer();
       setTimeout(() => {
         createWindow();
@@ -837,9 +846,7 @@ function handleDeepLink(url) {
 // Обработка Google Auth через системный браузер
 ipcMain.on('google-login', (event) => {
   // В разработке используем локалхост, в билде — продакшн
-  const authUrl = app.isPackaged 
-    ? 'https://api.loveapp.chat/api/auth/google'
-    : 'http://localhost:5555/api/auth/google';
+  const authUrl = `${backendOrigin}/api/auth/google`;
 
   // Открываем браузер по умолчанию (Chrome/Safari/etc)
   shell.openExternal(authUrl);

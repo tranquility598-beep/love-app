@@ -80,7 +80,106 @@
       return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((e || '').trim());
     }
     function validUsername(u) {
-      return /^[a-zA-Z0-9_]{3,24}$/.test(u || '');
+      return /^[a-zA-Z0-9_а-яА-ЯёЁ]{2,32}$/.test(u || '');
+    }
+
+    function showRestrictedAccess(data) {
+      const forms = $('auth-forms');
+      const authSwitch = $('auth-switch');
+      if (!forms) return;
+      screen.classList.add('auth-screen--restricted');
+      document.querySelectorAll('.auth-form').forEach(form => {
+        form.classList.remove('active');
+        form.style.display = 'none';
+      });
+      if (authSwitch) authSwitch.classList.add('hidden');
+
+      let form = $('auth-form-restricted');
+      if (!form) {
+        form = document.createElement('form');
+        form.id = 'auth-form-restricted';
+        form.className = 'auth-form auth-restricted-form';
+        form.innerHTML = `
+          <div class="auth-restriction-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 9l6 6M15 9l-6 6"/></svg></div>
+          <div class="auth-form-head"><h2 class="auth-form-title">Доступ ограничен</h2><p class="auth-form-note" id="restriction-summary"></p></div>
+          <div class="auth-restriction-reason"><span>Причина</span><p id="restriction-reason"></p></div>
+          <label class="auth-label" for="restriction-appeal">Обращение в команду</label>
+          <textarea id="restriction-appeal" name="restriction-appeal" class="auth-input auth-restriction-text" rows="5" maxlength="10000" placeholder="Объясните, почему решение стоит пересмотреть"></textarea>
+          <span class="auth-message auth-message--error hidden" id="restriction-error"></span>
+          <span class="auth-message auth-message--success hidden" id="restriction-success"></span>
+          <button type="submit" class="auth-submit" id="restriction-submit">Отправить апелляцию</button>
+          <button type="button" class="auth-link auth-back-link" id="restriction-logout">Выйти из аккаунта</button>`;
+        forms.appendChild(form);
+      }
+
+      const restriction = data.restriction || {};
+      const isAppeal = Boolean(restriction.actionId);
+      $('restriction-summary').textContent = restriction.type === 'deactivated'
+        ? 'Аккаунт деактивирован. Вы можете отправить одно обращение для пересмотра.'
+        : 'Аккаунт заблокирован. Чтение причины и апелляция остаются доступны.';
+      $('restriction-reason').textContent = restriction.reason || 'Причина не указана';
+      $('restriction-submit').textContent = isAppeal ? 'Отправить апелляцию' : 'Написать в поддержку';
+      $('restriction-error').classList.add('hidden');
+      $('restriction-success').classList.add('hidden');
+      form.classList.add('active');
+      form.style.display = 'flex';
+
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const description = $('restriction-appeal').value.trim();
+        if (description.length < 20) {
+          $('restriction-error').textContent = 'Опишите ситуацию подробнее, минимум 20 символов.';
+          $('restriction-error').classList.remove('hidden');
+          return;
+        }
+        const submit = $('restriction-submit');
+        submit.disabled = true;
+        submit.textContent = 'Отправляем...';
+        $('restriction-error').classList.add('hidden');
+        try {
+          if (isAppeal) {
+            await CasesAPI.appeal(restriction.actionId, description);
+          } else {
+            await CasesAPI.create({
+              kind: 'support',
+              title: 'Пересмотр ограничения аккаунта',
+              description
+            });
+          }
+          $('restriction-success').textContent = 'Обращение отправлено. Ответ появится в центре поддержки.';
+          $('restriction-success').classList.remove('hidden');
+          $('restriction-appeal').disabled = true;
+          submit.hidden = true;
+        } catch (error) {
+          $('restriction-error').textContent = error.message || 'Не удалось отправить обращение';
+          $('restriction-error').classList.remove('hidden');
+          submit.disabled = false;
+          submit.textContent = isAppeal ? 'Отправить апелляцию' : 'Написать в поддержку';
+        }
+      };
+
+      $('restriction-logout').onclick = async () => {
+        await clearAuthToken();
+        localStorage.removeItem('user');
+        window.currentUser = null;
+        form.remove();
+        screen.classList.remove('auth-screen--restricted');
+        if (authSwitch) authSwitch.classList.remove('hidden');
+        showForm('auth-form-login');
+      };
+    }
+
+    async function recoverRestrictedSession() {
+      try {
+        const data = await AuthAPI.getRestriction();
+        if (data?.accountRestricted) {
+          window.currentUser = data.user;
+          localStorage.setItem('user', JSON.stringify(data.user));
+          showRestrictedAccess(data);
+          return true;
+        }
+      } catch (_) {}
+      return false;
     }
 
     /* ─────── Проверка силы пароля ─────── */
@@ -154,6 +253,7 @@
     }
 
     function showForm(formId) {
+      screen.classList.remove('auth-screen--restricted');
       [formLogin, formRegister, formOtp, formForgot, formReset].forEach(f => {
         if (!f) return;
         f.classList.remove('active');
@@ -244,17 +344,17 @@
         if (!v) { setStatus(regUserStatus, ''); setWrap(regUser, ''); setHint(regUserHint, ''); return; }
         if (!validUsername(v)) {
           setStatus(regUserStatus, 'error'); setWrap(regUser, 'error');
-          setHint(regUserHint, '3–24 символа: латиница, цифры, _', 'error');
+          setHint(regUserHint, '2–32 символа: буквы, цифры, _', 'error');
           return;
         }
         setStatus(regUserStatus, 'loading'); setWrap(regUser, '');
         setHint(regUserHint, 'Проверяем доступность…', '');
         userTimer = setTimeout(async () => {
+          const checkedUsername = v;
           try {
-            const result = await UsersAPI.search(v);
-            const users = Array.isArray(result) ? result : (result.users || []);
-            const taken = users.some(u => u.username && u.username.toLowerCase() === v.toLowerCase());
-            if (taken) {
+            const result = await AuthAPI.checkUsername(checkedUsername);
+            if (regUser.value.trim() !== checkedUsername) return;
+            if (!result.available) {
               reg.username = false; setStatus(regUserStatus, 'error'); setWrap(regUser, 'error');
               setHint(regUserHint, 'Это имя уже занято', 'error');
             } else {
@@ -262,8 +362,9 @@
               setHint(regUserHint, 'Имя свободно', 'ok');
             }
           } catch (e) {
-            reg.username = true; setStatus(regUserStatus, 'ok'); setWrap(regUser, 'ok');
-            setHint(regUserHint, 'Имя доступно', 'ok');
+            if (regUser.value.trim() !== checkedUsername) return;
+            reg.username = false; setStatus(regUserStatus, 'error'); setWrap(regUser, 'error');
+            setHint(regUserHint, e.message || 'Не удалось проверить имя', 'error');
           }
           refreshRegSubmit();
         }, 600);
@@ -329,11 +430,19 @@
           }
         } catch (err) {
           console.error(err);
-          setWrap(regEmail, 'error');
-          setHint(regEmailHint, err.message || 'Ошибка регистрации', 'error');
+          const message = err.message || 'Ошибка регистрации';
+          if (/имя пользователя|username/i.test(message)) {
+            reg.username = false;
+            setWrap(regUser, 'error');
+            setStatus(regUserStatus, 'error');
+            setHint(regUserHint, message, 'error');
+          } else {
+            setWrap(regEmail, 'error');
+            setHint(regEmailHint, message, 'error');
+          }
         } finally {
-          regSubmit.disabled = false;
           regSubmit.textContent = 'Создать аккаунт';
+          refreshRegSubmit();
         }
       });
     }
@@ -377,6 +486,11 @@
           await storeAuthToken(data.token);
           localStorage.setItem('user', JSON.stringify(data.user));
           window.currentUser = data.user;
+
+          if (data.accountRestricted) {
+            showRestrictedAccess(data);
+            return;
+          }
 
           afterAuth(false, 'С возвращением!');
         } catch (err) {
@@ -590,6 +704,11 @@
           localStorage.setItem('user', JSON.stringify(data.user));
           window.currentUser = data.user;
 
+          if (data.accountRestricted) {
+            showRestrictedAccess(data);
+            return;
+          }
+
           afterAuth(shouldStartOnboarding, 'Вход выполнен успешно');
         } catch (err) {
           console.error(err);
@@ -788,7 +907,7 @@
           }
         } catch (error) {
           console.error(error);
-          setHint(loginEmailHint, 'Ошибка входа через Google', 'error');
+          if (!await recoverRestrictedSession()) setHint(loginEmailHint, 'Ошибка входа через Google', 'error');
         }
       }
     });
@@ -808,7 +927,7 @@
           }
         } catch (error) {
           console.error(error);
-          setHint(loginEmailHint, 'Ошибка входа через Google в Electron', 'error');
+          if (!await recoverRestrictedSession()) setHint(loginEmailHint, 'Ошибка входа через Google в Electron', 'error');
         }
       });
     }
@@ -846,6 +965,11 @@
 
     /* Экспорт в глобальную область для редиректа при 401 */
     window.showAuthScreen = openAuth;
+    window.enterLoveApp = enterApp;
+    window.showRestrictedAccess = data => {
+      screen.classList.remove('auth-hidden');
+      showRestrictedAccess(data);
+    };
 
     /* ─────── Проверка сессии при загрузке ─────── */
     async function checkExistingSession() {
@@ -873,6 +997,10 @@
         }
       } catch (err) {
         console.log('Нет активной сессии:', err.message);
+        if (await recoverRestrictedSession()) {
+          hideSplash();
+          return;
+        }
         // Показываем форму логина
         hideSplash();
         prefillResetFromUrl();

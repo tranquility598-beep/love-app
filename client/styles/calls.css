@@ -1,0 +1,346 @@
+/* Unified desktop call surfaces. Loaded after style.css to retire legacy mock feeds. */
+
+#call-modal {
+  padding: 32px 0 0;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+#call-modal .call-overlay-container {
+  width: min(1180px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 72px));
+  max-width: none;
+  max-height: none;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #0b0b0c;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.62);
+}
+
+#call-modal .call-bg-glow,
+#call-modal .call-bg-blur-avatar,
+#call-modal .call-voice-profile {
+  display: none !important;
+}
+
+#call-modal .call-top-bar {
+  min-height: 42px;
+  justify-content: space-between !important;
+}
+
+#call-modal .call-encrypted-badge {
+  margin: 0;
+  color: #9a9a9f;
+  background: transparent;
+  border: 0;
+}
+
+#call-modal .call-main-content {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 12px 0 84px;
+}
+
+#call-modal .call-video-grid,
+#call-modal .call-video-grid.layout-split {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 280px !important;
+  max-height: none !important;
+  margin: 0 !important;
+}
+
+#call-modal .call-video-grid.hidden {
+  display: grid !important;
+}
+
+#call-modal .video-stream-box,
+#call-modal .call-video-grid.layout-split .video-stream-box,
+#call-modal .call-video-grid.layout-remote-max .video-stream-box,
+#call-modal .call-video-grid.layout-local-max .video-stream-box {
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 8px !important;
+  background: #111113 !important;
+  overflow: hidden;
+  box-shadow: none !important;
+}
+
+#call-modal .call-video-grid.layout-remote-max .remote-video,
+#call-modal .call-video-grid.layout-local-max .local-video {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  z-index: 1 !important;
+}
+
+#call-modal .call-video-grid.layout-remote-max .local-video,
+#call-modal .call-video-grid.layout-local-max .remote-video {
+  position: absolute !important;
+  right: 14px !important;
+  bottom: 14px !important;
+  width: clamp(150px, 20vw, 220px) !important;
+  height: clamp(100px, 15vw, 150px) !important;
+  z-index: 4 !important;
+}
+
+.call-live-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #050505;
+  z-index: 2;
+}
+
+.call-live-video.is-screenshare {
+  object-fit: contain;
+  filter: none !important;
+}
+
+#call-modal .video-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #111113;
+}
+
+#call-modal .video-stream-box.has-media .video-placeholder {
+  visibility: hidden;
+}
+
+#call-modal .call-avatar {
+  width: clamp(72px, 9vw, 112px) !important;
+  height: clamp(72px, 9vw, 112px) !important;
+  font-size: 28px !important;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: none !important;
+}
+
+#call-modal .video-label {
+  color: #b2b2b7;
+  font-size: 13px;
+}
+
+.call-media-kind {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 5;
+  display: none;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(8, 8, 9, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f6;
+  font-size: 11px;
+}
+
+.video-stream-box.has-media .call-media-kind {
+  display: block;
+}
+
+#call-modal .call-controls-dock {
+  bottom: 18px;
+  min-height: 58px;
+  padding: 8px 10px;
+  gap: 8px;
+  border-radius: 8px;
+  background: rgba(12, 12, 13, 0.94) !important;
+}
+
+#call-modal .call-dock-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 7px !important;
+}
+
+#server-voice-panel .room-header {
+  min-height: 64px;
+}
+
+.voice-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.voice-stage-collapse {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #151517;
+  color: #b8b8bd;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.voice-stage-collapse:hover {
+  color: #fff;
+  background: #202023;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.voice-stage-collapse svg {
+  width: 18px;
+  height: 18px;
+}
+
+#server-voice-panel .voice-channel-panel {
+  position: relative;
+  min-height: 0;
+  padding: 14px 14px 84px;
+  border: 0;
+  border-radius: 0;
+  background: #09090a;
+}
+
+#server-voice-panel .voice-float-preview,
+#server-voice-panel .voice-fullscreen-overlay {
+  display: none !important;
+}
+
+#voice-grid-constellation.love-voice-grid {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  grid-auto-rows: minmax(210px, 1fr);
+  align-content: center;
+  gap: 10px;
+}
+
+#voice-grid-constellation.love-voice-grid[data-count="1"] {
+  grid-template-columns: minmax(0, 760px);
+  grid-template-rows: minmax(320px, 1fr);
+  justify-content: center;
+}
+
+.love-voice-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: #111113;
+  color: #fff;
+  cursor: default;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.love-voice-tile.speaking {
+  border-color: rgba(255, 132, 154, 0.72);
+}
+
+.love-voice-tile.has-media {
+  cursor: pointer;
+  aspect-ratio: 16 / 9;
+}
+
+.love-voice-tile.is-focused {
+  grid-column: 1 / -1;
+  grid-row: 1 / span 2;
+  min-height: 360px;
+}
+
+.love-voice-tile-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #050505;
+}
+
+.love-voice-tile.is-screen .love-voice-tile-video {
+  object-fit: contain;
+}
+
+.love-voice-tile-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.love-voice-tile.has-media .love-voice-tile-placeholder {
+  display: none;
+}
+
+.love-voice-tile-avatar {
+  width: clamp(76px, 9vw, 116px);
+  height: clamp(76px, 9vw, 116px);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  background: #202024 center / cover no-repeat;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.love-voice-tile-footer {
+  position: absolute;
+  z-index: 3;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.love-voice-tile-name,
+.love-voice-tile-mode {
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 8, 9, 0.82);
+  color: #f4f4f5;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.love-voice-tile-mode:empty {
+  display: none;
+}
+
+@media (max-width: 850px) {
+  #call-modal .call-overlay-container {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 48px);
+    padding: 12px;
+  }
+
+  #call-modal .call-video-grid,
+  #call-modal .call-video-grid.layout-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  #voice-grid-constellation.love-voice-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(180px, 1fr);
+  }
+}

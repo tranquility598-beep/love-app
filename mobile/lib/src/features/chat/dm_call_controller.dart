@@ -72,6 +72,8 @@ class DmCallController extends ChangeNotifier {
   String? _incomingConversationId;
   String? _incomingChannelId;
   String? _incomingPeerName;
+  String _incomingKind = 'audio';
+  bool _outgoingVideoRequested = false;
   bool _attached = false;
   bool _disposed = false;
 
@@ -123,17 +125,21 @@ class DmCallController extends ChangeNotifier {
     if (value.isNotEmpty) channelId = value;
   }
 
-  Future<void> startOutgoing() async {
+  Future<void> startOutgoing({bool video = false}) async {
     if (!canStart) return;
     if (!socket.isConnected) {
       _setError('Сокет еще не подключен');
       return;
     }
     _activePeerId = peerId;
+    _outgoingVideoRequested = video;
     phase = DmCallPhase.outgoing;
     errorMessage = null;
     _safeNotify();
-    socket.emit('call:request', {'targetUserId': peerId});
+    socket.emit('call:request', {
+      'targetUserId': peerId,
+      'kind': video ? 'video' : 'audio',
+    });
   }
 
   Future<void> acceptIncoming() async {
@@ -144,6 +150,7 @@ class DmCallController extends ChangeNotifier {
       'accepted': true,
       'conversationId': _incomingConversationId ?? conversationId,
       'channelId': _incomingChannelId ?? channelId,
+      'kind': _incomingKind,
     });
     await _joinCall(
       _roomId(
@@ -152,6 +159,7 @@ class DmCallController extends ChangeNotifier {
         callerId,
       ),
     );
+    if (_incomingKind == 'video' && !cameraOn) await toggleCamera();
   }
 
   void declineIncoming() {
@@ -172,13 +180,14 @@ class DmCallController extends ChangeNotifier {
     required String conversationId,
     required String channelId,
     required String callerName,
+    String kind = 'audio',
   }) {
     if (phase != DmCallPhase.idle) return;
     _activePeerId = callerId;
-    _incomingConversationId =
-        conversationId.isNotEmpty ? conversationId : null;
+    _incomingConversationId = conversationId.isNotEmpty ? conversationId : null;
     _incomingChannelId = channelId.isNotEmpty ? channelId : null;
     _incomingPeerName = callerName.isNotEmpty ? callerName : null;
+    _incomingKind = kind == 'video' ? 'video' : 'audio';
     phase = DmCallPhase.incoming;
     errorMessage = null;
     _safeNotify();
@@ -277,7 +286,9 @@ class DmCallController extends ChangeNotifier {
       return;
     }
     if (stream.getVideoTracks().isEmpty) {
-      try { await stream.dispose(); } catch (_) {}
+      try {
+        await stream.dispose();
+      } catch (_) {}
       await ScreenShareManager.stopScreenShare();
       errorMessage = 'Android не передал видеопоток демонстрации';
       _safeNotify();
@@ -312,6 +323,7 @@ class DmCallController extends ChangeNotifier {
     }
     cameraOn = !screen;
     screenSharing = screen;
+    _emitMediaState(screen ? 'screen' : 'camera');
     _safeNotify();
     await _renegotiateAll();
   }
@@ -320,6 +332,9 @@ class DmCallController extends ChangeNotifier {
   Future<void> stopVideo({bool silent = false}) async {
     final hadVideo = _videoStream != null;
     final wasScreen = screenSharing;
+    if (hadVideo) {
+      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
+    }
     for (final pc in _peerConnections.values) {
       try {
         final senders = await pc.getSenders();
@@ -373,6 +388,38 @@ class DmCallController extends ChangeNotifier {
     }
   }
 
+  void _emitMediaState(String mode, {String? previousMode}) {
+    final roomId = _activeRoomId;
+    if (roomId == null || roomId.isEmpty) return;
+    unawaited(_sendMediaState(roomId, mode, previousMode));
+  }
+
+  Future<void> _sendMediaState(
+    String roomId,
+    String mode,
+    String? previousMode,
+  ) async {
+    try {
+      final response = await socket.emitWithAck(
+        'voice:media_state',
+        {'channelId': roomId, 'mode': mode},
+        timeout: const Duration(seconds: 3),
+      );
+      if (response['status'] == 'ok') return;
+    } catch (_) {}
+
+    final legacyMode = mode == 'none' ? previousMode : mode;
+    if (legacyMode == 'screen') {
+      socket.emit(mode == 'none' ? 'screen:stop' : 'screen:start', {
+        'channelId': roomId,
+      });
+    } else if (legacyMode == 'camera') {
+      socket.emit(mode == 'none' ? 'camera:stop' : 'camera:start', {
+        'channelId': roomId,
+      });
+    }
+  }
+
   void dismissError() {
     if (phase == DmCallPhase.error) _resetToIdle();
   }
@@ -401,6 +448,7 @@ class DmCallController extends ChangeNotifier {
     _incomingConversationId = incomingConversationId;
     _incomingChannelId = asId(raw['channelId']);
     _incomingPeerName = userDisplayName(from);
+    _incomingKind = raw['kind'] == 'video' ? 'video' : 'audio';
     phase = DmCallPhase.incoming;
     errorMessage = null;
     _safeNotify();
@@ -430,6 +478,7 @@ class DmCallController extends ChangeNotifier {
         _activePeerId!,
       ),
     );
+    if (_outgoingVideoRequested && !cameraOn) await toggleCamera();
   }
 
   void _handleCallTerminated(dynamic data) {
@@ -551,17 +600,13 @@ class DmCallController extends ChangeNotifier {
     final pc = _peerConnections[fromSocketId];
     final remoteDescription = await pc?.getRemoteDescription();
     if (pc == null || remoteDescription?.type == null) {
-      _iceCandidateBuffer
-          .putIfAbsent(fromSocketId, () => [])
-          .add(candidate);
+      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
       return;
     }
     try {
       await pc.addCandidate(candidate);
     } catch (_) {
-      _iceCandidateBuffer
-          .putIfAbsent(fromSocketId, () => [])
-          .add(candidate);
+      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
     }
   }
 
@@ -578,7 +623,12 @@ class DmCallController extends ChangeNotifier {
       } catch (_) {
         // Часть сборок Android не даёт менять аудио-маршрут — не критично.
       }
-      socket.emit('voice:join', {'channelId': roomId});
+      final response =
+          await socket.emitWithAck('voice:join', {'channelId': roomId});
+      if (response['status'] != 'ok') {
+        throw StateError(
+            asText(response['message'], 'Сервер не подтвердил вход в звонок'));
+      }
     } catch (error) {
       await _leaveCall();
       _setError('Нет доступа к микрофону');
@@ -761,6 +811,8 @@ class DmCallController extends ChangeNotifier {
     _incomingConversationId = null;
     _incomingChannelId = null;
     _incomingPeerName = null;
+    _incomingKind = 'audio';
+    _outgoingVideoRequested = false;
     connectedAt = null;
     _safeNotify();
   }

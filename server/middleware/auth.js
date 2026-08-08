@@ -5,8 +5,10 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { refreshModerationState } = require('../services/moderationService');
+const { getJwtSecret } = require('../utils/jwtSecret');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'love-app-secret-key-2024';
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Проверяет JWT токен и добавляет пользователя в req.user
@@ -53,8 +55,33 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: 'Пользователь не найден' });
     }
 
-    if (user.isBanned) {
-      return res.status(403).json({ message: 'Ваш аккаунт заблокирован', isBanned: true, reason: user.banReason || '' });
+    await refreshModerationState(user);
+
+    const restricted = Boolean(user.deactivatedAt || user.isBanned);
+    if (restricted) {
+      const canAccessCases = req.baseUrl === '/api/cases';
+      const canReadRestriction = req.baseUrl === '/api/auth'
+        && req.path === '/restriction'
+        && req.method === 'GET';
+      const canOpenRestrictedSocket = req.baseUrl === '/api/auth'
+        && req.path === '/socket-token'
+        && req.method === 'POST';
+      if (!canAccessCases && !canReadRestriction && !canOpenRestrictedSocket) {
+        return res.status(403).json(user.deactivatedAt ? {
+          code: 'ACCOUNT_DEACTIVATED',
+          message: 'Аккаунт деактивирован',
+          reason: user.deactivationReason || ''
+        } : {
+          code: 'ACCOUNT_BANNED',
+          message: 'Ваш аккаунт заблокирован',
+          isBanned: true,
+          reason: user.banReason || '',
+          expiresAt: user.banUntil || null,
+          actionId: user.activeBanAction || null
+        });
+      }
+    } else if (decoded.restricted === true) {
+      return res.status(401).json({ message: 'Ограниченная сессия завершена. Войдите снова.' });
     }
     
     // Добавляем пользователя и ID сессии в запрос

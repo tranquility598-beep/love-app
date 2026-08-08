@@ -112,8 +112,7 @@ class ChannelVoiceController extends ChangeNotifier {
       // Некоторые Android-сборки не дают менять аудио-маршрут — не критично.
     }
 
-    final response =
-        await socket.emitWithAck('voice:join', {'channelId': id});
+    final response = await socket.emitWithAck('voice:join', {'channelId': id});
     if (response['status'] != 'ok') {
       await _abortJoin(asText(response['message'], 'Не удалось войти в войс'));
       return false;
@@ -220,7 +219,9 @@ class ChannelVoiceController extends ChangeNotifier {
       return;
     }
     if (stream.getVideoTracks().isEmpty) {
-      try { await stream.dispose(); } catch (_) {}
+      try {
+        await stream.dispose();
+      } catch (_) {}
       await ScreenShareManager.stopScreenShare();
       errorMessage = 'Android не передал видеопоток демонстрации';
       notifyListeners();
@@ -254,6 +255,7 @@ class ChannelVoiceController extends ChangeNotifier {
     }
     cameraOn = !screen;
     screenSharing = screen;
+    _emitMediaState(screen ? 'screen' : 'camera');
     notifyListeners();
     await _renegotiateAll();
   }
@@ -262,6 +264,9 @@ class ChannelVoiceController extends ChangeNotifier {
   Future<void> stopVideo({bool silent = false}) async {
     final hadVideo = _videoStream != null;
     final wasScreen = screenSharing;
+    if (hadVideo) {
+      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
+    }
     for (final pc in _peerConnections.values) {
       try {
         final senders = await pc.getSenders();
@@ -311,6 +316,39 @@ class ChannelVoiceController extends ChangeNotifier {
       } catch (_) {
         // Пир переподключится штатным путём.
       }
+    }
+  }
+
+  void _emitMediaState(String mode, {String? previousMode}) {
+    if (channelId.isEmpty) return;
+    unawaited(_sendMediaState(channelId, mode, previousMode));
+  }
+
+  Future<void> _sendMediaState(
+    String roomId,
+    String mode,
+    String? previousMode,
+  ) async {
+    final socket = _socket;
+    if (socket == null) return;
+    try {
+      final response = await socket.emitWithAck(
+        'voice:media_state',
+        {'channelId': roomId, 'mode': mode},
+        timeout: const Duration(seconds: 3),
+      );
+      if (response['status'] == 'ok') return;
+    } catch (_) {}
+
+    final legacyMode = mode == 'none' ? previousMode : mode;
+    if (legacyMode == 'screen') {
+      socket.emit(mode == 'none' ? 'screen:stop' : 'screen:start', {
+        'channelId': roomId,
+      });
+    } else if (legacyMode == 'camera') {
+      socket.emit(mode == 'none' ? 'camera:stop' : 'camera:start', {
+        'channelId': roomId,
+      });
     }
   }
 
@@ -443,17 +481,13 @@ class ChannelVoiceController extends ChangeNotifier {
     final pc = _peerConnections[fromSocketId];
     final remoteDescription = await pc?.getRemoteDescription();
     if (pc == null || remoteDescription?.type == null) {
-      _iceCandidateBuffer
-          .putIfAbsent(fromSocketId, () => [])
-          .add(candidate);
+      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
       return;
     }
     try {
       await pc.addCandidate(candidate);
     } catch (_) {
-      _iceCandidateBuffer
-          .putIfAbsent(fromSocketId, () => [])
-          .add(candidate);
+      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
     }
   }
 
@@ -498,8 +532,7 @@ class ChannelVoiceController extends ChangeNotifier {
   Future<RTCPeerConnection> _createPeerConnection(String socketId) async {
     final existing = _peerConnections[socketId];
     if (existing != null &&
-        existing.signalingState !=
-            RTCSignalingState.RTCSignalingStateClosed) {
+        existing.signalingState != RTCSignalingState.RTCSignalingStateClosed) {
       return existing;
     }
 
@@ -533,8 +566,7 @@ class ChannelVoiceController extends ChangeNotifier {
 
     pc.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state ==
-              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         unawaited(_removeConnection(socketId));
       }

@@ -260,6 +260,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       switch (result.type) {
         case AuthResultType.authenticated:
+        case AuthResultType.restricted:
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(result.message ?? 'Готово')),
           );

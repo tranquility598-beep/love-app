@@ -61,6 +61,57 @@
     return el.innerHTML;
   }
 
+  function _isTempMessageId(id) {
+    return !id || /^temp[-_]/.test(String(id));
+  }
+
+  function _normalizeReply(replyTo) {
+    if (!replyTo) return null;
+    if (typeof replyTo !== 'object') {
+      return { id: String(replyTo), text: '', author: '' };
+    }
+    const author = replyTo.author;
+    return {
+      id: String(replyTo._id || replyTo.id || ''),
+      text: replyTo.content || replyTo.text || '',
+      author: author && typeof author === 'object'
+        ? (author.nickname || author.username || '')
+        : ''
+    };
+  }
+
+  function _applyServerMessage(target, source, options = {}) {
+    if (!target || !source) return target;
+    const queuedEdit = target._queuedEdit;
+    target.text = queuedEdit || source.content || target.text || '';
+    target.attachments = source.attachments || target.attachments || [];
+    target.replyTo = _normalizeReply(source.replyTo) || target.replyTo || null;
+    target.authorRole = source.author?.role || target.authorRole || null;
+    target.edited = !!source.edited;
+    if (source.editedAt) target.editedAt = source.editedAt;
+
+    const sourceId = source._id || source.id;
+    if (sourceId && !_isTempMessageId(sourceId)) {
+      target._id = sourceId;
+      delete target._pending;
+      delete target._tempId;
+      if (window.__loveReplyTarget?.message === target) {
+        window.__loveReplyTarget.id = String(sourceId);
+      }
+      if (queuedEdit && options.flushQueuedEdit !== false) {
+        delete target._queuedEdit;
+        setTimeout(() => {
+          if (window.socket) window.socket.emit('message:edit', { messageId: sourceId, content: queuedEdit });
+          else if (window.MessagesAPI) window.MessagesAPI.edit(sourceId, queuedEdit);
+        }, 0);
+      }
+    } else if (sourceId) {
+      target._tempId = sourceId;
+      target._pending = true;
+    }
+    return target;
+  }
+
   // ══════════════════════════════════════════════════════════════════════
   // 3. SOCKET.JS CALLBACK STUBS
   //    These are called by socket.js event handlers. We provide
@@ -253,19 +304,24 @@
 
       // If DM message
       if (dmConv) {
-        // Prevent duplicates
-        if (msg._id && dmConv.messages.some(m => String(m._id) === String(msg._id))) return;
+        const incomingId = msg._id || msg.id;
+        // Prevent duplicates across both temporary and persisted IDs.
+        if (incomingId && dmConv.messages.some(m =>
+          String(m._id || '') === String(incomingId) || String(m._tempId || '') === String(incomingId)
+        )) return;
 
         const isOwn = String(msg.author?._id || msg.author) === String(window.currentUser?._id);
         
         // Merge with own optimistic pending message if exists
         if (isOwn) {
-          const pendingMsg = dmConv.messages.find(m => m.sender === 'own' && m._pending && !m._id);
+          const pendingMsg = dmConv.messages.find(m =>
+            m.sender === 'own' && m._pending && (
+              (incomingId && String(m._tempId || '') === String(incomingId)) ||
+              (!m._tempId && !m._id)
+            )
+          );
           if (pendingMsg) {
-            pendingMsg._id = msg._id;
-            delete pendingMsg._pending;
-            pendingMsg.text = msg.content || pendingMsg.text;
-            if (msg.attachments && msg.attachments.length) pendingMsg.attachments = msg.attachments;
+            _applyServerMessage(pendingMsg, msg);
             if (state.activeView === 'view-chats' && state.activeConversationId === dmConv.id) {
               if (typeof renderChatMessages === 'function') {
                 renderChatMessages(dmConv);
@@ -279,8 +335,14 @@
           sender: isOwn ? 'own' : 'partner',
           text: msg.content || '',
           time: _formatTime(msg.createdAt || new Date().toISOString()),
-          _id: msg._id,
-          attachments: msg.attachments || []
+          _id: _isTempMessageId(incomingId) ? undefined : incomingId,
+          _tempId: _isTempMessageId(incomingId) ? incomingId : undefined,
+          _pending: _isTempMessageId(incomingId),
+          attachments: msg.attachments || [],
+          replyTo: _normalizeReply(msg.replyTo),
+          edited: !!msg.edited,
+          author: msg.author?._id || msg.author,
+          authorRole: msg.author?.role || (isOwn ? window.currentUser?.role : dmConv._otherUser?.role) || null
         };
         dmConv.messages.push(msgObj);
 
@@ -306,19 +368,24 @@
           const ch = srv.channels?.find(c => String(c._realId) === String(msgChannelId));
           if (!ch) continue;
 
-          // Prevent duplicates
-          if (msg._id && ch.messages.some(m => String(m._id) === String(msg._id))) return;
+          const incomingId = msg._id || msg.id;
+          // Prevent duplicates across both temporary and persisted IDs.
+          if (incomingId && ch.messages.some(m =>
+            String(m._id || '') === String(incomingId) || String(m._tempId || '') === String(incomingId)
+          )) return;
 
           const isOwn = String(msg.author?._id || msg.author) === String(window.currentUser?._id);
           
           // Merge with own optimistic pending message if exists
           if (isOwn) {
-            const pendingMsg = ch.messages.find(m => m.sender === 'own' && m._pending && !m._id);
+            const pendingMsg = ch.messages.find(m =>
+              m.sender === 'own' && m._pending && (
+                (incomingId && String(m._tempId || '') === String(incomingId)) ||
+                (!m._tempId && !m._id)
+              )
+            );
             if (pendingMsg) {
-              pendingMsg._id = msg._id;
-              delete pendingMsg._pending;
-              pendingMsg.text = msg.content || pendingMsg.text;
-              if (msg.attachments && msg.attachments.length) pendingMsg.attachments = msg.attachments;
+              _applyServerMessage(pendingMsg, msg);
               if (state.activeView === 'view-servers' && state.activeServerId === srvId && String(ch._realId) === String(msgChannelId)) {
                 if (typeof renderServerChat === 'function') {
                   renderServerChat();
@@ -332,10 +399,15 @@
             sender: isOwn ? 'own' : (msg.author?.username || msg.author?.nickname || 'User'),
             text: msg.content || '',
             time: _formatTime(msg.createdAt || new Date().toISOString()),
-            _id: msg._id,
+            _id: _isTempMessageId(incomingId) ? undefined : incomingId,
+            _tempId: _isTempMessageId(incomingId) ? incomingId : undefined,
+            _pending: _isTempMessageId(incomingId),
             author: msg.author?._id || msg.author,
             authorAvatar: msg.author?.avatar || '',
-            attachments: msg.attachments || []
+            authorRole: msg.author?.role || (isOwn ? window.currentUser?.role : null),
+            attachments: msg.attachments || [],
+            replyTo: _normalizeReply(msg.replyTo),
+            edited: !!msg.edited
           });
 
           // If this is the active channel, re-render
@@ -388,7 +460,7 @@
         for (const conv of mockConvs) {
           const m = conv.messages?.find(m => String(m._id) === String(msg._id));
           if (m) {
-            m.text = msg.content || '';
+            _applyServerMessage(m, msg, { flushQueuedEdit: false });
             found = true;
             const state = window._getActiveState ? window._getActiveState() : {};
             if (state.activeView === 'view-chats' && state.activeConversationId === conv.id) {
@@ -408,7 +480,7 @@
             for (const ch of srv.channels || []) {
               const m = ch.messages?.find(m => String(m._id) === String(msg._id));
               if (m) {
-                m.text = msg.content || '';
+                _applyServerMessage(m, msg, { flushQueuedEdit: false });
                 const state = window._getActiveState ? window._getActiveState() : {};
                 if (state.activeView === 'view-servers' && state.activeServerId === 'srv-' + srv._realId && state.activeServerChannelId === 'ch-' + ch._realId) {
                   if (typeof renderServerChat === 'function') {
@@ -433,12 +505,13 @@
       const mockConvs = window._mockConversations;
       if (mockConvs) {
         for (const conv of mockConvs) {
-          const m = conv.messages?.find(m => String(m._tempId) === String(tempId) || (m._pending && !m._id));
+          const m = conv.messages?.find(m =>
+            String(m._tempId || '') === String(tempId) ||
+            String(m._id || '') === String(tempId) ||
+            (m._pending && !m._id && !m._tempId)
+          );
           if (m) {
-            m._id = msg._id;
-            delete m._pending;
-            delete m._tempId;
-            m.text = msg.content || m.text;
+            _applyServerMessage(m, msg);
             found = true;
             const state = window._getActiveState ? window._getActiveState() : {};
             if (state.activeView === 'view-chats' && state.activeConversationId === conv.id) {
@@ -456,12 +529,13 @@
         if (mockSrv) {
           for (const srv of Object.values(mockSrv)) {
             for (const ch of srv.channels || []) {
-              const m = ch.messages?.find(m => String(m._tempId) === String(tempId) || (m._pending && !m._id));
+              const m = ch.messages?.find(m =>
+                String(m._tempId || '') === String(tempId) ||
+                String(m._id || '') === String(tempId) ||
+                (m._pending && !m._id && !m._tempId)
+              );
               if (m) {
-                m._id = msg._id;
-                delete m._pending;
-                delete m._tempId;
-                m.text = msg.content || m.text;
+                _applyServerMessage(m, msg);
                 const state = window._getActiveState ? window._getActiveState() : {};
                 if (state.activeView === 'view-servers' && state.activeServerId === 'srv-' + srv._realId && state.activeServerChannelId === 'ch-' + ch._realId) {
                   if (typeof renderServerChat === 'function') {
@@ -592,7 +666,26 @@
   // ── showGlobalAnnouncementBanner ──────────────────────────────────────
   if (typeof window.showGlobalAnnouncementBanner !== 'function') {
     window.showGlobalAnnouncementBanner = function (data) {
-      window.showNotification('info', data.message || '', 'Объявление');
+      const previous = document.getElementById('love-global-announcement');
+      if (previous) previous.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'love-global-announcement';
+      overlay.className = 'love-global-announcement';
+      const dialog = document.createElement('section');
+      dialog.setAttribute('role', 'alertdialog');
+      dialog.setAttribute('aria-modal', 'true');
+      const title = document.createElement('h2');
+      title.textContent = data.title || 'Важное объявление Love';
+      const body = document.createElement('p');
+      body.textContent = data.content || data.message || '';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = 'Понятно';
+      close.addEventListener('click', () => overlay.remove());
+      dialog.append(title, body, close);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      close.focus();
     };
   }
 
@@ -947,6 +1040,11 @@
           activeServerId: firstId,
           activeServerChannelId: firstTextCh ? firstTextCh.id : (firstSrv.channels?.[0]?.id || '')
         });
+
+        const state = window._getActiveState ? window._getActiveState() : {};
+        if (state.activeView === 'view-servers' && typeof selectServerOrRoom === 'function') {
+          selectServerOrRoom(firstId, firstSrv._kind || firstSrv.kind || 'server');
+        }
       }
 
       console.log('[init-app] Servers loaded:', allServers.length);
@@ -1045,7 +1143,11 @@
           text:   msg.content || '',
           time:   _formatTime(msg.createdAt),
           _id:    msg._id,
-          attachments: msg.attachments || []
+          author: msg.author?._id || msg.author,
+          authorRole: msg.author?.role || (isOwn ? window.currentUser?.role : conv._otherUser?.role) || null,
+          attachments: msg.attachments || [],
+          replyTo: _normalizeReply(msg.replyTo),
+          edited: !!msg.edited
         };
       });
 
@@ -1088,7 +1190,10 @@
         _id:    msg._id,
         author: msg.author?._id || msg.author,
         authorAvatar: msg.author?.avatar || '',
-        attachments: msg.attachments || []
+        authorRole: msg.author?.role || null,
+        attachments: msg.attachments || [],
+        replyTo: _normalizeReply(msg.replyTo),
+        edited: !!msg.edited
       }));
 
       // Перерисовываем чат после ленивой загрузки. Для комнаты — её внутренний
@@ -1118,6 +1223,7 @@
       id: _notifIdCounter++,
       _realId: n._id,
       actorId: n.actor,
+      caseId: n.caseId || '',
       name: _esc(rawName),
       avatar: _esc(avatar),
       text: _esc(n.preview || ''),
@@ -1214,6 +1320,34 @@
   //    Intercepts form submits to send via real socket when applicable
   // ══════════════════════════════════════════════════════════════════════
 
+  function _emitMessagePayload(payload, replyTarget) {
+    if (!replyTarget) {
+      window.socket.emit('message:send', payload);
+      return;
+    }
+
+    const emitWhenReady = () => {
+      const targetId = replyTarget.message?._id || replyTarget.id;
+      if (targetId && !_isTempMessageId(targetId)) {
+        payload.replyTo = targetId;
+        window.socket.emit('message:send', payload);
+        return;
+      }
+      if (Date.now() < deadline) {
+        setTimeout(emitWhenReady, 60);
+        return;
+      }
+      // The original message failed to persist. Keep the new text deliverable,
+      // but do not send an invalid temporary reply id to the API.
+      window.socket.emit('message:send', payload);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Ответ отправлен без цитаты', 'Исходное сообщение не успело сохраниться.');
+      }
+    };
+    const deadline = Date.now() + 8000;
+    emitWhenReady();
+  }
+
   window._sendRealDMMessage = function (conv, text, attachments, replyTo) {
     if (!conv?._channelId || !window.socket) return false;
 
@@ -1221,13 +1355,17 @@
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: conv._channelId, content: text || '', tempId };
     // Reply target выбирается UI после нажатия «Ответить».
-    const target = replyTo || window.__loveReplyTarget?.id;
-    if (target) payload.replyTo = target;
+    const replyTarget = replyTo
+      ? { id: replyTo }
+      : window.__loveReplyTarget;
     if (attachments && attachments.length) payload.attachments = attachments;
-    window.socket.emit('message:send', payload);
-    if (target) window.__loveReplyTarget = null;
+    _emitMessagePayload(payload, replyTarget);
+    if (replyTarget) {
+      if (typeof window._clearLoveReplyTarget === 'function') window._clearLoveReplyTarget();
+      else window.__loveReplyTarget = null;
+    }
 
-    return true; // signal that message was sent via real socket
+    return tempId;
   };
 
   window._sendRealChannelMessage = function (channelRealId, text, attachments, replyTo) {
@@ -1235,13 +1373,17 @@
 
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: channelRealId, content: text || '', tempId };
-    const target = replyTo || window.__loveReplyTarget?.id;
-    if (target) payload.replyTo = target;
+    const replyTarget = replyTo
+      ? { id: replyTo }
+      : window.__loveReplyTarget;
     if (attachments && attachments.length) payload.attachments = attachments;
-    window.socket.emit('message:send', payload);
-    if (target) window.__loveReplyTarget = null;
+    _emitMessagePayload(payload, replyTarget);
+    if (replyTarget) {
+      if (typeof window._clearLoveReplyTarget === 'function') window._clearLoveReplyTarget();
+      else window.__loveReplyTarget = null;
+    }
 
-    return true;
+    return tempId;
   };
 
 
@@ -1294,44 +1436,6 @@
       try {
         await initSocket();
         console.log('[init-app] Socket connected');
-
-        // Лента уведомлений в реальном времени
-        if (window.socket) {
-          window.socket.on('notification:new', (n) => {
-            if (!n) return;
-            const mapped = _mapServerNotification(n);
-            // Добавляем в ленту уведомлений
-            if (typeof window._prependNotification === 'function') {
-              window._prependNotification(mapped);
-            }
-            // Показываем тост для уведомлений кроме DM-сообщений (те идут через showMessageNotification)
-            if (n.type !== 'new_dm' && typeof window.showAppNotification === 'function') {
-              const titles = {
-                mention: 'Упоминание',
-                friend_request: 'Запрос в друзья',
-                friend_accepted: 'Запрос принят',
-                missed_call: 'Пропущенный звонок'
-              };
-              const notifTitle = titles[n.type] || 'Уведомление';
-              const notifText = (n.preview || '').toString();
-              const notifView = (n.type === 'friend_request' || n.type === 'friend_accepted')
-                ? 'view-contacts' : 'view-notifications';
-              window.showAppNotification({
-                title: notifTitle,
-                text: notifText,
-                avatar: (n.actorName || '?').charAt(0).toUpperCase(),
-                onClick: () => {
-                  const btn = document.querySelector('[data-target="' + notifView + '"]');
-                  if (btn) btn.click();
-                }
-              });
-              // Нативное ОС-уведомление, когда приложение свёрнуто/в фоне.
-              if (!document.hasFocus() && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
-                window.electronAPI.showNotification(notifTitle, notifText.slice(0, 120), { view: notifView });
-              }
-            }
-          });
-        }
 
         // Join all server rooms
         if (window.servers && Array.isArray(window.servers) && typeof window.socketJoinServer === 'function') {
@@ -1454,6 +1558,7 @@
         // не полагаясь только на факт прилёта webrtc-трека.
         hasCam: !!(m.hasCam || m.cameraOn),
         hasShare: !!(m.hasShare || m.screenSharing),
+        mediaMode: m.mediaMode || (m.screenSharing ? 'screen' : m.cameraOn ? 'camera' : 'none'),
         isOwn: isOwn,
         micActive: !m.muted,
         soundActive: !m.deafened,
@@ -1658,38 +1763,15 @@
     const vm = window.voiceManager;
     const nowActive = !btn.classList.contains('video-inactive'); // script.js уже переключил
     if (nowActive) {
-      const stream = await _startCam();
-      const video = document.getElementById('call-local-video');
-      if (stream && video) {
-        video.srcObject = stream;
-        video.play().catch(() => {});
-      }
-      if (stream) {
-        const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack && vm.peerConnections) {
-          vm.peerConnections.forEach(async (pc) => {
-            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender) await sender.replaceTrack(videoTrack);
-            else pc.addTrack(videoTrack, stream);
-          });
-        }
-      } else {
+      const started = await vm.startCamera();
+      if (!started) {
         if (typeof showToast === 'function') showToast('Камера', 'Камера недоступна или доступ отклонён');
-        // Откатываем UI
         btn.classList.add('video-inactive');
         btn.querySelector('.icon-video-on')?.classList.add('hidden');
         btn.querySelector('.icon-video-off')?.classList.remove('hidden');
       }
     } else {
-      _stopCam();
-      const video = document.getElementById('call-local-video');
-      if (video) video.srcObject = null;
-      if (vm.peerConnections) {
-        vm.peerConnections.forEach(async (pc) => {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) sender.replaceTrack(null).catch(() => {});
-        });
-      }
+      await vm.stopCamera();
     }
   });
 

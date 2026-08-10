@@ -1,4 +1,5 @@
 node_modules/
+.workbuddy/
 temp/
 server/uploads/
 server/private-uploads/
@@ -7,5 +8,6 @@ build/dist/
 .DS_Store
 send to ai/
 .mimocode/
+.workbuddy/
 opencode.json
 notion/

@@ -433,6 +433,51 @@ body {
     flex-shrink: 0;
 }
 
+.voice-dock-trigger {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 14px;
+    background: #f4f4f5;
+    color: #101012;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38), inset 0 1px 0 #fff;
+    transition: transform 160ms ease, border-radius 160ms ease, background 160ms ease;
+}
+
+.voice-dock-trigger:hover,
+.voice-dock-trigger[aria-expanded="true"] {
+    transform: translateY(-2px);
+    border-radius: 11px;
+    background: #fff;
+}
+
+.voice-dock-trigger svg {
+    width: 18px;
+    height: 18px;
+}
+
+.voice-dock-trigger-pulse {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid #09090a;
+    border-radius: 50%;
+    background: #48d989;
+    box-shadow: 0 0 0 3px rgba(72, 217, 137, 0.12);
+}
+
+.voice-dock-trigger.is-muted .voice-dock-trigger-pulse {
+    background: #ff667d;
+    box-shadow: 0 0 0 3px rgba(255, 102, 125, 0.12);
+}
+
 .user-avatar-btn {
     width: 38px;
     height: 38px;
@@ -7584,7 +7629,7 @@ textarea.s-input {
 .voice-control-btn {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.45);
@@ -7650,7 +7695,7 @@ textarea.s-input {
     align-items: center;
     gap: 5px;
     padding: 5px 10px;
-    border-radius: 8px;
+    border-radius: 14px;
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.5);
@@ -15050,32 +15095,38 @@ a.mv-btn { text-decoration: none; }
 /* ───────────────── Мини-плашка войса ───────────────── */
 .voice-mini-bar {
     position: fixed;
-    left: var(--vmb-left, 16px);
-    top: var(--vmb-top, auto);
-    bottom: var(--vmb-bottom, 16px);
+    left: 82px;
+    top: 0;
+    bottom: auto;
     z-index: 11000;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px;
-    border-radius: 22px;
-    background: rgba(12, 12, 12, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    gap: 8px;
+    min-height: 62px;
+    padding: 8px;
+    border-radius: 20px;
+    background:
+        linear-gradient(140deg, rgba(31, 31, 35, 0.97), rgba(12, 12, 14, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    backdrop-filter: blur(24px) saturate(135%);
+    -webkit-backdrop-filter: blur(24px) saturate(135%);
     color: #fff;
     opacity: 0;
-    transform: translateY(16px) scale(0.96);
-    transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.34, 1.4, 0.5, 1);
-    cursor: grab;
-    touch-action: none;
+    transform: translateX(-14px) scaleX(0.94) scaleY(0.97);
+    transform-origin: left center;
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.85, 0.25, 1);
+    cursor: default;
     user-select: none;
 }
 
 .voice-mini-bar.visible {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(0) scale(1);
+}
+
+.voice-mini-bar.voice-dock-open {
+    transform-origin: left center;
 }
 
 /* Во время перетаскивания позиция управляется через top/left, transform сбрасываем */
@@ -15122,13 +15173,14 @@ a.mv-btn { text-decoration: none; }
 .vmb-body {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 8px 4px 6px;
+    gap: 11px;
+    min-width: 164px;
+    padding: 5px 10px 5px 6px;
     border: none;
     background: transparent;
     color: inherit;
     cursor: pointer;
-    border-radius: 12px;
+    border-radius: 14px;
     transition: background 0.18s ease;
 }
 
@@ -15139,17 +15191,20 @@ a.mv-btn { text-decoration: none; }
 /* Пульсирующий индикатор связи */
 .vmb-pulse {
     position: relative;
-    width: 22px;
-    height: 22px;
+    width: 38px;
+    height: 38px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 13px;
+    background: rgba(71, 218, 132, 0.1);
+    border: 1px solid rgba(71, 218, 132, 0.16);
 }
 
 .vmb-pulse-dot {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: #3ad07a;
     box-shadow: 0 0 0 0 rgba(58, 208, 122, 0.6);
@@ -15171,16 +15226,17 @@ a.mv-btn { text-decoration: none; }
 }
 
 .vmb-status {
-    font-size: 10px;
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #3ad07a;
-    font-weight: 600;
+    letter-spacing: 0.9px;
+    color: #59dc91;
+    font-weight: 750;
 }
 
 .vmb-channel {
-    font-size: 12.5px;
-    font-weight: 500;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 650;
     color: #f2f2f2;
     max-width: 160px;
     white-space: nowrap;
@@ -15191,17 +15247,19 @@ a.mv-btn { text-decoration: none; }
 .vmb-controls {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    padding-left: 8px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .vmb-btn {
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
-    border: none;
-    border-radius: 11px;
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.84);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -15210,24 +15268,27 @@ a.mv-btn { text-decoration: none; }
 }
 
 .vmb-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
-    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
 }
 
 .vmb-btn svg {
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
 }
 
 /* Активное "выключенное" состояние мика/звука */
 .vmb-btn.muted-state {
-    background: rgba(231, 76, 60, 0.18);
-    color: #ff6b5e;
+    background: rgba(255, 72, 94, 0.14);
+    border-color: rgba(255, 92, 112, 0.28);
+    color: #ff788c;
 }
 
 .vmb-btn-leave {
-    background: rgba(231, 76, 60, 0.16);
-    color: #ff6b5e;
+    background: rgba(255, 65, 89, 0.11);
+    border-color: rgba(255, 82, 103, 0.25);
+    color: #ff8998;
 }
 
 .vmb-btn-leave:hover {
@@ -15238,6 +15299,10 @@ a.mv-btn { text-decoration: none; }
 /* Мобила: полоса под шапкой во всю ширину (снизу занято вводом и навигацией).
    Чуть ниже плеера, чтобы не столкнуться, когда играет музыка. */
 @media (max-width: 768px) {
+    .voice-dock-trigger,
+    .voice-mini-bar {
+        display: none !important;
+    }
     /* Компактная плавающая капсула (не растягиваем во всю ширину) — её можно таскать */
     .voice-mini-bar {
         left: var(--vmb-left, 8px);

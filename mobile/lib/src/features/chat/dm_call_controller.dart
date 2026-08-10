@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/prefs/love_prefs.dart';
+import '../../core/network/api_client.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../core/services/screen_share_manager.dart';
 import 'chat_models.dart';
@@ -64,6 +65,7 @@ class DmCallController extends ChangeNotifier {
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
   final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
+  Map<String, dynamic> _iceConfiguration = _stunIceConfiguration;
 
   MediaStream? _localStream;
   MediaStream? _videoStream;
@@ -76,6 +78,7 @@ class DmCallController extends ChangeNotifier {
   bool _outgoingVideoRequested = false;
   bool _attached = false;
   bool _disposed = false;
+  Timer? _connectionTimeout;
 
   bool get isVisible => phase != DmCallPhase.idle;
   bool get canStart => phase == DmCallPhase.idle && peerId.isNotEmpty;
@@ -615,6 +618,7 @@ class DmCallController extends ChangeNotifier {
       phase = DmCallPhase.connecting;
       errorMessage = null;
       _safeNotify();
+      await _refreshIceConfiguration();
       await _ensureLocalStream();
       _activeRoomId = roomId;
       try {
@@ -623,16 +627,54 @@ class DmCallController extends ChangeNotifier {
       } catch (_) {
         // Часть сборок Android не даёт менять аудио-маршрут — не критично.
       }
-      final response =
-          await socket.emitWithAck('voice:join', {'channelId': roomId});
+      final response = await socket.emitWithAck(
+        'voice:join',
+        {'channelId': roomId},
+        timeout: const Duration(seconds: 15),
+      );
       if (response['status'] != 'ok') {
         throw StateError(
             asText(response['message'], 'Сервер не подтвердил вход в звонок'));
       }
-    } catch (error) {
+      _startConnectionTimeout();
+    } on TimeoutException {
       await _leaveCall();
-      _setError('Нет доступа к микрофону');
+      _setError('Время ожидания подтверждения звонка истекло');
+    } on StateError catch (error) {
+      await _leaveCall();
+      final message = error.message.toString();
+      _setError(message == 'microphone-denied'
+          ? 'Нет доступа к микрофону'
+          : asText(message, 'Не удалось подключиться к звонку'));
+    } catch (_) {
+      await _leaveCall();
+      _setError('Не удалось подключиться к звонку');
     }
+  }
+
+  Future<void> _refreshIceConfiguration() async {
+    _iceConfiguration = _stunIceConfiguration;
+    try {
+      final response = await ApiClient().get('/webrtc/ice-config');
+      final servers = response['iceServers'];
+      if (servers is List && servers.isNotEmpty) {
+        _iceConfiguration = {'iceServers': servers};
+      }
+    } catch (_) {}
+  }
+
+  void _startConnectionTimeout() {
+    _connectionTimeout?.cancel();
+    _connectionTimeout = Timer(const Duration(seconds: 30), () {
+      if (_disposed || phase != DmCallPhase.connecting) return;
+      unawaited(_leaveCall());
+      _setError('Не удалось соединиться. Попробуйте ещё раз.');
+    });
+  }
+
+  void _cancelConnectionTimeout() {
+    _connectionTimeout?.cancel();
+    _connectionTimeout = null;
   }
 
   Future<void> _ensureLocalStream() async {
@@ -709,6 +751,7 @@ class DmCallController extends ChangeNotifier {
 
     pc.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _cancelConnectionTimeout();
         phase = DmCallPhase.connected;
         connectedAt ??= DateTime.now();
         errorMessage = null;
@@ -780,6 +823,7 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _cleanupMedia() async {
+    _cancelConnectionTimeout();
     await stopVideo(silent: true);
     for (final socketId in _peerConnections.keys.toList()) {
       await _removeConnection(socketId);
@@ -805,6 +849,7 @@ class DmCallController extends ChangeNotifier {
   }
 
   void _resetToIdle() {
+    _cancelConnectionTimeout();
     phase = DmCallPhase.idle;
     errorMessage = null;
     _activePeerId = null;
@@ -818,6 +863,7 @@ class DmCallController extends ChangeNotifier {
   }
 
   void _setError(String message) {
+    _cancelConnectionTimeout();
     phase = DmCallPhase.error;
     errorMessage = message;
     _safeNotify();
@@ -851,7 +897,7 @@ class DmCallController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  static const _iceConfiguration = {
+  static const _stunIceConfiguration = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},

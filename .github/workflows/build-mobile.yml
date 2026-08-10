@@ -19,6 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify release version
+        working-directory: .
+        run: node ops/check-release-version.cjs
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:

@@ -8,7 +8,8 @@
     remoteStreams: new Map(),
     localStream: null,
     localMode: 'none',
-    focusedServerKey: null
+    focusedServerKey: null,
+    avatarUrls: new Map()
   };
 
   const asId = value => String(value || '');
@@ -21,12 +22,60 @@
   const displayName = member => member?.nickname || member?.username || member?.name || 'Участник';
   const initials = name => String(name || '?').trim().slice(0, 2).toUpperCase();
 
+  function normalizeAvatar(value) {
+    const raw = String(value || '').trim();
+    const cssUrl = raw.match(/^url\(["']?(.*?)["']?\)$/i);
+    return cssUrl ? cssUrl[1] : raw;
+  }
+
   function avatarUrl(member) {
-    const raw = member?.avatar || member?.avatarUrl || '';
+    const own = asId(member?.userId) === asId(window.currentUser?._id) || member?.isOwn;
+    const profileAvatar = own
+      ? [document.getElementById('nav-profile-btn'), document.getElementById('profile-avatar-display')]
+          .map(element => element ? getComputedStyle(element).backgroundImage : '')
+          .find(value => value && value !== 'none')
+      : '';
+    const fallback = own
+      ? window.currentUser?.avatar || window.currentUser?.avatarUrl || window.ownProfileData?.avatarUrl || profileAvatar
+      : '';
+    const raw = normalizeAvatar(member?.avatar || member?.avatarUrl || fallback);
     if (!raw) return '';
     return typeof window.getAvatarUrl === 'function'
       ? window.getAvatarUrl(raw, displayName(member), member?.userId)
       : raw;
+  }
+
+  function setAvatar(avatar, member, key, name) {
+    const cacheKey = asId(member?.userId || key);
+    const nextUrl = avatarUrl(member) || state.avatarUrls.get(cacheKey) || '';
+    avatar.dataset.avatarUrl = nextUrl;
+
+    if (!nextUrl) {
+      avatar.style.backgroundImage = '';
+      avatar.classList.remove('has-image');
+      avatar.textContent = initials(name);
+      return;
+    }
+
+    state.avatarUrls.set(cacheKey, nextUrl);
+    const applyImage = () => {
+      if (avatar.dataset.avatarUrl !== nextUrl) return;
+      avatar.style.backgroundImage = `url("${String(nextUrl).replace(/"/g, '%22')}")`;
+      avatar.classList.add('has-image');
+      avatar.textContent = '';
+    };
+    if (avatar.classList.contains('has-image') && avatar.style.backgroundImage.includes(nextUrl)) return;
+
+    const image = new Image();
+    image.onload = applyImage;
+    image.onerror = () => {
+      if (avatar.dataset.avatarUrl !== nextUrl) return;
+      state.avatarUrls.delete(cacheKey);
+      avatar.style.backgroundImage = '';
+      avatar.classList.remove('has-image');
+      avatar.textContent = initials(name);
+    };
+    image.src = nextUrl;
   }
 
   function setVideo(video, stream, mode) {
@@ -72,7 +121,7 @@
   }
 
   function memberKey(member) {
-    return asId(member?.socketId || member?.userId || member?.name);
+    return asId(member?.userId || member?.socketId || member?.name);
   }
 
   function streamFor(member) {
@@ -141,7 +190,6 @@
       const active = !!media.stream && media.mode !== 'none';
       const video = tile.querySelector('.love-voice-tile-video');
       const avatar = tile.querySelector('.love-voice-tile-avatar');
-      const url = avatarUrl(member);
 
       tile.classList.toggle('has-media', active);
       tile.classList.toggle('is-screen', media.mode === 'screen');
@@ -151,17 +199,20 @@
       setVideo(video, active ? media.stream : null, media.mode);
       tile.querySelector('.love-voice-tile-name').textContent = name + (member?.muted || member?.micActive === false ? ' · микрофон выключен' : '');
       tile.querySelector('.love-voice-tile-mode').textContent = media.mode === 'screen' ? 'Экран' : media.mode === 'camera' ? 'Камера' : '';
-      avatar.textContent = url ? '' : initials(name);
-      avatar.style.backgroundImage = url ? `url("${String(url).replace(/"/g, '%22')}")` : '';
+      setAvatar(avatar, member, key, name);
       fragment.appendChild(tile);
     });
 
+    // The legacy constellation renderer used the same container and leaves
+    // `.voice-pcard` nodes behind. Keep this stage as the container's single
+    // owner, otherwise a stale card is rendered alongside the new tile.
     Array.from(grid.children).forEach(node => {
-      if (node.dataset?.memberKey && !liveKeys.has(node.dataset.memberKey)) {
-        const video = node.querySelector('video');
-        if (video) video.srcObject = null;
-        node.remove();
-      }
+      const isStageTile = node.classList.contains('love-voice-tile');
+      const isCurrentMember = liveKeys.has(node.dataset?.memberKey);
+      if (isStageTile && isCurrentMember) return;
+      const video = node.querySelector('video');
+      if (video) video.srcObject = null;
+      node.remove();
     });
     grid.appendChild(fragment);
     const count = document.getElementById('voice-member-count-text');

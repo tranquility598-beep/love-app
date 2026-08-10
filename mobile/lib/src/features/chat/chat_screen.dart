@@ -161,13 +161,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   icon: Icons.videocam_outlined,
                   onPressed: () => _openCall(video: true),
                 ),
-              LoveActionButton(
-                tooltip: 'Поиск',
-                icon: Icons.search_rounded,
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Поиск по чату скоро')),
-                ),
-              ),
             ],
           ),
         Expanded(child: _body()),
@@ -324,7 +317,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final label = editing != null
         ? 'Редактирование сообщения'
         : 'Ответ для ${replyTo?.authorName ?? ''}';
-    final preview = editing?.content ?? replyTo?.content ?? '';
+    final target = editing ?? replyTo;
+    final preview = target == null
+        ? ''
+        : target.content.trim().isNotEmpty
+            ? target.content
+            : target.hasMedia
+                ? 'Вложение'
+                : 'Сообщение';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
       child: Container(
@@ -374,11 +374,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             IconButton(
               tooltip: 'Отменить',
-              onPressed: () => setState(() {
-                if (_editing != null) _message.clear();
-                _editing = null;
-                _replyTo = null;
-              }),
+              onPressed: _cancelComposerAction,
               iconSize: 18,
               color: LoveColors.textSecondary,
               icon: const Icon(Icons.close_rounded),
@@ -387,6 +383,15 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+  }
+
+  void _cancelComposerAction() {
+    if (!mounted) return;
+    setState(() {
+      if (_editing != null) _message.clear();
+      _editing = null;
+      _replyTo = null;
+    });
   }
 
   Future<void> _showMessageActions(ChatMessage message) async {

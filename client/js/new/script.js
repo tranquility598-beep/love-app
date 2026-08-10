@@ -9208,17 +9208,17 @@ function isVoiceScreenVisible() {
 
 function updateVoiceMiniBar() {
     const bar = document.getElementById('voice-mini-bar');
-    if (!bar) return;
+    const trigger = document.getElementById('voice-dock-trigger');
+    if (!bar || !trigger) return;
 
     const connected = !!window.currentVoiceChannel || !!(window.voiceManager && window.voiceManager.channelId);
-    const show = connected && !isVoiceScreenVisible();
+    trigger.classList.toggle('hidden', !connected);
+    trigger.classList.toggle('is-muted', !!window.voiceManager?.isMuted);
+    trigger.setAttribute('aria-expanded', bar.classList.contains('voice-dock-open') ? 'true' : 'false');
 
-    if (!show) {
-        bar.classList.remove('visible');
-        // Прячем после анимации, чтобы не ловить клики
-        setTimeout(() => {
-            if (!bar.classList.contains('visible')) bar.classList.add('hidden');
-        }, 300);
+    if (!connected) {
+        bar.classList.remove('visible', 'voice-dock-open');
+        bar.classList.add('hidden');
         return;
     }
 
@@ -9235,15 +9235,17 @@ function updateVoiceMiniBar() {
     // Синхронизируем визуал кнопок мик/звук с реальным состоянием
     syncVoiceMiniBarButtons();
 
-    bar.classList.remove('hidden');
-    // reflow для анимации появления
-    void bar.offsetHeight;
-    bar.classList.add('visible');
+    if (bar.classList.contains('voice-dock-open')) {
+        bar.classList.remove('hidden');
+        void bar.offsetHeight;
+        bar.classList.add('visible');
+    }
 }
 
 function syncVoiceMiniBarButtons() {
     const vm = window.voiceManager;
     const micBtn = document.getElementById('vmb-mic');
+    const trigger = document.getElementById('voice-dock-trigger');
     // Кнопка звука (deafen) удалена — прячем её в мини-баре, если осталась в разметке.
     const soundBtn = document.getElementById('vmb-sound');
     if (soundBtn) soundBtn.style.display = 'none';
@@ -9252,11 +9254,56 @@ function syncVoiceMiniBarButtons() {
         micBtn.classList.toggle('muted-state', muted);
         micBtn.querySelector('.vmb-icon-on')?.classList.toggle('hidden', muted);
         micBtn.querySelector('.vmb-icon-off')?.classList.toggle('hidden', !muted);
+        trigger?.classList.toggle('is-muted', muted);
     }
 }
 
 (function initVoiceMiniBar() {
+    function positionVoiceDockPanel(trigger, bar) {
+        const triggerRect = trigger.getBoundingClientRect();
+        const panelHeight = bar.offsetHeight;
+        const gap = 12;
+        const top = Math.max(10, Math.min(
+            triggerRect.top + (triggerRect.height - panelHeight) / 2,
+            window.innerHeight - panelHeight - 10
+        ));
+        bar.style.left = `${triggerRect.right + gap}px`;
+        bar.style.top = `${top}px`;
+        bar.style.bottom = 'auto';
+    }
+
+    function closeVoiceDockPanel(bar) {
+        if (!bar) return;
+        bar.classList.remove('visible');
+        document.getElementById('voice-dock-trigger')?.setAttribute('aria-expanded', 'false');
+        setTimeout(() => {
+            if (!bar.classList.contains('visible')) {
+                bar.classList.remove('voice-dock-open');
+                bar.classList.add('hidden');
+            }
+        }, 190);
+    }
+
     document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('#voice-dock-trigger');
+        if (trigger) {
+            const bar = document.getElementById('voice-mini-bar');
+            const open = !bar.classList.contains('voice-dock-open');
+            if (open) {
+                bar.classList.remove('hidden', 'visible');
+                bar.classList.add('voice-dock-open');
+                positionVoiceDockPanel(trigger, bar);
+                trigger.setAttribute('aria-expanded', 'true');
+                requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('visible')));
+            } else {
+                closeVoiceDockPanel(bar);
+            }
+            return;
+        }
+        const bar = document.getElementById('voice-mini-bar');
+        if (bar && bar.classList.contains('voice-dock-open') && !e.target.closest('#voice-mini-bar')) {
+            closeVoiceDockPanel(bar);
+        }
         // Плашка свёрнута за край — любой клик по язычку вытаскивает её обратно,
         // а не возвращает в войс и тем более не жмёт мик/выход.
         const docked = e.target.closest('#voice-mini-bar');
@@ -9271,6 +9318,7 @@ function syncVoiceMiniBarButtons() {
             if (bar && bar.dataset.suppressClick) return;
             const name = document.getElementById('vmb-channel')?.textContent || '';
             if (typeof showServerVoice === 'function') showServerVoice(name);
+            closeVoiceDockPanel(bar);
             updateVoiceMiniBar();
             return;
         }
@@ -9294,7 +9342,13 @@ function syncVoiceMiniBarButtons() {
     // Плюс — утащить/смахнуть за боковой край: плашка уезжает туда сама, остаётся
     // торчать «язычок», клик по нему или вытягивание пальцем/мышью возвращает её.
     const bar = document.getElementById('voice-mini-bar');
-    if (bar) {
+    window.addEventListener('resize', () => {
+        const trigger = document.getElementById('voice-dock-trigger');
+        if (trigger && bar?.classList.contains('voice-dock-open')) {
+            positionVoiceDockPanel(trigger, bar);
+        }
+    });
+    if (false && bar) {
         let dragging = false, moved = false;
         let startX = 0, startY = 0, originLeft = 0, originTop = 0;
         let targetX = 0, targetY = 0, renderX = 0, renderY = 0, rafId = null;

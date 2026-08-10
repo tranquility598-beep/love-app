@@ -6,12 +6,11 @@ on:
       - 'v*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -27,7 +26,10 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Verify release version
+        run: node ops/check-release-version.cjs
 
       - name: Build Artifacts
         run: npm run build:server && npx electron-builder build --publish never
@@ -37,9 +39,33 @@ jobs:
       - name: Verify no secrets in build output
         run: node ops/check-build-secrets.cjs
 
-      - name: Publish Release
-        run: npx electron-builder build --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            build/dist/*.exe
+            build/dist/*.dmg
+            build/dist/*.zip
+            build/dist/*.blockmap
+            build/dist/*.yml
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish desktop release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/**/*

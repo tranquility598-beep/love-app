@@ -200,6 +200,7 @@ class LocalNotifications {
     required String peer,
     required bool muted,
     String? body,
+    String? payload,
   }) async {
     if (!_ready) await init();
     final details = NotificationDetails(
@@ -236,6 +237,7 @@ class LocalNotifications {
       body ??
           (muted ? 'Звонок идёт · микрофон выключен' : 'Звонок идёт'),
       details,
+      payload: payload,
     );
   }
 

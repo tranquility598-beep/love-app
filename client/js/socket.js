@@ -625,6 +625,12 @@ function handleVoiceUserSpeaking(data) {
 
 function handleVoiceUserMuted(data) {
   const { channelId, userId, muted } = data;
+  const manager = window.voiceManager;
+  if (manager && manager.channelId === channelId && Array.isArray(manager.channelMembers)) {
+    const member = manager.channelMembers.find(item => String(item.userId) === String(userId));
+    if (member) member.muted = !!muted;
+    window.CallStageController?.syncMembers(manager.channelMembers);
+  }
   if (typeof updateUserVoiceState === 'function') {
     updateUserVoiceState(userId, muted, undefined);
   }

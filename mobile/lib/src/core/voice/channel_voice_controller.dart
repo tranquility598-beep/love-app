@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../features/chat/chat_models.dart';
+import '../network/api_client.dart';
 import '../prefs/love_prefs.dart';
 import '../realtime/love_socket.dart';
 import '../services/screen_share_manager.dart';
@@ -51,6 +52,7 @@ class ChannelVoiceController extends ChangeNotifier {
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
   final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
+  Map<String, dynamic> _iceConfiguration = _stunIceConfiguration;
   MediaStream? _localStream;
   MediaStream? _videoStream;
 
@@ -68,6 +70,7 @@ class ChannelVoiceController extends ChangeNotifier {
     socket.on('voice:existing_members', _handleExistingMembers);
     socket.on('voice:members_update', _handleMembersUpdate);
     socket.on('voice:user_left', _handleUserLeft);
+    socket.on('voice:user_muted', _handleUserMuted);
     socket.on('voice:left', _handleVoiceLeft);
     socket.on('webrtc:offer', _handleOffer);
     socket.on('webrtc:answer', _handleAnswer);
@@ -100,6 +103,7 @@ class ChannelVoiceController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await _refreshIceConfiguration();
       await _ensureLocalStream();
     } catch (_) {
       await _abortJoin('Не удалось включить микрофон');
@@ -112,9 +116,21 @@ class ChannelVoiceController extends ChangeNotifier {
       // Некоторые Android-сборки не дают менять аудио-маршрут — не критично.
     }
 
-    final response = await socket.emitWithAck('voice:join', {'channelId': id});
-    if (response['status'] != 'ok') {
-      await _abortJoin(asText(response['message'], 'Не удалось войти в войс'));
+    try {
+      final response = await socket.emitWithAck(
+        'voice:join',
+        {'channelId': id},
+        timeout: const Duration(seconds: 15),
+      );
+      if (response['status'] != 'ok') {
+        await _abortJoin(asText(response['message'], 'Не удалось войти в войс'));
+        return false;
+      }
+    } on TimeoutException {
+      await _abortJoin('Сервер долго не отвечает. Проверь подключение и попробуй снова.');
+      return false;
+    } catch (_) {
+      await _abortJoin('Не удалось подключиться к голосовому каналу');
       return false;
     }
 
@@ -395,6 +411,20 @@ class ChannelVoiceController extends ChangeNotifier {
     _resetToIdle();
   }
 
+  void _handleUserMuted(dynamic data) {
+    if (data is! Map || channelId.isEmpty) return;
+    if (asId(data['channelId']) != channelId) return;
+    final userId = asId(data['userId']);
+    if (userId.isEmpty) return;
+    for (final member in members) {
+      final user = member['user'] is Map ? member['user'] as Map : member;
+      if (asId(user['_id'] ?? member['userId']) == userId) {
+        member['muted'] = data['muted'] == true;
+      }
+    }
+    notifyListeners();
+  }
+
   void _applyMembers(Object? raw) {
     if (raw is! List) return;
     members
@@ -509,6 +539,17 @@ class ChannelVoiceController extends ChangeNotifier {
         track.enabled = false;
       }
     }
+  }
+
+  Future<void> _refreshIceConfiguration() async {
+    _iceConfiguration = _stunIceConfiguration;
+    try {
+      final response = await ApiClient().get('/webrtc/ice-config');
+      final servers = response['iceServers'];
+      if (servers is List && servers.isNotEmpty) {
+        _iceConfiguration = {'iceServers': servers};
+      }
+    } catch (_) {}
   }
 
   Future<void> _initiateConnection(String socketId) async {
@@ -680,7 +721,7 @@ class ChannelVoiceController extends ChangeNotifier {
     );
   }
 
-  static const _iceConfiguration = {
+  static const _stunIceConfiguration = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},

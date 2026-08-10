@@ -8,10 +8,44 @@ import '../../theme/love_tokens.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_surface.dart';
+import '../../widgets/love_background.dart';
 import '../../session/app_session.dart';
 import '../calls/call_screen.dart';
 import '../calls/call_session.dart';
 import '../chat/chat_models.dart';
+import '../shell/screen_frame.dart';
+
+class ActiveChannelVoiceScreen extends StatelessWidget {
+  const ActiveChannelVoiceScreen({required this.socket, super.key});
+
+  final LoveSocket socket;
+
+  @override
+  Widget build(BuildContext context) {
+    final voice = ChannelVoiceController.instance;
+    final title = voice.channelTitle.isEmpty ? 'Голосовой канал' : voice.channelTitle;
+    return Scaffold(
+      body: LoveBackground(
+        child: SafeArea(
+          bottom: false,
+          child: ScreenFrame(
+            title: title,
+            leading: IconButton(
+              tooltip: 'Назад',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            child: ChannelVoicePanel(
+              title: title,
+              channel: {'_id': voice.channelId, 'name': title},
+              socket: socket,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Голосовой канал сферы/комнаты с реальным звуком (WebRTC) и ч/б-стилем.
 ///

@@ -331,6 +331,7 @@ class CallCenter extends ChangeNotifier {
           peer: voice.channelTitle.isEmpty ? 'Войс' : voice.channelTitle,
           muted: voice.muted,
           body: voice.muted ? 'Вы в войсе · микрофон выключен' : 'Вы в войсе',
+          payload: 'voice:active',
         );
       }
     } else if (_lastVoiceActive || force) {

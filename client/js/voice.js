@@ -135,6 +135,13 @@ class VoiceManager {
   async refreshIceServers(force = false) {
     const isFresh = Date.now() - this._iceConfigFetchedAt < 10 * 60 * 1000;
     if (!force && isFresh) return;
+    this.iceServers = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    };
     try {
       if (typeof apiFetch !== 'function') return;
       const data = await apiFetch('/api/webrtc/ice-config');
@@ -227,6 +234,7 @@ class VoiceManager {
       } else {
         console.warn('[Voice] Failed to join voice channel:', error.message);
       }
+      this.cleanup();
       return false;
     }
   }
@@ -1294,6 +1302,7 @@ window.voiceManager = null;
 
 // Флаг для защиты от спама входа в войс
 let _isJoiningVoice = false;
+let _voiceJoinPromise = null;
 
 /**
  * Присоединиться к голосовому каналу
@@ -1301,12 +1310,14 @@ let _isJoiningVoice = false;
 async function joinVoiceChannel(channelId, channelName, serverName) {
   // ===== ЗАЩИТА ОТ СПАМА =====
   if (_isJoiningVoice) {
-    console.log('⏳ Already joining voice channel, ignoring...');
-    return;
+    console.log('⏳ Already joining voice channel, waiting...');
+    return _voiceJoinPromise;
   }
 
   // Если уже в этом же голосовом канале — переключаем интерфейс обратно на полнoэкранный Voice View
-  if (window.currentVoiceChannel === channelId) {
+  if (window.currentVoiceChannel === channelId &&
+      window.voiceManager?.channelId === channelId &&
+      window.voiceManager?.localStream) {
     if (typeof showVoiceView === 'function') {
       showVoiceView();
     }
@@ -1315,7 +1326,7 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
   }
 
   _isJoiningVoice = true;
-
+  _voiceJoinPromise = (async () => {
   try {
     // Если уже в другом голосовом канале - выходим
     if (window.currentVoiceChannel) {
@@ -1329,7 +1340,12 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
     if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
       window.NavigationController._commitState({ currentVoiceChannel: channelId }, 'joinVoiceChannel');
     }
-    const success = await window.voiceManager.joinChannel(channelId);
+    let success = await window.voiceManager.joinChannel(channelId);
+    if (!success && window.socket?.connected) {
+      await new Promise(resolve => setTimeout(resolve, 650));
+      window.voiceManager = new VoiceManager();
+      success = await window.voiceManager.joinChannel(channelId);
+    }
 
     if (success) {
       window.voiceChannelName = channelName;
@@ -1341,13 +1357,16 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
       if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
         window.NavigationController._commitState({ currentVoiceChannel: null }, 'joinVoiceChannel-fail');
       }
+      window.voiceManager?.cleanup();
+      window.voiceManager = null;
+      if (typeof showToast === 'function') showToast('Голосовой канал', 'Не удалось подключиться. Попробуйте ещё раз.');
     }
   } finally {
-    // Снимаем блокировку через небольшую задержку чтобы предотвратить мгновенный повтор
-    setTimeout(() => {
-      _isJoiningVoice = false;
-    }, 1000);
+    _isJoiningVoice = false;
+    _voiceJoinPromise = null;
   }
+  })();
+  return _voiceJoinPromise;
 }
 
 /**

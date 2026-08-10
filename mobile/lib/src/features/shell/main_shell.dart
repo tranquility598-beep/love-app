@@ -25,6 +25,7 @@ import '../home/conversations_screen.dart';
 import '../more/more_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../servers/servers_screen.dart';
+import '../servers/voice_channel_panel.dart';
 import '../support/support_center_screen.dart';
 
 /// Height of the bottom bar chrome (excluding the safe-area inset).
@@ -106,6 +107,15 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         if (mounted) setState(() => _index = 2);
       case 'notifications':
         if (mounted) setState(() => _index = 3);
+      case 'voice:active':
+        final voice = ChannelVoiceController.instance;
+        if (voice.isActive && mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ActiveChannelVoiceScreen(socket: _socket),
+            ),
+          );
+        }
       default:
         if (payload != null && payload.startsWith('case:')) {
           _openSupport(payload.substring(5));

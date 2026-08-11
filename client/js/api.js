@@ -484,8 +484,10 @@ function inviteLink(code) {
 // Хост ссылки-приглашения: любой поддомен loveapp.chat (сейчас страницу
 // отдаёт api.loveapp.chat) плюс локальный сервер для разработки. Оставлять
 // «любой хост» нельзя: тогда ссылка вида discord.com/invite/... в сообщении
-// превратилась бы в нашу карточку и провалилась на превью.
-const INVITE_HOSTS = String.raw`(?:[^\s/]*loveapp\.chat|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)`;
+// превратилась бы в нашу карточку и провалилась на превью. Поддомены
+// разбираем как `(?:sub.)*loveapp.chat`, а не `[^\s/]*loveapp.chat`:
+// второе поймало бы и чужой `evil-loveapp.chat`.
+const INVITE_HOSTS = String.raw`(?:(?:[a-z0-9-]+\.)*loveapp\.chat|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)`;
 const INVITE_LINK_SOURCE = String.raw`(?:https?:\/\/${INVITE_HOSTS}\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9-]{4,32})`;
 
 // Извлечь инвайт-код из строки: полной ссылки (https://api.loveapp.chat/invite/КОД

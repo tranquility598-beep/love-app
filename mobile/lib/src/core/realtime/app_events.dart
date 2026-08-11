@@ -11,6 +11,7 @@ class AppEvents extends ChangeNotifier {
   int supportRevision = 0;
   int moderationRevision = 0;
   int devLogRevision = 0;
+  int spacesRevision = 0;
   String? activeCaseId;
   String? pendingCaseId;
   Map<String, dynamic> lastSupportUpdate = const {};
@@ -72,6 +73,14 @@ class AppEvents extends ChangeNotifier {
 
   void moderationChanged() {
     moderationRevision += 1;
+    notifyListeners();
+  }
+
+  /// Список сфер и комнат изменился не с экрана сфер — например, вступили по
+  /// deep link'у. Слушатели сверяют [spacesRevision] со своей копией, чтобы не
+  /// перезагружать список на каждое уведомление: шина одна на всё приложение.
+  void spacesChanged() {
+    spacesRevision += 1;
     notifyListeners();
   }
 

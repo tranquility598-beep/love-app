@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../config/app_config.dart';
+import '../../core/invite_links.dart';
 import '../../core/network/love_api.dart';
+import '../../core/realtime/app_events.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
+import '../servers/invite_prompt.dart';
 import 'chat_models.dart';
 
 /// Detects a LOVE invite link inside message text and renders a server card
@@ -20,20 +23,16 @@ class InviteCard extends StatefulWidget {
   final LoveApi api;
   final String code;
 
-  static final RegExp _inviteRe = RegExp(
-    r'(?:love-app:\/\/invite\/|https?:\/\/(?:www\.)?loveapp\.chat\/invite\/)([A-Za-z0-9\-]{4,32})',
-  );
-
   /// Returns the invite code when [content] contains an invite link.
-  static String? inviteCodeOf(String content) {
-    return _inviteRe.firstMatch(content)?.group(1);
-  }
+  ///
+  /// Разбор живёт в [InviteLinks]: раньше здесь был свой регексп на
+  /// `loveapp.chat`, и вставленная ссылка с хоста API (`api.loveapp.chat`)
+  /// карточкой не становилась.
+  static String? inviteCodeOf(String content) => InviteLinks.codeOf(content);
 
   /// [content] without the invite link, so the raw URL is not shown above
   /// the card.
-  static String stripInviteLink(String content) {
-    return content.replaceAll(_inviteRe, '').trim();
-  }
+  static String stripInviteLink(String content) => InviteLinks.strip(content);
 
   @override
   State<InviteCard> createState() => _InviteCardState();
@@ -55,20 +54,9 @@ class _InviteCardState extends State<InviteCard> {
   Future<void> _load() async {
     try {
       final preview = await widget.api.invitePreview(widget.code);
-      var member = false;
-      try {
-        final servers = await widget.api.servers();
-        final previewId = asId(preview['id']);
-        final previewName = asText(preview['name']);
-        member = servers.any((server) {
-          if (previewId.isNotEmpty) return asId(server['_id']) == previewId;
-          return previewName.isNotEmpty &&
-              asText(server['name']) == previewName;
-        });
-      } catch (_) {
-        // Membership check is best-effort; the join button still handles
-        // the «already a member» server response.
-      }
+      // Проверка «уже участник» одна на приложение — та же, что в листе
+      // deep link'а: два разных ответа на один вопрос путают сильнее всего.
+      final member = await inviteTargetJoined(widget.api, preview);
       if (!mounted) return;
       setState(() {
         _preview = preview;
@@ -89,6 +77,9 @@ class _InviteCardState extends State<InviteCard> {
     try {
       await widget.api.joinInvite(widget.code);
       if (!mounted) return;
+      // Экран сфер мог быть загружен раньше — иначе новая сфера появится
+      // там только после ручного pull-to-refresh.
+      AppEvents.instance.spacesChanged();
       setState(() {
         _member = true;
         _joining = false;

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/invite_links.dart';
 import '../../core/network/love_api.dart';
+import '../../core/realtime/app_events.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/async_value_view.dart';
@@ -39,11 +41,30 @@ class ServersScreen extends StatefulWidget {
 class _ServersScreenState extends State<ServersScreen> {
   late Future<List<Map<String, dynamic>>> _future;
   _SpaceFilter _filter = _SpaceFilter.all;
+  final _events = AppEvents.instance;
+  late int _spacesRevision;
 
   @override
   void initState() {
     super.initState();
     _future = widget.api.servers();
+    _spacesRevision = _events.spacesRevision;
+    _events.addListener(_onAppEvents);
+  }
+
+  @override
+  void dispose() {
+    _events.removeListener(_onAppEvents);
+    super.dispose();
+  }
+
+  /// Шина общая на всё приложение, поэтому реагируем только на смену
+  /// [AppEvents.spacesRevision] — иначе список перезагружался бы на каждое
+  /// входящее уведомление.
+  void _onAppEvents() {
+    if (_events.spacesRevision == _spacesRevision) return;
+    _spacesRevision = _events.spacesRevision;
+    if (mounted) _reload();
   }
 
   @override
@@ -186,10 +207,13 @@ class _ServersScreenState extends State<ServersScreen> {
   Future<void> _createInvite(Map<String, dynamic> space) async {
     try {
       final response = await widget.api.createInvite(asId(space['_id']));
-      final code = asText(response['inviteCode']);
-      final link = code.isEmpty
-          ? asText(response['inviteUrl'])
-          : 'https://loveapp.chat/invite/$code';
+      // Приоритет — ссылка от сервера. Раньше условие было перевёрнуто:
+      // при непустом коде подставлялась зашитая `loveapp.chat/invite/...`,
+      // а такого маршрута на статике сайта нет — ссылка не открывалась.
+      final link = InviteLinks.fromResponse(
+        asText(response['inviteUrl']),
+        asText(response['inviteCode']),
+      );
       if (link.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: link));
       }
@@ -790,7 +814,7 @@ class _InviteFields extends StatelessWidget {
           enabled: enabled,
           decoration: InputDecoration(
             labelText: 'Ссылка-приглашение',
-            hintText: 'https://loveapp.chat/invite/ABC12345',
+            hintText: InviteLinks.hintUrl,
             prefixIcon: const Icon(Icons.link_rounded),
             suffixIcon: IconButton(
               tooltip: 'Проверить',
@@ -907,11 +931,10 @@ List<Map<String, dynamic>> _mapList(Object? value) {
 String? _parseInviteCode(String value) {
   final input = value.trim();
   if (input.isEmpty) return null;
-  final link = RegExp(
-    r'(?:https?:\/\/[^\s\/]*loveapp\.chat\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9]{4,})',
-    caseSensitive: false,
-  ).firstMatch(input);
-  if (link != null) return link.group(1)!.toUpperCase();
-  final bare = RegExp(r'^[A-Za-z0-9]{4,16}$').firstMatch(input);
+  // Ссылку разбирает общий InviteLinks — там же поддержаны хост API
+  // и dev-хост. Отдельно принимаем «голый» код: его диктуют голосом.
+  final fromLink = InviteLinks.codeOf(input);
+  if (fromLink != null) return fromLink.toUpperCase();
+  final bare = RegExp(r'^[A-Za-z0-9-]{4,32}$').firstMatch(input);
   return bare?.group(0)?.toUpperCase();
 }

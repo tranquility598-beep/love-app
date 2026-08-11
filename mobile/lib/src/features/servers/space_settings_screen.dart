@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/invite_links.dart';
 import '../../core/network/love_api.dart';
 import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
@@ -477,9 +478,12 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
     });
     try {
       final response = await widget.api.createInvite(widget.spaceId);
-      final code = asText(response['inviteCode']);
-      final link =
-          code.isEmpty ? asText(response['inviteUrl']) : _inviteUrl(code);
+      // Ссылка от сервера приоритетнее: условие было перевёрнуто и при
+      // непустом коде подставляло мёртвый `loveapp.chat/invite/...`.
+      final link = InviteLinks.fromResponse(
+        asText(response['inviteUrl']),
+        asText(response['inviteCode']),
+      );
       setState(() {
         _inviteLink = link;
         _inviteController.text = link;
@@ -843,4 +847,4 @@ List<Map<String, dynamic>> _mapList(Object? value) {
       .toList();
 }
 
-String _inviteUrl(String code) => 'https://loveapp.chat/invite/$code';
+String _inviteUrl(String code) => InviteLinks.webUrl(code);

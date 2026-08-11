@@ -90,7 +90,7 @@ const STYLES = `
   *, *::before, *::after { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; padding: 24px 16px;
-    display: flex; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: #050505;
     background-image: radial-gradient(80% 55% at 50% 0%, #171717 0%, #050505 70%);
     color: #f2f2f2;

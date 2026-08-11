@@ -87,11 +87,14 @@ Production работает на коде этих коммитов. Проце�
 
 ```bash
 # На машине владельца, из корня репозитория:
+# admin/dist — артефакт сборки, в git его нет, а сервер отдаёт с него /admin.
+# Без этой строки админка на проде превратится в 503 «не собрана».
+(cd admin && MSYS_NO_PATHCONV=1 npx vite build --base=/admin/)
 GIT_SHA=$(git rev-parse HEAD)
 printf '{"gitSha":"%s","builtAt":"%s"}\n' "$GIT_SHA" "$(date -u +%FT%TZ)" > release-manifest.json
 tar --exclude='server/.env' --exclude='server/node_modules' --exclude='server/uploads' \
     --exclude='server/private-uploads' --exclude='server/temp' --exclude='.env' --exclude='.env.*' \
-    -czf /tmp/love-release.tgz release-manifest.json package.json server client sandbox/public ops/production
+    -czf /tmp/love-release.tgz release-manifest.json package.json server client sandbox/public ops/production admin/dist
 (cd /tmp && sha256sum love-release.tgz > love-release.tgz.sha256)
 rm release-manifest.json
 scp -i ~/.ssh/id_ed25519 /tmp/love-release.tgz /tmp/love-release.tgz.sha256 love-deploy@87.199.197.158:/var/www/love-staging/

@@ -229,6 +229,29 @@ app.use('/uploads', express.static(uploadsDir, {
 // Раздача статических файлов клиента
 app.use(express.static(path.join(__dirname, '..', 'client')));
 
+// Админ-панель (React SPA) на том же домене.
+//
+// Поддомен admin.loveapp.chat не поднят, а панель нужна с телефона — держим её
+// здесь. Тот же origin ещё и удобен для adminOriginGuard: запросы к /api/admin
+// приходят как same-origin, без исключений в CORS.
+//
+// index: false намеренно — маршруты react-router (/admin/users и т.п.) должен
+// отдавать fallback ниже, иначе при обновлении страницы будет 404.
+const adminDistDir = path.join(__dirname, '..', 'admin', 'dist');
+const adminIndexFile = path.join(adminDistDir, 'index.html');
+app.use('/admin', express.static(adminDistDir, { index: false }));
+app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
+  // admin/dist — артефакт сборки и в git не лежит (см. .gitignore). Если релиз
+  // собрали без `npm run build` в admin/, честно говорим об этом: иначе
+  // sendFile отдаёт голую 500 и причину приходится искать в логах.
+  if (!fs.existsSync(adminIndexFile)) {
+    return res.status(503).type('text/plain; charset=utf-8').send(
+      'Админ-панель не собрана: выполните npm run build в admin/ и переразверните релиз.'
+    );
+  }
+  res.sendFile(adminIndexFile);
+});
+
 // Импорт роутов
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');

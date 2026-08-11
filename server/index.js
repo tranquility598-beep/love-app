@@ -24,12 +24,15 @@ const app = express();
 const server = http.createServer(app);
 const passport = require('./config/passport');
 
+// Дефолтный список — только для локальной разработки. В production
+// ALLOWED_ORIGINS задаётся в окружении. Адрес Radmin-машины разработчика
+// сюда не входит: он попадал в публичный репозиторий и держал CORS
+// открытым на домашний IP.
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean)
   : [
       'http://localhost:5555',
       'http://127.0.0.1:5555',
-      'http://26.237.63.189:5555',
       'http://localhost:5173',
       'http://127.0.0.1:5173',
       'https://localhost',
@@ -170,8 +173,12 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Лимит тела запроса.
+// 50mb на JSON — это подарок для DoS: несколько параллельных запросов
+// съедали память процесса. Файлы идут не через JSON, а через express-fileupload
+// (см. ниже), поэтому 1mb на тело достаточно даже для длинных сообщений.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
 // Настройка загрузки файлов
@@ -195,9 +202,29 @@ const audioDir = path.join(uploadsDir, 'audio');
   }
 });
 
-// Статические файлы (загрузки) - открыты для авторизованных пользователей
-// Для Electron и браузера изображения должны загружаться без дополнительных заголовков
-app.use('/uploads', express.static(uploadsDir));
+// Статические файлы (загрузки).
+//
+// Требовать здесь Authorization нельзя: картинки подставляются в <img src>,
+// а браузер к таким запросам заголовок не добавляет — сломались бы аватары
+// и вложения во всех клиентах. Имена файлов случайные (timestamp_random),
+// так что перебор нереалистичен. Что закрываем:
+//  - dotfiles: точечные файлы не отдаём вовсе;
+//  - index: false — никакого листинга каталога;
+//  - nosniff + Content-Disposition: attachment для не-картинок, иначе
+//    загруженный .html/.svg исполнялся бы как страница НА НАШЕМ домене
+//    (stored XSS с доступом к localStorage и токену).
+const INLINE_SAFE_TYPES = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.webm', '.mov']);
+app.use('/uploads', express.static(uploadsDir, {
+  dotfiles: 'deny',
+  index: false,
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    const ext = path.extname(filePath).toLowerCase();
+    if (!INLINE_SAFE_TYPES.has(ext)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  }
+}));
 
 // Раздача статических файлов клиента
 app.use(express.static(path.join(__dirname, '..', 'client')));
@@ -223,9 +250,11 @@ const notificationRoutes = require('./routes/notifications');
 const webrtcRoutes = require('./routes/webrtc');
 const { featureFlags, requireFeature } = require('./config/featureFlags');
 
-// Rate Limiting для всех API роутов
-const { generalLimiter } = require('./middleware/rateLimiter');
-app.use('/api', generalLimiter);
+// Rate Limiting для всех API роутов.
+// attachRateLimitIdentity обязан идти ПЕРЕД generalLimiter: он достаёт userId
+// из токена, чтобы счётчик был на пользователя, а не на общий NAT-адрес.
+const { attachRateLimitIdentity, generalLimiter } = require('./middleware/rateLimiter');
+app.use('/api', attachRateLimitIdentity, generalLimiter);
 
 // Подключение роутов
 app.use('/api/auth', authRoutes);
@@ -252,11 +281,13 @@ app.use('/api/webrtc', webrtcRoutes);
 // поэтому мониторинг должен видеть 503, а не «ok».
 app.get('/api/health', (req, res) => {
   const dbReady = mongoose.connection.readyState === 1;
+  // featureFlags отсюда убраны: публичный health показывал карту
+  // недоделанных и внутренних подсистем (adminV1, casesV1, staffCommsV1...) —
+  // готовый список целей. Клиенту эти флаги не нужны.
   const payload = {
     status: dbReady ? 'ok' : 'degraded',
     message: 'Love Server is running',
-    db: dbReady ? 'connected' : 'disconnected',
-    features: featureFlags
+    db: dbReady ? 'connected' : 'disconnected'
   };
   res.status(dbReady ? 200 : 503).json(payload);
 });
@@ -270,6 +301,11 @@ app.get('/', (req, res) => {
 app.get('/release', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'release.html'));
 });
+
+// Страница приглашения: вставленная в браузер ссылка показывает превью сферы,
+// кнопку «вступить» и установщик под ОС гостя. Публичная и намеренно вне /api:
+// её открывают люди, а не клиенты.
+app.use('/invite', require('./routes/invitePage'));
 
 // Legal pages (TOS & Privacy Policy)
 const publicDir = path.join(__dirname, '..', 'sandbox', 'public');
@@ -298,6 +334,11 @@ app.set('presence', presence);
 const { startAnalyticsCollector } = require('./services/analyticsService');
 if (featureFlags.analyticsV1) startAnalyticsCollector(presence);
 
+// Планировщик капсул времени: раз в минуту рассылает сообщения,
+// у которых наступил deliverAt.
+const { startCapsuleScheduler } = require('./services/capsuleService');
+startCapsuleScheduler(io);
+
 // Запуск сервера с обработкой занятого порта.
 // В production за Nginx задайте HOST=127.0.0.1, чтобы backend не был доступен
 // напрямую из интернета в обход reverse proxy. По умолчанию — 0.0.0.0 (dev).
@@ -305,7 +346,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 server.listen(PORT, HOST, () => {
   console.log(`🚀 Server running on ${HOST}:${PORT}`);
   console.log(`📡 Socket.io ready`);
-  console.log(`🌐 API available at http://26.237.63.189:${PORT}/api`);
+  console.log(`🌐 API available at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/api`);
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.log(`⚠️  Port ${PORT} is already in use. Server may already be running.`);

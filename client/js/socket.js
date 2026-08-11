@@ -468,6 +468,18 @@ function handleMessageDeleted(data) {
   removeMessageFromDOM(messageId);
 }
 
+// Капсула времени принята сервером: она НЕ появляется в ленте до срока,
+// поэтому убираем оптимистичный баббл, который композер уже нарисовал.
+function handleCapsuleScheduled(data) {
+  if (window.LoveCapsules?.onScheduled) window.LoveCapsules.onScheduled(data);
+}
+
+// Срок наступил. Само сообщение приходит обычным 'message:new' —
+// здесь только показываем, что это была капсула.
+function handleCapsuleDelivered(data) {
+  if (window.LoveCapsules?.onDelivered) window.LoveCapsules.onDelivered(data);
+}
+
 function handleMessageReaction(data) {
   const { channelId, messageId, reactions } = data;
   if (window.currentChannelId?.toString() === channelId?.toString()) {
@@ -1100,6 +1112,10 @@ function attachAllSocketListeners() {
   attachListener('context', 'message:deleted', handleMessageDeleted);
   attachListener('context', 'message:reaction', handleMessageReaction);
   attachListener('context', 'message:rate_limited', handleMessageRateLimited);
+  // Капсулы времени. Держим в context-scope рядом с message:* — они
+  // приходят как часть жизненного цикла сообщений канала.
+  attachListener('context', 'capsule:scheduled', handleCapsuleScheduled);
+  attachListener('context', 'capsule:delivered', handleCapsuleDelivered);
   attachListener('context', 'typing:start', handleTypingStart);
   attachListener('context', 'typing:stop', handleTypingStop);
   attachListener('context', 'dm:new_message', handleDMNewMessage);

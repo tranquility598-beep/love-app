@@ -10,6 +10,7 @@ const Channel = require('../models/Channel');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
+const { isBlockedBetween } = require('../utils/blocking');
 
 /**
  * GET /api/dm
@@ -49,6 +50,12 @@ router.post('/:userId', authMiddleware, async (req, res) => {
     const targetUser = await User.findById(targetUserId);
     if (!targetUser) {
       return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    // Блокировка закрывает и создание нового диалога, иначе окно ЛС
+    // открывается, а отправка потом падает — выглядит как поломка.
+    if (await isBlockedBetween(req.user._id, targetUserId)) {
+      return res.status(403).json({ message: 'Диалог с этим пользователем недоступен' });
     }
     
     // Ищем существующий диалог
@@ -125,17 +132,19 @@ router.get('/:conversationId/messages', authMiddleware, async (req, res) => {
     
     const query = {
       channel: conversation.channel,
-      deleted: false
+      deleted: false,
+      // Капсула видна только после доставки планировщиком.
+      delivered: { $ne: false }
     };
-    
+
     if (before) {
       query._id = { $lt: before };
     }
-    
+
     const messages = await Message.find(query)
       .populate('author', 'username nickname avatar discriminator role')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
+      .limit(Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100));
     
     messages.reverse();
     

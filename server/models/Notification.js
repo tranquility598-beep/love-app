@@ -17,7 +17,8 @@ const notificationSchema = new mongoose.Schema({
 
   type: {
     type: String,
-    enum: ['mention', 'friend_request', 'friend_accepted', 'new_dm', 'missed_call', 'system'],
+    // capsule — сработала капсула времени (см. services/capsuleService).
+    enum: ['mention', 'friend_request', 'friend_accepted', 'new_dm', 'missed_call', 'system', 'capsule'],
     required: true
   },
 

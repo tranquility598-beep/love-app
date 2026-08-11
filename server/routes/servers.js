@@ -11,6 +11,7 @@ const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 const { requireCanCommunicate } = require('../services/moderationService');
 const { validateServerName, sanitizeBody } = require('../middleware/validation');
+const { webInviteUrl, deepInviteUrl } = require('../utils/inviteLinks');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -603,7 +604,11 @@ router.post('/:id/invite', authMiddleware, requireCanCommunicate, async (req, re
 
     res.json({
       inviteCode,
-      inviteUrl: `love-app://invite/${inviteCode}`,
+      // Наружу отдаём веб-ссылку: её можно вставить в браузер или мессенджер и
+      // получить превью сферы (GET /invite/:code). Deep link едет рядом —
+      // им открывается уже установленное приложение.
+      inviteUrl: webInviteUrl(req, inviteCode),
+      deepLink: deepInviteUrl(inviteCode),
       message: 'Код приглашения обновлён'
     });
     

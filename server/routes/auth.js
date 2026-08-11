@@ -626,36 +626,41 @@ router.get('/restriction', authMiddleware, (req, res) => {
  * Запрос на сброс пароля (отправка OTP)
  */
 router.post('/forgot-password', passwordResetLimiter, sanitizeBody, validateEmail, async (req, res) => {
+  // Ответ одинаковый независимо от того, есть такая почта или нет.
+  // Раньше 404 «Пользователь с такой почтой не найден» превращал форму
+  // восстановления в проверялку: есть ли у вас аккаунт в Love.
+  const genericResponse = { message: 'Если аккаунт с такой почтой существует, письмо для восстановления отправлено' };
+
   try {
     const { email } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
-      return res.status(404).json({ message: 'Пользователь с такой почтой не найден' });
+      return res.json(genericResponse);
     }
-    
+
     const COOLDOWN_MS = 60 * 1000;
     if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
       const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
       return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
     }
-    
+
     const otp = generateOTP();
     user.otpCode = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
-    
+
     const resetUrl = buildResetPasswordUrl(req, user.email, otp);
     const emailSent = await sendPasswordResetEmail(user.email, otp, resetUrl);
     if (!emailSent) {
       return res.status(500).json({ message: 'Ошибка отправки письма для восстановления пароля.' });
     }
-    
+
     user.otpLastSentAt = new Date();
     await user.save();
-    
-    res.json({ message: 'Письмо для восстановления отправлено на почту' });
-    
+
+    res.json(genericResponse);
+
   } catch (error) {
     res.status(500).json({ message: 'Ошибка сервера' });
   }

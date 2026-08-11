@@ -109,7 +109,39 @@ const messageSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+
+  // Оригинал удалённого текста — только для модерации.
+  // НИКОГДА не отдаётся клиентам: во всех выборках стоит
+  // .select('-deletedContent'), а toJSON вырезает поле.
+  deletedContent: {
+    type: String,
+    default: null,
+    select: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+
+  // ===== КАПСУЛА ВРЕМЕНИ =====
+  // Сообщение с deliverAt в будущем не показывается получателю,
+  // пока планировщик (services/capsuleService) его не доставит.
+  // Обычные сообщения имеют deliverAt = null и работают как раньше.
+  deliverAt: {
+    type: Date,
+    default: null
+  },
+  // false, пока капсула ждёт своего времени.
+  delivered: {
+    type: Boolean,
+    default: true
+  },
+
   // Дата создания
   createdAt: {
     type: Date,
@@ -117,8 +149,22 @@ const messageSchema = new mongoose.Schema({
   }
 });
 
+/**
+ * Никогда не сериализуем оригинал удалённого текста наружу.
+ * select:false защищает от обычных find(), это — от случайного
+ * populate/lean-пути, где поле всё же подтянули.
+ */
+messageSchema.set('toJSON', {
+  transform(doc, ret) {
+    delete ret.deletedContent;
+    return ret;
+  }
+});
+
 // Индексы для быстрого поиска
 messageSchema.index({ channel: 1, createdAt: -1 });
 messageSchema.index({ author: 1 });
+// Планировщик капсул: выбирает недоставленные с наступившим сроком.
+messageSchema.index({ delivered: 1, deliverAt: 1 });
 
 module.exports = mongoose.model('Message', messageSchema);

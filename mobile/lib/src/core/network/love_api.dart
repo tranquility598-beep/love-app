@@ -152,11 +152,27 @@ class LoveApi {
     String channelId,
     String content, {
     String? replyTo,
+    DateTime? deliverAt,
   }) {
     return api.post(
       '/messages/$channelId',
-      body: {'content': content, if (replyTo != null) 'replyTo': replyTo},
+      body: {
+        'content': content,
+        if (replyTo != null) 'replyTo': replyTo,
+        if (deliverAt != null) 'deliverAt': deliverAt.toUtc().toIso8601String(),
+      },
     );
+  }
+
+  /// Свои ещё не доставленные капсулы времени.
+  Future<List<Map<String, dynamic>>> capsules() async {
+    final response = await api.get('/messages/capsules');
+    return _list(response['capsules']);
+  }
+
+  /// Отменить свою капсулу до срока доставки.
+  Future<Map<String, dynamic>> cancelCapsule(String capsuleId) {
+    return api.delete('/messages/capsules/$capsuleId');
   }
 
   /// Публичный профиль пользователя (GET /users/:id).

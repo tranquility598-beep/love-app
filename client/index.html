@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="styles/calls.css">
     <link rel="stylesheet" href="styles/settings.css">
     <link rel="stylesheet" href="styles/auth.css">
+    <link rel="stylesheet" href="styles/capsules.css">
+    <link rel="stylesheet" href="styles/media.css">
     <link rel="stylesheet" href="styles/perf-android.css">
     <!-- Android WebView заметно слабее iOS: помечаем html.perf-lite, чтобы
          perf-android.css отключил дорогие эффекты (blur/backdrop/фоновые анимации). -->
@@ -788,13 +790,30 @@
 
                         <!-- Панель медиатеки комнаты -->
                         <div class="room-pane-content pane-hidden" id="room-pane-media">
-                            <div class="hub-content-panel">
-                                <span class="helper-text">Вся медиатека комнаты (картинки, файлы, видео) собраны здесь.</span>
-                                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 16px;">
-                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Фото_июль.jpg</div>
-                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Скриншот_1.png</div>
-                                    <div style="aspect-ratio: 1; background: #151515; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-secondary);">Трек.mp3</div>
+                            <div class="hub-content-panel media-pane">
+                                <div class="media-toolbar">
+                                    <div class="media-filters" role="tablist">
+                                        <button type="button" class="media-filter active" data-media-filter="all">Всё</button>
+                                        <button type="button" class="media-filter" data-media-filter="image">Фото</button>
+                                        <button type="button" class="media-filter" data-media-filter="video">Видео</button>
+                                        <button type="button" class="media-filter" data-media-filter="audio">Аудио</button>
+                                        <button type="button" class="media-filter" data-media-filter="file">Файлы</button>
+                                    </div>
+                                    <button type="button" class="media-refresh" id="room-media-refresh" title="Обновить">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                        </svg>
+                                    </button>
                                 </div>
+
+                                <div class="media-grid" id="room-media-grid"></div>
+
+                                <div class="media-state" id="room-media-state">
+                                    <span class="helper-text">Загружаем медиатеку...</span>
+                                </div>
+
+                                <button type="button" class="media-load-more hidden" id="room-media-more">Показать ещё</button>
                             </div>
                         </div>
                 </main>
@@ -2671,6 +2690,8 @@
     <script src="js/new/script.js"></script>
     <script src="js/new/init-app.js"></script>
     <script src="js/new/message-reports.js"></script>
+    <script src="js/new/capsules.js"></script>
+    <script src="js/new/room-media.js"></script>
     <script src="js/new/desktop-message-actions.js"></script>
     <script src="js/new/updates.js"></script>
     <script src="js/new/space-settings.js"></script>

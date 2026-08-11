@@ -7,8 +7,40 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../config/app_config.dart';
-import '../../theme/love_tokens.dart';
 import 'chat_models.dart';
+
+/// Скорости воспроизведения — тот же набор и тот же порядок перебора, что в
+/// десктопном плеере (`init-app.js`), чтобы привычка переносилась.
+const List<double> _playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+/// Одновременно играет только один вложенный плеер.
+///
+/// Без этого два голосовых из разных сообщений накладываются друг на друга:
+/// на телефоне у пузырей нет общего владельца звука, каждый плеер сам себе
+/// хозяин. Регистрируемся здесь при старте и глушим предыдущего.
+class MediaSession {
+  MediaSession._();
+
+  static final MediaSession instance = MediaSession._();
+
+  int _token = 0;
+  void Function()? _pause;
+
+  /// Забирает звук себе, останавливая того, кто играл до этого. Возвращает
+  /// токен, с которым потом нужно вызвать [release].
+  int claim(void Function() pause) {
+    final previous = _pause;
+    _token += 1;
+    _pause = pause;
+    // Токен уже сдвинут, поэтому release от предыдущего плеера не затрёт нас.
+    previous?.call();
+    return _token;
+  }
+
+  void release(int token) {
+    if (token == _token) _pause = null;
+  }
+}
 
 /// Renders one message attachment the way desktop does: inline images and
 /// gifs, an audio player for voice messages and music, an inline video
@@ -37,11 +69,16 @@ class AttachmentView extends StatelessWidget {
       return AudioAttachmentPlayer(
         url: url,
         title: isVoiceNote ? 'Голосовое сообщение' : attachment.name,
+        size: attachment.size,
         own: own,
       );
     }
     if (attachment.isVideo) {
-      return VideoAttachmentPlayer(url: url);
+      return VideoAttachmentPlayer(
+        url: url,
+        name: attachment.name,
+        size: attachment.size,
+      );
     }
     return FileChip(name: attachment.name, url: url, own: own);
   }
@@ -106,39 +143,175 @@ class _ImageAttachment extends StatelessWidget {
   }
 }
 
-class _ImageViewerScreen extends StatelessWidget {
+/// Полноэкранный просмотр фото.
+///
+/// Ключевое: зона зума занимает весь экран, а картинка внутри неё —
+/// `BoxFit.contain`. Раньше [InteractiveViewer] оборачивал саму картинку,
+/// та занимала только полосу по центру, и зум считался от её маленькой
+/// коробки — увеличение уезжало вбок, а сверху и снизу оставались чёрные
+/// поля, за которые нельзя было вытянуть изображение.
+class _ImageViewerScreen extends StatefulWidget {
   const _ImageViewerScreen({required this.url, required this.name});
 
   final String url;
   final String name;
 
   @override
+  State<_ImageViewerScreen> createState() => _ImageViewerScreenState();
+}
+
+class _ImageViewerScreenState extends State<_ImageViewerScreen>
+    with SingleTickerProviderStateMixin {
+  final TransformationController _transform = TransformationController();
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  )..addListener(_applyAnim);
+
+  Animation<Matrix4>? _zoomTween;
+  bool _chrome = true;
+  Offset _tapPoint = Offset.zero;
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
+  void _applyAnim() {
+    final tween = _zoomTween;
+    if (tween != null) _transform.value = tween.value;
+  }
+
+  void _animateTo(Matrix4 target) {
+    _zoomTween = Matrix4Tween(begin: _transform.value, end: target).animate(
+      CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic),
+    );
+    _anim
+      ..value = 0
+      ..forward();
+  }
+
+  /// Зум с сохранением точки под пальцем: `s*(v - p) + p`, то есть сдвиг
+  /// `p*(1 - s)` и потом масштаб.
+  Matrix4 _zoomedAt(Offset point, double scale) {
+    return Matrix4.identity()
+      ..translateByDouble(
+        point.dx * (1 - scale),
+        point.dy * (1 - scale),
+        0,
+        1,
+      )
+      ..scaleByDouble(scale, scale, 1, 1);
+  }
+
+  void _handleDoubleTap(Offset point) {
+    final zoomed = _transform.value.getMaxScaleOnAxis() > 1.05;
+    _animateTo(zoomed ? Matrix4.identity() : _zoomedAt(point, 2.5));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14),
-        ),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.6,
-          maxScale: 5,
-          child: Image.network(
-            url,
-            errorBuilder: (context, error, stack) => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Не удалось загрузить изображение',
-                style: TextStyle(color: Colors.white70),
+      // AppBar убран намеренно: он отъедал верх и добавлял ещё одну чёрную
+      // полосу. Название и закрытие лежат поверх картинки.
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          InteractiveViewer(
+            transformationController: _transform,
+            minScale: 1,
+            maxScale: 6,
+            boundaryMargin: EdgeInsets.zero,
+            child: GestureDetector(
+              onTap: () => setState(() => _chrome = !_chrome),
+              onDoubleTapDown: (details) => _tapPoint = details.localPosition,
+              onDoubleTap: () => _handleDoubleTap(_tapPoint),
+              child: SizedBox.expand(
+                child: Image.network(
+                  widget.url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(
+                      child: SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stack) => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Не удалось загрузить изображение',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
+          ),
+          IgnorePointer(
+            ignoring: !_chrome,
+            child: AnimatedOpacity(
+              opacity: _chrome ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: _topBar(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _topBar() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.65),
+            Colors.transparent,
+          ],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+          child: Row(
+            children: [
+              _VideoOverlayButton(
+                icon: Icons.close_rounded,
+                onTap: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+              _VideoOverlayButton(
+                icon: Icons.open_in_new_rounded,
+                onTap: () => launchUrl(
+                  Uri.parse(widget.url),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -155,6 +328,7 @@ class AudioAttachmentPlayer extends StatefulWidget {
     required this.url,
     required this.title,
     required this.own,
+    this.size = 0,
     super.key,
   });
 
@@ -162,14 +336,19 @@ class AudioAttachmentPlayer extends StatefulWidget {
   final String title;
   final bool own;
 
+  /// Размер файла в байтах: показываем, пока длительность неизвестна.
+  final int size;
+
   @override
   State<AudioAttachmentPlayer> createState() => _AudioAttachmentPlayerState();
 }
 
 class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
   final AudioPlayer _player = AudioPlayer();
+  int _sessionToken = 0;
   bool _loaded = false;
   bool _loading = false;
+  double _speed = 1;
   String? _error;
 
   @override
@@ -179,6 +358,7 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
       if (state.processingState == ProcessingState.completed) {
         _player.pause();
         _player.seek(Duration.zero);
+        MediaSession.instance.release(_sessionToken);
       }
       if (mounted) setState(() {});
     });
@@ -186,10 +366,13 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
 
   @override
   void dispose() {
+    MediaSession.instance.release(_sessionToken);
     _player.dispose();
     super.dispose();
   }
 
+  /// Метаданные тянем только по первому тапу: в переписке голосовых бывает
+  /// десятки, и готовить их все на старте — лишние соединения и ExoPlayer'ы.
   Future<void> _toggle() async {
     try {
       if (!_loaded) {
@@ -202,7 +385,9 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
       }
       if (_player.playing) {
         await _player.pause();
+        MediaSession.instance.release(_sessionToken);
       } else {
+        _sessionToken = MediaSession.instance.claim(_pauseFromSession);
         unawaited(_player.play());
       }
     } catch (_) {
@@ -212,33 +397,47 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
     }
   }
 
+  void _pauseFromSession() {
+    _player.pause();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _cycleSpeed() async {
+    final index = _playbackSpeeds.indexOf(_speed);
+    final next = _playbackSpeeds[(index + 1) % _playbackSpeeds.length];
+    await _player.setSpeed(next);
+    if (mounted) setState(() => _speed = next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final base = widget.own ? Colors.black : Colors.white;
     return Container(
-      width: 236,
+      width: 250,
       margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
       decoration: BoxDecoration(
+        // Без рамки: плашка уже лежит внутри пузыря сообщения, и обводка
+        // читалась как второй контур.
         color: base.withValues(alpha: widget.own ? 0.07 : 0.055),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: base.withValues(alpha: 0.1)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(19),
             onTap: _loading ? null : _toggle,
             child: Container(
-              width: 36,
-              height: 36,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: base.withValues(alpha: 0.12),
               ),
               child: _loading
                   ? Padding(
-                      padding: const EdgeInsets.all(9),
+                      padding: const EdgeInsets.all(10),
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: base,
@@ -248,7 +447,7 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
                       _player.playing
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
-                      size: 22,
+                      size: 23,
                       color: base,
                     ),
             ),
@@ -275,45 +474,41 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
                     final duration = _player.duration ?? Duration.zero;
                     var position = snapshot.data ?? Duration.zero;
                     if (position > duration) position = duration;
-                    final maxMs = duration.inMilliseconds.toDouble();
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 2,
-                            activeTrackColor: base.withValues(alpha: 0.8),
-                            inactiveTrackColor: base.withValues(alpha: 0.18),
-                            thumbColor: base,
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 5,
-                            ),
-                            overlayShape: SliderComponentShape.noOverlay,
-                          ),
-                          child: Slider(
-                            value: maxMs > 0
-                                ? position.inMilliseconds
-                                    .toDouble()
-                                    .clamp(0, maxMs)
-                                : 0,
-                            max: maxMs > 0 ? maxMs : 1,
-                            onChanged: !_loaded || maxMs <= 0
-                                ? null
-                                : (value) => _player.seek(
-                                      Duration(milliseconds: value.round()),
-                                    ),
-                          ),
+                        MediaScrubber(
+                          position: position,
+                          buffered: _player.bufferedPosition,
+                          duration: duration,
+                          accent: base,
+                          height: 18,
+                          onSeek: _loaded ? _player.seek : null,
                         ),
-                        Text(
-                          maxMs > 0
-                              ? '${_fmtDuration(position)} / ${_fmtDuration(duration)}'
-                              : ' ',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: base.withValues(alpha: 0.55),
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                duration > Duration.zero
+                                    ? '${fmtMediaTime(position)} / '
+                                        '${fmtMediaTime(duration)}'
+                                    : _fallbackLabel(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: base.withValues(alpha: 0.55),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            // Ускорение для голосовых — самое частое
+                            // действие, поэтому кнопка всегда на виду.
+                            _SpeedButton(
+                              speed: _speed,
+                              color: base,
+                              onTap: _loaded ? _cycleSpeed : null,
+                            ),
+                          ],
                         ),
                       ],
                     );
@@ -326,6 +521,42 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
       ),
     );
   }
+
+  String _fallbackLabel() {
+    if (widget.size <= 0) return 'Нажми, чтобы послушать';
+    return fmtBytes(widget.size);
+  }
+}
+
+class _SpeedButton extends StatelessWidget {
+  const _SpeedButton({
+    required this.speed,
+    required this.color,
+    required this.onTap,
+  });
+
+  final double speed;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          fmtSpeed(speed),
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w900,
+            color: color.withValues(alpha: onTap == null ? 0.3 : 0.75),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -333,9 +564,16 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
 // ---------------------------------------------------------------------------
 
 class VideoAttachmentPlayer extends StatefulWidget {
-  const VideoAttachmentPlayer({required this.url, super.key});
+  const VideoAttachmentPlayer({
+    required this.url,
+    this.name = '',
+    this.size = 0,
+    super.key,
+  });
 
   final String url;
+  final String name;
+  final int size;
 
   @override
   State<VideoAttachmentPlayer> createState() => _VideoAttachmentPlayerState();
@@ -343,21 +581,27 @@ class VideoAttachmentPlayer extends StatefulWidget {
 
 class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
   VideoPlayerController? _controller;
+  int _sessionToken = 0;
   bool _initializing = false;
   String? _error;
 
   @override
   void dispose() {
+    MediaSession.instance.release(_sessionToken);
     _controller?.dispose();
     super.dispose();
   }
 
+  /// Контроллер создаём по тапу, а не при построении пузыря: иначе каждое
+  /// видео в переписке открывало бы свой декодер ещё до просмотра.
   Future<void> _start() async {
     final existing = _controller;
     if (existing != null) {
       if (existing.value.isPlaying) {
         await existing.pause();
+        MediaSession.instance.release(_sessionToken);
       } else {
+        _sessionToken = MediaSession.instance.claim(_pauseFromSession);
         await existing.play();
       }
       if (mounted) setState(() {});
@@ -372,10 +616,10 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
         Uri.parse(widget.url),
       );
       await controller.initialize();
-      controller.addListener(() {
-        if (mounted) setState(() {});
-      });
+      // Слушателя на каждый кадр вешает уже _VideoStage — он и рисует
+      // панель. Пузырь целиком 60 раз в секунду перестраивать не нужно.
       _controller = controller;
+      _sessionToken = MediaSession.instance.claim(_pauseFromSession);
       await controller.play();
     } catch (_) {
       _error = 'Не удалось загрузить видео';
@@ -384,15 +628,25 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
     }
   }
 
+  void _pauseFromSession() {
+    _controller?.pause();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _openFullscreen() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
+    // Ландшафт разрешаем только на время фуллскрина: остальное приложение
+    // рассчитано на портрет.
     await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     if (!mounted) return;
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (_) => FullscreenVideoPage(controller: controller),
+        builder: (_) => FullscreenVideoPage(
+          controller: controller,
+          title: widget.name,
+        ),
       ),
     );
     await SystemChrome.setPreferredOrientations(
@@ -404,116 +658,631 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
   Widget build(BuildContext context) {
     final maxWidth = MediaQuery.sizeOf(context).width * 0.64;
     final controller = _controller;
+    final ready = controller != null && controller.value.isInitialized;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           width: maxWidth,
-          child: controller == null || !controller.value.isInitialized
-              ? GestureDetector(
-                  onTap: _initializing ? null : _start,
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      child: Center(
-                        child: _initializing
-                            ? const SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : _error != null
-                                ? Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Text(
-                                      _error!,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.4,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow_rounded,
-                                      size: 30,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                      ),
-                    ),
-                  ),
+          child: ready
+              ? _VideoStage(
+                  controller: controller,
+                  onFullscreen: _openFullscreen,
+                  fullscreen: false,
                 )
-              : AspectRatio(
-                  aspectRatio: controller.value.aspectRatio <= 0
-                      ? 16 / 9
-                      : controller.value.aspectRatio,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      VideoPlayer(controller),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _start,
-                        child: AnimatedOpacity(
-                          opacity: controller.value.isPlaying ? 0 : 1,
-                          duration: const Duration(milliseconds: 160),
-                          child: Container(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            child: const Center(
-                              child: Icon(
-                                Icons.play_arrow_rounded,
-                                size: 46,
-                                color: Colors.white,
+              : _poster(),
+        ),
+      ),
+    );
+  }
+
+  Widget _poster() {
+    return GestureDetector(
+      onTap: _initializing ? null : _start,
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Container(
+          color: const Color(0xFF0E0E0E),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: _initializing
+                    ? const SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : _error != null
+                        ? Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
                               ),
                             ),
+                          )
+                        : Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.14),
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              size: 32,
+                              color: Colors.white,
+                            ),
+                          ),
+              ),
+              if (_error == null)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 8,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.name.isEmpty ? 'Видео' : widget.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white.withValues(alpha: 0.75),
                           ),
                         ),
                       ),
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: _VideoOverlayButton(
-                          icon: Icons.fullscreen_rounded,
-                          onTap: _openFullscreen,
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: VideoProgressIndicator(
-                          controller,
-                          allowScrubbing: true,
-                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-                          colors: const VideoProgressColors(
-                            playedColor: Colors.white,
-                            bufferedColor: Colors.white24,
-                            backgroundColor: Colors.white12,
+                      if (widget.size > 0) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          fmtBytes(widget.size),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white.withValues(alpha: 0.45),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Кадр видео плюс управление: тап показывает панель, через пару секунд она
+/// сама уезжает, двойной тап по краю мотает на ±10 секунд.
+class _VideoStage extends StatefulWidget {
+  const _VideoStage({
+    required this.controller,
+    required this.onFullscreen,
+    required this.fullscreen,
+  });
+
+  final VideoPlayerController controller;
+  final VoidCallback onFullscreen;
+  final bool fullscreen;
+
+  @override
+  State<_VideoStage> createState() => _VideoStageState();
+}
+
+class _VideoStageState extends State<_VideoStage> {
+  static const _hideAfter = Duration(milliseconds: 2600);
+
+  Timer? _hideTimer;
+  Timer? _hudTimer;
+  bool _controlsVisible = true;
+  bool _muted = false;
+  String _hud = '';
+  double _lastTapX = 0;
+  double _stageWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Панель живёт и во встроенном плеере, и в фуллскрине, поэтому слушает
+    // контроллер сама: иначе в фуллскрине время и кнопки замирали бы.
+    widget.controller.addListener(_onTick);
+    _muted = widget.controller.value.volume == 0;
+    _restartHideTimer();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTick);
+    _hideTimer?.cancel();
+    _hudTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  void _restartHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(_hideAfter, () {
+      if (mounted && widget.controller.value.isPlaying) {
+        setState(() => _controlsVisible = false);
+      }
+    });
+  }
+
+  void _showControls() {
+    setState(() => _controlsVisible = true);
+    _restartHideTimer();
+  }
+
+  void _flash(String text) {
+    setState(() => _hud = text);
+    _hudTimer?.cancel();
+    _hudTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _hud = '');
+    });
+  }
+
+  Future<void> _toggle() async {
+    final controller = widget.controller;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+      setState(() => _controlsVisible = true);
+      _hideTimer?.cancel();
+    } else {
+      await controller.play();
+      _restartHideTimer();
+    }
+  }
+
+  Future<void> _seekBy(int seconds) async {
+    final value = widget.controller.value;
+    final total = value.duration;
+    if (total <= Duration.zero) return;
+    var target = value.position + Duration(seconds: seconds);
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > total) target = total;
+    await widget.controller.seekTo(target);
+    _flash('${seconds > 0 ? '+' : ''}$seconds с');
+  }
+
+  Future<void> _toggleMute() async {
+    final next = !_muted;
+    await widget.controller.setVolume(next ? 0 : 1);
+    setState(() => _muted = next);
+    _flash(next ? 'Без звука' : 'Звук');
+    _restartHideTimer();
+  }
+
+  Future<void> _cycleSpeed() async {
+    final current = widget.controller.value.playbackSpeed;
+    var index = _playbackSpeeds.indexWhere((item) => item == current);
+    if (index < 0) index = _playbackSpeeds.indexOf(1);
+    final next = _playbackSpeeds[(index + 1) % _playbackSpeeds.length];
+    await widget.controller.setPlaybackSpeed(next);
+    _flash(fmtSpeed(next));
+    _restartHideTimer();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final value = controller.value;
+    final ratio = value.aspectRatio <= 0 ? 16 / 9 : value.aspectRatio;
+
+    final stage = Stack(
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(
+          child: FittedBox(
+            fit: widget.fullscreen ? BoxFit.contain : BoxFit.cover,
+            child: SizedBox(
+              width: value.size.width <= 0 ? 16 : value.size.width,
+              height: value.size.height <= 0 ? 9 : value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+        ),
+        // Ловим жесты на всём кадре: одиночный тап — панель, двойной по
+        // левой/правой половине — перемотка.
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _stageWidth = constraints.maxWidth;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (_controlsVisible && value.isPlaying) {
+                    setState(() => _controlsVisible = false);
+                    _hideTimer?.cancel();
+                  } else {
+                    _showControls();
+                  }
+                },
+                onDoubleTapDown: (details) =>
+                    _lastTapX = details.localPosition.dx,
+                onDoubleTap: () {
+                  final half = _stageWidth / 2;
+                  _seekBy(_lastTapX < half ? -10 : 10);
+                  _showControls();
+                },
+                child: const SizedBox.expand(),
+              );
+            },
+          ),
+        ),
+        if (!value.isPlaying)
+          IgnorePointer(
+            child: Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.45),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                size: 34,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        if (value.isBuffering)
+          const IgnorePointer(
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        if (_hud.isNotEmpty)
+          IgnorePointer(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                _hud,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            ignoring: !_controlsVisible,
+            child: AnimatedOpacity(
+              opacity: _controlsVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: _controlsBar(value),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (widget.fullscreen) return stage;
+    return AspectRatio(aspectRatio: ratio, child: stage);
+  }
+
+  Widget _controlsBar(VideoPlayerValue value) {
+    final buffered = value.buffered.isEmpty
+        ? Duration.zero
+        : value.buffered.last.end;
+    return Container(
+      padding: EdgeInsets.fromLTRB(4, 12, 4, widget.fullscreen ? 6 : 2),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.55),
+          ],
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: MediaScrubber(
+              position: value.position,
+              buffered: buffered,
+              duration: value.duration,
+              height: 20,
+              onSeek: (target) {
+                widget.controller.seekTo(target);
+                _restartHideTimer();
+              },
+            ),
+          ),
+          Row(
+            children: [
+              _BarButton(
+                icon: value.isPlaying
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                onTap: _toggle,
+              ),
+              Text(
+                '${fmtMediaTime(value.position)} / '
+                '${fmtMediaTime(value.duration)}',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: _cycleSpeed,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  child: Text(
+                    fmtSpeed(value.playbackSpeed),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              _BarButton(
+                icon: _muted
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                onTap: _toggleMute,
+              ),
+              _BarButton(
+                icon: widget.fullscreen
+                    ? Icons.fullscreen_exit_rounded
+                    : Icons.fullscreen_rounded,
+                onTap: widget.onFullscreen,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BarButton extends StatelessWidget {
+  const _BarButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(icon, size: 20, color: Colors.white),
+      ),
+    );
+  }
+}
+
+/// Тонкая дорожка прокрутки с буфером — общая для видео и аудио.
+///
+/// Собственная вместо [Slider]: нужен слой «сколько уже загружено», иначе
+/// непонятно, почему перемотка вперёд подвисает.
+class MediaScrubber extends StatefulWidget {
+  const MediaScrubber({
+    required this.position,
+    required this.buffered,
+    required this.duration,
+    required this.onSeek,
+    this.accent = Colors.white,
+    this.height = 20,
+    super.key,
+  });
+
+  final Duration position;
+  final Duration buffered;
+  final Duration duration;
+
+  /// null — дорожка неактивна (файл ещё не загружен).
+  final ValueChanged<Duration>? onSeek;
+  final Color accent;
+  final double height;
+
+  @override
+  State<MediaScrubber> createState() => _MediaScrubberState();
+}
+
+class _MediaScrubberState extends State<MediaScrubber> {
+  double? _dragFraction;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.duration.inMilliseconds;
+    final enabled = widget.onSeek != null && total > 0;
+    final played = total <= 0
+        ? 0.0
+        : (widget.position.inMilliseconds / total).clamp(0.0, 1.0);
+    final buffered = total <= 0
+        ? 0.0
+        : (widget.buffered.inMilliseconds / total).clamp(0.0, 1.0);
+    final value = _dragFraction ?? played;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth <= 0 ? 1.0 : constraints.maxWidth;
+
+        void track(double dx) {
+          if (!enabled) return;
+          setState(() => _dragFraction = (dx / width).clamp(0.0, 1.0));
+        }
+
+        void commit() {
+          final fraction = _dragFraction;
+          if (fraction != null && enabled) {
+            widget.onSeek!(
+              Duration(milliseconds: (total * fraction).round()),
+            );
+          }
+          if (mounted) setState(() => _dragFraction = null);
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) => track(details.localPosition.dx),
+          onTapUp: (_) => commit(),
+          onTapCancel: () => setState(() => _dragFraction = null),
+          onHorizontalDragStart: (details) => track(details.localPosition.dx),
+          onHorizontalDragUpdate: (details) => track(details.localPosition.dx),
+          onHorizontalDragEnd: (_) => commit(),
+          child: SizedBox(
+            height: widget.height,
+            child: Center(
+              child: SizedBox(
+                height: 12,
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    _bar(1, widget.accent.withValues(alpha: 0.2)),
+                    _bar(buffered, widget.accent.withValues(alpha: 0.32)),
+                    _bar(value, widget.accent.withValues(alpha: 0.95)),
+                    Align(
+                      alignment: Alignment(-1 + 2 * value, 0),
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: enabled
+                              ? widget.accent
+                              : widget.accent.withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _bar(double factor, Color color) {
+    return FractionallySizedBox(
+      widthFactor: factor.clamp(0.0, 1.0),
+      child: Container(
+        height: 3,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fullscreen playback for video attachments. Reuses the inline controller,
+/// so position, speed and play state stay in sync with the bubble player.
+class FullscreenVideoPage extends StatelessWidget {
+  const FullscreenVideoPage({
+    required this.controller,
+    this.title = '',
+    super.key,
+  });
+
+  final VideoPlayerController controller;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: _VideoStage(
+              controller: controller,
+              fullscreen: true,
+              onFullscreen: () => Navigator.of(context).pop(),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  _VideoOverlayButton(
+                    icon: Icons.close_rounded,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                  if (title.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoOverlayButton extends StatelessWidget {
+  const _VideoOverlayButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, size: 20, color: Colors.white),
         ),
       ),
     );
@@ -550,11 +1319,6 @@ class FileChip extends StatelessWidget {
                 ? Colors.black.withValues(alpha: 0.08)
                 : Colors.white.withValues(alpha: 0.055),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: own
-                  ? Colors.black.withValues(alpha: 0.08)
-                  : LoveColors.border,
-            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -580,142 +1344,32 @@ class FileChip extends StatelessWidget {
   }
 }
 
-String _fmtDuration(Duration value) {
-  final minutes = value.inMinutes;
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
+/// `m:ss`, а от часа — `h:mm:ss`.
+String fmtMediaTime(Duration value) {
   final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
+  if (value.inHours > 0) {
+    final minutes = (value.inMinutes % 60).toString().padLeft(2, '0');
+    return '${value.inHours}:$minutes:$seconds';
+  }
+  return '${value.inMinutes}:$seconds';
 }
 
-// ---------------------------------------------------------------------------
-// Fullscreen video
-// ---------------------------------------------------------------------------
-
-class _VideoOverlayButton extends StatelessWidget {
-  const _VideoOverlayButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.45),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, size: 20, color: Colors.white),
-        ),
-      ),
-    );
-  }
+/// `1×`, `1.5×`, `0.75×` — без болтающихся нулей.
+String fmtSpeed(double value) {
+  final text = value
+      .toStringAsFixed(2)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+  return '$text×';
 }
 
-/// Fullscreen playback for video attachments. Reuses the inline controller,
-/// so position and play state stay in sync with the bubble player.
-class FullscreenVideoPage extends StatefulWidget {
-  const FullscreenVideoPage({required this.controller, super.key});
-
-  final VideoPlayerController controller;
-
-  @override
-  State<FullscreenVideoPage> createState() => _FullscreenVideoPageState();
-}
-
-class _FullscreenVideoPageState extends State<FullscreenVideoPage> {
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onTick);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onTick);
-    super.dispose();
-  }
-
-  void _onTick() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _togglePlay() async {
-    final controller = widget.controller;
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      await controller.play();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = widget.controller;
-    final ratio = controller.value.aspectRatio;
-    final double aspect = ratio <= 0 ? 16 / 9 : ratio;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Center(
-            child: AspectRatio(
-              aspectRatio: aspect,
-              child: VideoPlayer(controller),
-            ),
-          ),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _togglePlay,
-            child: AnimatedOpacity(
-              opacity: controller.value.isPlaying ? 0 : 1,
-              duration: const Duration(milliseconds: 160),
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.3),
-                child: const Center(
-                  child: Icon(
-                    Icons.play_arrow_rounded,
-                    size: 68,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: _VideoOverlayButton(
-                  icon: Icons.close_rounded,
-                  onTap: () => Navigator.of(context).pop(),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: VideoProgressIndicator(
-                controller,
-                allowScrubbing: true,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                colors: const VideoProgressColors(
-                  playedColor: Colors.white,
-                  bufferedColor: Colors.white24,
-                  backgroundColor: Colors.white12,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+String fmtBytes(int value) {
+  if (value <= 0) return '';
+  if (value < 1024) return '$value Б';
+  if (value < 1024 * 1024) return '${(value / 1024).toStringAsFixed(0)} КБ';
+  return '${(value / (1024 * 1024)).toStringAsFixed(1)} МБ';
 }

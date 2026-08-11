@@ -5,6 +5,37 @@
 
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../utils/jwtSecret');
+
+const JWT_SECRET = getJwtSecret();
+
+/**
+ * Дешёвое опознание пользователя ДО authMiddleware.
+ *
+ * generalLimiter подключён на app.use('/api', ...) — то есть выполняется
+ * раньше, чем роут доберётся до authMiddleware. Поэтому req.user там был
+ * всегда undefined, и вся «лимитим по userId» логика никогда не работала:
+ * счётчик всегда шёл по IP. За одним NAT это значило общий лимит на всех.
+ *
+ * Здесь только verify подписи, без запроса в БД: цель — получить ключ для
+ * счётчика, а не авторизовать. Настоящая проверка сессии и бана остаётся
+ * в authMiddleware.
+ */
+function attachRateLimitIdentity(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.substring(7), JWT_SECRET);
+      if (decoded && decoded.userId) {
+        req.rateLimitUserId = String(decoded.userId);
+      }
+    } catch (_) {
+      // Битый/просроченный токен — лимитим по IP, ошибку отдаст authMiddleware.
+    }
+  }
+  next();
+}
 
 // Общий лимит для API.
 // ВАЖНО: лимит должен быть адекватным для Electron-клиента. В обычной
@@ -12,11 +43,6 @@ const { ipKeyGenerator } = require('express-rate-limit');
 // /servers/rooms, /channels/:id, /messages/:channelId на каждое
 // переключение канала / комнаты / сервера. Старый лимит 150/15мин
 // съедался за пару минут активного использования и приводил к 429.
-//
-// Также исключаем самые частые "лёгкие" авторизованные endpoint'ы —
-// у них своя защита через JWT + authMiddleware, и они не несут риска
-// брутфорса (нечего подбирать). Для login/register/otp есть отдельные
-// строгие лимитеры (authLimiter, registerLimiter, otpLimiter).
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 минута
   max: 600, // 600 запросов в минуту = 10 rps — с запасом на reconnect-штормы и быстрое переключение каналов
@@ -27,32 +53,29 @@ const generalLimiter = rateLimit({
   // одним NAT/корпоративным IP делят один счётчик и быстро упираются.
   // Для неавторизованных запросов используем IP (стандарт).
   keyGenerator: (req, res) => {
+    if (req.rateLimitUserId) return `u:${req.rateLimitUserId}`;
     if (req.user && req.user._id) return `u:${req.user._id}`;
     // Используем хелпер библиотеки для корректной нормализации IPv6 (/64 префикс).
     return ipKeyGenerator(req, res);
   },
-  // Не считаем поллинговые/служебные endpoint'ы и идемпотентные GET'ы,
-  // которые делает UI на каждое переключение комнаты/канала. У них есть
-  // authMiddleware — нет смысла лимитить их так же строго, как POST'ы.
+  // Не считаем поллинговые/служебные endpoint'ы.
+  //
+  // Раньше здесь пропускались ВСЕ GET на /messages/, /servers/, /channels/,
+  // /dm/ — то есть выкачивание всей истории и поиск по сообщениям не
+  // лимитировались вообще. Оставляем только точечные лёгкие маршруты;
+  // чтение сообщений теперь считается как обычный запрос (600/мин с запасом
+  // хватает даже на быстрое перещёлкивание каналов).
   skip: (req) => {
     const p = req.path || '';
     if (p === '/health' || p === '/auth/me' || p === '/auth/socket-token') return true;
     if (req.method === 'GET') {
-      return (
-        p === '/friends' ||
-        p === '/dm' ||
-        p === '/servers' ||
-        p.startsWith('/servers/') ||
-        p.startsWith('/channels/') ||
-        p.startsWith('/messages/') ||
-        p.startsWith('/dm/')
-      );
+      return p === '/friends' || p === '/dm' || p === '/servers';
     }
     return false;
   },
   handler: (req, res) => {
     console.warn(`⚠️  Rate limit exceeded for IP: ${req.ip} on ${req.method} ${req.originalUrl}`);
-    res.status(429).json({ 
+    res.status(429).json({
       message: 'Слишком много запросов с этого IP, попробуйте позже',
       retryAfter: Math.ceil(req.rateLimit.resetTime / 1000)
     });
@@ -137,12 +160,29 @@ const passwordResetLimiter = rateLimit({
   }
 });
 
+// Лимит для публичных HTML-страниц вне /api (страница приглашения).
+// Она без авторизации ходит в базу, поэтому считаем по IP отдельно от
+// generalLimiter: 60 открытий в минуту хватает живому человеку с запасом,
+// а перебор инвайт-кодов при таком темпе бессмыслен (кодов 16^8).
+const publicPageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`⚠️  Public page rate limit exceeded for IP: ${req.ip} on ${req.originalUrl}`);
+    res.status(429).type('text/plain; charset=utf-8').send('Слишком много запросов, попробуйте позже');
+  }
+});
+
 module.exports = {
+  attachRateLimitIdentity,
   generalLimiter,
   authLimiter,
   registerLimiter,
   messageLimiter,
   uploadLimiter,
   otpLimiter,
-  passwordResetLimiter
+  passwordResetLimiter,
+  publicPageLimiter
 };

@@ -469,22 +469,32 @@ const ServersAPI = {
 };
 
 // ===== INVITE LINK HELPERS =====
-// Приглашение — это ссылка вида https://loveapp.chat/invite/КОД.
-// Базовый домен фиксирован (это публичный сайт-лендинг), а не BASE_URL API.
-const INVITE_BASE = 'https://loveapp.chat/invite/';
+// Приглашение — это ссылка вида https://api.loveapp.chat/invite/КОД.
+// Базой берём хост API: именно он отдаёт страницу /invite/:code с превью
+// сферы и установщиком (см. server/routes/invitePage.js). Раньше здесь был
+// зашит https://loveapp.chat — сайт на статике, такого роута у него нет,
+// и скопированная ссылка в браузере просто отдавала 404.
+const INVITE_BASE = (window.BASE_URL || 'https://api.loveapp.chat').replace(/\/+$/, '') + '/invite/';
 
 // Собрать полную ссылку-приглашение из кода.
 function inviteLink(code) {
   return INVITE_BASE + String(code || '').trim();
 }
 
-// Извлечь инвайт-код из строки: полной ссылки (https://loveapp.chat/invite/КОД
+// Хост ссылки-приглашения: любой поддомен loveapp.chat (сейчас страницу
+// отдаёт api.loveapp.chat) плюс локальный сервер для разработки. Оставлять
+// «любой хост» нельзя: тогда ссылка вида discord.com/invite/... в сообщении
+// превратилась бы в нашу карточку и провалилась на превью.
+const INVITE_HOSTS = String.raw`(?:[^\s/]*loveapp\.chat|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)`;
+const INVITE_LINK_SOURCE = String.raw`(?:https?:\/\/${INVITE_HOSTS}\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9-]{4,32})`;
+
+// Извлечь инвайт-код из строки: полной ссылки (https://api.loveapp.chat/invite/КОД
 // или love-app://invite/КОД) либо «голого» кода. Возвращает код или null.
 function parseInviteCode(text) {
   if (!text) return null;
   const s = String(text).trim();
   // Сначала пробуем полноценную ссылку (web или deep-link).
-  const linkMatch = s.match(/(?:https?:\/\/[^\s/]*loveapp\.chat\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9]{4,})/i);
+  const linkMatch = s.match(new RegExp(INVITE_LINK_SOURCE, 'i'));
   if (linkMatch) return linkMatch[1].toUpperCase();
   // Иначе — «голый» код целиком (8 символов как генерит бэкенд, допускаем 4–16).
   const bare = s.match(/^([A-Za-z0-9]{4,16})$/);
@@ -494,7 +504,7 @@ function parseInviteCode(text) {
 
 // Регекс для поиска инвайт-ССЫЛКИ внутри текста сообщения (строгий —
 // только полная ссылка, чтобы не превращать любое слово в карточку).
-const INVITE_LINK_REGEX = /(?:https?:\/\/[^\s/]*loveapp\.chat\/invite\/|love-app:\/\/invite\/)([A-Za-z0-9]{4,})/i;
+const INVITE_LINK_REGEX = new RegExp(INVITE_LINK_SOURCE, 'i');
 
 window.inviteLink = inviteLink;
 window.parseInviteCode = parseInviteCode;
@@ -557,8 +567,10 @@ const MessagesAPI = {
     return apiFetch(url);
   },
 
-  send: (channelId, content, replyTo) =>
-    apiFetch(`/messages/${channelId}`, { method: 'POST', body: JSON.stringify({ content, replyTo }) }),
+  // deliverAt (ISO-строка) превращает сообщение в капсулу времени:
+  // сервер сохранит его скрытым и разошлёт, когда наступит срок.
+  send: (channelId, content, replyTo, deliverAt) =>
+    apiFetch(`/messages/${channelId}`, { method: 'POST', body: JSON.stringify({ content, replyTo, deliverAt }) }),
 
   edit: (messageId, content) =>
     apiFetch(`/messages/${messageId}`, { method: 'PUT', body: JSON.stringify({ content }) }),
@@ -575,6 +587,26 @@ const MessagesAPI = {
     if (content) formData.append('content', content);
     if (replyTo) formData.append('replyTo', replyTo);
     return apiUpload(`/upload/file`, formData);
+  },
+
+  // ===== Капсулы времени =====
+  // Свои ещё не доставленные капсулы (во всех каналах сразу).
+  getCapsules: () =>
+    apiFetch('/messages/capsules'),
+
+  // Отменить капсулу можно только до срока — после доставки это уже
+  // обычное сообщение, и сервер вернёт 404.
+  cancelCapsule: (capsuleId) =>
+    apiFetch(`/messages/capsules/${capsuleId}`, { method: 'DELETE' }),
+
+  // ===== Медиатека канала =====
+  // Все вложения канала, новые сверху. type: image|video|audio|file.
+  getMedia: (channelId, { type, before, limit } = {}) => {
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
+    if (before) params.set('before', before);
+    params.set('limit', String(limit || 60));
+    return apiFetch(`/messages/${channelId}/media?${params.toString()}`);
   }
 };
 

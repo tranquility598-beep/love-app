@@ -12386,28 +12386,51 @@ textarea.s-input {
 /* ════════════════ VIDEO PLAYER — Premium Design ════════════════ */
 .media-video-wrapper {
     width: 100%;
-    max-width: 520px;
-    border-radius: 14px;
+    max-width: 560px;
+    border-radius: 10px;
     overflow: hidden;
     position: relative;
     background: #000;
     aspect-ratio: 16 / 9;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
     transition: box-shadow 0.3s ease, border-color 0.3s ease;
     --mv-accent: #fff;
 }
 .media-video-wrapper:hover {
-    box-shadow: 0 6px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.14);
+    box-shadow: 0 6px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.18);
 }
+.media-video-wrapper:focus { outline: none; }
+.media-video-wrapper:focus-visible {
+    box-shadow: 0 6px 36px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.55);
+}
+
+/* Индикатор перемотки/громкости по центру (горячие клавиши) */
+.mv-hud {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.92);
+    z-index: 4;
+    padding: 9px 16px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.72);
+    color: #fff;
+    font-size: 15px;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.mv-hud.is-on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
 /* ▶ Центральная кнопка play/pause */
 .media-video-play-btn {
-    width: 68px; height: 68px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.55);
+    width: 64px; height: 64px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border: 1.5px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.28);
     color: #fff;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer;
@@ -12415,10 +12438,10 @@ textarea.s-input {
     z-index: 2;
 }
 .media-video-play-btn:hover {
-    background: rgba(0,0,0,0.7);
-    border-color: rgba(255,255,255,0.4);
-    transform: translate(-50%, -50%) scale(1.1);
-    box-shadow: 0 0 24px rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.95);
+    border-color: #fff;
+    color: #0d0d0d;
+    transform: translate(-50%, -50%) scale(1.06);
 }
 .media-video-play-btn svg { width: 26px; height: 26px; margin-left: 3px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
 
@@ -12446,14 +12469,15 @@ textarea.s-input {
 .media-video-controls {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    padding: 10px 14px 12px;
-    display: flex; align-items: center; gap: 10px;
+    padding: 22px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
     opacity: 0;
-    transition: opacity 0.35s ease, transform 0.35s ease;
+    transition: opacity 0.25s ease, transform 0.25s ease;
     transform: translateY(6px);
     z-index: 3;
 }
-.media-video-wrapper:hover .media-video-controls {
+.media-video-wrapper:hover .media-video-controls,
+.media-video-wrapper:focus-within .media-video-controls {
     opacity: 1;
     transform: translateY(0);
 }
@@ -12461,35 +12485,59 @@ textarea.s-input {
 /* ═══ Таймлайн: скраббл-доржка ═══ */
 .media-video-timeline {
     flex: 1;
-    height: 5px;
-    background: rgba(255,255,255,0.15);
-    border-radius: 3px;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
     position: relative;
     cursor: pointer;
     transition: height 0.15s ease, background 0.15s ease;
     overflow: visible;
 }
 .media-video-timeline:hover,
-.media-video-timeline.is-scrubbing { height: 7px; background: rgba(255,255,255,0.25); }
+.media-video-timeline.is-scrubbing { height: 6px; background: rgba(255,255,255,0.28); }
+
+/* Загруженная часть — видно, докуда можно мотать без ожидания */
+.media-video-timeline-buffer {
+    position: absolute; top: 0; left: 0; height: 100%; width: 0;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+}
 .media-video-timeline-fill {
     position: absolute; top: 0; left: 0; height: 100%; width: 0;
     background: var(--mv-accent);
-    border-radius: 3px;
+    border-radius: 2px;
     transition: background 0.12s ease;
 }
-/* Белая точка на конце прогресса */
+/* Точка на конце прогресса */
 .media-video-timeline-fill::after {
     content: '';
     position: absolute; top: 50%; right: -5px; transform: translateY(-50%);
-    width: 12px; height: 12px;
+    width: 11px; height: 11px;
     border-radius: 50%;
     background: var(--mv-accent);
     opacity: 0;
     transition: opacity 0.15s ease;
-    box-shadow: 0 0 6px rgba(255,255,255,0.3);
 }
 .media-video-timeline:hover .media-video-timeline-fill::after,
 .media-video-timeline.is-scrubbing .media-video-timeline-fill::after { opacity: 1; }
+
+/* Время под курсором на дорожке */
+.mv-tip {
+    position: absolute;
+    bottom: 14px;
+    transform: translateX(-50%);
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.mv-tip.is-on { opacity: 1; }
 
 /* ═══ Время ═══ */
 .mv-time {
@@ -12516,27 +12564,43 @@ textarea.s-input {
 a.mv-btn { text-decoration: none; }
 
 /* Кнопка play/pause в контролах (немного выделяем) */
-.mv-btn.mv-play { width: 36px; height: 36px; background: rgba(255,255,255,0.08); }
-.mv-btn.mv-play:hover { background: rgba(255,255,255,0.18); }
+.mv-btn.mv-play { width: 34px; height: 34px; background: rgba(255,255,255,0.1); }
+.mv-btn.mv-play:hover { background: #fff; color: #0d0d0d; }
 
-/* Громкость — компактный слайдер */
+/* Скорость — текстовая кнопка, ей нужна своя ширина */
+.mv-btn.mv-speed {
+    width: auto; min-width: 34px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.3px;
+}
+
+/* Громкость: ползунок раскрывается по наведению, чтобы не занимать место */
+.mv-vol-box {
+    display: flex; align-items: center; gap: 2px;
+    flex-shrink: 0;
+}
 .mv-vol {
-    width: 64px; height: 4px;
+    width: 0; height: 4px;
     accent-color: #fff;
     cursor: pointer;
     flex-shrink: 0;
     -webkit-appearance: none;
     appearance: none;
-    background: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.25);
     border-radius: 2px;
     outline: none;
+    opacity: 0;
+    transition: width 0.2s ease, opacity 0.2s ease;
 }
+.mv-vol-box:hover .mv-vol,
+.mv-vol:focus-visible { width: 68px; opacity: 1; }
 .mv-vol::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 14px; height: 14px; border-radius: 50%;
+    width: 12px; height: 12px; border-radius: 50%;
     background: #fff;
     cursor: pointer;
-    box-shadow: 0 0 4px rgba(0,0,0,0.4);
 }
 
 /* Видео-элемент */
@@ -12559,14 +12623,31 @@ a.mv-btn { text-decoration: none; }
     color: rgba(255,255,255,0.5); font-size: 13.5px;
     z-index: 5;
 }
-.media-video-controls .mv-btn { background: none; border: none; color: #fff; cursor: pointer; width: 28px; height: 28px; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; }
-.media-video-controls .mv-btn:hover { background: rgba(255, 255, 255, 0.18); }
-.media-video-controls .mv-btn svg { width: 18px; height: 18px; }
-.media-video-controls .mv-time { color: #fff; font-size: 11px; font-family: var(--font-mono); white-space: nowrap; }
-.media-video-controls .mv-vol { width: 64px; accent-color: #fff; cursor: pointer; }
+.media-video-controls .mv-btn { background: none; border: none; color: rgba(255,255,255,0.85); cursor: pointer; width: 30px; height: 30px; padding: 5px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; }
+.media-video-controls .mv-btn:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.media-video-controls .mv-btn svg { width: 17px; height: 17px; }
+.media-video-controls .mv-time { color: #fff; font-size: 11.5px; font-family: var(--font-mono); white-space: nowrap; }
 .media-video-timeline { cursor: pointer; touch-action: none; user-select: none; }
+
+/* Во весь экран: контролы крупнее, дорожка с воздухом по краям */
 .media-video-wrapper:fullscreen { width: 100vw; height: 100vh; max-width: none; aspect-ratio: auto; border: none; border-radius: 0; }
 .media-video-wrapper:fullscreen video { height: 100vh; }
+.media-video-wrapper:fullscreen .media-video-controls { padding: 30px 26px 20px; gap: 12px; }
+.media-video-wrapper:fullscreen .media-video-controls .mv-btn { width: 38px; height: 38px; padding: 7px; }
+.media-video-wrapper:fullscreen .media-video-controls .mv-btn svg { width: 21px; height: 21px; }
+.media-video-wrapper:fullscreen .media-video-timeline { height: 6px; }
+.media-video-wrapper:fullscreen .media-video-timeline:hover { height: 9px; }
+.media-video-wrapper:fullscreen .media-video-controls .mv-time { font-size: 13.5px; }
+.media-video-wrapper:fullscreen .media-video-play-btn { width: 84px; height: 84px; }
+.media-video-wrapper:fullscreen .media-video-play-btn svg { width: 34px; height: 34px; }
+/* Курсор прячем вместе с контролами — их скрывает :hover */
+.media-video-wrapper:fullscreen:not(:hover) { cursor: none; }
+
+/* Тач-устройства: hover нет, контролы держим видимыми */
+@media (hover: none) {
+    .media-video-controls { opacity: 1; transform: none; }
+    .mv-vol-box:hover .mv-vol { width: 0; opacity: 0; }
+}
 
 /* Кастомный аудио/музыка плеер */
 .media-audio-player { gap: 10px; }

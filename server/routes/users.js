@@ -13,6 +13,9 @@ const path = require('path');
 const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
+const { escapeRegex } = require('../utils/security');
+const { blockedIdsFor } = require('../utils/blocking');
+const { validateFile } = require('../utils/fileValidator');
 
 const USERNAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,10 +38,17 @@ router.get('/search', authMiddleware, async (req, res) => {
     if (!q || q.length < 2) {
       return res.status(400).json({ message: 'Запрос должен содержать минимум 2 символа' });
     }
-    
+
+    // Без экранирования запрос '.*' возвращал весь список пользователей,
+    // а вложенные квантификаторы вешали базу (ReDoS).
+    const pattern = escapeRegex(String(q).slice(0, 64));
+
+    // Заблокированные не должны находиться поиском — ни в одну сторону.
+    const hidden = await blockedIdsFor(req.user._id);
+
     const users = await User.find({
-      username: { $regex: q, $options: 'i' },
-      _id: { $ne: req.user._id } // Исключаем себя
+      username: { $regex: pattern, $options: 'i' },
+      _id: { $nin: [req.user._id, ...hidden] }
     })
     .select('username avatar status discriminator')
     .limit(20);
@@ -255,17 +265,18 @@ router.put('/avatar', authMiddleware, async (req, res) => {
     }
     
     const avatarFile = req.files.avatar;
-    
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(avatarFile.mimetype)) {
-      return res.status(400).json({ message: 'Допустимые форматы: JPEG, PNG, GIF, WebP' });
+
+    // Раньше здесь проверялся только mimetype из заголовка — его клиент
+    // задаёт сам, так что под видом image/png уезжал любой файл.
+    // validateFile читает magic bytes (как в /api/upload/avatar).
+    const validation = await validateFile(avatarFile, true, 'image', { maxSize: 5 * 1024 * 1024 });
+    if (!validation.valid) {
+      return res.status(400).json({
+        message: 'Ошибка валидации аватара',
+        errors: validation.errors
+      });
     }
-    
-    if (avatarFile.size > 5 * 1024 * 1024) {
-      return res.status(400).json({ message: 'Размер файла не должен превышать 5MB' });
-    }
-    
-    const ext = path.extname(avatarFile.name);
+
     const publicId = `avatars/avatar_${req.user._id}_${Date.now()}`;
     
     let filePath;
@@ -367,7 +378,10 @@ router.post('/report', authMiddleware, async (req, res) => {
     
     const io = req.app.get('io');
     if (io) {
-      io.emit('admin:new_report', {
+      // Раньше io.emit рассылал жалобу ВСЕМ подключённым клиентам: любой
+      // пользователь видел, кто на кого пожаловался и по какой причине.
+      // admin:staff — комната, куда попадают только сотрудники.
+      io.to('admin:staff').emit('admin:new_report', {
         _id: newReport._id,
         reporter: { _id: req.user._id, username: req.user.username, avatar: req.user.avatar },
         reason,

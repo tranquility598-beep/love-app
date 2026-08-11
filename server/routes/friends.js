@@ -8,6 +8,7 @@ const router = express.Router();
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 const { requireCanCommunicate } = require('../services/moderationService');
+const { isBlockedBetween } = require('../utils/blocking');
 
 /**
  * GET /api/friends
@@ -48,7 +49,14 @@ router.post('/request/:userId', authMiddleware, requireCanCommunicate, async (re
     if (!targetUser) {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
-    
+
+    // Заблокированный продолжал слать заявки в друзья — кнопка «Заблокировать»
+    // не делала ничего. Ответ намеренно нейтральный: не сообщаем, что нас
+    // заблокировали.
+    if (await isBlockedBetween(req.user._id, targetUserId)) {
+      return res.status(403).json({ message: 'Не удалось отправить запрос этому пользователю' });
+    }
+
     const currentUser = await User.findById(req.user._id);
     
     // Проверяем что уже не друзья

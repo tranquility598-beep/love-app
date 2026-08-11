@@ -59,4 +59,4 @@ function buildReleaseInfo(req) {
   };
 }
 
-module.exports = { buildReleaseInfo };
+module.exports = { buildReleaseInfo, getBaseUrl };

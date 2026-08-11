@@ -1,0 +1,305 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   МЕДИАТЕКА КОМНАТЫ
+   Вкладка «Медиа»: фильтры, сетка вложений, просмотр видео.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* .hub-content-panel выше по каскаду ставит overflow: hidden !important,
+   поэтому скроллит не панель, а сама сетка. */
+.media-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* ── Панель фильтров ──────────────────────────────────────────────────── */
+
+.media-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg) 0 var(--spacing-lg);
+}
+
+.media-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.media-filter {
+    padding: 7px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.media-filter:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.media-filter.active {
+    border-color: #fff;
+    background: #fff;
+    color: #0d0d0d;
+}
+
+.media-refresh {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.media-refresh:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+.media-refresh svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+/* ── Сетка ────────────────────────────────────────────────────────────── */
+
+.media-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.media-grid:empty {
+    flex: 0;
+    padding: 0;
+}
+
+.media-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg, 14px);
+    background: rgba(255, 255, 255, 0.025);
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.media-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-2px);
+}
+
+.media-card-preview {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+}
+
+.media-card-preview img,
+.media-card-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Значок «плей» поверх постера — видео в сетке не проигрывается,
+   клик открывает полноразмерный плеер. */
+.media-card-play {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-round, 999px);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 14px;
+    padding-left: 3px;
+    pointer-events: none;
+}
+
+.media-preview-audio,
+.media-preview-file {
+    aspect-ratio: auto;
+    padding: 18px 12px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.media-preview-file svg {
+    width: 34px;
+    height: 34px;
+}
+
+.media-preview-audio audio {
+    width: 100%;
+    height: 34px;
+}
+
+/* Аудио-карточка не открывает просмотрщик — курсор не должен обещать клик. */
+.media-card-audio {
+    cursor: default;
+}
+
+.media-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 9px 11px 11px 11px;
+    min-width: 0;
+}
+
+.media-card-name {
+    font-size: 12.5px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.media-card-sub {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    letter-spacing: 0.3px;
+}
+
+/* ── Пустое состояние и «показать ещё» ────────────────────────────────── */
+
+.media-state {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+    text-align: center;
+}
+
+.media-state .helper-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.35);
+    letter-spacing: 0.4px;
+    font-family: var(--font-sans);
+}
+
+.media-load-more {
+    flex-shrink: 0;
+    align-self: center;
+    margin: 0 0 var(--spacing-lg) 0;
+    padding: 9px 22px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.media-load-more:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* ── Просмотр видео ───────────────────────────────────────────────────── */
+
+.media-video-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(8px);
+}
+
+.media-video-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: min(100%, 1100px);
+}
+
+/* Тот же плеер, что в ленте, но там он ограничен 560px — в оверлее
+   растягиваем на всю доступную ширину. */
+.media-video-box .media-video-wrapper {
+    width: min(90vw, 1100px);
+    max-width: none;
+    aspect-ratio: auto;
+    height: 78vh;
+}
+
+.media-video-box video {
+    max-width: 100%;
+    max-height: 78vh;
+    border-radius: var(--radius-lg, 14px);
+    background: #000;
+    display: block;
+}
+
+.media-video-box .media-video-wrapper video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    object-fit: contain;
+}
+
+.media-video-name {
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 768px) {
+    .media-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-md) var(--spacing-md) 0 var(--spacing-md);
+    }
+
+    .media-refresh {
+        align-self: flex-end;
+    }
+
+    .media-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        padding: var(--spacing-md);
+    }
+}

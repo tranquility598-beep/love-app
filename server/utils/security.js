@@ -52,4 +52,22 @@ function requestIp(req) {
   return String(raw).trim().replace(/^::ffff:/, '');
 }
 
-module.exports = { randomToken, hashToken, safeEqual, encryptSecret, decryptSecret, requestIp };
+/**
+ * Экранирует спецсимволы regex в пользовательском вводе.
+ *
+ * Обязательно для любого $regex из query/body: без этого '.*' выгружает
+ * всю коллекцию, а конструкции вида '(a+)+$' вешают процесс (ReDoS).
+ */
+function escapeRegex(value) {
+  return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+module.exports = {
+  randomToken,
+  hashToken,
+  safeEqual,
+  encryptSecret,
+  decryptSecret,
+  requestIp,
+  escapeRegex
+};

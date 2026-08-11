@@ -19,7 +19,12 @@ const { communicationRestriction, refreshModerationState } = require('../service
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 const AdminSession = require('../models/AdminSession');
 const { isStaffRole } = require('../config/adminRoles');
-const { hashToken, safeEqual } = require('../utils/security');
+const { hashToken, safeEqual, escapeRegex } = require('../utils/security');
+const { checkChannelAccess, checkServerAccess, isValidObjectId } = require('../utils/channelAccess');
+const { canManageServerMessages, canManageServerRoles } = require('../utils/serverPermissions');
+const { sanitizeRolePermissions } = require('../utils/rolePermissions');
+const { isBlockedBetween } = require('../utils/blocking');
+const { parseDeliverAt } = require('../services/capsuleService');
 const registerAdminStaffSocket = require('./adminStaffSocket');
 const {
   applyVoiceMediaMode,
@@ -320,15 +325,26 @@ module.exports = (io) => {
           return socket.emit('error', { message: 'Канал не найден' });
         }
 
-        // Если это DM-канал, проверяем что получатель не удалил отправителя из друзей
+        // Членство в канале. Раньше проверялась только дружба для ЛС,
+        // а в любой серверный канал можно было писать, зная его _id.
+        const access = await checkChannelAccess(channelId, userId);
+        if (!access.allowed) {
+          return socket.emit('error', { message: 'Канал не найден' });
+        }
+
+        // Если это DM-канал, проверяем что получатель не удалил отправителя
+        // из друзей и не заблокировал его.
         if (!channel.server) {
-          const dm = await DirectMessage.findOne({ channel: channelId });
+          const dm = access.conversation || await DirectMessage.findOne({ channel: channelId });
           if (dm) {
             const otherParticipant = dm.participants.find(p => p.toString() !== userId);
             const recipientUser = otherParticipant ? await User.findById(otherParticipant).lean() : null;
             const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
             if (!isFriend) {
               return socket.emit('error', { message: 'Вы не можете отправлять сообщения пользователю, который удалил вас из друзей' });
+            }
+            if (await isBlockedBetween(userId, otherParticipant)) {
+              return socket.emit('error', { message: 'Сообщение не доставлено' });
             }
           }
         }
@@ -346,6 +362,38 @@ module.exports = (io) => {
           }
         }
         
+        // ===== КАПСУЛА ВРЕМЕНИ =====
+        // Обрабатываем ДО оптимистичной рассылки: капсула не должна
+        // мелькнуть у получателя, а потом исчезнуть.
+        const parsedDeliverAt = parseDeliverAt(data.deliverAt);
+        if (!parsedDeliverAt.ok) {
+          return socket.emit('error', { message: parsedDeliverAt.error });
+        }
+
+        if (parsedDeliverAt.date) {
+          const capsule = new Message({
+            content: content || '',
+            author: userId,
+            channel: channelId,
+            server: channel.server,
+            replyTo: validReplyTo,
+            attachments: normalizedAttachments,
+            type: normalizedAttachments.length > 0 ? 'file' : 'default',
+            deliverAt: parsedDeliverAt.date,
+            delivered: false
+          });
+          await capsule.save();
+          await capsule.populate('author', 'username nickname avatar discriminator role');
+
+          // lastMessage канала НЕ трогаем: капсулы ещё нет для собеседника.
+          return socket.emit('capsule:scheduled', {
+            channelId,
+            tempId: tempId || null,
+            capsule,
+            deliverAt: capsule.deliverAt
+          });
+        }
+
         // ШАГ А: МГНОВЕННО рассылаем сообщение всем в комнате (даже до сохранения в БД)
         // Используем временный ID от клиента, если он передан
         const tempMessageId = tempId || ('temp_' + Date.now() + '_' + userId);
@@ -552,7 +600,13 @@ module.exports = (io) => {
         if (message.author.toString() !== userId) {
           return socket.emit('error', { message: 'Нет прав для редактирования' });
         }
-        
+
+        // Автор мог потерять доступ к каналу после отправки.
+        const editAccess = await checkChannelAccess(message.channel, userId);
+        if (!editAccess.allowed) {
+          return socket.emit('error', { message: 'Нет доступа к этому каналу' });
+        }
+
         message.content = content;
         message.edited = true;
         message.editedAt = new Date();
@@ -605,11 +659,26 @@ module.exports = (io) => {
           return socket.emit('error', { message: 'Сообщение не найдено' });
         }
         
-        if (message.author.toString() !== userId) {
-          return socket.emit('error', { message: 'Нет прав для удаления' });
+        const deleteAccess = await checkChannelAccess(message.channel, userId);
+        if (!deleteAccess.allowed) {
+          return socket.emit('error', { message: 'Нет доступа к этому каналу' });
         }
-        
+
+        // Автор или модератор сервера (право manageMessages).
+        const isAuthor = message.author.toString() === userId;
+        if (!isAuthor) {
+          const server = message.server ? await Server.findById(message.server) : null;
+          if (!server || !canManageServerMessages(server, userId)) {
+            return socket.emit('error', { message: 'Нет прав для удаления' });
+          }
+        }
+
+        // Оригинал сохраняем для модерации, клиентам он не уходит
+        // (deletedContent объявлен select:false и вырезается в toJSON).
         message.deleted = true;
+        message.deletedContent = message.content;
+        message.deletedAt = new Date();
+        message.deletedBy = userId;
         message.content = 'Сообщение удалено';
         await message.save();
         
@@ -653,7 +722,13 @@ module.exports = (io) => {
         if (!message) {
           return socket.emit('error', { message: 'Сообщение не найдено' });
         }
-        
+
+        // Реакция — действие в канале, нужен доступ.
+        const reactAccess = await checkChannelAccess(message.channel, userId);
+        if (!reactAccess.allowed) {
+          return socket.emit('error', { message: 'Нет доступа к этому каналу' });
+        }
+
         const existingReaction = message.reactions.find(r => r.emoji === emoji);
         
         if (existingReaction) {
@@ -704,8 +779,11 @@ module.exports = (io) => {
      */
     socket.on('typing:start', async (data) => {
       const { channelId } = data;
-      const channel = await Channel.findById(channelId);
-      
+      // Без проверки можно было слать "печатает" в любой чужой канал.
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) return;
+      const channel = access.channel;
+
       if (channel && channel.server) {
         socket.to(`server:${channel.server}`).emit('typing:start', {
           channelId,
@@ -730,8 +808,10 @@ module.exports = (io) => {
     
     socket.on('typing:stop', async (data) => {
       const { channelId } = data;
-      const channel = await Channel.findById(channelId);
-      
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) return;
+      const channel = access.channel;
+
       if (channel && channel.server) {
         socket.to(`server:${channel.server}`).emit('typing:stop', {
           channelId,
@@ -760,18 +840,44 @@ module.exports = (io) => {
     socket.on('voice:join', async (data, callback) => {
       try {
         const { channelId } = data;
-        
+
+        if (!channelId || typeof channelId !== 'string') {
+          if (typeof callback === 'function') callback({ status: 'error', message: 'Некорректный канал' });
+          return;
+        }
+
+        const denyAccess = (message = 'Голосовой канал не найден') => {
+          socket.emit('error', { message });
+          if (typeof callback === 'function') callback({ status: 'error', message });
+        };
+
         // ===== ПОДДЕРЖКА ЗВОНКОВ В ЛС (Virtual Rooms) =====
         const isDMCall = channelId.startsWith('dm_call:');
         let channel = null;
 
-        if (!isDMCall) {
+        if (isDMCall) {
+          // Раньше в dm_call:<id> входил любой, кто знает id диалога:
+          // третий участник молча слушал чужой разговор.
+          const conversationId = channelId.slice('dm_call:'.length);
+          if (!isValidObjectId(conversationId)) {
+            return denyAccess();
+          }
+          const conversation = await DirectMessage.findById(conversationId).select('participants').lean();
+          const isParticipant = conversation && (conversation.participants || [])
+            .some(p => p.toString() === userId.toString());
+          if (!isParticipant) {
+            return denyAccess();
+          }
+        } else {
           channel = await Channel.findById(channelId);
           if (!channel || channel.type !== 'voice') {
-            const err = new Error('Голосовой канал не найден');
-            socket.emit('error', { message: err.message });
-            if (typeof callback === 'function') callback({ status: 'error', message: err.message });
-            return;
+            return denyAccess();
+          }
+          // Членство в сервере/диалоге обязательно: голосовой канал —
+          // такое же содержимое, как и переписка.
+          const access = await checkChannelAccess(channelId, userId);
+          if (!access.allowed) {
+            return denyAccess();
           }
         }
         
@@ -1172,6 +1278,18 @@ module.exports = (io) => {
       const { targetUserId } = data;
       const kind = data?.kind === 'video' ? 'video' : 'audio';
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
+
+      if (!isValidObjectId(targetIdStr)) {
+        socket.emit('call:error', { message: 'Пользователь не найден' });
+        return;
+      }
+
+      // Блокировка должна отсекать звонки, а не только сообщения.
+      if (await isBlockedBetween(userId, targetIdStr)) {
+        socket.emit('call:error', { message: 'Звонок недоступен' });
+        return;
+      }
+
       const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
       console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found sockets: ${targetIsOnline ? 'YES' : 'NO'}`);
@@ -1221,17 +1339,27 @@ module.exports = (io) => {
     /**
      * Ответ на звонок (Принять / Отклонить)
      */
-    socket.on('call:response', (data) => {
+    socket.on('call:response', async (data) => {
       const { callerId, accepted, conversationId, channelId } = data;
       const kind = data?.kind === 'video' ? 'video' : 'audio';
       const callerIdStr = callerId ? callerId.toString() : null;
+
+      // Без этой проверки можно было слать «звонок принят» кому угодно:
+      // достаточно знать чужой userId, чтобы дёрнуть его в звонок.
+      if (!isValidObjectId(callerIdStr) || !isValidObjectId(conversationId)) return;
+      const conversation = await DirectMessage.findById(conversationId).select('participants channel').lean();
+      if (!conversation) return;
+      const ids = (conversation.participants || []).map(p => p.toString());
+      if (!ids.includes(userId.toString()) || !ids.includes(callerIdStr)) return;
+
       const callerIsOnline = !!connectedUsers.get(callerIdStr)?.size;
 
       if (callerIsOnline) {
         io.to(`user:${callerIdStr}`).emit('call:response', {
           accepted,
           conversationId,
-          channelId,
+          // channelId берём из диалога, а не из payload: клиент мог прислать чужой.
+          channelId: conversation.channel ? conversation.channel.toString() : channelId,
           kind,
           responderId: userId
         });
@@ -1250,9 +1378,18 @@ module.exports = (io) => {
     /**
      * Завершение звонка
      */
-    socket.on('call:end', (data) => {
+    socket.on('call:end', async (data) => {
       const { targetUserId } = data;
       const targetIdStr = targetUserId ? targetUserId.toString() : null;
+      if (!isValidObjectId(targetIdStr)) return;
+
+      // «Завершить звонок» кому попало — способ обрывать чужие разговоры.
+      // Отправитель должен быть в одном диалоге с адресатом.
+      const conversation = await DirectMessage.findOne({
+        participants: { $all: [userId, targetIdStr] }
+      }).select('_id').lean();
+      if (!conversation) return;
+
       const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
       if (targetIsOnline) {
@@ -1583,17 +1720,37 @@ module.exports = (io) => {
   socket.on('user:block', async (data) => {
     try {
       const { userId: targetUserId } = data;
-      
+
       if (userId === targetUserId) {
         return socket.emit('error', { message: 'Нельзя заблокировать самого себя' });
       }
-      
+      if (!isValidObjectId(targetUserId)) {
+        return socket.emit('error', { message: 'Пользователь не найден' });
+      }
+
       const user = await User.findById(userId);
       if (!user.blockedUsers.includes(targetUserId)) {
         user.blockedUsers.push(targetUserId);
         await user.save();
       }
-      
+
+      // Блокировка должна разрывать текущую связь, а не только будущую:
+      // убираем из друзей и гасим висящие заявки в обе стороны.
+      await User.findByIdAndUpdate(userId, {
+        $pull: {
+          friends: targetUserId,
+          friendRequestsSent: { to: targetUserId },
+          friendRequestsReceived: { from: targetUserId }
+        }
+      });
+      await User.findByIdAndUpdate(targetUserId, {
+        $pull: {
+          friends: userId,
+          friendRequestsSent: { to: userId },
+          friendRequestsReceived: { from: userId }
+        }
+      });
+
       socket.emit('user:blocked', { userId: targetUserId });
       
     } catch (error) {
@@ -1643,11 +1800,12 @@ module.exports = (io) => {
   socket.on('message:pin', async (data) => {
     try {
       const { messageId, channelId } = data;
-      
-      const channel = await Channel.findById(channelId);
-      if (!channel) {
+
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) {
         return socket.emit('error', { message: 'Канал не найден' });
       }
+      const channel = access.channel;
       
       const message = await Message.findById(messageId);
       if (!message) {
@@ -1657,6 +1815,12 @@ module.exports = (io) => {
       // Проверяем что сообщение из этого канала
       if (message.channel.toString() !== channelId) {
         return socket.emit('error', { message: 'Сообщение не принадлежит этому каналу' });
+      }
+
+      // Неотправленную капсулу закрепить нельзя: закреплённые видит весь
+      // канал, и автор так раскрыл бы собеседнику её содержимое до срока.
+      if (message.delivered === false) {
+        return socket.emit('error', { message: 'Капсулу нельзя закрепить до доставки' });
       }
       
       // Добавляем в закрепленные если еще не закреплено
@@ -1699,11 +1863,12 @@ module.exports = (io) => {
   socket.on('message:unpin', async (data) => {
     try {
       const { messageId, channelId } = data;
-      
-      const channel = await Channel.findById(channelId);
-      if (!channel) {
+
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) {
         return socket.emit('error', { message: 'Канал не найден' });
       }
+      const channel = access.channel;
       
       // Удаляем из закрепленных
       channel.pinnedMessages = channel.pinnedMessages.filter(
@@ -1743,20 +1908,28 @@ module.exports = (io) => {
   socket.on('message:get_pinned', async (data) => {
     try {
       const { channelId } = data;
-      
+
+      // Закреплённые — это содержимое канала: нужен доступ.
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) {
+        return socket.emit('error', { message: 'Канал не найден' });
+      }
+
       const channel = await Channel.findById(channelId)
         .populate({
           path: 'pinnedMessages',
           populate: { path: 'author', select: 'username nickname avatar role' }
         });
-      
+
       if (!channel) {
         return socket.emit('error', { message: 'Канал не найден' });
       }
       
       socket.emit('message:pinned_list', {
         channelId,
-        messages: channel.pinnedMessages
+        // Страховка: если капсула успела попасть в pinnedMessages
+        // (старые записи), она всё равно не уедет до срока.
+        messages: (channel.pinnedMessages || []).filter(m => m && m.delivered !== false)
       });
       
     } catch (error) {
@@ -1773,24 +1946,28 @@ module.exports = (io) => {
   socket.on('message:search', async (data) => {
     try {
       const { channelId, query, limit = 50 } = data;
-      
+
       if (!query || query.trim().length === 0) {
         return socket.emit('message:search_results', { results: [] });
       }
-      
-      const channel = await Channel.findById(channelId);
-      if (!channel) {
+
+      // Без этой проверки поиск по channelId выгружал чужую переписку.
+      const access = await checkChannelAccess(channelId, userId);
+      if (!access.allowed) {
         return socket.emit('error', { message: 'Канал не найден' });
       }
-      
-      // Поиск сообщений по содержимому
+
+      // Поиск сообщений по содержимому.
+      // escapeRegex обязателен: '.*' иначе выгружает весь канал.
       const messages = await Message.find({
         channel: channelId,
-        content: { $regex: query, $options: 'i' } // case-insensitive поиск
+        content: { $regex: escapeRegex(String(query).slice(0, 200)), $options: 'i' },
+        deleted: false,
+        delivered: { $ne: false }
       })
         .populate('author', 'username nickname avatar role')
         .sort({ createdAt: -1 })
-        .limit(limit);
+        .limit(Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100));
       
       socket.emit('message:search_results', {
         channelId,
@@ -1817,25 +1994,28 @@ module.exports = (io) => {
         return socket.emit('message:search_results', { results: [] });
       }
       
-      const Server = require('../models/Server');
-      const server = await Server.findById(serverId);
-      if (!server) {
+      // Самая опасная дыра: один вызов отдавал всю историю чужого
+      // сервера тому, кто знает его id. Нужно членство.
+      const access = await checkServerAccess(serverId, userId);
+      if (!access.allowed) {
         return socket.emit('error', { message: 'Сервер не найден' });
       }
-      
+
       // Получаем все каналы сервера
       const channels = await Channel.find({ server: serverId });
       const channelIds = channels.map(c => c._id);
-      
+
       // Поиск сообщений по всем каналам сервера
       const messages = await Message.find({
         channel: { $in: channelIds },
-        content: { $regex: query, $options: 'i' }
+        content: { $regex: escapeRegex(String(query).slice(0, 200)), $options: 'i' },
+        deleted: false,
+        delivered: { $ne: false }
       })
         .populate('author', 'username nickname avatar role')
         .populate('channel', 'name')
         .sort({ createdAt: -1 })
-        .limit(limit);
+        .limit(Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100));
       
       socket.emit('message:search_results', {
         serverId,
@@ -1867,37 +2047,21 @@ module.exports = (io) => {
         return socket.emit('error', { message: 'Сервер не найден' });
       }
       
-      // Проверяем права (только владелец или админ)
+      // Проверяем права (только владелец или тот, кому дали manageRoles)
       const isOwner = server.owner.toString() === userId;
-      const member = server.members.find(m => m.user.toString() === userId);
-      
-      console.log('Role create permission check:', {
-        userId,
-        isOwner,
-        hasMember: !!member,
-        memberRoles: member?.roles,
-        serverRoles: server.roles.map(r => ({ id: r._id, name: r.name }))
-      });
-      
-      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
-        const r = server.roles.id(memberRoleId);
-        return r && (r.permissions.administrator || r.permissions.manageRoles);
-      });
-      
-      if (!isOwner && !hasPermission) {
+
+      if (!isOwner && !canManageServerRoles(server, userId)) {
         return socket.emit('error', { message: 'Недостаточно прав' });
       }
-      
-      // Создаем роль
+
+      // Создаем роль.
+      // permissions приходят от клиента, поэтому фильтруем по whitelist:
+      // раньше участник с manageRoles мог создать роль с administrator: true
+      // и выдать её себе — то есть забрать сервер у владельца.
       const newRole = {
-        name: name || 'Новая роль',
+        name: String(name || 'Новая роль').slice(0, 64),
         color: color || '#99aab5',
-        permissions: permissions || {
-          sendMessages: true,
-          readMessages: true,
-          connect: true,
-          speak: true
-        },
+        permissions: sanitizeRolePermissions(permissions, { isOwner }),
         position: server.roles.length
       };
       
@@ -1934,25 +2098,26 @@ module.exports = (io) => {
       
       // Проверяем права
       const isOwner = server.owner.toString() === userId;
-      const member = server.members.find(m => m.user.toString() === userId);
-      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
-        const r = server.roles.id(memberRoleId);
-        return r && (r.permissions.administrator || r.permissions.manageRoles);
-      });
-      
-      if (!isOwner && !hasPermission) {
+
+      if (!isOwner && !canManageServerRoles(server, userId)) {
         return socket.emit('error', { message: 'Недостаточно прав' });
       }
-      
+
       // Обновляем роль
       const role = server.roles.id(roleId);
       if (!role) {
         return socket.emit('error', { message: 'Роль не найдена' });
       }
-      
-      if (updates.name) role.name = updates.name;
+
+      if (updates.name) role.name = String(updates.name).slice(0, 64);
       if (updates.color) role.color = updates.color;
-      if (updates.permissions) role.permissions = { ...role.permissions, ...updates.permissions };
+      // Слияние с санитизированным набором: administrator добавит только владелец.
+      if (updates.permissions) {
+        role.permissions = {
+          ...(role.permissions ? role.permissions.toObject?.() || role.permissions : {}),
+          ...sanitizeRolePermissions(updates.permissions, { isOwner })
+        };
+      }
       if (updates.position !== undefined) role.position = updates.position;
       if (updates.hoist !== undefined) role.hoist = updates.hoist;
       if (updates.mentionable !== undefined) role.mentionable = updates.mentionable;
@@ -2034,22 +2199,27 @@ module.exports = (io) => {
       
       // Проверяем права
       const isOwner = server.owner.toString() === userId;
-      const member = server.members.find(m => m.user.toString() === userId);
-      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
-        const r = server.roles.id(memberRoleId);
-        return r && (r.permissions.administrator || r.permissions.manageRoles);
-      });
-      
-      if (!isOwner && !hasPermission) {
+
+      if (!isOwner && !canManageServerRoles(server, userId)) {
         return socket.emit('error', { message: 'Недостаточно прав' });
       }
-      
+
+      // Роль с administrator раздаёт только владелец. Иначе участник
+      // с manageRoles просто выдаёт себе готовую админ-роль — обход того же
+      // ограничения, что и в role:create, но с другой стороны.
+      const roleToAssign = server.roles.id(roleId);
+      if (!roleToAssign) {
+        return socket.emit('error', { message: 'Роль не найдена' });
+      }
+      if (!isOwner && roleToAssign.permissions && roleToAssign.permissions.administrator) {
+        return socket.emit('error', { message: 'Только владелец может выдавать роль администратора' });
+      }
+
       // Находим участника
       const targetMember = server.members.find(m => m.user.toString() === targetUserId);
       if (!targetMember) {
         return socket.emit('error', { message: 'Участник не найден' });
       }
-      
       const roleIdStr = roleId.toString();
       const alreadyHas = targetMember.roles.some((rid) => rid.toString() === roleIdStr);
       if (!alreadyHas) {
@@ -2090,22 +2260,17 @@ module.exports = (io) => {
       
       // Проверяем права
       const isOwner = server.owner.toString() === userId;
-      const member = server.members.find(m => m.user.toString() === userId);
-      const hasPermission = member && member.roles && member.roles.length > 0 && member.roles.some((memberRoleId) => {
-        const r = server.roles.id(memberRoleId);
-        return r && (r.permissions.administrator || r.permissions.manageRoles);
-      });
-      
-      if (!isOwner && !hasPermission) {
+
+      if (!isOwner && !canManageServerRoles(server, userId)) {
         return socket.emit('error', { message: 'Недостаточно прав' });
       }
-      
+
       // Находим участника
       const targetMember = server.members.find(m => m.user.toString() === targetUserId);
       if (!targetMember) {
         return socket.emit('error', { message: 'Участник не найден' });
       }
-      
+
       // Удаляем роль
       targetMember.roles = targetMember.roles.filter((r) => r.toString() !== roleId.toString());
       await server.save();

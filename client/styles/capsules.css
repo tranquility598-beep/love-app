@@ -1,0 +1,305 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   КАПСУЛЫ ВРЕМЕНИ
+   Плашка над композером + модалка выбора даты и списка капсул.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+.capsule-trigger.active svg,
+.capsule-trigger:hover svg {
+    color: #fff;
+}
+
+/* ── Плашка «капсула выставлена» ──────────────────────────────────────── */
+
+.capsule-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.capsule-banner-icon svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.capsule-banner-text {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-secondary);
+}
+
+.capsule-banner-text b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.capsule-banner-cancel {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.capsule-banner-cancel:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+/* ── Модалка ──────────────────────────────────────────────────────────── */
+
+.capsule-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-md);
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(6px);
+}
+
+.capsule-modal {
+    width: min(100%, 440px);
+    max-height: 84vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: var(--radius-md);
+    background: #0f0f11;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+    font-family: var(--font-sans);
+}
+
+
+.capsule-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.capsule-modal-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.capsule-modal-close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.capsule-modal-close:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.capsule-modal-body {
+    padding: 18px 20px 20px;
+    overflow-y: auto;
+}
+
+.capsule-hint {
+    margin-bottom: var(--spacing-md);
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.capsule-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.capsule-preset {
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.capsule-preset:hover {
+    border-color: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.capsule-field {
+    display: block;
+    margin-bottom: var(--spacing-sm);
+}
+
+.capsule-field span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.capsule-field input {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--border-color-active);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    color-scheme: dark;
+}
+
+.capsule-field input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.capsule-error {
+    min-height: 16px;
+    color: #f87171;
+    font-size: 12px;
+}
+
+.capsule-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+}
+
+.capsule-btn-ghost,
+.capsule-btn-primary {
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.capsule-btn-ghost {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.capsule-btn-ghost:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+.capsule-btn-primary {
+    border: 1px solid #fff;
+    background: #fff;
+    color: #0d0d0d;
+    font-weight: 600;
+}
+
+.capsule-btn-primary:hover {
+    background: #d8d8d8;
+    border-color: #d8d8d8;
+}
+
+/* ── Список капсул ────────────────────────────────────────────────────── */
+
+.capsule-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.capsule-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+}
+
+.capsule-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.capsule-item-when {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.capsule-item-text {
+    margin: 3px 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.capsule-item-where {
+    color: var(--text-muted);
+    font-size: 11.5px;
+}
+
+.capsule-item-cancel {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.capsule-item-cancel:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+.capsule-item-cancel:disabled {
+    opacity: 0.5;
+    cursor: default;
+}

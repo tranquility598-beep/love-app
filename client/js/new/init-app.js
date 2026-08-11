@@ -283,6 +283,19 @@
     });
   }
 
+  // Комнаты и сферы лежат в одном _mockServers, но рисуются разными
+  // функциями. renderServerChat показывает панель чата и прячет панель
+  // комнаты, поэтому для активной комнаты его звать нельзя: лента комнаты
+  // не обновлялась, и новое сообщение (в том числе доставленная капсула)
+  // появлялось только после перезагрузки.
+  function _renderSpaceChat(srv) {
+    if (srv && (srv._kind === 'room' || srv.kind === 'room')) {
+      if (typeof renderRoomChat === 'function') renderRoomChat();
+    } else if (typeof renderServerChat === 'function') {
+      renderServerChat();
+    }
+  }
+
   // ── appendMessage ─────────────────────────────────────────────────────
   if (typeof window.appendMessage !== 'function') {
     window.appendMessage = function (msg) {
@@ -387,9 +400,7 @@
             if (pendingMsg) {
               _applyServerMessage(pendingMsg, msg);
               if (state.activeView === 'view-servers' && state.activeServerId === srvId && String(ch._realId) === String(msgChannelId)) {
-                if (typeof renderServerChat === 'function') {
-                  renderServerChat();
-                }
+                _renderSpaceChat(srv);
               }
               break;
             }
@@ -412,9 +423,7 @@
 
           // If this is the active channel, re-render
           if (state.activeView === 'view-servers' && state.activeServerId === srvId && String(ch._realId) === String(msgChannelId)) {
-            if (typeof renderServerChat === 'function') {
-              renderServerChat();
-            }
+            _renderSpaceChat(srv);
           } else {
             ch.unread = true;
             if (typeof renderUnifiedSidebar === 'function') {
@@ -483,9 +492,7 @@
                 _applyServerMessage(m, msg, { flushQueuedEdit: false });
                 const state = window._getActiveState ? window._getActiveState() : {};
                 if (state.activeView === 'view-servers' && state.activeServerId === 'srv-' + srv._realId && state.activeServerChannelId === 'ch-' + ch._realId) {
-                  if (typeof renderServerChat === 'function') {
-                    renderServerChat();
-                  }
+                  _renderSpaceChat(srv);
                 }
                 break;
               }
@@ -538,9 +545,7 @@
                 _applyServerMessage(m, msg);
                 const state = window._getActiveState ? window._getActiveState() : {};
                 if (state.activeView === 'view-servers' && state.activeServerId === 'srv-' + srv._realId && state.activeServerChannelId === 'ch-' + ch._realId) {
-                  if (typeof renderServerChat === 'function') {
-                    renderServerChat();
-                  }
+                  _renderSpaceChat(srv);
                 }
                 break;
               }
@@ -585,9 +590,7 @@
                 ch.messages.splice(idx, 1);
                 const state = window._getActiveState ? window._getActiveState() : {};
                 if (state.activeView === 'view-servers' && state.activeServerId === 'srv-' + srv._realId && state.activeServerChannelId === 'ch-' + ch._realId) {
-                  if (typeof renderServerChat === 'function') {
-                    renderServerChat();
-                  }
+                  _renderSpaceChat(srv);
                 }
                 break;
               }
@@ -1354,6 +1357,12 @@
     // Emit via socket. attachments — массив объектов вложений (image/file/video/audio).
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: conv._channelId, content: text || '', tempId };
+    // Капсула времени: если в композере выставлена дата, забираем её
+    // (consume — чтобы следующее сообщение ушло обычным).
+    const deliverAt = typeof window._consumeCapsuleDeliverAt === 'function'
+      ? window._consumeCapsuleDeliverAt()
+      : null;
+    if (deliverAt) payload.deliverAt = deliverAt;
     // Reply target выбирается UI после нажатия «Ответить».
     const replyTarget = replyTo
       ? { id: replyTo }
@@ -1373,6 +1382,10 @@
 
     const tempId = 'temp-' + Date.now();
     const payload = { channelId: channelRealId, content: text || '', tempId };
+    const deliverAt = typeof window._consumeCapsuleDeliverAt === 'function'
+      ? window._consumeCapsuleDeliverAt()
+      : null;
+    if (deliverAt) payload.deliverAt = deliverAt;
     const replyTarget = replyTo
       ? { id: replyTo }
       : window.__loveReplyTarget;
@@ -1390,6 +1403,62 @@
   // ══════════════════════════════════════════════════════════════════════
   // 6. MAIN initApp()
   // ══════════════════════════════════════════════════════════════════════
+
+  // ── Приглашение из адресной строки ────────────────────────────────────
+  // Страница /invite/:code уводит незалогиненного гостя на SPA с ?invite=КОД.
+  // Здесь код подхватывается: если пользователь уже вошёл — вступаем сразу,
+  // если нет — код ждёт в localStorage до следующего успешного запуска.
+  const PENDING_INVITE_KEY = 'pendingInvite';
+
+  function takePendingInvite() {
+    let code = null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get('invite');
+      if (fromUrl && typeof parseInviteCode === 'function') {
+        code = parseInviteCode(fromUrl);
+      }
+      if (code) {
+        // Убираем параметр из URL: иначе F5 после вступления снова дёргает join.
+        params.delete('invite');
+        const query = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : ''));
+      } else {
+        code = localStorage.getItem(PENDING_INVITE_KEY);
+      }
+      localStorage.removeItem(PENDING_INVITE_KEY);
+    } catch (err) {
+      console.warn('[init-app] pending invite read failed:', err);
+    }
+    return code || null;
+  }
+
+  async function consumePendingInvite() {
+    const code = takePendingInvite();
+    if (!code) return;
+    if (typeof window.joinSpaceByCode !== 'function') return;
+    try {
+      // joinSpaceByCode сам встраивает сферу в сайдбар и открывает её
+      // (с правильным kind — сфера это или комната), поэтому выбор здесь
+      // повторять не нужно.
+      await window.joinSpaceByCode(code);
+    } catch (err) {
+      console.error('[init-app] join by invite failed:', err);
+    }
+  }
+
+  // Гость не авторизован — сохраняем код до входа. Вызывается из auth-потока
+  // и на всякий случай при загрузке страницы.
+  window.stashPendingInvite = function () {
+    try {
+      const code = new URLSearchParams(window.location.search).get('invite');
+      const parsed = (code && typeof parseInviteCode === 'function') ? parseInviteCode(code) : null;
+      if (parsed) localStorage.setItem(PENDING_INVITE_KEY, parsed);
+    } catch (err) {
+      console.warn('[init-app] pending invite stash failed:', err);
+    }
+  };
+  if (!localStorage.getItem('token')) window.stashPendingInvite();
 
   window.initApp = async function () {
     console.log('[init-app] ═══ Bootstrapping application ═══');
@@ -1472,6 +1541,10 @@
         toastContainer.style.bottom = '80px';
       }
     }
+
+    // 6. Приглашение из ссылки (?invite=КОД) — уже после загрузки сфер,
+    // иначе новая сфера не встанет в отрисованный сайдбар.
+    await consumePendingInvite();
 
     console.log('[init-app] ═══ Bootstrap complete ═══');
   };
@@ -2067,6 +2140,24 @@
   const _FS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
   const _PIP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor"/></svg>';
   const _VOL_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9v6h4l5 5V4L9 9H5z"/></svg>';
+  const _MUTE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9v6h4l5 5V4L9 9H5z"/><path d="M16.5 8.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  const _FS_EXIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M3 16h3a2 2 0 0 1 2 2v3M21 16h-3a2 2 0 0 0-2 2v3"/></svg>';
+
+  // Громкость общая для всех плееров и переживает перезапуск: заново
+  // выкручивать её на каждом видео — неудобно.
+  const _VOL_KEY = 'love:mediaVolume';
+
+  function _loadVolume() {
+    try {
+      const raw = parseFloat(localStorage.getItem(_VOL_KEY));
+      if (isFinite(raw) && raw >= 0 && raw <= 1) return raw;
+    } catch (_) {}
+    return DEFAULT_MEDIA_VOLUME;
+  }
+
+  function _saveVolume(value) {
+    try { localStorage.setItem(_VOL_KEY, String(value)); } catch (_) {}
+  }
 
   // Кнопка-ссылка «скачать» для медиа.
   function _downloadAnchor(url, name, cls) {
@@ -2161,9 +2252,11 @@
   function _buildVideoPlayer(url, name) {
     const wrap = document.createElement('div');
     wrap.className = 'media-video-wrapper';
+    wrap.tabIndex = 0;
     const video = document.createElement('video');
     video.src = url; video.playsInline = true; video.preload = 'metadata';
-    video.volume = DEFAULT_MEDIA_VOLUME;
+    const startVolume = _loadVolume();
+    video.volume = startVolume;
     // Восстановить позицию, если видео было приостановлено (а не сброшено).
     const savedPos = _videoPosStore.get(url);
     if (savedPos && savedPos.paused && isFinite(savedPos.currentTime)) {
@@ -2177,23 +2270,40 @@
     bigPlay.innerHTML = _PLAY_SVG;
     wrap.appendChild(bigPlay);
 
+    // Индикатор перемотки/громкости по центру — обратная связь на горячие клавиши.
+    const hud = document.createElement('div');
+    hud.className = 'mv-hud';
+    wrap.appendChild(hud);
+
     const controls = document.createElement('div');
     controls.className = 'media-video-controls';
     controls.innerHTML = `
-      <button class="mv-btn mv-play">${_PLAY_SVG}</button>
-      <div class="media-video-timeline"><div class="media-video-timeline-fill"></div></div>
+      <button class="mv-btn mv-play" title="Пауза / плей (Space)">${_PLAY_SVG}</button>
+      <div class="media-video-timeline">
+        <div class="media-video-timeline-buffer"></div>
+        <div class="media-video-timeline-fill"></div>
+        <div class="mv-tip"></div>
+      </div>
       <span class="mv-time">0:00</span>
-      <button class="mv-btn mv-vol-btn">${_VOL_SVG}</button>
-      <input class="mv-vol" type="range" min="0" max="1" step="0.05" value="${DEFAULT_MEDIA_VOLUME}">
+      <div class="mv-vol-box">
+        <button class="mv-btn mv-vol-btn" title="Звук (M)">${_VOL_SVG}</button>
+        <input class="mv-vol" type="range" min="0" max="1" step="0.05" value="${startVolume}" title="Громкость">
+      </div>
+      <button class="mv-btn mv-speed" title="Скорость">1×</button>
       <button class="mv-btn mv-pip" title="Свернуть в окошко">${_PIP_SVG}</button>
-      <button class="mv-btn mv-fs" title="Во весь экран">${_FS_SVG}</button>`;
+      <button class="mv-btn mv-fs" title="Во весь экран (F)">${_FS_SVG}</button>`;
     wrap.appendChild(controls);
 
     const playBtn = controls.querySelector('.mv-play');
     const fill = controls.querySelector('.media-video-timeline-fill');
+    const buffer = controls.querySelector('.media-video-timeline-buffer');
+    const tip = controls.querySelector('.mv-tip');
     const timeline = controls.querySelector('.media-video-timeline');
     const timeEl = controls.querySelector('.mv-time');
     const vol = controls.querySelector('.mv-vol');
+    const volBtn = controls.querySelector('.mv-vol-btn');
+    const fsBtn = controls.querySelector('.mv-fs');
+    const speedBtn = controls.querySelector('.mv-speed');
 
     let realDur = 0;
     const dur = () => (isFinite(video.duration) && video.duration > 0) ? video.duration : realDur;
@@ -2204,21 +2314,113 @@
     };
     _resolveDuration(video, (d) => { realDur = d || 0; paint(); });
 
+    // Буфер: видно, сколько уже подгружено — иначе непонятно, почему
+    // перемотка вперёд подвисает.
+    const paintBuffer = () => {
+      const d = dur();
+      if (!d || !video.buffered.length) return;
+      buffer.style.width = Math.min(100, video.buffered.end(video.buffered.length - 1) / d * 100) + '%';
+    };
+    video.addEventListener('progress', paintBuffer);
+    video.addEventListener('loadedmetadata', paintBuffer);
+
+    let hudTimer = 0;
+    const flash = (text) => {
+      hud.textContent = text;
+      hud.classList.add('is-on');
+      clearTimeout(hudTimer);
+      hudTimer = setTimeout(() => hud.classList.remove('is-on'), 650);
+    };
+
     const setUI = () => { playBtn.innerHTML = video.paused ? _PLAY_SVG : _PAUSE_SVG; bigPlay.style.display = video.paused ? 'flex' : 'none'; };
     const toggle = () => { if (video.paused) video.play().catch(() => {}); else video.pause(); };
+    const seekBy = (delta) => {
+      const d = dur();
+      if (!d) return;
+      video.currentTime = Math.max(0, Math.min(d, video.currentTime + delta));
+      paint();
+      flash((delta > 0 ? '+' : '') + Math.round(delta) + ' с');
+    };
+    const setVolume = (value) => {
+      const v = Math.max(0, Math.min(1, value));
+      video.muted = false;
+      video.volume = v;
+      vol.value = v;
+      _saveVolume(v);
+      flash(Math.round(v * 100) + '%');
+    };
+    const syncVolIcon = () => {
+      const silent = video.muted || video.volume === 0;
+      volBtn.innerHTML = silent ? _MUTE_SVG : _VOL_SVG;
+      vol.value = silent ? 0 : video.volume;
+    };
+    const toggleFs = () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (wrap.requestFullscreen) wrap.requestFullscreen();
+    };
+
     bigPlay.addEventListener('click', toggle);
     playBtn.addEventListener('click', toggle);
     video.addEventListener('click', toggle);
+    video.addEventListener('dblclick', (e) => { e.preventDefault(); toggleFs(); });
     video.addEventListener('play', setUI);
     video.addEventListener('pause', setUI);
     video.addEventListener('timeupdate', paint);
+    video.addEventListener('volumechange', syncVolIcon);
     _bindMediaScrub(timeline, video, dur, paint);
-    vol.addEventListener('input', () => { video.muted = false; video.volume = parseFloat(vol.value); });
-    controls.querySelector('.mv-vol-btn').addEventListener('click', () => { video.muted = !video.muted; vol.value = video.muted ? 0 : video.volume; });
-    controls.querySelector('.mv-fs').addEventListener('click', () => {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else if (wrap.requestFullscreen) wrap.requestFullscreen();
+
+    // Подсказка со временем под курсором — попасть в нужный момент
+    // на глаз по узкой дорожке иначе трудно.
+    timeline.addEventListener('pointermove', (e) => {
+      const d = dur();
+      if (!d) return;
+      const r = timeline.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+      tip.textContent = _fmtT(pct * d);
+      tip.style.left = (pct * 100) + '%';
+      tip.classList.add('is-on');
     });
+    timeline.addEventListener('pointerleave', () => tip.classList.remove('is-on'));
+
+    vol.addEventListener('input', () => setVolume(parseFloat(vol.value)));
+    volBtn.addEventListener('click', () => { video.muted = !video.muted; syncVolIcon(); });
+    fsBtn.addEventListener('click', toggleFs);
+    document.addEventListener('fullscreenchange', () => {
+      const on = document.fullscreenElement === wrap;
+      wrap.classList.toggle('is-fullscreen', on);
+      fsBtn.innerHTML = on ? _FS_EXIT_SVG : _FS_SVG;
+    });
+
+    const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    speedBtn.addEventListener('click', () => {
+      const next = SPEEDS[(SPEEDS.indexOf(video.playbackRate) + 1) % SPEEDS.length];
+      video.playbackRate = next;
+      speedBtn.textContent = next + '×';
+      flash(next + '×');
+    });
+
+    // Горячие клавиши. Слушаем на самом плеере (он tabIndex=0), а не на
+    // документе: иначе Space воевал бы с полем ввода сообщения.
+    wrap.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const key = e.key.toLowerCase();
+      if (key === ' ' || key === 'k') { e.preventDefault(); toggle(); }
+      else if (key === 'arrowright') { e.preventDefault(); seekBy(5); }
+      else if (key === 'arrowleft') { e.preventDefault(); seekBy(-5); }
+      else if (key === 'l') { e.preventDefault(); seekBy(10); }
+      else if (key === 'j') { e.preventDefault(); seekBy(-10); }
+      else if (key === 'arrowup') { e.preventDefault(); setVolume(video.volume + 0.1); }
+      else if (key === 'arrowdown') { e.preventDefault(); setVolume(video.volume - 0.1); }
+      else if (key === 'm') { e.preventDefault(); video.muted = !video.muted; syncVolIcon(); }
+      else if (key === 'f') { e.preventDefault(); toggleFs(); }
+      else if (key >= '0' && key <= '9') {
+        const d = dur();
+        if (d) { e.preventDefault(); video.currentTime = d * (Number(key) / 10); paint(); }
+      }
+    });
+    // Клик по плееру = фокус, чтобы клавиши заработали сразу.
+    wrap.addEventListener('pointerdown', () => wrap.focus({ preventScroll: true }));
+    syncVolIcon();
     controls.querySelector('.mv-pip').addEventListener('click', async () => {
       try {
         if (document.pictureInPictureElement) await document.exitPictureInPicture();
@@ -2236,6 +2438,8 @@
     _observeMedia(video);
     return wrap;
   }
+  // Нужен вкладке «Медиа» — там открывается тот же плеер.
+  window.buildVideoPlayer = _buildVideoPlayer;
 
   // Кастомный аудио/музыка плеер: play/seek/время/громкость(40%).
   function _buildAudioPlayer(url, name) {
@@ -2248,9 +2452,9 @@
         <div class="ma-time">0:00</div>
       </div>
       <button class="mv-btn ma-vol-btn">${_VOL_SVG}</button>
-      <input class="ma-vol" type="range" min="0" max="1" step="0.05" value="${DEFAULT_MEDIA_VOLUME}">`;
+      <input class="ma-vol" type="range" min="0" max="1" step="0.05" value="${_loadVolume()}">`;
     const audio = document.createElement('audio');
-    audio.src = url; audio.preload = 'metadata'; audio.volume = DEFAULT_MEDIA_VOLUME;
+    audio.src = url; audio.preload = 'metadata'; audio.volume = _loadVolume();
     wrap.appendChild(audio);
 
     const playBtn = wrap.querySelector('.ma-play');
@@ -2274,8 +2478,20 @@
     audio.addEventListener('pause', setUI);
     audio.addEventListener('timeupdate', paint);
     _bindMediaScrub(timeline, audio, dur, paint);
-    vol.addEventListener('input', () => { audio.muted = false; audio.volume = parseFloat(vol.value); });
-    wrap.querySelector('.ma-vol-btn').addEventListener('click', () => { audio.muted = !audio.muted; vol.value = audio.muted ? 0 : audio.volume; });
+    vol.addEventListener('input', () => {
+      audio.muted = false;
+      audio.volume = parseFloat(vol.value);
+      _saveVolume(audio.volume);
+    });
+    const volBtn = wrap.querySelector('.ma-vol-btn');
+    const syncVolIcon = () => {
+      const silent = audio.muted || audio.volume === 0;
+      volBtn.innerHTML = silent ? _MUTE_SVG : _VOL_SVG;
+      vol.value = silent ? 0 : audio.volume;
+    };
+    volBtn.addEventListener('click', () => { audio.muted = !audio.muted; syncVolIcon(); });
+    audio.addEventListener('volumechange', syncVolIcon);
+    syncVolIcon();
     wrap.appendChild(_downloadAnchor(url, name, 'mv-btn ma-dl'));
     setUI();
     _observeMedia(audio);

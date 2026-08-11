@@ -126,7 +126,6 @@ class _InviteCardState extends State<InviteCard> {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: LoveColors.border),
         ),
         child: const Center(
           child: SizedBox(
@@ -146,7 +145,6 @@ class _InviteCardState extends State<InviteCard> {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: LoveColors.border),
         ),
         child: Row(
           children: [
@@ -181,10 +179,11 @@ class _InviteCardState extends State<InviteCard> {
       width: 250,
       margin: const EdgeInsets.only(top: 6),
       clipBehavior: Clip.antiAlias,
+      // Рамки нет намеренно: карточка лежит внутри пузыря сообщения,
+      // и обводка давала двойной контур.
       decoration: BoxDecoration(
         color: const Color(0xF2101010),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: LoveColors.borderActive),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

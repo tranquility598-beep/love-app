@@ -16,6 +16,7 @@ import '../../core/prefs/love_prefs.dart';
 import '../../core/notifications/local_notifications.dart';
 import '../../core/calls/call_center.dart';
 import '../profile/user_profile_screen.dart';
+import 'capsule_sheet.dart';
 import 'chat_models.dart';
 import 'dm_call_controller.dart';
 import '../calls/call_screen.dart';
@@ -75,6 +76,9 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Own message currently being edited («Редактировать»).
   ChatMessage? _editing;
 
+  /// Срок капсулы для следующей отправки. null — обычное сообщение.
+  DateTime? _capsuleAt;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +92,7 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.socket.on('message:edited', _handleMessageEdited);
     widget.socket.on('message:deleted', _handleMessageDeleted);
     widget.socket.on('dm:new_message', _handleDmMessage);
+    widget.socket.on('capsule:scheduled', _handleCapsuleScheduled);
     _joinServerRoom();
     final peerId = widget.peerId;
     if (widget.conversationId != null && peerId != null && peerId.isNotEmpty) {
@@ -123,6 +128,7 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.socket.off('message:edited', _handleMessageEdited);
     widget.socket.off('message:deleted', _handleMessageDeleted);
     widget.socket.off('dm:new_message', _handleDmMessage);
+    widget.socket.off('capsule:scheduled', _handleCapsuleScheduled);
     if (_recordingVoice) {
       ChatNativeFiles.cancelVoiceRecording();
     }
@@ -164,6 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         Expanded(child: _body()),
+        if (_capsuleAt != null) _capsuleBanner(),
         if (_replyTo != null || _editing != null) _composerBanner(),
         _Composer(
           controller: _message,
@@ -171,9 +178,11 @@ class _ChatScreenState extends State<ChatScreen> {
           recordingVoice: _recordingVoice,
           editing: _editing != null,
           attachments: _pendingAttachments,
+          capsuleAt: _capsuleAt,
           onAttach: _pickAttachment,
           onRemoveAttachment: _removeAttachment,
           onEmoji: _showEmojiSheet,
+          onCapsule: _openCapsuleSheet,
           onVoice: _toggleVoiceRecording,
           onSend: _send,
         ),
@@ -309,6 +318,60 @@ class _ChatScreenState extends State<ChatScreen> {
     if (video && !starting && !call.cameraOn && !call.screenSharing) {
       call.toggleCamera();
     }
+  }
+
+  /// Плашка «капсула взведена». Формулировка важна: на десктопе люди
+  /// решали, что капсула уже отправлена, и ждали её, ничего не написав.
+  Widget _capsuleBanner() {
+    final at = _capsuleAt;
+    if (at == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: const BorderRadius.all(LoveRadii.sm),
+          border: Border(
+            left: BorderSide(
+              color: Colors.white.withValues(alpha: 0.5),
+              width: 2,
+            ),
+            top: BorderSide(color: LoveColors.borderActive),
+            right: BorderSide(color: LoveColors.borderActive),
+            bottom: BorderSide(color: LoveColors.borderActive),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.schedule_rounded,
+              size: 16,
+              color: LoveColors.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Следующее сообщение уйдёт капсулой — откроется '
+                '${_formatCapsuleDate(at)}. Напиши текст и отправь.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: LoveColors.textSecondary,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Отменить капсулу',
+              onPressed: () => setState(() => _capsuleAt = null),
+              iconSize: 18,
+              color: LoveColors.textSecondary,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _composerBanner() {
@@ -591,6 +654,28 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Догружает то, что ещё не улетело в Cloudinary, и приводит к payload,
+  /// который ждёт сервер.
+  Future<List<Map<String, dynamic>>> _uploadPending(
+    List<_PendingAttachment> pending,
+  ) async {
+    final attachments = <Map<String, dynamic>>[];
+    for (final item in pending) {
+      final uploaded = item.uploaded ??
+          await widget.api
+              .uploadAttachment(item.path, mimeType: item.mimeType);
+      attachments.add({
+        'type': item.typeFromUpload(uploaded),
+        'url': asText(uploaded['url']),
+        'filename': asText(uploaded['filename'], item.name),
+        'originalName': asText(uploaded['originalName'], item.name),
+        'size': int.tryParse(asText(uploaded['size'])) ?? item.size,
+        'mimetype': asText(uploaded['mimetype'], item.mimeType),
+      });
+    }
+    return attachments;
+  }
+
   Future _send() async {
     final text = _message.text.trim();
     final editing = _editing;
@@ -615,7 +700,69 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final currentUser = AppSessionScope.of(context).user;
+    final capsuleAt = _capsuleAt;
     final tempId = 'temp_${DateTime.now().microsecondsSinceEpoch}';
+
+    // Капсулу в ленту не добавляем: до срока её нет ни у кого, включая
+    // автора. Иначе пузырь висел бы до перезапуска и выглядел отправленным.
+    if (capsuleAt != null) {
+      setState(() {
+        _sending = true;
+        _message.clear();
+        _pendingAttachments.clear();
+        _replyTo = null;
+      });
+      try {
+        final attachments = await _uploadPending(pendingAttachments);
+        widget.socket.kick();
+        if (widget.socket.isConnected) {
+          widget.socket.emit('message:send', {
+            'channelId': channelId,
+            'content': text,
+            'attachments': attachments,
+            'tempId': tempId,
+            'deliverAt': capsuleAt.toUtc().toIso8601String(),
+            if (replyTo != null &&
+                !replyTo.id.startsWith('temp_') &&
+                !replyTo.id.startsWith('temp-'))
+              'replyTo': replyTo.id,
+          });
+          // Снимет взвод и покажет подтверждение по 'capsule:scheduled'.
+          return;
+        }
+        if (attachments.isNotEmpty) {
+          throw const FormatException(
+              'Нет realtime-соединения для отправки файла');
+        }
+        await widget.api.sendMessage(
+          channelId,
+          text,
+          deliverAt: capsuleAt,
+          replyTo: replyTo != null &&
+                  !replyTo.id.startsWith('temp_') &&
+                  !replyTo.id.startsWith('temp-')
+              ? replyTo.id
+              : null,
+        );
+        if (!mounted) return;
+        setState(() => _capsuleAt = null);
+        _showSnack('Капсула запланирована');
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _message.text = text;
+          _pendingAttachments
+            ..clear()
+            ..addAll(pendingAttachments);
+          _replyTo = replyTo;
+        });
+        _showSnack(error.toString());
+      } finally {
+        if (mounted) setState(() => _sending = false);
+      }
+      return;
+    }
+
     setState(() {
       _sending = true;
       _message.clear();
@@ -652,20 +799,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToEnd();
 
     try {
-      final attachments = <Map<String, dynamic>>[];
-      for (final pending in pendingAttachments) {
-        final uploaded = pending.uploaded ??
-            await widget.api
-                .uploadAttachment(pending.path, mimeType: pending.mimeType);
-        attachments.add({
-          'type': pending.typeFromUpload(uploaded),
-          'url': asText(uploaded['url']),
-          'filename': asText(uploaded['filename'], pending.name),
-          'originalName': asText(uploaded['originalName'], pending.name),
-          'size': int.tryParse(asText(uploaded['size'])) ?? pending.size,
-          'mimetype': asText(uploaded['mimetype'], pending.mimeType),
-        });
-      }
+      final attachments = await _uploadPending(pendingAttachments);
       widget.socket.kick();
       if (widget.socket.isConnected) {
         widget.socket.emit('message:send', {
@@ -853,6 +987,48 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  String _formatCapsuleDate(DateTime at) {
+    const months = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ];
+    final local = at.toLocal();
+    final time = '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+    final date = '${local.day} ${months[local.month - 1]}';
+    final now = DateTime.now();
+    if (local.year != now.year) return '$date ${local.year}, $time';
+    return '$date, $time';
+  }
+
+  Future<void> _openCapsuleSheet() async {
+    final picked = await CapsuleSheet.open(
+      context,
+      api: widget.api,
+      armed: _capsuleAt,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      // Капсула и редактирование несовместимы: правка уходит другим событием.
+      _editing = null;
+      _capsuleAt = picked.clear ? null : picked.deliverAt;
+    });
+  }
+
+  /// Сервер подтвердил капсулу. Оптимистичный пузырь для неё не рисуем
+  /// (сообщения ещё нет в ленте), поэтому просто снимаем взвод.
+  void _handleCapsuleScheduled(dynamic data) {
+    if (!mounted) return;
+    if (data is Map && asId(data['channelId']).isNotEmpty) {
+      if (asId(data['channelId']) != _activeChannelId) return;
+    }
+    setState(() {
+      _capsuleAt = null;
+      _sending = false;
+    });
+    _showSnack('Капсула запланирована');
   }
 
   void _handleNewMessage(dynamic data) {
@@ -1134,15 +1310,28 @@ class _MessageBubbleState extends State<_MessageBubble> {
         : InviteCard.stripInviteLink(message.content);
     final hasText = displayText.trim().isNotEmpty;
     final hasMedia = inviteCode != null || message.attachments.isNotEmpty;
+
+    // Картинка, видео и карточка приглашения — сами по себе непрозрачные
+    // карточки. Пузырь вокруг них добавлял вторую рамку и лишний фон, из-за
+    // чего сообщение с файлом выглядело криво. Аудио и файловые чипы
+    // полупрозрачные — им подложка пузыря нужна, иначе не читаются.
+    final bare = hasMedia &&
+        !hasText &&
+        message.replyToId.isEmpty &&
+        message.attachments
+            .every((item) => item.isImage || (!item.isVoice && item.isVideo));
+
     final timeText = Text(
       '${_formatTime(message.createdAt)}${message.edited ? ' · изм.' : ''}',
       style: TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w700,
-        color: (message.isOwn
-                ? LoveColors.bubbleOwnText
-                : LoveColors.bubblePartnerText)
-            .withValues(alpha: 0.5),
+        color: bare
+            ? LoveColors.textMuted
+            : (message.isOwn
+                    ? LoveColors.bubbleOwnText
+                    : LoveColors.bubblePartnerText)
+                .withValues(alpha: 0.5),
       ),
     );
 
@@ -1151,21 +1340,28 @@ class _MessageBubbleState extends State<_MessageBubble> {
         maxWidth: MediaQuery.sizeOf(context).width * 0.76,
       ),
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 10 : 12,
-          vertical: compact ? 5 : 7,
-        ),
-        decoration: BoxDecoration(
-          color:
-              message.isOwn ? LoveColors.bubbleOwn : LoveColors.bubblePartner,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(message.isOwn ? 16 : 5),
-            bottomRight: Radius.circular(message.isOwn ? 5 : 16),
-          ),
-          border: message.isOwn ? null : Border.all(color: LoveColors.border),
-        ),
+        padding: bare
+            ? EdgeInsets.zero
+            : EdgeInsets.symmetric(
+                horizontal: compact ? 10 : 12,
+                vertical: compact ? 5 : 7,
+              ),
+        decoration: bare
+            ? null
+            : BoxDecoration(
+                color: message.isOwn
+                    ? LoveColors.bubbleOwn
+                    : LoveColors.bubblePartner,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(message.isOwn ? 16 : 5),
+                  bottomRight: Radius.circular(message.isOwn ? 5 : 16),
+                ),
+                border: message.isOwn
+                    ? null
+                    : Border.all(color: LoveColors.border),
+              ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -1536,9 +1732,11 @@ class _Composer extends StatelessWidget {
     required this.recordingVoice,
     required this.editing,
     required this.attachments,
+    required this.capsuleAt,
     required this.onAttach,
     required this.onRemoveAttachment,
     required this.onEmoji,
+    required this.onCapsule,
     required this.onVoice,
     required this.onSend,
   });
@@ -1548,9 +1746,13 @@ class _Composer extends StatelessWidget {
   final bool recordingVoice;
   final bool editing;
   final List<_PendingAttachment> attachments;
+
+  /// Срок капсулы, если она взведена. null — обычная отправка.
+  final DateTime? capsuleAt;
   final VoidCallback onAttach;
   final void Function(int index) onRemoveAttachment;
   final VoidCallback onEmoji;
+  final VoidCallback onCapsule;
   final VoidCallback onVoice;
   final VoidCallback onSend;
 
@@ -1575,7 +1777,17 @@ class _Composer extends StatelessWidget {
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(color: LoveColors.borderActive),
               ),
-              child: Row(
+              // Кнопок в строке пять, и с дефолтными 48dp полю ввода
+              // почти не остаётся места на узком экране.
+              child: IconButtonTheme(
+                data: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(40, 40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
@@ -1593,6 +1805,20 @@ class _Composer extends StatelessWidget {
                       size: 20,
                     ),
                   ),
+                  if (!editing)
+                    IconButton(
+                      tooltip: 'Капсула времени',
+                      onPressed: onCapsule,
+                      color: capsuleAt != null
+                          ? Colors.white
+                          : LoveColors.textSecondary,
+                      icon: Icon(
+                        capsuleAt != null
+                            ? Icons.schedule_rounded
+                            : Icons.schedule_outlined,
+                        size: 20,
+                      ),
+                    ),
                   Expanded(
                     child: TextField(
                       controller: controller,
@@ -1600,6 +1826,7 @@ class _Composer extends StatelessWidget {
                       maxLines: 5,
                       textAlignVertical: TextAlignVertical.center,
                       textInputAction: TextInputAction.newline,
+                      cursorColor: LoveColors.textPrimary,
                       style: const TextStyle(
                         color: LoveColors.textPrimary,
                         fontSize: 14.5,
@@ -1614,7 +1841,16 @@ class _Composer extends StatelessWidget {
                           color: LoveColors.textMuted,
                           fontSize: 14,
                         ),
+                        // Рамку и фон рисует Container вокруг всей строки.
+                        // Без явного сброса тема подставляет свои границы
+                        // и заливку, и получается «окно внутри окна».
+                        filled: false,
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           vertical: 12,
@@ -1654,6 +1890,7 @@ class _Composer extends StatelessWidget {
                           ),
                   ),
                 ],
+                ),
               ),
             ),
           ],

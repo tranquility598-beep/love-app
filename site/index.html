@@ -160,6 +160,8 @@
     font-size: clamp(17px, 2.1vw, 20px); line-height: 1.55; color: var(--paper-65);
   }
   .hero-ctas { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+  .hero-hint { margin-top: 16px; font-size: 12.5px; line-height: 1.5; color: var(--paper-40); }
+  .hero-hint[hidden] { display: none; }
   .hero-meta { margin-top: 30px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); }
   .hero-meta span + span::before { content: "·"; margin: 0 12px; }
 
@@ -285,6 +287,15 @@
   .dl-card .fmt { font-size: 12px; color: var(--paper-40); transition: color 0.4s; }
   .dl-card:hover .fmt { color: var(--ink-60); }
   .dl-card .get { margin-top: 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+  .dl-card.is-yours { border-color: var(--paper-40); background: rgba(255,255,255,0.07); }
+  .dl-your { display: none; }
+  .dl-card.is-yours .dl-your {
+    display: inline-block; align-self: flex-start; margin-top: 12px;
+    border: 1px solid var(--paper-12); border-radius: 999px; padding: 4px 10px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--paper-65); transition: color 0.4s, border-color 0.4s;
+  }
+  .dl-card.is-yours:hover .dl-your { color: var(--ink-60); border-color: rgba(10,10,10,0.15); }
   .dl-note { margin-top: 28px; font-size: 12.5px; color: var(--paper-40); }
   .dl-note a { text-decoration: underline; text-underline-offset: 3px; }
   .dl-meta { margin-top: 34px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); }
@@ -347,9 +358,12 @@
     <span class="en">LOVE is a free messenger for friends and communities: direct messages, voice calls, screen sharing and your own spheres.</span>
   </p>
   <div class="hero-ctas">
-    <a class="btn btn-w js-dl-win" href="https://github.com/tranquility598-beep/love-app/releases/latest"><span><span class="ru">Скачать для Windows</span><span class="en">Download for Windows</span></span></a>
+    <!-- Подпись и ссылка подставляются по системе гостя (js-dl-auto ниже).
+         Без JS остаётся страница релизов — там есть сборки под всё. -->
+    <a class="btn btn-w js-dl-auto" href="https://github.com/tranquility598-beep/love-app/releases/latest"><span><span class="ru">Скачать LOVE</span><span class="en">Download LOVE</span></span></a>
     <a class="btn btn-ow" href="#download"><span><span class="ru">Другие платформы</span><span class="en">All platforms</span></span></a>
   </div>
+  <p class="hero-hint js-dl-hint" hidden><span class="ru"></span><span class="en"></span></p>
   <div class="hero-meta">
     <span class="ru">Бесплатно</span><span class="en">Free</span>
     <span>Windows</span>
@@ -479,25 +493,29 @@
     </p></div>
 
     <div class="dl-grid reveal d2">
-      <a class="dl-card js-dl-win" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-win" data-os="win" href="https://github.com/tranquility598-beep/love-app/releases/latest">
         <span class="os">Windows</span>
         <span class="fmt">.exe · Windows 10 / 11</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+        <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-mac-as" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-mac-as" data-os="mac-as" href="https://github.com/tranquility598-beep/love-app/releases/latest">
         <span class="os">macOS</span>
         <span class="fmt">.dmg · Apple Silicon</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+        <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-mac-intel" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-mac-intel" data-os="mac-intel" href="https://github.com/tranquility598-beep/love-app/releases/latest">
         <span class="os">macOS</span>
         <span class="fmt">.dmg · Intel</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+        <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-android" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-android" data-os="android" href="https://github.com/tranquility598-beep/love-app/releases/latest">
         <span class="os">Android</span>
         <span class="fmt">.apk · Android 8+</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
+        <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
     </div>
 
@@ -595,6 +613,105 @@
     });
   });
 
+  // ===== Кнопка установки под систему гостя =====
+  // Вопрос «а мне какой файл качать?» решаем за человека: подпись, подсказка и
+  // ссылка главной кнопки подставляются под ОС, а в списке платформ
+  // подсвечивается нужная карточка. Кнопка «Другие платформы» рядом — для тех,
+  // кому определили не то (или качают на другое устройство).
+  function detectOs() {
+    var ua = navigator.userAgent || "";
+    var plat = navigator.platform || "";
+    // Android проверяем первым: его UA содержит «Linux».
+    if (/android/i.test(ua)) return "android";
+    // iPadOS 13+ отдаёт десктопный UA, отличаясь только тач-точками.
+    if (/iphone|ipad|ipod/i.test(ua)) return "ios";
+    if (plat === "MacIntel" && navigator.maxTouchPoints > 1) return "ios";
+    if (/windows|win32|win64/i.test(ua) || /^win/i.test(plat)) return "windows";
+    if (/mac os x|macintosh/i.test(ua) || /^mac/i.test(plat)) return "mac";
+    if (/linux|x11|cros/i.test(ua)) return "linux";
+    return "";
+  }
+
+  // Apple Silicon или Intel. Честного признака в браузере нет, поэтому смотрим
+  // имя GPU. Safari отдаёт «Apple GPU» и на Intel-маках, поэтому доверяем
+  // только явному M-чипу; null = не определили, и тогда подсказка сама скажет
+  // про Intel-версию ниже.
+  function macIsArm() {
+    try {
+      var gl = document.createElement("canvas").getContext("webgl");
+      var dbg = gl && gl.getExtension("WEBGL_debug_renderer_info");
+      var name = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : "";
+      if (/apple\s*m\d/i.test(name)) return true;
+      if (/intel|amd|radeon|nvidia|geforce/i.test(name)) return false;
+      return null;
+    } catch (e) { return null; }
+  }
+
+  var PLANS = {
+    windows: { cls: "js-dl-win", card: "win",
+      ru: "Скачать для Windows", en: "Download for Windows",
+      hintRu: ".exe · Windows 10 / 11", hintEn: ".exe · Windows 10 / 11" },
+    macArm: { cls: "js-dl-mac-as", card: "mac-as",
+      ru: "Скачать для macOS", en: "Download for macOS",
+      hintRu: ".dmg · Apple Silicon", hintEn: ".dmg · Apple Silicon" },
+    macArmMaybe: { cls: "js-dl-mac-as", card: "mac-as",
+      ru: "Скачать для macOS", en: "Download for macOS",
+      hintRu: ".dmg · Apple Silicon — если у вас Mac на Intel, возьмите версию ниже",
+      hintEn: ".dmg · Apple Silicon — on an Intel Mac pick the build below" },
+    macIntel: { cls: "js-dl-mac-intel", card: "mac-intel",
+      ru: "Скачать для macOS", en: "Download for macOS",
+      hintRu: ".dmg · Intel", hintEn: ".dmg · Intel" },
+    android: { cls: "js-dl-android", card: "android",
+      ru: "Скачать для Android", en: "Download for Android",
+      hintRu: ".apk · Android 8+ · при установке разрешите этот источник",
+      hintEn: ".apk · Android 8+ · allow installs from this source" },
+    ios: { cls: null, card: null, href: "#download",
+      ru: "Все платформы", en: "All platforms",
+      hintRu: "Версии для iPhone пока нет — готовы Windows, macOS и Android",
+      hintEn: "No iPhone build yet — Windows, macOS and Android are ready" },
+    linux: { cls: null, card: null, href: "#download",
+      ru: "Все платформы", en: "All platforms",
+      hintRu: "Сборки для Linux пока нет — готовы Windows, macOS и Android",
+      hintEn: "No Linux build yet — Windows, macOS and Android are ready" }
+  };
+
+  function pickPlan() {
+    var os = detectOs();
+    if (os === "windows") return PLANS.windows;
+    if (os === "android") return PLANS.android;
+    if (os === "ios") return PLANS.ios;
+    if (os === "linux") return PLANS.linux;
+    if (os !== "mac") return null;
+    var arm = macIsArm();
+    if (arm === false) return PLANS.macIntel;
+    return arm === true ? PLANS.macArm : PLANS.macArmMaybe;
+  }
+
+  // Подписи ставим сразу, не дожидаясь GitHub: если его API недоступен или
+  // упёрся в лимит запросов, кнопка всё равно названа правильно и ведёт на
+  // страницу релизов.
+  var plan = pickPlan();
+  if (plan) {
+    document.querySelectorAll(".js-dl-auto").forEach(function (el) {
+      var ru = el.querySelector(".ru");
+      var en = el.querySelector(".en");
+      if (ru) ru.textContent = plan.ru;
+      if (en) en.textContent = plan.en;
+      if (plan.href) el.href = plan.href;
+    });
+    document.querySelectorAll(".js-dl-hint").forEach(function (el) {
+      var ru = el.querySelector(".ru");
+      var en = el.querySelector(".en");
+      if (ru) ru.textContent = plan.hintRu;
+      if (en) en.textContent = plan.hintEn;
+      el.removeAttribute("hidden");
+    });
+    if (plan.card) {
+      var yours = document.querySelector('.dl-card[data-os="' + plan.card + '"]');
+      if (yours) yours.classList.add("is-yours");
+    }
+  }
+
   // Актуальная версия и прямые ссылки — с GitHub Releases
   var REPO = "tranquility598-beep/love-app";
   fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
@@ -612,10 +729,15 @@
         if (!u) return;
         document.querySelectorAll("." + cls).forEach(function (el) { el.href = u; });
       }
-      set("js-dl-win", url(function (n) { return /\.exe$/i.test(n); }));
-      set("js-dl-mac-as", url(function (n) { return /arm64\.dmg$/i.test(n); }));
-      set("js-dl-mac-intel", url(function (n) { return /\.dmg$/i.test(n) && !/arm64/i.test(n); }));
-      set("js-dl-android", url(function (n) { return /love-mobile.*\.apk$/i.test(n); }) || url(function (n) { return /\.apk$/i.test(n); }));
+      var urls = {
+        "js-dl-win": url(function (n) { return /\.exe$/i.test(n); }),
+        "js-dl-mac-as": url(function (n) { return /arm64\.dmg$/i.test(n); }),
+        "js-dl-mac-intel": url(function (n) { return /\.dmg$/i.test(n) && !/arm64/i.test(n); }),
+        "js-dl-android": url(function (n) { return /love-mobile.*\.apk$/i.test(n); }) || url(function (n) { return /\.apk$/i.test(n); })
+      };
+      Object.keys(urls).forEach(function (cls) { set(cls, urls[cls]); });
+      // Главная кнопка ведёт на тот же файл, что и подсвеченная карточка.
+      if (plan && plan.cls) set("js-dl-auto", urls[plan.cls]);
     })
     .catch(function () { /* останутся ссылки на страницу релизов */ });
 })();

@@ -20,14 +20,20 @@ body.is-electron .app-container {
   min-height: 0 !important;
 }
 
+/* Высота титлбара как переменная: плавающие элементы (плашка звонка) считают
+   от неё свой отступ, иначе прячутся под ним — титлбар выше их по z-index. */
+body.is-electron {
+  --titlebar-h: 32px;
+}
+
 body.is-electron .window-titlebar {
   display: flex;
   height: 32px;
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-primary, #080808);
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.04));
+  background: var(--bg-primary, var(--bg-primary));
+  border-bottom: 1px solid var(--border-color, var(--tint-a-4));
   -webkit-app-region: drag;
   user-select: none;
   z-index: 9999;
@@ -64,13 +70,13 @@ body.is-electron .auth-screen {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.15em;
-  color: var(--text-secondary, #a2a2a2);
+  color: var(--text-secondary, var(--text-secondary));
 }
 
 .window-titlebar-logo svg {
   width: 11px;
   height: 11px;
-  color: var(--text-primary, #f5f5f5);
+  color: var(--text-primary, var(--text-primary));
 }
 
 /* MacOS Controls */
@@ -114,7 +120,7 @@ body.platform-macos .window-titlebar-logo {
 .macos-controls:hover .mac-control-btn::after {
   position: absolute;
   font-size: 8px;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--shade-a-60);
   font-weight: bold;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
@@ -157,7 +163,7 @@ body.platform-windows .windows-controls {
   background: transparent;
   border: none;
   outline: none;
-  color: var(--text-secondary, #a2a2a2);
+  color: var(--text-secondary, var(--text-secondary));
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -168,11 +174,11 @@ body.platform-windows .windows-controls {
 }
 
 .win-control-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary, #f5f5f5);
+  background: var(--tint-a-8);
+  color: var(--text-primary, var(--text-primary));
 }
 
 .win-control-btn.close:hover {
   background: #e81123;
-  color: #ffffff;
+  color: var(--text-bright);
 }

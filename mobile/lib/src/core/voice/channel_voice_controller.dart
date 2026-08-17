@@ -5,6 +5,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../features/chat/chat_models.dart';
+import '../calls/call_center.dart';
 import '../network/api_client.dart';
 import '../prefs/love_prefs.dart';
 import '../realtime/love_socket.dart';
@@ -82,6 +83,15 @@ class ChannelVoiceController extends ChangeNotifier {
     final socket = _socket;
     if (socket == null || id.isEmpty) return false;
     if (isActive && channelId == id) return true;
+
+    // Звонок в ЛС уже держит микрофон и свою WebRTC-комнату. Заход в войс
+    // поверх звонка отбирал поток, и звонок оставался «висеть» без звука.
+    if (CallCenter.instance.dmBusy) {
+      errorMessage = 'Сначала завершите звонок — во время звонка нельзя зайти в войс';
+      notifyListeners();
+      return false;
+    }
+
     if (isActive) await leave();
 
     errorMessage = null;

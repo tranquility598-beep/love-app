@@ -26,20 +26,20 @@ class LoveSurface extends StatelessWidget {
   final bool shadow;
 
   /// Faint card fill matching web `.lvs-card` — rgba(255,255,255,0.018).
-  static const cardFill = Color(0x05FFFFFF);
+  static Color cardFill(BuildContext context) => context.palette.inkA(0.02);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: color ?? cardFill,
-        border: Border.all(color: borderColor ?? const Color(0x0DFFFFFF)),
+        color: color ?? cardFill(context),
+        border: Border.all(color: borderColor ??  context.palette.inkA(0.05)),
         borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           if (shadow)
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
+              color: context.palette.dropA(0.25),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),

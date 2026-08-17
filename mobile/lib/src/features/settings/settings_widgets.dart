@@ -8,15 +8,19 @@ import '../../widgets/love_surface.dart';
 /// but the desktop Settings surface uses a green "success" and amber "warning"
 /// accent (settings.css `--settings-success` / warning banner). We mirror those
 /// here, scoped to settings/hub only.
-const settingsSuccess = Color(0xFF4CB96A);
-const settingsSuccessBg = Color(0x1A4CB96A);
-const settingsSuccessBorder = Color(0x404CB96A);
-const settingsWarning = Color(0xFFE8B341);
-const settingsWarningBg = Color(0x12E8B341);
-const settingsWarningBorder = Color(0x40E8B341);
+extension SettingsColorsX on BuildContext {
+  Color get settingsSuccess => palette.success;
+  Color get settingsSuccessBg => palette.successBg;
+  Color get settingsSuccessBorder => palette.successBorder;
+  Color get settingsWarning => palette.warning;
+  Color get settingsWarningBg => palette.warningBg;
+  Color get settingsWarningBorder => palette.warning.withValues(alpha: 0.25);
+}
 
-const _rowDivider = Color(0x0DFFFFFF); // rgba(255,255,255,0.05)
-const _rowFill = Color(0x08FFFFFF); // faint row fill inside cards
+extension SettingsRowsX on BuildContext {
+  Color get rowDivider => palette.inkA(0.05); // rgba(255,255,255,0.05)
+  Color get rowFill => palette.inkA(0.03); // faint row fill inside cards
+}
 
 // ── Section header ──────────────────────────────────────────────────────────
 
@@ -34,19 +38,19 @@ class SettingsSectionHead extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style:  TextStyle(
             fontSize: 23,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.4,
-            color: LoveColors.textPrimary,
+            color: context.palette.textPrimary,
           ),
         ),
         if (desc != null) ...[
           const SizedBox(height: 4),
           Text(
             desc!,
-            style: const TextStyle(
-              color: LoveColors.textMuted,
+            style:  TextStyle(
+              color: context.palette.textMuted,
               fontSize: 13,
               height: 1.35,
             ),
@@ -71,9 +75,9 @@ class SettingsSubtitle extends StatelessWidget {
       padding: padding ?? const EdgeInsets.fromLTRB(4, 2, 4, 10),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style:  TextStyle(
           fontFamily: LoveFonts.mono,
-          color: LoveColors.textMuted,
+          color: context.palette.textMuted,
           fontSize: 11,
           fontWeight: FontWeight.w500,
           letterSpacing: 1.0,
@@ -104,13 +108,13 @@ class SettingsCard extends StatelessWidget {
     for (var i = 0; i < children.length; i++) {
       rows.add(children[i]);
       if (i != children.length - 1) {
-        rows.add(const Divider(height: 1, thickness: 1, color: _rowDivider));
+        rows.add(Divider(height: 1, thickness: 1, color: context.rowDivider));
       }
     }
     return LoveSurface(
       padding: EdgeInsets.zero,
       radius: 16,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -145,7 +149,7 @@ class _RowLabel extends StatelessWidget {
     return Row(
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 19, color: LoveColors.textSecondary),
+          Icon(icon, size: 19, color: context.palette.textSecondary),
           const SizedBox(width: 12),
         ],
         Expanded(
@@ -155,18 +159,18 @@ class _RowLabel extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w500,
-                  color: LoveColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
+                  style:  TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 12,
                     height: 1.3,
                   ),
@@ -269,12 +273,12 @@ class LoveSwitch extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      activeThumbColor: Colors.black,
-      activeTrackColor: Colors.white,
-      inactiveThumbColor: LoveColors.textSecondary,
-      inactiveTrackColor: Colors.white.withValues(alpha: 0.06),
+      activeThumbColor: context.palette.onAccent,
+      activeTrackColor: context.palette.accent,
+      inactiveThumbColor: context.palette.textSecondary,
+      inactiveTrackColor: context.palette.inkA(0.06),
       trackOutlineColor:
-          WidgetStateProperty.all(value ? Colors.transparent : LoveColors.borderActive),
+          WidgetStateProperty.all(value ? Colors.transparent : context.palette.borderActive),
     );
   }
 }
@@ -386,7 +390,7 @@ class _SelectButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.05),
+      color: context.palette.inkA(0.05),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -396,7 +400,7 @@ class _SelectButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -406,16 +410,16 @@ class _SelectButton extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style:  TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: LoveColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
               ),
               const SizedBox(width: 6),
-              const Icon(Icons.keyboard_arrow_down_rounded,
-                  size: 18, color: LoveColors.textSecondary),
+               Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 18, color: context.palette.textSecondary),
             ],
           ),
         ),
@@ -477,13 +481,13 @@ class _SheetOption extends StatelessWidget {
                     fontSize: 15,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                     color: selected
-                        ? LoveColors.textPrimary
-                        : LoveColors.textSecondary,
+                        ? context.palette.textPrimary
+                        : context.palette.textSecondary,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_rounded, size: 20, color: Colors.white),
+                 Icon(Icons.check_rounded, size: 20, color: context.palette.accent),
             ],
           ),
         ),
@@ -533,10 +537,10 @@ class SettingsSliderRow extends StatelessWidget {
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 4,
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withValues(alpha: 0.12),
+              activeTrackColor: context.palette.accent,
+              inactiveTrackColor: context.palette.inkA(0.08),
+              thumbColor: context.palette.accent,
+              overlayColor: context.palette.inkA(0.12),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
             ),
             child: Slider(
@@ -646,8 +650,8 @@ class SettingsNavRow extends StatelessWidget {
               Expanded(child: _RowLabel(title: title, subtitle: subtitle, icon: icon)),
               const SizedBox(width: 12),
               trailing ??
-                  const Icon(Icons.chevron_right_rounded,
-                      color: LoveColors.textMuted),
+                   Icon(Icons.chevron_right_rounded,
+                      color: context.palette.textMuted),
             ],
           ),
         ),
@@ -688,10 +692,10 @@ class SettingsValueRow extends StatelessWidget {
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
-                  color: LoveColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
             ),
@@ -714,14 +718,14 @@ class LoveBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final warn = variant == BannerVariant.warning;
-    final fg = warn ? settingsWarning : LoveColors.textSecondary;
+    final fg = warn ? context.settingsWarning : context.palette.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: warn ? settingsWarningBg : Colors.white.withValues(alpha: 0.03),
+        color: warn ? context.settingsWarningBg : context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: warn ? settingsWarningBorder : LoveColors.border,
+          color: warn ? context.settingsWarningBorder : context.palette.border,
         ),
       ),
       child: Row(
@@ -737,7 +741,7 @@ class LoveBanner extends StatelessWidget {
             child: Text(
               text,
               style: TextStyle(
-                color: warn ? settingsWarning : LoveColors.textSecondary,
+                color: warn ? context.settingsWarning : context.palette.textSecondary,
                 fontSize: 12.5,
                 height: 1.4,
               ),
@@ -760,10 +764,10 @@ class LoveBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: success ? settingsSuccessBg : Colors.white.withValues(alpha: 0.05),
+        color: success ? context.settingsSuccessBg : context.palette.inkA(0.05),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: success ? settingsSuccessBorder : LoveColors.borderActive,
+          color: success ? context.settingsSuccessBorder : context.palette.borderActive,
         ),
       ),
       child: Text(
@@ -772,7 +776,7 @@ class LoveBadge extends StatelessWidget {
           fontFamily: LoveFonts.mono,
           fontSize: 11.5,
           fontWeight: FontWeight.w500,
-          color: success ? settingsSuccess : LoveColors.textSecondary,
+          color: success ? context.settingsSuccess : context.palette.textSecondary,
         ),
       ),
     );
@@ -799,9 +803,9 @@ class DangerButton extends StatelessWidget {
       icon: Icon(icon ?? Icons.warning_amber_rounded, size: 18),
       label: Text(label),
       style: FilledButton.styleFrom(
-        backgroundColor: LoveColors.danger,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: LoveColors.danger.withValues(alpha: 0.4),
+        backgroundColor: context.palette.danger,
+        foregroundColor: context.palette.accent,
+        disabledBackgroundColor: context.palette.danger.withValues(alpha: 0.4),
       ),
     );
   }
@@ -820,16 +824,16 @@ Future<T?> showLoveSheet<T>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.6),
+    barrierColor: context.palette.dropA(0.6),
     builder: (context) {
       final bottom = MediaQuery.of(context).viewInsets.bottom;
       return Padding(
         padding: EdgeInsets.only(bottom: bottom),
         child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF0E0E0E),
+          decoration:  BoxDecoration(
+            color: context.palette.bgSecondary,
             borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-            border: Border(top: BorderSide(color: LoveColors.borderActive)),
+            border: Border(top: BorderSide(color: context.palette.borderActive)),
           ),
           child: SafeArea(
             top: false,
@@ -845,7 +849,7 @@ Future<T?> showLoveSheet<T>(
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
+                        color: context.palette.inkA(0.14),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -855,17 +859,17 @@ Future<T?> showLoveSheet<T>(
                       Expanded(
                         child: Text(
                           title,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 21,
                             fontWeight: FontWeight.w600,
-                            color: LoveColors.textPrimary,
+                            color: context.palette.textPrimary,
                           ),
                         ),
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close_rounded),
-                        color: LoveColors.textSecondary,
+                        color: context.palette.textSecondary,
                         tooltip: 'Закрыть',
                       ),
                     ],
@@ -992,7 +996,7 @@ class _MoodChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? Colors.white : _rowFill,
+      color: selected ? context.palette.accent : context.rowFill,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1003,13 +1007,13 @@ class _MoodChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? Colors.white : LoveColors.border,
+              color: selected ? context.palette.accent : context.palette.border,
             ),
           ),
           child: Icon(
             icon,
             size: 22,
-            color: selected ? Colors.black : LoveColors.textSecondary,
+            color: selected ? context.palette.onAccent : context.palette.textSecondary,
           ),
         ),
       ),
@@ -1092,7 +1096,7 @@ class _HobbyChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _rowFill,
+      color: context.rowFill,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -1101,27 +1105,27 @@ class _HobbyChip extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(hobbyIcon(item.icon), size: 16, color: LoveColors.textSecondary),
+              Icon(hobbyIcon(item.icon), size: 16, color: context.palette.textSecondary),
               const SizedBox(width: 7),
               Text(
                 item.text,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: LoveColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
               const SizedBox(width: 4),
               GestureDetector(
                 onTap: onDelete,
-                child: const Padding(
+                child:  Padding(
                   padding: EdgeInsets.all(2),
-                  child: Icon(Icons.close_rounded, size: 15, color: LoveColors.textMuted),
+                  child: Icon(Icons.close_rounded, size: 15, color: context.palette.textMuted),
                 ),
               ),
             ],
@@ -1149,19 +1153,19 @@ class _AddHobbyChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
-          child: const Row(
+          child:  Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_rounded, size: 16, color: LoveColors.textSecondary),
+              Icon(Icons.add_rounded, size: 16, color: context.palette.textSecondary),
               SizedBox(width: 6),
               Text(
                 'Добавить',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: LoveColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
             ],

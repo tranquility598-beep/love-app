@@ -35,6 +35,7 @@ class MainActivity : FlutterActivity() {
                     "startVoiceRecording" -> startVoiceRecording(result)
                     "stopVoiceRecording" -> stopVoiceRecording(result)
                     "cancelVoiceRecording" -> cancelVoiceRecording(result)
+                    "voiceAmplitude" -> voiceAmplitude(result)
                     else -> result.notImplemented()
                 }
             }
@@ -194,6 +195,31 @@ class MainActivity : FlutterActivity() {
         activeVoiceFile = null
         activeVoiceStartedAt = 0
         result.success(null)
+    }
+
+    /**
+     * Текущий пик с микрофона, 0..32767 — источник живой волны при записи
+     * голосового.
+     *
+     * MediaRecorder не умеет отдавать поток амплитуд, только maxAmplitude —
+     * максимум с прошлого вызова. То есть окно усреднения задаёт сам опрос
+     * из Dart, и никакого состояния здесь держать не нужно.
+     */
+    private fun voiceAmplitude(result: MethodChannel.Result) {
+        val recorder = activeVoiceRecorder
+        if (recorder == null) {
+            result.success(0)
+            return
+        }
+        val amplitude = try {
+            recorder.maxAmplitude
+        } catch (_: Exception) {
+            // Опрос мог прийти в момент остановки — тогда getMaxAmplitude
+            // бросает IllegalStateException. Для волны это просто «нет
+            // данных»; ронять из-за неё запись нельзя.
+            0
+        }
+        result.success(amplitude)
     }
 
     @Deprecated("Deprecated in Java")

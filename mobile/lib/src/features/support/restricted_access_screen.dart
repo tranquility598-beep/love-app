@@ -89,16 +89,16 @@ class _RestrictedAccessScreenState extends State<RestrictedAccessScreen> {
                       width: 70,
                       height: 70,
                       decoration: BoxDecoration(
-                        color: LoveColors.danger.withValues(alpha: 0.12),
+                        color: context.palette.danger.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: LoveColors.danger.withValues(alpha: 0.5)),
+                            color: context.palette.danger.withValues(alpha: 0.5)),
                       ),
                       child: Icon(
                         isDeactivated
                             ? Icons.person_off_outlined
                             : Icons.gpp_bad_outlined,
-                        color: const Color(0xFFFF8895),
+                        color:  context.palette.dangerText,
                         size: 32,
                       ),
                     ),
@@ -115,28 +115,28 @@ class _RestrictedAccessScreenState extends State<RestrictedAccessScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
+                     Text(
                       'Чтение причины, поддержка и апелляция остаются доступны.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          color: LoveColors.textSecondary, height: 1.45),
+                          color: context.palette.textSecondary, height: 1.45),
                     ),
                     const SizedBox(height: 22),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: LoveColors.danger.withValues(alpha: 0.08),
+                        color: context.palette.danger.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
-                            color: LoveColors.danger.withValues(alpha: 0.35)),
+                            color: context.palette.danger.withValues(alpha: 0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('ПРИЧИНА',
+                           Text('ПРИЧИНА',
                               style: TextStyle(
-                                  color: Color(0xFFFF8D99),
+                                  color: context.palette.dangerText,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w900)),
                           const SizedBox(height: 7),
@@ -147,8 +147,8 @@ class _RestrictedAccessScreenState extends State<RestrictedAccessScreen> {
                               style: const TextStyle(height: 1.4)),
                           const SizedBox(height: 12),
                           Text(_term(restriction),
-                              style: const TextStyle(
-                                  color: LoveColors.textMuted, fontSize: 12.5)),
+                              style:  TextStyle(
+                                  color: context.palette.textMuted, fontSize: 12.5)),
                         ],
                       ),
                     ),

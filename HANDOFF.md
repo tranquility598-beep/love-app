@@ -87,9 +87,10 @@ Production работает на коде этих коммитов. Проце�
 
 ```bash
 # На машине владельца, из корня репозитория:
-# admin/dist — артефакт сборки, в git его нет, а сервер отдаёт с него /admin.
+# admin/dist — артефакт сборки, в git его нет. Панель собирается для корня
+# admin.loveapp.chat; Nginx проксирует UI внутрь на /admin.
 # Без этой строки админка на проде превратится в 503 «не собрана».
-(cd admin && MSYS_NO_PATHCONV=1 npx vite build --base=/admin/)
+(cd admin && npm ci && npm test && npm run lint && npm run build)
 GIT_SHA=$(git rev-parse HEAD)
 printf '{"gitSha":"%s","builtAt":"%s"}\n' "$GIT_SHA" "$(date -u +%FT%TZ)" > release-manifest.json
 tar --exclude='server/.env' --exclude='server/node_modules' --exclude='server/uploads' \
@@ -138,3 +139,14 @@ curl -s https://api.loveapp.chat/api/webrtc/ice-config  # 401 без токен�
 - `ops/check-build-secrets.cjs` — guard секретов в артефактах
 - `server/routes/webrtc.js` + `server/tests/webrtc-ice-config.test.js` — TURN credentials
 - `server/scripts/backup-admin-v1.js` / `restore-backup.js` — backup/restore
+
+## 8. Админ-домен и TLS (проверено 2026-08-15)
+
+- `https://admin.loveapp.chat` обслуживает production-сборку Love Control Panel; активный релиз на момент настройки: `/var/www/love-releases/20260813T185654Z`.
+- Backend принимает административные запросы только с `Origin: https://admin.loveapp.chat`: `ADMIN_ORIGINS=https://admin.loveapp.chat`, `ADMIN_ALLOW_NO_ORIGIN=false`.
+- На `api.loveapp.chat` административный API закрыт case-insensitive правилом `location ~* ^/api/admin(?:/|$) { return 404; }`. Проверены `/API/ADMIN`, `/api/ADMIN` и `/Api/Admin` — все возвращают `404`.
+- Admin-vhost доступен к origin только из официальных сетей Cloudflare; прямой запрос к IP с `Host`/SNI админ-домена получает `403`.
+- Nginx-конфигурации в репозитории: `ops/production/nginx-admin.conf`, `ops/production/nginx-api.conf`, `ops/production/nginx-cloudflare-allow.conf`.
+- Сертификат админ-домена: `/etc/letsencrypt/live/admin.loveapp.chat/fullchain.pem`, срок действия до `2026-11-11`.
+- `nginx -t` и `certbot renew --dry-run --no-random-sleep-on-renew` успешно выполнены 2026-08-15 для `admin.loveapp.chat` и `api.loveapp.chat`.
+- В Cloudflare для домена должен быть выбран режим `SSL/TLS -> Full (strict)`, так как на origin уже установлен валидный сертификат Let's Encrypt.

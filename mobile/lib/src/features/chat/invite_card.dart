@@ -115,7 +115,7 @@ class _InviteCardState extends State<InviteCard> {
         height: 84,
         margin: const EdgeInsets.only(top: 6),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.25),
+          color: context.palette.sinkA(0.25),
           borderRadius: BorderRadius.circular(14),
         ),
         child: const Center(
@@ -134,23 +134,23 @@ class _InviteCardState extends State<InviteCard> {
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.25),
+          color: context.palette.sinkA(0.25),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
-            const Icon(
+             Icon(
               Icons.link_off_rounded,
               size: 18,
-              color: LoveColors.textMuted,
+              color: context.palette.textMuted,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 _error!,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 12,
-                  color: LoveColors.textMuted,
+                  color: context.palette.textMuted,
                 ),
               ),
             ),
@@ -173,7 +173,7 @@ class _InviteCardState extends State<InviteCard> {
       // Рамки нет намеренно: карточка лежит внутри пузыря сообщения,
       // и обводка давала двойной контур.
       decoration: BoxDecoration(
-        color: const Color(0xF2101010),
+        color:  context.palette.glassStrong,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -210,10 +210,10 @@ class _InviteCardState extends State<InviteCard> {
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w900,
-                              color: LoveColors.textPrimary,
+                              color: context.palette.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -221,9 +221,9 @@ class _InviteCardState extends State<InviteCard> {
                             'Приглашение · ${_membersLabel(memberCount)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 11,
-                              color: LoveColors.textMuted,
+                              color: context.palette.textMuted,
                             ),
                           ),
                         ],
@@ -237,9 +237,9 @@ class _InviteCardState extends State<InviteCard> {
                     description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 12,
-                      color: LoveColors.textSecondary,
+                      color: context.palette.textSecondary,
                       height: 1.35,
                     ),
                   ),
@@ -257,12 +257,12 @@ class _InviteCardState extends State<InviteCard> {
                       : FilledButton(
                           onPressed: _joining ? null : _join,
                           child: _joining
-                              ? const SizedBox(
+                              ?  SizedBox(
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.black,
+                                    color: context.palette.onAccent,
                                   ),
                                 )
                               : const Text('Войти'),
@@ -299,15 +299,15 @@ class _BannerFallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withValues(alpha: 0.1),
-            Colors.white.withValues(alpha: 0.02),
+            context.palette.inkA(0.1),
+            context.palette.inkA(0.02),
           ],
         ),
       ),
       child: Icon(
         Icons.favorite,
         size: 22,
-        color: Colors.white.withValues(alpha: 0.25),
+        color: context.palette.inkA(0.25),
       ),
     );
   }

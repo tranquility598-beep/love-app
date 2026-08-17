@@ -146,12 +146,12 @@ class _BannerHostState extends State<_BannerHost>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xF21A1A1A),
+                        color:  context.palette.glassStrong,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: LoveColors.borderActive),
+                        border: Border.all(color: context.palette.borderActive),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
+                            color: context.palette.dropA(0.5),
                             blurRadius: 30,
                             offset: const Offset(0, 10),
                           ),
@@ -166,11 +166,11 @@ class _BannerHostState extends State<_BannerHost>
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.06),
-                                border: Border.all(color: LoveColors.border),
+                                color: context.palette.inkA(0.06),
+                                border: Border.all(color: context.palette.border),
                               ),
                               child: Icon(widget.icon,
-                                  size: 20, color: LoveColors.textPrimary),
+                                  size: 20, color: context.palette.textPrimary),
                             )
                           else
                             LoveAvatar(
@@ -188,10 +188,10 @@ class _BannerHostState extends State<_BannerHost>
                                   widget.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style:  TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
-                                    color: LoveColors.textPrimary,
+                                    color: context.palette.textPrimary,
                                   ),
                                 ),
                                 if ((widget.body ?? '').isNotEmpty) ...[
@@ -200,9 +200,9 @@ class _BannerHostState extends State<_BannerHost>
                                     widget.body!,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style:  TextStyle(
                                       fontSize: 13,
-                                      color: LoveColors.textSecondary,
+                                      color: context.palette.textSecondary,
                                     ),
                                   ),
                                 ],

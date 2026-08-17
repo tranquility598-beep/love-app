@@ -39,8 +39,8 @@ class LoveAvatar extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: _backgroundColor,
-                  border: Border.all(color: borderColor ?? LoveColors.border),
+                  color: _backgroundColor(context),
+                  border: Border.all(color: borderColor ?? context.palette.border),
                 ),
                 child: mediaUrl == null
                     ? _FallbackAvatar(
@@ -74,13 +74,13 @@ class LoveAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: status == 'online'
-                      ? LoveColors.presenceOnline
-                      : LoveColors.presenceOffline,
-                  border: Border.all(color: LoveColors.bgAndroid, width: 2),
+                      ? context.palette.presenceOnline
+                      : context.palette.presenceOffline,
+                  border: Border.all(color: context.palette.bgAndroid, width: 2),
                   boxShadow: status == 'online'
                       ? [
                           BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color: context.palette.glowA(0.4),
                             blurRadius: 6,
                           ),
                         ]
@@ -93,12 +93,12 @@ class LoveAvatar extends StatelessWidget {
     );
   }
 
-  Color get _backgroundColor {
+  Color _backgroundColor(BuildContext context) {
     final steps = [
-      const Color(0xFF161616),
-      const Color(0xFF1B1B1B),
-      const Color(0xFF202020),
-      const Color(0xFF141414),
+       context.palette.surfaceRaised,
+       context.palette.surfaceHighlight,
+       context.palette.surfaceHighlight,
+       context.palette.surfaceRaised,
     ];
     return steps[_seed % steps.length];
   }
@@ -143,14 +143,14 @@ class _FallbackAvatar extends StatelessWidget {
           ? Text(
               initials,
               style: TextStyle(
-                color: LoveColors.textPrimary,
+                color: context.palette.textPrimary,
                 fontSize: size * 0.36,
                 fontWeight: FontWeight.w600,
               ),
             )
           : Icon(
               icon,
-              color: LoveColors.textPrimary,
+              color: context.palette.textPrimary,
               size: size * 0.46,
             ),
     );

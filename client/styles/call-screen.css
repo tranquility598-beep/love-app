@@ -4,12 +4,12 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: #0a0a0a;
+  background: var(--bg-primary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   font-family: inherit;
-  color: #fff;
+  color: var(--text-bright);
 }
 
 /* ---- сетка участников / медиа-плиток ---- */
@@ -24,8 +24,8 @@
 
 .media-tile {
   position: relative;
-  background: #111;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--tint-a-10);
   border-radius: 16px;
   overflow: hidden;
   aspect-ratio: 16 / 10;
@@ -33,14 +33,14 @@
   transition: border-color 0.18s ease, transform 0.18s ease;
 }
 .media-tile:hover {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: var(--tint-a-35);
   transform: translateY(-2px);
 }
 .media-tile video {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #000;
+  background: var(--shade-solid);
   display: block;
 }
 .media-tile .tile-label {
@@ -50,8 +50,8 @@
   padding: 4px 10px;
   font-size: 12px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--shade-a-60);
+  border: 1px solid var(--tint-a-12);
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
@@ -65,8 +65,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--shade-a-50);
+  border: 1px solid var(--tint-a-12);
   opacity: 0;
   transition: opacity 0.18s ease;
   font-size: 13px;
@@ -86,8 +86,8 @@
   width: 84px;
   height: 84px;
   border-radius: 50%;
-  background: #1c1c1c;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--surface-highlight);
+  border: 1px solid var(--tint-a-15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,10 +106,10 @@
   gap: 14px;
   padding: 12px 18px;
   border-radius: 999px;
-  background: rgba(20, 20, 20, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: var(--surface-overlay);
+  border: 1px solid var(--tint-a-10);
   backdrop-filter: blur(14px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 12px 40px var(--shade-a-50);
   z-index: 20;
 }
 
@@ -117,9 +117,9 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid var(--tint-a-14);
+  background: var(--tint-a-8);
+  color: var(--text-bright);
   font-size: 20px;
   display: flex;
   align-items: center;
@@ -131,42 +131,42 @@
 }
 .ctl-btn:hover {
   transform: scale(1.08);
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.30);
+  background: var(--tint-a-16);
+  border-color: var(--tint-a-30);
 }
 .ctl-btn:active { transform: scale(0.96); }
 
 /* выключенное состояние (мик/камера off) */
 .ctl-btn.is-off {
-  background: rgba(255, 255, 255, 0.92);
-  color: #0a0a0a;
+  background: var(--tint-a-85);
+  color: var(--bg-primary);
   border-color: transparent;
 }
 
 /* активная демка */
 .ctl-btn.is-active {
-  background: #fff;
-  color: #0a0a0a;
+  background: var(--text-bright);
+  color: var(--bg-primary);
   border-color: transparent;
 }
 
 /* завершить звонок */
 .ctl-btn.hangup {
-  background: #fff;
-  color: #0a0a0a;
+  background: var(--text-bright);
+  color: var(--bg-primary);
   width: 60px;
   height: 52px;
   border-radius: 999px;
   border-color: transparent;
 }
-.ctl-btn.hangup:hover { background: #e6e6e6; }
+.ctl-btn.hangup:hover { background: var(--text-primary); }
 
 /* ---- полноэкранный просмотр (expandMedia) ---- */
 .media-lightbox {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.96);
+  background: var(--shade-a-100);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,15 +189,15 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  border: 1px solid var(--tint-a-18);
+  background: var(--tint-a-8);
+  color: var(--text-bright);
   font-size: 16px;
   cursor: pointer;
   transition: background 0.15s ease;
   z-index: 2;
 }
-.media-lightbox .lb-close:hover { background: rgba(255, 255, 255, 0.18); }
+.media-lightbox .lb-close:hover { background: var(--tint-a-18); }
 
 .media-lightbox .lb-hint {
   position: absolute;
@@ -205,6 +205,6 @@
   left: 50%;
   transform: translateX(-50%);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--tint-a-45);
   pointer-events: none;
 }

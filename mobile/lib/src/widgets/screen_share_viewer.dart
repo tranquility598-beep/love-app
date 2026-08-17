@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/love_theme.dart';
+import '../theme/love_tokens.dart';
 
 /// Полноэкранный просмотр демки/камеры с зумом и перемещением.
 ///
@@ -63,8 +65,15 @@ class _FullscreenShareViewerState extends State<FullscreenShareViewer>
 
   @override
   Widget build(BuildContext context) {
+    // Просмотр целиком занят кадром — внутри тёмная палитра независимо от темы
+    // приложения. Иначе в светлой теме подложка была белой (`onAccent` там
+    // белый), а заголовок и кнопки HUD — чёрными поверх тёмного кадра.
+    return LoveFrameScope(builder: _viewer);
+  }
+
+  Widget _viewer(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.onAccent,
       body: Stack(
         children: [
           Positioned.fill(
@@ -97,8 +106,8 @@ class _FullscreenShareViewerState extends State<FullscreenShareViewer>
                       Expanded(
                         child: Text(
                           widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style:  TextStyle(
+                            color: context.palette.accent,
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                           ),
@@ -134,14 +143,14 @@ class _HudButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.10),
+      color: context.palette.inkA(0.10),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: Colors.white, size: 20),
+          child: Icon(icon, color: context.palette.accent, size: 20),
         ),
       ),
     );
@@ -394,12 +403,12 @@ class _DraggablePipTileState extends State<DraggablePipTile>
             height: _h,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: const Color(0xFF111111),
+              color:  context.palette.bgTertiary,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24, width: 1),
-              boxShadow: const [
+              border: Border.all(color: context.palette.inkA(0.24), width: 1),
+              boxShadow:  [
                 BoxShadow(
-                  color: Colors.black54,
+                  color: context.palette.dropA(0.54),
                   blurRadius: 14,
                   offset: Offset(0, 6),
                 ),

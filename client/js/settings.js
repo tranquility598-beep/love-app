@@ -36,12 +36,17 @@ class SettingsManager {
       'privacy-activity': true,
       'privacy-dm-from-servers': true,
       'privacy-typing-indicator': true,
+      // Спрашивать перед переходом по ссылке на чужой сайт (свои домены — молча).
+      // Тот же ключ на мобиле: mobile/lib/src/core/prefs/love_prefs.dart.
+      'love_link_warning': true,
       
       // Внешний вид
+      'app-theme': 'dark', // dark | light | system
       'font-size': 'medium',
       'ui-scale': 100,
       'compact-mode': false,
       'animations': true,
+      'transparency-effects': true,
       'show-avatars': true,
       'link-preview': true,
       'hd-emoji': true,
@@ -124,8 +129,14 @@ class SettingsManager {
       case 'animations':
         this.applyAnimations(value);
         break;
+      case 'transparency-effects':
+        this.applyTransparency(value);
+        break;
       case 'show-avatars':
         this.applyShowAvatars(value);
+        break;
+      case 'app-theme':
+        this.applyTheme(value);
         break;
         
       // Голос
@@ -136,6 +147,20 @@ class SettingsManager {
         document.querySelectorAll('audio[data-voice-output="true"], #remote-audio-container audio').forEach(audio => {
           if (typeof applyAudioOutputDevice === 'function') applyAudioOutputDevice(audio);
         });
+        break;
+
+      // Микрофон и обработка звука читаются только в момент захвата трека
+      // (getUserMedia → getVoiceAudioConstraints), поэтому на живом
+      // соединении их надо перезахватить — иначе выбор применялся бы лишь
+      // при следующем входе в войс. switchMicrophone сам ничего не делает,
+      // если войса нет, так что вызов на старте безвреден.
+      case 'voice-input-device':
+      case 'noise-suppression':
+      case 'echo-cancellation':
+      case 'auto-gain-control':
+        if (window.voiceManager && typeof window.voiceManager.switchMicrophone === 'function') {
+          window.voiceManager.switchMicrophone();
+        }
         break;
     }
   }
@@ -178,7 +203,21 @@ class SettingsManager {
 
   // Применение масштаба UI
   applyUIScale(scale) {
-    document.documentElement.style.fontSize = (16 * scale / 100) + 'px';
+    const factor = Math.min(1.25, Math.max(0.75, (Number(scale) || 100) / 100));
+
+    // Раньше здесь менялся корневой font-size — и это не работало: вёрстка
+    // почти целиком в px (≈3670 значений против 8 в rem), так что размер
+    // корня на неё не влияет. Масштабируем страницу целиком.
+    if (window.electronAPI && typeof window.electronAPI.setZoomFactor === 'function') {
+      window.electronAPI.setZoomFactor(factor);
+    } else {
+      // Вне Electron (дев-превью в браузере) — тот же эффект через CSS.
+      document.documentElement.style.zoom = factor === 1 ? '' : String(factor);
+    }
+
+    // Подчищаем инлайновый font-size от прежней версии, иначе он останется
+    // в разметке у тех, кто уже двигал ползунок.
+    document.documentElement.style.fontSize = '';
   }
 
   // Компактный режим
@@ -199,6 +238,15 @@ class SettingsManager {
     }
   }
 
+  // Размытие и стекло (см. client/styles/appearance.css)
+  applyTransparency(enabled) {
+    if (!enabled) {
+      document.body.classList.add('no-transparency');
+    } else {
+      document.body.classList.remove('no-transparency');
+    }
+  }
+
   // Показывать аватары
   applyShowAvatars(enabled) {
     if (!enabled) {
@@ -206,6 +254,32 @@ class SettingsManager {
     } else {
       document.body.classList.remove('hide-avatars');
     }
+  }
+
+  // Тема: атрибут на <html> (не body) — так раньше срабатывает, а инлайновый
+  // скрипт в index.html ставит его ещё до первой отрисовки, без чёрной
+  // вспышки. «Системная» — живая подписка на prefers-color-scheme: смена
+  // темы ОС на лету переворачивает и приложение, без перезапуска.
+  applyTheme(mode) {
+    const resolved = (mode === 'light' || mode === 'dark')
+      ? mode
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', resolved);
+
+    if (!this._themeMq && window.matchMedia) {
+      this._themeMq = window.matchMedia('(prefers-color-scheme: light)');
+      const onChange = () => {
+        if (this.settings['app-theme'] === 'system') this.applyTheme('system');
+      };
+      if (typeof this._themeMq.addEventListener === 'function') {
+        this._themeMq.addEventListener('change', onChange);
+      } else if (typeof this._themeMq.addListener === 'function') {
+        this._themeMq.addListener(onChange);
+      }
+    }
+
+    // starfield.js слушает событие и перекрашивает звёзды/вуаль
+    window.dispatchEvent(new CustomEvent('themechange'));
   }
 
   // Громкость выхода

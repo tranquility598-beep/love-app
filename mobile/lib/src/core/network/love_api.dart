@@ -148,16 +148,23 @@ class LoveApi {
     return _list(response['messages']);
   }
 
+  /// Отправка сообщения через HTTP.
+  ///
+  /// Это резервный путь: обычно сообщения уходят по сокету. Вложения здесь
+  /// обязательны — без них клиент, потерявший realtime, не мог отправить
+  /// голосовое и просто падал с ошибкой.
   Future<Map<String, dynamic>> sendMessage(
     String channelId,
     String content, {
     String? replyTo,
     DateTime? deliverAt,
+    List<Map<String, dynamic>> attachments = const [],
   }) {
     return api.post(
       '/messages/$channelId',
       body: {
         'content': content,
+        if (attachments.isNotEmpty) 'attachments': attachments,
         if (replyTo != null) 'replyTo': replyTo,
         if (deliverAt != null) 'deliverAt': deliverAt.toUtc().toIso8601String(),
       },
@@ -237,6 +244,13 @@ class LoveApi {
 
   Future<void> clearNotifications() async {
     await api.delete('/notifications');
+  }
+
+  /// Стереть одно уведомление. Раньше крестик в списке звал
+  /// [markNotificationsRead], поэтому запись оставалась в базе и возвращалась
+  /// при следующем обновлении. Сервер: `DELETE /notifications/:id`.
+  Future<void> deleteNotification(String id) async {
+    await api.delete('/notifications/$id');
   }
 
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) {

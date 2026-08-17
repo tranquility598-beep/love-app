@@ -410,8 +410,8 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
           ),
           const SizedBox(height: 8),
           Text(item.description,
-              style: const TextStyle(
-                  color: LoveColors.textSecondary, height: 1.45)),
+              style:  TextStyle(
+                  color: context.palette.textSecondary, height: 1.45)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -445,12 +445,12 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
             child: Divider(height: 1),
           ),
           if (item.notes.isEmpty)
-            const Padding(
+             Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
               child: Text(
                 'Команда ещё не ответила. Новые сообщения появятся здесь автоматически.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: LoveColors.textMuted, height: 1.4),
+                style: TextStyle(color: context.palette.textMuted, height: 1.4),
               ),
             ),
           for (final note in item.notes) _NoteBubble(note: note),
@@ -470,9 +470,9 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0B0B0B),
-          border: Border(top: BorderSide(color: LoveColors.border)),
+        decoration:  BoxDecoration(
+          color: context.palette.bgPrimary,
+          border: Border(top: BorderSide(color: context.palette.border)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -606,10 +606,10 @@ class _NewCaseSheetState extends State<_NewCaseSheet> {
                 : (value) => setState(() => _priority = value ?? 'normal'),
           ),
           const SizedBox(height: 8),
-          const Text(
+           Text(
             'Критический приоритет используйте только при угрозе безопасности или полной потере доступа.',
             style: TextStyle(
-                color: LoveColors.textMuted, fontSize: 12, height: 1.35),
+                color: context.palette.textMuted, fontSize: 12, height: 1.35),
           ),
           if (_files.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -798,12 +798,12 @@ class _ViolationsView extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.035),
+              color: context.palette.inkA(0.035),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                   color: danger
-                      ? LoveColors.danger.withValues(alpha: 0.5)
-                      : LoveColors.borderActive),
+                      ? context.palette.danger.withValues(alpha: 0.5)
+                      : context.palette.borderActive),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,13 +829,13 @@ class _ViolationsView extends StatelessWidget {
                   value: status.trustScore / 100,
                   minHeight: 7,
                   borderRadius: BorderRadius.circular(99),
-                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  backgroundColor: context.palette.inkA(0.06),
                 ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    const Text('Активные предупреждения',
-                        style: TextStyle(color: LoveColors.textSecondary)),
+                     Text('Активные предупреждения',
+                        style: TextStyle(color: context.palette.textSecondary)),
                     const Spacer(),
                     Text('${status.warningCount}/7',
                         style: const TextStyle(fontWeight: FontWeight.w900)),
@@ -859,11 +859,11 @@ class _ViolationsView extends StatelessWidget {
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           if (status.actions.isEmpty)
-            const Padding(
+             Padding(
               padding: EdgeInsets.symmetric(vertical: 36),
               child: Text('Нарушений нет.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: LoveColors.textMuted)),
+                  style: TextStyle(color: context.palette.textMuted)),
             )
           else
             for (final action in status.actions)
@@ -884,7 +884,7 @@ class _CaseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.03),
+      color: context.palette.inkA(0.03),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
@@ -893,14 +893,14 @@ class _CaseCard extends StatelessWidget {
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: LoveColors.border)),
+              border: Border.all(color: context.palette.border)),
           child: Row(
             children: [
               Container(
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: context.palette.inkA(0.06),
                     borderRadius: BorderRadius.circular(13)),
                 child: Icon(_kindIcon(item.kind), size: 21),
               ),
@@ -915,14 +915,14 @@ class _CaseCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
                     Text('${item.number} · ${_statusLabel(item.status)}',
-                        style: const TextStyle(
-                            color: LoveColors.textMuted, fontSize: 11.5)),
+                        style:  TextStyle(
+                            color: context.palette.textMuted, fontSize: 11.5)),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded,
-                  color: LoveColors.textMuted),
+               Icon(Icons.chevron_right_rounded,
+                  color: context.palette.textMuted),
             ],
           ),
         ),
@@ -948,11 +948,11 @@ class _NoteBubble extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: own
-              ? const Color(0xFF241518)
-              : Colors.white.withValues(alpha: 0.045),
+              ?  context.palette.bgPrimary
+              : context.palette.inkA(0.045),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: own ? const Color(0x663C2026) : LoveColors.border),
+              color: own ?  context.palette.dangerBg : context.palette.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -997,10 +997,10 @@ class _ModerationCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: action.active ? LoveColors.borderActive : LoveColors.border),
+            color: action.active ? context.palette.borderActive : context.palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1022,12 +1022,12 @@ class _ModerationCard extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(action.reason,
-              style: const TextStyle(
-                  color: LoveColors.textSecondary, height: 1.4)),
+              style:  TextStyle(
+                  color: context.palette.textSecondary, height: 1.4)),
           const SizedBox(height: 8),
           Text(_actionTerm(action),
               style:
-                  const TextStyle(color: LoveColors.textMuted, fontSize: 12)),
+                   TextStyle(color: context.palette.textMuted, fontSize: 12)),
           if (action.appeal != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -1063,14 +1063,14 @@ class _WarningTrack extends StatelessWidget {
             Container(
                 height: 7,
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: context.palette.inkA(0.08),
                     borderRadius: BorderRadius.circular(99))),
             FractionallySizedBox(
               widthFactor: (count.clamp(0, 7)) / 7,
               child: Container(
                   height: 7,
                   decoration: BoxDecoration(
-                      color: count >= 5 ? LoveColors.danger : Colors.white,
+                      color: count >= 5 ? context.palette.danger : context.palette.inkA(0.25),
                       borderRadius: BorderRadius.circular(99))),
             ),
           ],
@@ -1087,8 +1087,8 @@ class _WarningTrack extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w900))),
                 Expanded(
                     child: Text(threshold.consequence,
-                        style: const TextStyle(
-                            color: LoveColors.textMuted, fontSize: 11.5))),
+                        style:  TextStyle(
+                            color: context.palette.textMuted, fontSize: 11.5))),
               ],
             ),
           ),
@@ -1109,10 +1109,10 @@ class _LoveSheetFrame extends StatelessWidget {
       child: Container(
         constraints:
             BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0E0E0E),
+        decoration:  BoxDecoration(
+          color: context.palette.bgSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: LoveColors.borderActive)),
+          border: Border(top: BorderSide(color: context.palette.borderActive)),
         ),
         child: SafeArea(
           top: false,
@@ -1126,7 +1126,7 @@ class _LoveSheetFrame extends StatelessWidget {
                         width: 42,
                         height: 4,
                         decoration: BoxDecoration(
-                            color: LoveColors.borderActive,
+                            color: context.palette.borderActive,
                             borderRadius: BorderRadius.circular(99)))),
                 const SizedBox(height: 12),
                 Row(
@@ -1163,20 +1163,20 @@ class _CaseBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: accent
-            ? LoveColors.danger.withValues(alpha: 0.13)
-            : Colors.white.withValues(alpha: 0.055),
+            ? context.palette.danger.withValues(alpha: 0.13)
+            : context.palette.inkA(0.055),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
             color: accent
-                ? LoveColors.danger.withValues(alpha: 0.45)
-                : LoveColors.border),
+                ? context.palette.danger.withValues(alpha: 0.45)
+                : context.palette.border),
       ),
       child: Text(label,
           style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w800,
               color:
-                  accent ? const Color(0xFFFFA1AC) : LoveColors.textSecondary)),
+                  accent ?  context.palette.dangerText : context.palette.textSecondary)),
     );
   }
 }
@@ -1194,12 +1194,12 @@ class _RetryState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_outlined,
-                size: 36, color: LoveColors.textMuted),
+             Icon(Icons.cloud_off_outlined,
+                size: 36, color: context.palette.textMuted),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: LoveColors.textSecondary)),
+                style:  TextStyle(color: context.palette.textSecondary)),
             const SizedBox(height: 14),
             OutlinedButton.icon(
                 onPressed: () => onRetry(),

@@ -249,7 +249,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: LoveColors.bgTertiary,
+        backgroundColor: context.palette.bgTertiary,
         title: const Text('Удалить из друзей?'),
         content: Text('$name будет удалён из вашего списка друзей.'),
         actions: [
@@ -259,7 +259,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: LoveColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.palette.danger),
             child: const Text('Удалить'),
           ),
         ],
@@ -327,8 +327,8 @@ class _CategoryHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: Color(0x59FFFFFF),
+        style:  TextStyle(
+          color: context.palette.inkA(0.35),
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
@@ -383,10 +383,10 @@ class _FriendTile extends StatelessWidget {
                       name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style:  TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: LoveColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -394,9 +394,9 @@ class _FriendTile extends StatelessWidget {
                       statusText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style:  TextStyle(
                         fontSize: 12,
-                        color: Color(0x4DFFFFFF),
+                        color: context.palette.inkA(0.3),
                       ),
                     ),
                   ],
@@ -432,8 +432,8 @@ class _FriendActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: emphasized
-          ? Colors.white.withValues(alpha: 0.04)
-          : Colors.white.withValues(alpha: 0.02),
+          ? context.palette.inkA(0.04)
+          : context.palette.inkA(0.02),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -446,14 +446,14 @@ class _FriendActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: emphasized
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : Colors.white.withValues(alpha: 0.08),
+                  ? context.palette.inkA(0.2)
+                  : context.palette.inkA(0.08),
             ),
           ),
           child: Icon(
             icon,
             size: 16,
-            color: emphasized ? Colors.white : const Color(0x80FFFFFF),
+            color: emphasized ? context.palette.accent :  context.palette.inkA(0.5),
           ),
         ),
       ),
@@ -498,16 +498,16 @@ class _RequestTile extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style:  TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: LoveColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   incoming ? 'Хочет добавить вас' : 'Заявка отправлена',
-                  style: const TextStyle(fontSize: 12, color: Color(0x4DFFFFFF)),
+                  style:  TextStyle(fontSize: 12, color: context.palette.inkA(0.3)),
                 ),
               ],
             ),
@@ -560,8 +560,8 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
       padding: EdgeInsets.fromLTRB(12, 0, 12, inset + 12),
       child: LoveSurface(
         radius: 22,
-        color: const Color(0xF2161616),
-        borderColor: LoveColors.borderActive,
+        color:  context.palette.surfaceStrong,
+        borderColor: context.palette.borderActive,
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 560),
@@ -593,7 +593,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
                 Text(
                   _status!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: LoveColors.textSecondary, fontSize: 12.5),
+                  style:  TextStyle(color: context.palette.textSecondary, fontSize: 12.5),
                 ),
               ],
               const SizedBox(height: 12),
@@ -604,7 +604,7 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
                           padding: const EdgeInsets.symmetric(vertical: 28),
                           child: Text(
                             _searching ? 'Ищем…' : 'Введите минимум 2 символа',
-                            style: const TextStyle(color: LoveColors.textMuted),
+                            style:  TextStyle(color: context.palette.textMuted),
                           ),
                         ),
                       )
@@ -640,8 +640,8 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
                                         '@${asText(user['username'])}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: LoveColors.textMuted,
+                                        style:  TextStyle(
+                                          color: context.palette.textMuted,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -649,11 +649,11 @@ class _AddFriendSheetState extends State<_AddFriendSheet> {
                                   ),
                                 ),
                                 sent
-                                    ? const Padding(
+                                    ?  Padding(
                                         padding: EdgeInsets.symmetric(horizontal: 8),
                                         child: Text('Отправлено',
                                             style: TextStyle(
-                                                color: LoveColors.textMuted,
+                                                color: context.palette.textMuted,
                                                 fontSize: 12)),
                                       )
                                     : OutlinedButton(

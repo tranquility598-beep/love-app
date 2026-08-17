@@ -25,6 +25,14 @@ class LoveSocket with WidgetsBindingObserver {
 
   final AuthRepository authRepository;
   final _handlers = <String, Set<SocketEventHandler>>{};
+
+  /// Кто хочет знать, что связь снова появилась.
+  ///
+  /// `_onConnect` — один колбэк на весь сокет, его занял MainShell. А знать про
+  /// восстановление связи нужно каждому открытому экрану: пока нас не было,
+  /// сокет не получал события, и догрузить пропущенное можно только по факту
+  /// «снова на связи».
+  final _connectListeners = <void Function()>{};
   io.Socket? _socket;
   Timer? _watchdog;
   bool _shouldBeConnected = false;
@@ -65,6 +73,13 @@ class LoveSocket with WidgetsBindingObserver {
     _handlers.putIfAbsent(event, () => {}).add(handler);
     _socket?.on(event, handler);
   }
+
+  /// Подписаться на «сокет снова на связи» (в том числе на первое подключение).
+  void addConnectListener(void Function() listener) =>
+      _connectListeners.add(listener);
+
+  void removeConnectListener(void Function() listener) =>
+      _connectListeners.remove(listener);
 
   void off(String event, [SocketEventHandler? handler]) {
     if (handler == null) {
@@ -146,6 +161,10 @@ class LoveSocket with WidgetsBindingObserver {
         ..onConnect((_) {
           SafeDiagnosticLog.instance.socket('connected');
           _onConnect?.call();
+          // Копией: слушатель имеет право отписаться прямо из колбэка.
+          for (final listener in _connectListeners.toList()) {
+            listener();
+          }
         })
         ..onConnectError((error) {
           SafeDiagnosticLog.instance

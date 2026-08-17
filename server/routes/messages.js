@@ -8,6 +8,8 @@ const router = express.Router();
 const Message = require('../models/Message');
 const Channel = require('../models/Channel');
 const Server = require('../models/Server');
+const User = require('../models/User');
+const DirectMessage = require('../models/DirectMessage');
 const authMiddleware = require('../middleware/auth');
 const { messageLimiter } = require('../middleware/rateLimiter');
 const { messageAntiSpamMiddleware } = require('../middleware/messageAntiSpam');
@@ -18,6 +20,9 @@ const { canManageServerMessages } = require('../utils/serverPermissions');
 const { escapeRegex } = require('../utils/security');
 const { isBlockedBetween } = require('../utils/blocking');
 const { parseDeliverAt } = require('../services/capsuleService');
+const { normalizeMessageAttachments } = require('../utils/messageAttachments');
+const { buildMessagePreview } = require('../utils/messagePreview');
+const { createNotification } = require('../utils/notify');
 
 /**
  * Реальный тип вложения.
@@ -261,7 +266,12 @@ router.post('/:channelId', authMiddleware, requireCanCommunicate, messageLimiter
     const { channelId } = req.params;
     const { content, replyTo, deliverAt } = req.body;
 
-    if (!content && (!req.files || Object.keys(req.files).length === 0)) {
+    // Вложения приходят уже загруженными (POST /upload отдал ссылку) — так же,
+    // как в socket-пути. Без этого REST оставался «текстовым», и клиент, у
+    // которого отвалился сокет, не мог отправить голосовое или файл вообще.
+    const attachments = normalizeMessageAttachments(req.body.attachments);
+
+    if (!content && attachments.length === 0 && (!req.files || Object.keys(req.files).length === 0)) {
       return res.status(400).json({ message: 'Сообщение не может быть пустым' });
     }
 
@@ -307,6 +317,11 @@ router.post('/:channelId', authMiddleware, requireCanCommunicate, messageLimiter
       channel: channelId,
       server: channel.server,
       replyTo: validReplyTo,
+      attachments,
+      // Тип держим в тех же значениях, что socket-путь, иначе одно и то же
+      // сообщение выглядело бы по-разному в зависимости от того, был ли жив
+      // сокет в момент отправки.
+      type: attachments.length > 0 ? 'file' : 'default',
       deliverAt: parsedDeliverAt.date,
       // Капсула лежит невидимой, пока планировщик не выставит delivered=true.
       delivered: !isCapsule
@@ -352,6 +367,52 @@ router.post('/:channelId', authMiddleware, requireCanCommunicate, messageLimiter
         participants.forEach(participantId => {
           io.to(`user:${participantId}`).emit('message:new', { channelId, message });
         });
+      }
+    }
+
+    // Личка: счётчик непрочитанных и запись в ленту уведомлений.
+    // Socket-путь (message:send) это делал, а REST — нет: сообщение уходило
+    // собеседнику, но диалог не поднимался в списке, бейдж не рос и в
+    // уведомлениях ничего не появлялось. Клиент падает на REST, когда сокет
+    // отвалился, — то есть ровно тогда, когда уведомление нужнее всего.
+    // Условие «только друзьям» повторяет socket-путь, чтобы два пути не
+    // расходились в том, кому вообще положены уведомления.
+    if (!channel.server) {
+      try {
+        const conversation = access.conversation
+          || await DirectMessage.findOne({ channel: channelId });
+        if (conversation) {
+          const senderId = req.user._id.toString();
+          const otherParticipant = conversation.participants.find(p => p.toString() !== senderId);
+          const recipient = otherParticipant ? await User.findById(otherParticipant).lean() : null;
+          const isFriend = recipient
+            ? (recipient.friends || []).some(f => f.toString() === senderId)
+            : false;
+
+          if (otherParticipant && isFriend) {
+            await DirectMessage.findByIdAndUpdate(conversation._id, {
+              $inc: { 'unreadCount.$[elem].count': 1 },
+              lastMessage: message._id,
+              updatedAt: new Date()
+            }, {
+              arrayFilters: [{ 'elem.user': otherParticipant }]
+            });
+
+            createNotification(io, {
+              user: otherParticipant,
+              type: 'new_dm',
+              actor: req.user._id,
+              actorName: req.user.username,
+              actorAvatar: req.user.avatar,
+              ...buildMessagePreview(content, attachments),
+              conversationId: conversation._id,
+              channelId
+            });
+          }
+        }
+      } catch (notifyError) {
+        // Уведомление не должно ломать отправку — сообщение уже сохранено.
+        console.error('[messages] DM notify failed:', notifyError.message);
       }
     }
 

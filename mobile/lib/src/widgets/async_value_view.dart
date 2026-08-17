@@ -31,16 +31,16 @@ class AsyncValueView<T> extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                   Icon(
                     Icons.wifi_off_rounded,
-                    color: LoveColors.textMuted,
+                    color: context.palette.textMuted,
                     size: 34,
                   ),
                   const SizedBox(height: 12),
                   Text(
                     snapshot.error.toString(),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: LoveColors.textMuted),
+                    style:  TextStyle(color: context.palette.textMuted),
                   ),
                   if (onRetry != null) ...[
                     const SizedBox(height: 14),

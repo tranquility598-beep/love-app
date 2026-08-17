@@ -1,0 +1,506 @@
+/* ════════════════════════════════════════════════════════════════
+   LOVE — Внешний вид: то, что стоит за тумблерами настроек.
+
+   Раздел «Внешний вид» выглядел мёртвым по простой причине: значения
+   сохранялись в localStorage и на body вешались классы, но ни одного
+   правила под эти классы в стилях не было (`.compact-mode`,
+   `.no-animations` — ноль совпадений по всему client/styles).
+   Здесь эти правила и живут. Классы ставит SettingsManager
+   (client/js/settings.js → applyCompactMode / applyAnimations /
+   applyTransparency).
+
+   Масштаба интерфейса тут нет намеренно: почти вся вёрстка в px
+   (≈3670 значений против 8 в rem), поэтому корневой font-size на неё
+   не влияет — масштаб делается зумом страницы в settings.js.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ───────────── Анимации выключены (body.no-animations) ─────────────
+
+   Гасим не через `animation: none`, а через нулевую длительность.
+   Разница принципиальная: часть элементов появляется кейфреймом с
+   `both` (диалоги, тосты, превью), и при `animation: none` они
+   остались бы в начальном кадре — то есть невидимыми. С длительностью
+   1ms анимация проигрывается мгновенно и конечное состояние
+   применяется как обычно.
+
+   Через `*`, потому что transition раскидан по ~380 правилам
+   и не собран в одну переменную. */
+body.no-animations *,
+body.no-animations *::before,
+body.no-animations *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+  transition-delay: 0ms !important;
+}
+
+/* Плавный скролл — тоже анимация. */
+body.no-animations,
+body.no-animations * {
+  scroll-behavior: auto !important;
+}
+
+/* Постоянный фон-канвас крутится в requestAnimationFrame всё время,
+   пока открыто приложение. Это ровно то, что человек просил убрать. */
+body.no-animations #starfield-canvas {
+  display: none !important;
+}
+
+/* ───────────── Эффекты прозрачности выключены (body.no-transparency) ─────────────
+
+   Подпись тумблера — «Размытие и стекло», поэтому снимаем именно их.
+   Тот же приём уже работает на Android (html.perf-lite в
+   perf-android.css): backdrop-filter снят глобально, и интерфейс
+   выглядит нормально — то есть подход проверен на живой сборке. */
+body.no-transparency *,
+body.no-transparency *::before,
+body.no-transparency *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Декоративные блюр-свечения: без стекла они выглядят как размытые
+   пятна ниоткуда. Гасим только чистый blur — drop-shadow на иконках
+   это не задевает. */
+body.no-transparency .auth-particle,
+body.no-transparency .auth-glow,
+body.no-transparency .ambient-glow,
+body.no-transparency .bg-glow,
+body.no-transparency [class*="-glow"] {
+  filter: none !important;
+}
+
+/* Без размытия полупрозрачные панели показывали бы сквозь себя резкий
+   звёздный фон. Даём приложению ровную подложку. */
+body.no-transparency {
+  background-color: var(--bg-primary) !important;
+}
+
+body.no-transparency #starfield-canvas {
+  display: none !important;
+}
+
+/* ───────────── Компактный режим (body.compact-mode) ─────────────
+
+   Подпись — «Плотнее размещать сообщения», поэтому жмём вертикальный
+   ритм ленты, а не весь интерфейс: расстояние между группами, отступы
+   внутри баббла и аватар. Значения по умолчанию для сравнения —
+   style.css: .message-group margin-bottom 20px / gap 12px,
+   .message-bubble padding 10px 14px, .chat-feed gap var(--spacing-md). */
+body.compact-mode .chat-feed {
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  padding-bottom: 110px !important;
+}
+
+body.compact-mode .message-group {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+body.compact-mode .message-group-content {
+  gap: 2px;
+}
+
+body.compact-mode .message-bubble {
+  padding: 6px 11px;
+  line-height: 1.45;
+}
+
+/* Аватар остаётся кружком: правим все четыре размера вместе, иначе
+   min-width/min-height растянут его в овал.
+
+   `!important` тут не украшательство: в style.css (≈14332) размеры аватаров
+   заданы одним общим правилом на десяток селекторов и все с `!important` —
+   без него компактный размер просто не применяется (проверено замером:
+   ширина оставалась 38px). */
+body.compact-mode .msg-sender-avatar,
+body.compact-mode .msg-sender-avatar.wabi-avatar.chat-avatar-clickable {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  font-size: 12px !important;
+}
+
+body.compact-mode .message-meta {
+  margin-top: 0;
+}
+
+/* ───────────── Тема ─────────────
+
+   Светлая тема — это переворот рамп из style.css, а не второй набор
+   из тысячи литералов: все цвета сведены к токенам, поэтому здесь
+   достаточно переопределить значения. И принцип тот же, что у классов
+   выше — класс/атрибут ставит SettingsManager (applyTheme), атрибут
+   живёт на <html>, чтобы сработать до первой отрисовки.
+
+   Светлая палитра строго монохромна: серое на почти белом. Единственный
+   цветной акцент остаётся красный danger, как и в тёмной. */
+html[data-theme="light"] {
+  /* Страница и поверхности */
+  --bg-deep: #ededed;
+  --bg-page-core: #f7f7f7;
+  --bg-primary: #f4f4f4;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #ececec;
+  --surface-raised: #e7e7e7;
+  --surface-highlight: #dedede;
+  --surface-overlay: rgba(255, 255, 255, 0.94);
+  --border-strong: #c9c9c9;
+  --glass-bg: rgba(247, 247, 247, 0.96);
+  --glass-strong: rgba(252, 252, 252, 0.97);
+  --scrim: rgba(0, 0, 0, 0.35);
+
+  /* Рамки: чернильная рампа становится чёрной (белые рамки на белом
+     не существуют), именованные рамки чуть плотнее — .04 чёрного
+     на белом глазом не ловится */
+  --tint-a-0: rgba(0, 0, 0, 0);
+  --tint-a-1: rgba(0, 0, 0, 0.01);
+  --tint-a-2: rgba(0, 0, 0, 0.02);
+  --tint-a-3: rgba(0, 0, 0, 0.03);
+  --tint-a-4: rgba(0, 0, 0, 0.04);
+  --tint-a-5: rgba(0, 0, 0, 0.05);
+  --tint-a-6: rgba(0, 0, 0, 0.06);
+  --tint-a-7: rgba(0, 0, 0, 0.07);
+  --tint-a-8: rgba(0, 0, 0, 0.08);
+  --tint-a-9: rgba(0, 0, 0, 0.09);
+  --tint-a-10: rgba(0, 0, 0, 0.1);
+  --tint-a-12: rgba(0, 0, 0, 0.12);
+  --tint-a-14: rgba(0, 0, 0, 0.14);
+  --tint-a-15: rgba(0, 0, 0, 0.15);
+  --tint-a-16: rgba(0, 0, 0, 0.16);
+  --tint-a-18: rgba(0, 0, 0, 0.18);
+  --tint-a-20: rgba(0, 0, 0, 0.2);
+  --tint-a-25: rgba(0, 0, 0, 0.25);
+  --tint-a-30: rgba(0, 0, 0, 0.3);
+  --tint-a-35: rgba(0, 0, 0, 0.35);
+  --tint-a-40: rgba(0, 0, 0, 0.4);
+  --tint-a-45: rgba(0, 0, 0, 0.45);
+  --tint-a-50: rgba(0, 0, 0, 0.5);
+  --tint-a-55: rgba(0, 0, 0, 0.55);
+  --tint-a-60: rgba(0, 0, 0, 0.6);
+  --tint-a-70: rgba(0, 0, 0, 0.7);
+  --tint-a-80: rgba(0, 0, 0, 0.8);
+  --tint-a-85: rgba(0, 0, 0, 0.85);
+  --tint-a-100: rgba(0, 0, 0, 1);
+  --border-color: rgba(0, 0, 0, 0.09);
+  --border-color-active: rgba(0, 0, 0, 0.24);
+
+  /* Тени мягче: чёрные 0.4–0.9 на белом выглядят грязью */
+  --shade-a-10: rgba(0, 0, 0, 0.06);
+  --shade-a-15: rgba(0, 0, 0, 0.08);
+  --shade-a-20: rgba(0, 0, 0, 0.1);
+  --shade-a-25: rgba(0, 0, 0, 0.12);
+  --shade-a-30: rgba(0, 0, 0, 0.14);
+  --shade-a-35: rgba(0, 0, 0, 0.16);
+  --shade-a-40: rgba(0, 0, 0, 0.18);
+  --shade-a-50: rgba(0, 0, 0, 0.22);
+  --shade-a-60: rgba(0, 0, 0, 0.26);
+  --shade-a-70: rgba(0, 0, 0, 0.3);
+  --shade-a-80: rgba(0, 0, 0, 0.36);
+  --shade-a-90: rgba(0, 0, 0, 0.42);
+  --shade-a-100: rgba(0, 0, 0, 1);
+
+  /* Текст: серое на почти белом.
+
+     --text-muted пришлось затемнить против первой версии (#949494): на белом
+     это давало контраст 2.6:1 — подписи, счётчики и хинты в настройках читались
+     хуже, чем те же элементы в тёмной теме (там роль держит 3.2:1). #757575
+     даёт 4.0:1 и при этом остаётся заметно светлее --text-secondary, так что
+     ступенька в иерархии не пропала. */
+  --text-bright: #0a0a0a;
+  --text-primary: #1c1c1c;
+  --text-secondary: #5f5f5f;
+  --text-muted: #757575;
+  --on-accent: #ffffff;
+
+  /* Цветные статусы. Тёмные значения рассчитаны на почти чёрный фон и на белом
+     выгорают: зелёный #4cb96a как надпись давал 2:1, янтарный — 1.7:1. Оттенок
+     сохраняем, светлоту опускаем. Сам --success не трогаем: он ещё и заливка
+     кружка «принять звонок», а на ней лежит тёмная иконка. */
+  --success-text: #1f7a3d;
+  --warning-text: #8f6300;
+  --warning-soft: #9a6f1f;
+
+  /* Бабблы инвертируются: свой становится тёмным со светлым текстом,
+     чужой — белым с тёмным (в тёмной было наоборот) */
+  --bubble-own: #1f1f1f;
+  --bubble-own-text: #f5f5f5;
+  --bubble-partner: #ffffff;
+  --bubble-partner-text: #1c1c1c;
+
+  /* Инпуты, ховеры, скроллбары */
+  --input-bg: rgba(0, 0, 0, 0.035);
+  --input-border: rgba(0, 0, 0, 0.12);
+  --fill-hover: rgba(0, 0, 0, 0.055);
+  --fill-active: rgba(0, 0, 0, 0.11);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
+
+  /* Красный чуть темнее текстом — на белом яркая заливка выгорает */
+  --danger-text: #d6453f;
+  --danger-bg: rgba(229, 84, 79, 0.08);
+  --danger-border: rgba(229, 84, 79, 0.28);
+  --success-bg: rgba(76, 185, 106, 0.12);
+  --success-border: rgba(76, 185, 106, 0.3);
+  --success-glow: rgba(76, 185, 106, 0.6);
+
+  /* Звёзды на светлых обоях — тёмные точки, цветные туманности гасим
+     (читает starfield.js) */
+  --star-rgb: 60, 60, 60;
+  --starfield-veil: rgba(250, 250, 250, 0.85);
+  --starfield-nebulae: off;
+
+  --settings-accent: var(--text-bright);
+}
+
+/* Тёмная тема — явно, чтобы «Системная» на светлой ОС не оставляла
+   тёмных значений от предыдущего состояния атрибута. */
+html[data-theme="dark"] {
+  --star-rgb: 255, 255, 255;
+  --starfield-veil: rgba(0, 0, 0, 0.8);
+  --starfield-nebulae: on;
+}
+
+/* ───────────── Светлая тема: картинки, которые токеном не покрасить ─────────
+
+   Внутри data-URI переменные CSS не работают: обводка там записана буквально.
+   Эти три фона нарисованы белым — в светлой теме стрелка селекта и волна
+   голосового просто исчезали. Поэтому дублируем их тёмным вариантом. */
+html[data-theme="light"] .s-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%231c1c1c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+html[data-theme="light"] .voice-waveform-wrap {
+  background: url('data:image/svg+xml;utf8,<svg preserveAspectRatio="none" viewBox="0 0 100 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 12 Q 10 0, 20 12 T 40 12 T 60 12 T 80 12 T 100 12" fill="none" stroke="rgba(0,0,0,0.22)" stroke-width="2"/></svg>') center/100% 100% no-repeat;
+}
+
+html[data-theme="light"] .voice-waveform-fill {
+  background: url('data:image/svg+xml;utf8,<svg preserveAspectRatio="none" viewBox="0 0 100 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 12 Q 10 0, 20 12 T 40 12 T 60 12 T 80 12 T 100 12" fill="none" stroke="rgba(0,0,0,0.78)" stroke-width="2"/></svg>') center/100% 100% no-repeat;
+}
+
+/* ───────────── Светлая тема: поверхности, где лежит видео и фото ─────────
+
+   Здесь переворот рамп работает против нас. Кнопка «плей» на постере, время
+   на дорожке плеера, подпись «ЭКРАН» на демонстрации — всё это лежит не на
+   поверхности приложения, а поверх кадра. Кадр тёмный независимо от темы,
+   поэтому в светлой теме такой хром становился чёрным текстом на чёрном
+   пикселе.
+
+   Вместо того чтобы править два десятка правил по отдельности, возвращаем
+   внутри этих контейнеров тёмную рампу целиком: белые чернила, чёрные тени,
+   светлый текст. Дальше вложенные правила красятся сами, включая те, что
+   появятся позже. Тёмную тему это не задевает — селектор светлый.
+
+   Список контейнеров узкий намеренно. Сюда попадает только то, что целиком
+   занято кадром. Соседние обёртки, которые выглядят похоже, но держат ещё и
+   светлую часть, трогать нельзя, иначе я сломаю то, что работало:
+     .video-stream-box — без медиа показывает заглушку с аватаром на светлой
+       подложке, поэтому берём только .has-media (заглушка тогда скрыта);
+     .voice-pcard.has-live-media — светлая карточка с кадром внутри и именем
+       под ним, в светлой теме она читается правильно сама;
+     .attach-tray-item — у не-картинки миниатюры нет, видно только имя файла
+       на светлой плашке;
+     .media-image-wrapper — держит заглушку загрузки, которая в светлой теме
+       и так светлая.
+   Плавающие кнопки из этих четырёх покрашены отдельным правилом ниже. */
+html[data-theme="light"] .media-card-preview,
+html[data-theme="light"] .media-video-wrapper,
+html[data-theme="light"] .video-stream-box.has-media,
+html[data-theme="light"] .voice-preview-content,
+html[data-theme="light"] .love-voice-media-fullscreen,
+html[data-theme="light"] .media-lightbox {
+  --tint-a-1: rgba(255, 255, 255, 0.01);
+  --tint-a-2: rgba(255, 255, 255, 0.02);
+  --tint-a-3: rgba(255, 255, 255, 0.03);
+  --tint-a-4: rgba(255, 255, 255, 0.04);
+  --tint-a-5: rgba(255, 255, 255, 0.05);
+  --tint-a-6: rgba(255, 255, 255, 0.06);
+  --tint-a-7: rgba(255, 255, 255, 0.07);
+  --tint-a-8: rgba(255, 255, 255, 0.08);
+  --tint-a-9: rgba(255, 255, 255, 0.09);
+  --tint-a-10: rgba(255, 255, 255, 0.1);
+  --tint-a-12: rgba(255, 255, 255, 0.12);
+  --tint-a-14: rgba(255, 255, 255, 0.14);
+  --tint-a-15: rgba(255, 255, 255, 0.15);
+  --tint-a-16: rgba(255, 255, 255, 0.16);
+  --tint-a-18: rgba(255, 255, 255, 0.18);
+  --tint-a-20: rgba(255, 255, 255, 0.2);
+  --tint-a-25: rgba(255, 255, 255, 0.25);
+  --tint-a-30: rgba(255, 255, 255, 0.3);
+  --tint-a-35: rgba(255, 255, 255, 0.35);
+  --tint-a-40: rgba(255, 255, 255, 0.4);
+  --tint-a-45: rgba(255, 255, 255, 0.45);
+  --tint-a-50: rgba(255, 255, 255, 0.5);
+  --tint-a-55: rgba(255, 255, 255, 0.55);
+  --tint-a-60: rgba(255, 255, 255, 0.6);
+  --tint-a-70: rgba(255, 255, 255, 0.7);
+  --tint-a-80: rgba(255, 255, 255, 0.8);
+  --tint-a-85: rgba(255, 255, 255, 0.85);
+  --tint-a-100: rgba(255, 255, 255, 1);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-color-active: rgba(255, 255, 255, 0.22);
+
+  /* Тени возвращаем к полной глубине: смягчение нужно было для белых
+     поверхностей, а поверх кадра плашка обязана читаться. */
+  --shade-a-10: rgba(0, 0, 0, 0.1);
+  --shade-a-15: rgba(0, 0, 0, 0.15);
+  --shade-a-20: rgba(0, 0, 0, 0.2);
+  --shade-a-25: rgba(0, 0, 0, 0.25);
+  --shade-a-30: rgba(0, 0, 0, 0.3);
+  --shade-a-35: rgba(0, 0, 0, 0.35);
+  --shade-a-40: rgba(0, 0, 0, 0.4);
+  --shade-a-50: rgba(0, 0, 0, 0.5);
+  --shade-a-60: rgba(0, 0, 0, 0.6);
+  --shade-a-70: rgba(0, 0, 0, 0.7);
+  --shade-a-80: rgba(0, 0, 0, 0.8);
+  --shade-a-90: rgba(0, 0, 0, 0.9);
+
+  --text-bright: #f5f5f5;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a2a2a2;
+  --text-muted: #a8a8a8;
+  --on-accent: #000000;
+
+  /* Плашки поверх кадра тоже должны потемнеть: подпись «ЭКРАН» в ЛС-звонке
+     нарисована через --surface-overlay, а в светлой теме это почти белый. */
+  --surface-overlay: rgba(18, 18, 18, 0.92);
+  --glass-strong: rgba(20, 20, 20, 0.94);
+}
+
+/* Слот превью своей камеры/демки — тоже кадр, а не поверхность приложения.
+   Его подложка нарисована светлыми токенами, поэтому одной рампы мало:
+   без этого белая заглушка «НЕТ СИГНАЛА» легла бы на светло-серый градиент. */
+html[data-theme="light"] .voice-preview-content {
+  background: linear-gradient(135deg, #1b1b1b, #0f0f0f);
+}
+
+/* Плавающие кнопки поверх фото и видео из контейнеров, которые целиком
+   красить нельзя (см. список выше). Мягкая рампа светлой темы давала им
+   бледную плашку с чёрным значком прямо на кадре — берём плотный чёрный. */
+html[data-theme="light"] .media-img-dl,
+html[data-theme="light"] .attach-tray-remove,
+html[data-theme="light"] .voice-live-media-badge,
+html[data-theme="light"] .love-voice-media-close,
+html[data-theme="light"] .love-voice-media-caption {
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f5f5f5;
+}
+
+html[data-theme="light"] .media-img-dl:hover,
+html[data-theme="light"] .attach-tray-remove:hover,
+html[data-theme="light"] .love-voice-media-close:hover {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+/* ───────────── Светлая тема: тёмное стекло, которому нужна светлая версия ────
+
+   Панель входящего вызова и вступительный экран нарисованы как тёмное стекло
+   (--shade-a-70/90). В светлой теме мягкая рампа превращала их в серую плиту
+   с серым текстом поверх — читалось хуже всего в приложении. */
+html[data-theme="light"] .incoming-call-panel {
+  background: var(--glass-strong) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 20px 50px var(--shade-a-25), inset 0 1px 0 var(--tint-a-4);
+}
+
+html[data-theme="light"] .onboarding-stage {
+  background: var(--glass-strong);
+}
+
+/* ───────────── Светлая тема: «парящие стеклянные плиты» ─────────────────────
+
+   Главная причина, почему светлая тема выглядела неопрятной. Все основные
+   поверхности приложения — сайдбар, область чата, сфера, войс, настройки —
+   нарисованы затемнением поверх обоев (--shade-a-40…60). В тёмной теме это
+   даёт еле заметное стекло: обои #0d0d0d, плита #070707, разница на глаз почти
+   не видна, панель выделяют рамка и тень. В светлой то же затемнение даёт
+   #f2f2f2 → #bdbdbd: вместо стекла — серая плита на весь экран.
+
+   Стекло в светлой теме должно светлить, а не затемнять. Зеркалим: белое с той
+   же примерно прозрачностью, обои остаются чуть темнее плиты. Рамку при этом
+   поднимаем с --tint-a-5 до --border-color — на почти белом поверх почти белого
+   она единственный разделитель, и 5% чёрного там не видно.
+
+   !important обязателен: в исходных правилах фон объявлен с ним. */
+html[data-theme="light"] .global-sidebar,
+html[data-theme="light"] .chat-area,
+html[data-theme="light"] .server-content-wrapper,
+html[data-theme="light"] .friends-main-panel,
+html[data-theme="light"] .hub-content-panel,
+html[data-theme="light"] .hub-bento-dashboard,
+html[data-theme="light"] .settings-content-panel,
+html[data-theme="light"] .settings-sidebar-nav,
+html[data-theme="light"] .notifications-main-panel,
+html[data-theme="light"] .notifications-sidebar,
+html[data-theme="light"] .voice-channel-panel {
+  background: rgba(255, 255, 255, 0.58) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Шапки, поле ввода и лоток вложений лежат уже на осветлённой плите. В тёмной
+   теме они утоплены (темнее панели) — сохраняем смысл, но лёгким серым, а не
+   30% чёрного, иначе шапка чата выходит темнее самого чата. */
+html[data-theme="light"] .chat-header,
+html[data-theme="light"] .room-header,
+html[data-theme="light"] .voice-header-bar,
+html[data-theme="light"] .members-sidebar-header,
+html[data-theme="light"] .attach-tray,
+html[data-theme="light"] .message-input-form {
+  background: rgba(0, 0, 0, 0.035) !important;
+}
+
+html[data-theme="light"] .message-input-form:focus-within {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Язычок разворота сайдбара, наоборот, должен читаться как приподнятый. */
+html[data-theme="light"] .sidebar-toggle-trigger {
+  background: var(--surface-raised) !important;
+}
+
+/* Карточки на плите: в светлой теме это обычные белые карточки с рамкой,
+   а не затемнённые окошки. */
+html[data-theme="light"] .profile-card,
+html[data-theme="light"] .unified-glass-card,
+html[data-theme="light"] .s-preview-card,
+html[data-theme="light"] .tutorial-step-illustration {
+  background: var(--bg-secondary) !important;
+}
+
+/* ───────────── Настройки: «В разработке» (.lvs-row--soon) ─────────────
+
+   Тумблер или ползунок, за которым в коде ничего не стоит, врёт человеку:
+   он щёлкает, значение сохраняется, а поведение не меняется. Пока такие
+   настройки не реализованы, контрол отключён, а строка приглушена —
+   так видно, что это план, а не сломанная функция.
+
+   Сейчас так помечены: активация по голосу и Push-to-Talk (в коде их не
+   читает никто) и «Громкость ввода» — усиления микрофона нет, его нельзя
+   сделать ползунком, для этого исходящий трек надо гнать через звуковой
+   граф, а это отдельная работа с риском для самого войса. */
+.lvs-row--soon .lvs-row-label,
+.lvs-row--soon .lvs-slider-value,
+.lvs-row--soon .lvs-kbd {
+  opacity: 0.5;
+}
+
+.lvs-row--soon .lvs-row-sub {
+  color: var(--text-muted);
+}
+
+/* Ползунок и тумблер: курсор «нельзя» ставим на обёртку, потому что у
+   disabled-элемента :hover и cursor в части движков не срабатывают. */
+.lvs-row--soon .lvs-slider-wrap,
+.lvs-row--soon .lvs-toggle {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lvs-row--soon .lvs-slider:disabled,
+.lvs-row--soon .lvs-toggle input:disabled {
+  pointer-events: none;
+}

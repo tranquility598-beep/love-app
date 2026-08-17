@@ -885,7 +885,11 @@
           _realId:    conv._id,
           _channelId: conv.channel || conv.channelId,
           _otherUser: other,
-          // Сохраняем флаг загрузки полной истории
+          // Сохраняем флаг загрузки полной истории.
+          // А вот «запрос в полёте» переносить нельзя: его снимет `finally`
+          // старого объекта, которого в списке уже нет, и новый остался бы
+          // заблокирован навсегда. Идущий запрос допишет в мёртвый объект и
+          // потеряется — это переживём, историю всё равно перечитает досинк.
           _messagesLoaded: prev ? prev._messagesLoaded : false
         };
 
@@ -910,7 +914,9 @@
 
       // Re-render conversation list
       if (typeof renderConversationsList === 'function') {
-        renderConversationsList('');
+        // С текущим фильтром: список перечитывается не только по кнопке, но и
+        // на возврат в окно — сбрасывать набранный поиск на ровном месте нельзя.
+        renderConversationsList(document.getElementById('conv-search')?.value || '');
       }
 
       console.log('[init-app] DM conversations loaded:', mockArr.length);
@@ -1003,7 +1009,7 @@
 
         const channels = (server.channels || []).map(ch => ({
           id:   'ch-' + ch._id,
-          name: ch.name || 'general',
+          name: ch.name || 'Чат',
           type: ch.type || 'text',
           messages: [],
           _realId: ch._id
@@ -1129,9 +1135,59 @@
     }
   }
 
-  // ── Load full DM message history (on demand) ──────────────────────────
-  async function loadDMMessages(conv) {
-    if (!conv?._realId || conv._messagesLoaded) return;
+  // ── Догрузка пропущенного ─────────────────────────────────────────────
+  // Сокет не отдаёт то, что случилось, пока его не было: свернул окно — связь
+  // умерла, тебе написали, вернулся — в ленте дырка, и дальнейшая переписка
+  // ложится поверх неё. Лечится только повторным чтением истории, поэтому
+  // держим под рукой, что открыто прямо сейчас.
+  let _activeDMId = '';
+  let _activeChannelRef = null; // { serverId, channelId }
+
+  function _findConv(mockId) {
+    if (!mockId) return null;
+    return window._mockConversations?.find(c => c.id === mockId) || null;
+  }
+
+  // Сливает свежую историю с лентой вместо замены.
+  //
+  // Заменять нельзя: сервер отдаёт последние 50 сообщений и ничего не знает
+  // про пузыри, которые ещё летят. Точка стыковки — первое локальное
+  // сообщение, которое сервер тоже вернул: всё до него история старше окна,
+  // всё после — либо перечитано сервером, либо ещё в полёте.
+  function _mergeFeed(localList, fresh) {
+    const local = Array.isArray(localList) ? localList : [];
+    if (!fresh.length) return local.slice();
+
+    const freshIds = new Set(fresh.map(m => String(m._id)));
+    let windowStart = local.findIndex(m => freshIds.has(String(m._id)));
+    if (windowStart === -1) windowStart = local.length; // пересечения нет
+
+    const older = local.slice(0, windowStart);
+    const inFlight = local
+      .slice(windowStart)
+      .filter(m => _isTempMessageId(m._id) && !freshIds.has(String(m._id)));
+
+    return older.concat(fresh, inFlight);
+  }
+
+  function _sameFeed(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (String(a[i]._id) !== String(b[i]._id)) return false;
+      if ((a[i].text || '') !== (b[i].text || '')) return false;
+      if (!!a[i].edited !== !!b[i].edited) return false;
+    }
+    return true;
+  }
+
+  // ── Load full DM message history ──────────────────────────────────────
+  // force — досинк: перечитать и слить. Без него первый заход в беседу
+  // заменяет заглушку (последнее сообщение из списка) настоящей историей.
+  async function loadDMMessages(conv, { force = false } = {}) {
+    if (!conv?._realId) return;
+    if (conv._messagesLoading) return;
+    if (conv._messagesLoaded && !force) return;
+    conv._messagesLoading = true;
     conv._messagesLoaded = true;
 
     try {
@@ -1139,7 +1195,7 @@
       const messages = data.messages || data || [];
       if (!Array.isArray(messages)) return;
 
-      conv.messages = messages.map(msg => {
+      const fresh = messages.map(msg => {
         const isOwn = String(msg.author?._id || msg.author) === String(window.currentUser?._id);
         return {
           sender: isOwn ? 'own' : 'partner',
@@ -1154,6 +1210,15 @@
         };
       });
 
+      const next = force ? _mergeFeed(conv.messages, fresh) : fresh;
+      // На досинке рисуем только при реальных изменениях: он случается на
+      // каждый возврат в окно, и лишняя перерисовка — это мигание чата и
+      // потеря позиции прокрутки на ровном месте. На первой загрузке рисуем
+      // всегда: заглушка из списка совпадает с настоящим сообщением по тексту,
+      // но не знает про вложения и ответы.
+      const shouldRender = force ? !_sameFeed(next, conv.messages) : true;
+      conv.messages = next;
+
       // Set the DM channel ID for socket events
       if (data.channelId) {
         conv._channelId = data.channelId;
@@ -1161,24 +1226,30 @@
         if (reverse) reverse.channelId = data.channelId;
       }
 
-      // Re-render current chat view
-      if (typeof renderChatMessages === 'function') {
+      // Пока шёл запрос, пользователь мог уйти в другую беседу — тогда
+      // рисовать нельзя, иначе в открытый чат попадёт чужая история.
+      if (shouldRender && conv.id === _activeDMId && typeof renderChatMessages === 'function') {
         renderChatMessages(conv);
       }
       console.log('[init-app] DM messages loaded for:', conv.name, '(', conv.messages.length, ')');
     } catch (err) {
       console.error('[init-app] Failed to load DM messages:', err);
       conv._messagesLoaded = false; // allow retry
+    } finally {
+      conv._messagesLoading = false;
     }
   }
 
-  // ── Load full channel message history (on demand) ─────────────────────
-  async function loadChannelMessages(serverId, channelId) {
+  // ── Load full channel message history ─────────────────────────────────
+  async function loadChannelMessages(serverId, channelId, { force = false } = {}) {
     const mockSrv = window._mockServers;
     if (!mockSrv?.[serverId]) return;
 
     const channel = mockSrv[serverId].channels?.find(ch => ch.id === channelId);
-    if (!channel || !channel._realId || channel._messagesLoaded) return;
+    if (!channel || !channel._realId) return;
+    if (channel._messagesLoading) return;
+    if (channel._messagesLoaded && !force) return;
+    channel._messagesLoading = true;
     channel._messagesLoaded = true;
 
     try {
@@ -1186,7 +1257,7 @@
       const messages = data.messages || data || [];
       if (!Array.isArray(messages)) return;
 
-      channel.messages = messages.map(msg => ({
+      const fresh = messages.map(msg => ({
         sender: msg.author?.username || msg.author?.nickname || 'User',
         text:   msg.content || '',
         time:   _formatTime(msg.createdAt),
@@ -1198,6 +1269,12 @@
         replyTo: _normalizeReply(msg.replyTo),
         edited: !!msg.edited
       }));
+
+      const next = force ? _mergeFeed(channel.messages, fresh) : fresh;
+      const shouldRender = force ? !_sameFeed(next, channel.messages) : true;
+      channel.messages = next;
+
+      if (!shouldRender) return;
 
       // Перерисовываем чат после ленивой загрузки. Для комнаты — её внутренний
       // чат (renderRoomChat не трогает панели); для сервера — серверный.
@@ -1213,8 +1290,39 @@
     } catch (err) {
       console.error('[init-app] Failed to load channel messages:', err);
       channel._messagesLoaded = false; // allow retry
+    } finally {
+      channel._messagesLoading = false;
     }
   }
+
+  // Перечитать то, что открыто сейчас, плюс список бесед (превью и
+  // непрочитанное тоже устают, пока сокет мёртв).
+  let _resyncTimer = null;
+  function resyncActiveChat() {
+    clearTimeout(_resyncTimer);
+    // Debounce: focus, visibilitychange и reconnect обычно прилетают подряд.
+    _resyncTimer = setTimeout(async () => {
+      if (!window.currentUser) return;
+      // Сначала список: он пересобирает объекты бесед (перенося messages и
+      // _messagesLoaded), поэтому историю догружаем после него — иначе
+      // догруженное сразу заменится старым объектом.
+      try { await loadRealDMConversations(); } catch (_) { /* не критично */ }
+
+      const conv = _findConv(_activeDMId);
+      if (conv) loadDMMessages(conv, { force: true });
+      if (_activeChannelRef) {
+        loadChannelMessages(_activeChannelRef.serverId, _activeChannelRef.channelId, { force: true });
+      }
+    }, 250);
+  }
+  window.resyncActiveChat = resyncActiveChat;
+
+  window.addEventListener('focus', resyncActiveChat);
+  window.addEventListener('online', resyncActiveChat);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) resyncActiveChat();
+  });
+
 
   // ── Уведомления: маппинг серверного формата в формат ленты UI ─────────
   let _notifIdCounter = 1;
@@ -1227,9 +1335,18 @@
       _realId: n._id,
       actorId: n.actor,
       caseId: n.caseId || '',
-      name: _esc(rawName),
-      avatar: _esc(avatar),
-      text: _esc(n.preview || ''),
+      // Тексты держим в сыром виде: лента прогоняет всё через escHTML при
+      // рендере. Раньше здесь стоял ещё и _esc(), из-за чего экранирование
+      // случалось дважды и в карточке было видно «Маша &amp; Даша».
+      name: rawName,
+      avatar,
+      avatarUrl: n.actorAvatar || '',
+      text: n.preview || '',
+      // Чем было сообщение и первая картинка из него — из utils/messagePreview.
+      // Нужно, чтобы карточка показывала «Фото» со значком или само фото,
+      // а не пустую строку.
+      previewKind: n.previewKind || 'text',
+      previewImage: n.previewImage || '',
       time: _formatTime(n.createdAt),
       unread: !n.read
     };
@@ -1238,16 +1355,19 @@
         return Object.assign(base, {
           type: 'mention',
           category: 'normal',
-          groupName: _esc(n.serverName || 'Сервер'),
-          groupAvatar: _esc((n.serverName || 'S').charAt(0).toUpperCase()),
-          senderAvatar: _esc(avatar),
+          groupName: n.serverName || 'Сервер',
+          groupAvatar: (n.serverName || 'S').charAt(0).toUpperCase(),
+          senderAvatar: avatar,
           serverId: n.serverId ? ('srv-' + n.serverId) : ''
         });
       case 'new_dm':
         return Object.assign(base, {
           type: 'dm',
           category: 'normal',
-          convId: n.conversationId ? ('dm-' + n.conversationId) : ''
+          convId: n.conversationId ? ('dm-' + n.conversationId) : '',
+          // Канал нужен для ответа прямо из карточки: если диалога ещё нет
+          // в списке (список подгружается отдельно), отправляем по channelId.
+          channelId: n.channelId || ''
         });
       case 'friend_request':
         return Object.assign(base, { type: 'request', category: 'normal', isFriend: false, convId: '' });
@@ -1293,14 +1413,22 @@
       window.currentChannelId        = reverse.channelId;
     }
 
-    if (!conv._messagesLoaded) {
-      loadDMMessages(conv);
-    }
+    _activeDMId = id;
+    _activeChannelRef = null;
+
+    // Уже загружали — всё равно перечитываем: пока окно было свёрнуто, сокет
+    // молчал, и в ленте могла остаться дырка. Слияние не тронет то, что уже
+    // показано, но подтянет пропущенное.
+    loadDMMessages(conv, { force: conv._messagesLoaded });
   };
 
   window._onServerChatRendered = function (serverId, channelId) {
-    // Load real messages for the channel
-    loadChannelMessages(serverId, channelId);
+    _activeDMId = '';
+    _activeChannelRef = { serverId, channelId };
+
+    // Load real messages for the channel (перечитывая, если уже загружали)
+    const ch = window._mockServers?.[serverId]?.channels?.find(c => c.id === channelId);
+    loadChannelMessages(serverId, channelId, { force: !!ch?._messagesLoaded });
 
     // Set currentServer state for socket.js
     const reverse = _srvReverseMap.get(serverId);
@@ -1964,6 +2092,35 @@
     return p;
   }
 
+  // Мы уже в этой сфере? Превью отдаёт id, а список своих сфер уже лежит в
+  // window.servers — отдельный запрос на сервер не нужен. Имя — запасной
+  // вариант, если превью пришло без id.
+  function _joinedLocalId(preview) {
+    const list = Array.isArray(window.servers) ? window.servers : [];
+    const pid = preview && preview.id ? String(preview.id) : '';
+    const pname = (preview && preview.name) ? String(preview.name) : '';
+    const hit = list.find(s => (pid && String(s._id) === pid) || (!pid && pname && String(s.name) === pname));
+    return hit ? 'srv-' + hit._id : null;
+  }
+
+  // «1 участник», «3 участника», «11 участников» — раньше всегда было
+  // «участников». Парная логика на мобиле: chat/invite_card.dart.
+  function _membersLabel(n) {
+    const count = Number(n) || 1;
+    const mod100 = count % 100;
+    const mod10 = count % 10;
+    let word = 'участников';
+    if (mod10 === 1 && mod100 !== 11) word = 'участник';
+    else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) word = 'участника';
+    return count + ' ' + word;
+  }
+
+  function _openLocalSpace(localId) {
+    if (!localId || typeof selectServerOrRoom !== 'function') return;
+    const local = window._mockServers && window._mockServers[localId];
+    selectServerOrRoom(localId, local && local._kind === 'room' ? 'room' : 'server');
+  }
+
   window.attachInviteCard = function (bubbleWrap, text) {
     if (!bubbleWrap || !text) return;
     const re = window.INVITE_LINK_REGEX;
@@ -1992,34 +2149,155 @@
 
       card.classList.remove('is-loading');
       card.classList.toggle('has-banner', !!preview.banner);
-      card.innerHTML = `
-        ${bannerHtml}
-        <div class="invite-card-body">
-          ${avatarHtml}
-          <div class="invite-card-info">
-            <div class="invite-card-label">Приглашение в ${kindLabel}</div>
-            <div class="invite-card-name">${_esc(preview.name)}</div>
-            <div class="invite-card-meta">${preview.memberCount || 1} участников</div>
-          </div>
-          <button type="button" class="lvs-btn invite-card-join">Присоединиться</button>
-        </div>`;
 
-      const joinBtn = card.querySelector('.invite-card-join');
-      if (joinBtn) {
+      // Состояние карточки считаем при каждой отрисовке: после входа она должна
+      // сама превратиться из «Присоединиться» в «Вы уже участник».
+      const paint = () => {
+        const joinedId = _joinedLocalId(preview);
+        card.classList.toggle('is-member', !!joinedId);
+        card.innerHTML = `
+          ${bannerHtml}
+          <div class="invite-card-body">
+            ${avatarHtml}
+            <div class="invite-card-info">
+              <div class="invite-card-label">${joinedId ? 'Вы уже участник' : `Приглашение в ${kindLabel}`}</div>
+              <div class="invite-card-name">${_esc(preview.name)}</div>
+              <div class="invite-card-meta">${_membersLabel(preview.memberCount)}</div>
+            </div>
+            ${joinedId
+              ? '<button type="button" class="lvs-btn lvs-btn--ghost invite-card-open">Открыть</button>'
+              : '<button type="button" class="lvs-btn invite-card-join">Присоединиться</button>'}
+          </div>`;
+
+        const openBtn = card.querySelector('.invite-card-open');
+        if (openBtn) {
+          openBtn.addEventListener('click', () => _openLocalSpace(joinedId));
+          return;
+        }
+        const joinBtn = card.querySelector('.invite-card-join');
+        if (!joinBtn) return;
         joinBtn.addEventListener('click', async () => {
           joinBtn.disabled = true;
           joinBtn.textContent = 'Входим…';
           const id = (typeof window.joinSpaceByCode === 'function') ? await window.joinSpaceByCode(code) : null;
           if (id) {
-            joinBtn.textContent = 'Открыто';
+            paint(); // вошли — карточка перерисуется в «Вы уже участник»
           } else {
             joinBtn.disabled = false;
             joinBtn.textContent = 'Присоединиться';
           }
         });
-      }
+      };
+
+      paint();
     });
   };
+
+  // ── Приглашение из ссылки love-app://invite/КОД ──
+  // Кнопка «Открыть в приложении» на веб-странице приглашения уходит на
+  // love-app://, main.js ловит схему и присылает сюда код. Молча вступать
+  // нельзя (ссылку могли прислать в чужом чате), поэтому показываем превью
+  // сферы с кнопкой — как лист приглашения на мобиле.
+  let _inviteModalOpen = false;
+
+  function _closeInviteModal(backdrop) {
+    if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    _inviteModalOpen = false;
+  }
+
+  function _showInviteModal(code, preview) {
+    const kindLabel = preview.kind === 'room' ? 'комнату' : 'сферу';
+    const initial = (preview.name || '?').trim().charAt(0).toUpperCase();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.style.zIndex = '16000';
+    backdrop.innerHTML = `
+      <div class="profile-card" style="width:400px;padding:26px;box-sizing:border-box;">
+        <button class="profile-close-btn" type="button" data-invite-close title="Закрыть" style="top:18px;right:18px;z-index:10;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        <h3 style="margin-bottom:18px;">Приглашение в ${_esc(kindLabel)}</h3>
+        <div class="invite-card${preview.banner ? ' has-banner' : ''}" style="margin:0;">
+          ${preview.banner ? `<div class="invite-card-banner" style="background-image:url('${_media(preview.banner)}')"></div>` : ''}
+          <div class="invite-card-body">
+            ${preview.icon
+              ? `<div class="invite-card-avatar" style="background-image:url('${_media(preview.icon)}')"></div>`
+              : `<div class="invite-card-avatar">${_esc(initial)}</div>`}
+            <div class="invite-card-info">
+              <div class="invite-card-name">${_esc(preview.name)}</div>
+              <div class="invite-card-meta">${_esc(_membersLabel(preview.memberCount))}</div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="submit-action-btn" data-invite-join style="width:100%;margin-top:22px;height:44px;font-size:15px;font-weight:600;border-radius:12px;">Присоединиться</button>
+      </div>`;
+
+    document.body.appendChild(backdrop);
+    _inviteModalOpen = true;
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop || e.target.closest('[data-invite-close]')) {
+        _closeInviteModal(backdrop);
+      }
+    });
+
+    const joinBtn = backdrop.querySelector('[data-invite-join]');
+    joinBtn.addEventListener('click', async () => {
+      joinBtn.disabled = true;
+      joinBtn.textContent = 'Входим…';
+      const id = (typeof window.joinSpaceByCode === 'function')
+        ? await window.joinSpaceByCode(code)
+        : null;
+      // joinSpaceByCode сам открывает сферу и сам тостит про ошибку.
+      if (id) {
+        _closeInviteModal(backdrop);
+      } else {
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'Присоединиться';
+      }
+    });
+  }
+
+  window.openInviteFromDeepLink = async function (rawCode) {
+    const code = (typeof parseInviteCode === 'function')
+      ? parseInviteCode(rawCode)
+      : String(rawCode || '').trim();
+    if (!code) return;
+
+    // Ещё не вошли — придержим код до логина, его подхватит consumePendingInvite.
+    if (!localStorage.getItem('token')) {
+      try { localStorage.setItem(PENDING_INVITE_KEY, code); } catch (err) { /* приватный режим */ }
+      if (typeof showToast === 'function') {
+        showToast('Приглашение', 'Войдите в аккаунт — приглашение откроется сразу после входа.');
+      }
+      return;
+    }
+
+    if (_inviteModalOpen) return; // две ссылки подряд не должны плодить модалки
+
+    const preview = await Promise.resolve(_fetchInvitePreview(code));
+    if (!preview || !preview.name) {
+      if (typeof showToast === 'function') {
+        showToast('Приглашение', 'Ссылка недействительна или истекла.');
+      }
+      return;
+    }
+
+    // Уже участник — человек нажал «открыть», значит просто пускаем внутрь.
+    const joinedId = _joinedLocalId(preview);
+    if (joinedId) {
+      _openLocalSpace(joinedId);
+      return;
+    }
+
+    _showInviteModal(code, preview);
+  };
+
+  if (window.electronAPI && typeof window.electronAPI.onDeepLinkInvite === 'function') {
+    window.electronAPI.onDeepLinkInvite((code) => {
+      window.openInviteFromDeepLink(code);
+    });
+  }
 
   // ── Рендер вложений сообщения (image/video/audio/file) ──
   const _FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';

@@ -1,13 +1,18 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/external_link.dart';
 import '../../core/network/love_api.dart';
 import '../../core/notifications/in_app_notifications.dart';
 import '../../core/platform/audio_file_picker.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
+import '../../widgets/audio_level_bars.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_background.dart';
@@ -55,7 +60,7 @@ class ChatScreen extends StatefulWidget {
   State createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _message = TextEditingController();
   final _scroll = ScrollController();
   final _messages = <ChatMessage>[];
@@ -67,6 +72,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _recordingVoice = false;
   bool _slowLoad = false;
+
+  /// Идёт догрузка пропущенного. Нужен, чтобы возврат в приложение и
+  /// восстановление связи (обычно случаются подряд) не слали два запроса.
+  bool _resyncing = false;
   String? _error;
   DmCallController? _callController;
 
@@ -82,6 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _activeChannelId = widget.channelId;
     if (widget.conversationId != null) {
       ActiveChat.conversationId = widget.conversationId;
@@ -93,6 +103,7 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.socket.on('message:deleted', _handleMessageDeleted);
     widget.socket.on('dm:new_message', _handleDmMessage);
     widget.socket.on('capsule:scheduled', _handleCapsuleScheduled);
+    widget.socket.addConnectListener(_onSocketConnected);
     _joinServerRoom();
     final peerId = widget.peerId;
     if (widget.conversationId != null && peerId != null && peerId.isNotEmpty) {
@@ -120,6 +131,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (ActiveChat.conversationId == widget.conversationId) {
       ActiveChat.conversationId = null;
     }
@@ -129,6 +141,7 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.socket.off('message:deleted', _handleMessageDeleted);
     widget.socket.off('dm:new_message', _handleDmMessage);
     widget.socket.off('capsule:scheduled', _handleCapsuleScheduled);
+    widget.socket.removeConnectListener(_onSocketConnected);
     if (_recordingVoice) {
       ChatNativeFiles.cancelVoiceRecording();
     }
@@ -215,8 +228,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? 'Жду историю личного чата...'
                     : 'Жду сообщения канала...',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: LoveColors.textMuted,
+                style:  TextStyle(
+                  color: context.palette.textMuted,
                   fontSize: 12,
                 ),
               ),
@@ -235,7 +248,7 @@ class _ChatScreenState extends State<ChatScreen> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: LoveColors.textMuted),
+                style:  TextStyle(color: context.palette.textMuted),
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -330,34 +343,34 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: context.palette.inkA(0.05),
           borderRadius: const BorderRadius.all(LoveRadii.sm),
           border: Border(
             left: BorderSide(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: context.palette.inkA(0.5),
               width: 2,
             ),
-            top: BorderSide(color: LoveColors.borderActive),
-            right: BorderSide(color: LoveColors.borderActive),
-            bottom: BorderSide(color: LoveColors.borderActive),
+            top: BorderSide(color: context.palette.borderActive),
+            right: BorderSide(color: context.palette.borderActive),
+            bottom: BorderSide(color: context.palette.borderActive),
           ),
         ),
         child: Row(
           children: [
-            const Icon(
+             Icon(
               Icons.schedule_rounded,
               size: 16,
-              color: LoveColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Следующее сообщение уйдёт капсулой — откроется '
                 '${_formatCapsuleDate(at)}. Напиши текст и отправь.',
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: LoveColors.textSecondary,
+                  color: context.palette.textSecondary,
                 ),
               ),
             ),
@@ -365,7 +378,7 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Отменить капсулу',
               onPressed: () => setState(() => _capsuleAt = null),
               iconSize: 18,
-              color: LoveColors.textSecondary,
+              color: context.palette.textSecondary,
               icon: const Icon(Icons.close_rounded),
             ),
           ],
@@ -393,16 +406,16 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
+          color: context.palette.inkA(0.04),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: LoveColors.border),
+          border: Border.all(color: context.palette.border),
         ),
         child: Row(
           children: [
             Icon(
               editing != null ? Icons.edit_rounded : Icons.reply_rounded,
               size: 16,
-              color: LoveColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -414,10 +427,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
-                      color: LoveColors.textSecondary,
+                      color: context.palette.textSecondary,
                     ),
                   ),
                   if (preview.trim().isNotEmpty) ...[
@@ -426,9 +439,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       preview,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style:  TextStyle(
                         fontSize: 12,
-                        color: LoveColors.textMuted,
+                        color: context.palette.textMuted,
                       ),
                     ),
                   ],
@@ -439,7 +452,7 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Отменить',
               onPressed: _cancelComposerAction,
               iconSize: 18,
-              color: LoveColors.textSecondary,
+              color: context.palette.textSecondary,
               icon: const Icon(Icons.close_rounded),
             ),
           ],
@@ -458,8 +471,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _showMessageActions(ChatMessage message) async {
-    final isTemp =
-        message.id.startsWith('temp_') || message.id.startsWith('temp-');
+    final isTemp = _isTempId(message.id);
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -467,9 +479,9 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Container(
           margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -654,6 +666,113 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Догрузка пропущенного.
+  ///
+  /// Сокет не отдаёт то, что случилось, пока его не было: свернули приложение —
+  /// связь умерла, вам написали, вернулись — в ленте пусто, и дальнейшая
+  /// переписка ложится поверх дырки. Поэтому на возврат в приложение и на
+  /// восстановление связи перечитываем историю и сливаем её с тем, что уже
+  /// показано.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_resync());
+  }
+
+  void _onSocketConnected() => unawaited(_resync());
+
+  Future<void> _resync() async {
+    if (!mounted || _loading || _resyncing) return;
+    _resyncing = true;
+    try {
+      final List<Map<String, dynamic>> raw;
+      if (widget.conversationId != null) {
+        raw = await _loadConversationMessages();
+      } else {
+        final channelId = _activeChannelId;
+        if (channelId == null || channelId.isEmpty) return;
+        raw = await widget.api.messages(channelId);
+      }
+      if (!mounted) return;
+      _mergeHistory(raw);
+    } catch (_) {
+      // Молча: это подстраховка поверх сокета, а не действие пользователя.
+      // Ошибка здесь не должна перекрывать уже показанную переписку.
+    } finally {
+      _resyncing = false;
+    }
+  }
+
+  /// Сливает свежую историю с лентой, а не заменяет её.
+  ///
+  /// Заменять нельзя: сервер отдаёт последние 50 сообщений и ничего не знает
+  /// про пузыри, которые ещё летят (`temp_…`). Поэтому берём ленту за основу,
+  /// подставляем свежие версии, добавляем пропущенное и убираем удалённое —
+  /// но только внутри окна, которое сервер действительно перечитал.
+  void _mergeHistory(List<Map<String, dynamic>> raw) {
+    final fetched = raw
+        .map((item) =>
+            ChatMessage.fromJson(item, currentUserId: _currentUserId))
+        .toList();
+    if (fetched.isEmpty) return;
+
+    final incoming = <String, ChatMessage>{for (final m in fetched) m.id: m};
+    // Сервер отдаёт по возрастанию времени, но на порядок не полагаемся.
+    var windowStart = fetched.first.createdAt;
+    for (final message in fetched) {
+      if (message.createdAt.isBefore(windowStart)) {
+        windowStart = message.createdAt;
+      }
+    }
+
+    final merged = <ChatMessage>[];
+    for (final local in _messages) {
+      final fresh = incoming.remove(local.id);
+      if (fresh != null) {
+        merged.add(fresh); // мог быть отредактирован, пока нас не было
+        continue;
+      }
+      if (_isTempId(local.id)) {
+        merged.add(local); // ещё летит на сервер
+        continue;
+      }
+      if (local.createdAt.isBefore(windowStart)) {
+        merged.add(local); // старее перечитанного окна — сервер про него молчит
+        continue;
+      }
+      // Внутри окна, а сервер не отдал — удалено, пока нас не было.
+    }
+    merged.addAll(incoming.values); // то, что пропустили
+    merged.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    if (_sameFeed(merged, _messages)) return; // нечего показывать — не дёргаем
+    final wasAtBottom = _isAtBottom();
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(merged);
+    });
+    // Читал историю выше — не выдёргиваем его вниз.
+    if (wasAtBottom) _scrollToEnd();
+  }
+
+  bool _isTempId(String id) =>
+      id.startsWith('temp_') || id.startsWith('temp-');
+
+  bool _sameFeed(List<ChatMessage> a, List<ChatMessage> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].edited != b[i].edited) return false;
+      if (a[i].content != b[i].content) return false;
+    }
+    return true;
+  }
+
+  bool _isAtBottom() {
+    if (!_scroll.hasClients) return true;
+    final position = _scroll.position;
+    return position.maxScrollExtent - position.pixels < 120;
+  }
+
   /// Догружает то, что ещё не улетело в Cloudinary, и приводит к payload,
   /// который ждёт сервер.
   Future<List<Map<String, dynamic>>> _uploadPending(
@@ -674,6 +793,30 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
     return attachments;
+  }
+
+  /// Заменяет временный пузырь тем сообщением, которое вернул сервер.
+  ///
+  /// Для socket-пути это делает событие 'message:update'. После HTTP-отправки
+  /// такого события не было, и пузырь оставался с id вида `temp_…`: у своего же
+  /// сообщения не работало ничего, кроме «Копировать», пока не перезапустишь
+  /// приложение.
+  void _applySentMessage(String tempId, dynamic raw) {
+    if (raw is! Map || !mounted) return;
+    final sent = ChatMessage.fromJson(
+      raw.cast<String, dynamic>(),
+      currentUserId: _currentUserId,
+    );
+    setState(() {
+      final index = _messages.indexWhere((item) => item.id == tempId);
+      if (index == -1) {
+        // Сокет успел ожить и принять свою же рассылку 'message:new' —
+        // тогда сообщение уже в ленте и дублировать его не нужно.
+        if (!_messages.any((item) => item.id == sent.id)) _messages.add(sent);
+      } else {
+        _messages[index] = sent;
+      }
+    });
   }
 
   Future _send() async {
@@ -730,14 +873,14 @@ class _ChatScreenState extends State<ChatScreen> {
           // Снимет взвод и покажет подтверждение по 'capsule:scheduled'.
           return;
         }
-        if (attachments.isNotEmpty) {
-          throw const FormatException(
-              'Нет realtime-соединения для отправки файла');
-        }
+        // Сокета нет — уходим по HTTP. Раньше в этой ветке с вложением летел
+        // FormatException, и капсула с файлом терялась уже после того, как сам
+        // файл успешно загрузился.
         await widget.api.sendMessage(
           channelId,
           text,
           deliverAt: capsuleAt,
+          attachments: attachments,
           replyTo: replyTo != null &&
                   !replyTo.id.startsWith('temp_') &&
                   !replyTo.id.startsWith('temp-')
@@ -781,7 +924,11 @@ class _ChatScreenState extends State<ChatScreen> {
           attachments: pendingAttachments
               .map(
                 (item) => ChatAttachment(
-                  url: item.path,
+                  // Ссылка после загрузки, а не локальный путь: плеер и
+                  // просмотрщик умеют только сетевые адреса, поэтому у только
+                  // что записанного голосового вместо имени файла было
+                  // «Не удалось воспроизвести».
+                  url: asText(item.uploaded?['url'], item.path),
                   name: item.name,
                   type: item.type,
                   mimeType: item.mimeType,
@@ -813,24 +960,30 @@ class _ChatScreenState extends State<ChatScreen> {
             'replyTo': replyTo.id,
         });
       } else {
-        if (attachments.isEmpty) {
-          await widget.api.sendMessage(
-            channelId,
-            text,
-            replyTo: replyTo != null &&
-                    !replyTo.id.startsWith('temp_') &&
-                    !replyTo.id.startsWith('temp-')
-                ? replyTo.id
-                : null,
-          );
-        } else {
-          throw const FormatException(
-              'Нет realtime-соединения для отправки файла');
-        }
+        // Сокет мог тихо умереть (доза, смена сети) — тогда отправляем по HTTP.
+        // Раньше с вложением здесь летел FormatException: файл уже был загружен,
+        // сообщение о нём никуда не уходило, а временный пузырь оставался в
+        // ленте и выглядел отправленным.
+        final response = await widget.api.sendMessage(
+          channelId,
+          text,
+          attachments: attachments,
+          replyTo: replyTo != null &&
+                  !replyTo.id.startsWith('temp_') &&
+                  !replyTo.id.startsWith('temp-')
+              ? replyTo.id
+              : null,
+        );
+        _applySentMessage(tempId, response['message']);
       }
     } catch (error) {
       if (!mounted) return;
       setState(() {
+        // Пузырь убираем: пока он висел, сообщение выглядело отправленным, хотя
+        // на сервер не ушло. Текст и вложения возвращаем в композер, чтобы
+        // отправку можно было просто повторить.
+        _messages.removeWhere((item) => item.id == tempId);
+        if (_message.text.trim().isEmpty) _message.text = text;
         _pendingAttachments
           ..clear()
           ..addAll(pendingAttachments);
@@ -944,9 +1097,9 @@ class _ChatScreenState extends State<ChatScreen> {
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: GridView.builder(
             shrinkWrap: true,
@@ -1169,15 +1322,15 @@ class _ChatHeader extends StatelessWidget {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LoveColors.border)),
+      decoration:  BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.palette.border)),
       ),
       child: Row(
         children: [
           IconButton(
             tooltip: 'Назад',
             onPressed: () => Navigator.of(context).maybePop(),
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
           ),
           Expanded(
@@ -1202,10 +1355,10 @@ class _ChatHeader extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
-                              color: LoveColors.textPrimary,
+                              color: context.palette.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -1213,9 +1366,9 @@ class _ChatHeader extends StatelessWidget {
                             subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 11,
-                              color: LoveColors.textMuted,
+                              color: context.palette.textMuted,
                             ),
                           ),
                         ],
@@ -1260,14 +1413,14 @@ class LoveActionButton extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: LoveColors.border),
+              border: Border.all(color: context.palette.border),
             ),
             child: Icon(
               icon,
               size: 18,
               color: onPressed == null
-                  ? LoveColors.textMuted
-                  : LoveColors.textSecondary,
+                  ? context.palette.textMuted
+                  : context.palette.textSecondary,
             ),
           ),
         ),
@@ -1327,10 +1480,10 @@ class _MessageBubbleState extends State<_MessageBubble> {
         fontSize: 10,
         fontWeight: FontWeight.w700,
         color: bare
-            ? LoveColors.textMuted
+            ? context.palette.textMuted
             : (message.isOwn
-                    ? LoveColors.bubbleOwnText
-                    : LoveColors.bubblePartnerText)
+                    ? context.palette.bubbleOwnText
+                    : context.palette.bubblePartnerText)
                 .withValues(alpha: 0.5),
       ),
     );
@@ -1350,8 +1503,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
             ? null
             : BoxDecoration(
                 color: message.isOwn
-                    ? LoveColors.bubbleOwn
-                    : LoveColors.bubblePartner,
+                    ? context.palette.bubbleOwn
+                    : context.palette.bubblePartner,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -1360,7 +1513,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 ),
                 border: message.isOwn
                     ? null
-                    : Border.all(color: LoveColors.border),
+                    : Border.all(color: context.palette.border),
               ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1376,8 +1529,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
               _ExpandableMessageText(
                 text: displayText,
                 color: message.isOwn
-                    ? LoveColors.bubbleOwnText
-                    : LoveColors.bubblePartnerText,
+                    ? context.palette.bubbleOwnText
+                    : context.palette.bubblePartnerText,
                 trailing: hasMedia ? null : timeText,
               ),
             if (inviteCode != null)
@@ -1439,10 +1592,10 @@ class _MessageBubbleState extends State<_MessageBubble> {
                             child: Text(
                               message.authorName,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style:  TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w900,
-                                color: LoveColors.textMuted,
+                                color: context.palette.textMuted,
                               ),
                             ),
                           ),
@@ -1485,7 +1638,10 @@ class _ReplyPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = own ? Colors.black : Colors.white;
+    final base = own ? context.palette.onAccent : context.palette.accent;
+    // В самом сообщении ссылка-приглашение заменяется карточкой, поэтому в
+    // цитате сырой URL выглядел чужеродно — подписываем его словами.
+    final preview = _previewText();
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: ClipRRect(
@@ -1518,10 +1674,10 @@ class _ReplyPreview extends StatelessWidget {
                             color: base.withValues(alpha: 0.75),
                           ),
                         ),
-                        if (content.trim().isNotEmpty) ...[
+                        if (preview.isNotEmpty) ...[
                           const SizedBox(height: 1),
                           Text(
-                            content,
+                            preview,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1541,6 +1697,12 @@ class _ReplyPreview extends StatelessWidget {
       ),
     );
   }
+
+  String _previewText() {
+    if (InviteCard.inviteCodeOf(content) == null) return content.trim();
+    final rest = InviteCard.stripInviteLink(content).trim();
+    return rest.isEmpty ? 'Приглашение' : rest;
+  }
 }
 
 class _MessageActionTile extends StatelessWidget {
@@ -1558,13 +1720,13 @@ class _MessageActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? LoveColors.danger : LoveColors.textPrimary;
+    final color = danger ? context.palette.danger : context.palette.textPrimary;
     return ListTile(
       onTap: onTap,
       leading: Icon(
         icon,
         size: 20,
-        color: danger ? LoveColors.danger : LoveColors.textSecondary,
+        color: danger ? context.palette.danger : context.palette.textSecondary,
       ),
       title: Text(
         label,
@@ -1602,24 +1764,121 @@ class _ExpandableMessageText extends StatefulWidget {
 }
 
 class _ExpandableMessageTextState extends State<_ExpandableMessageText> {
+  // Ссылку узнаём по схеме или по `www.`: угадывать домены без схемы («зайди
+  // на loveapp.chat») не берёмся — так в подчёркивание попадали бы обычные
+  // слова с точкой вроде «привет.ну».
+  static final _urlPattern = RegExp(
+    r'(?:https?://|www\.)[^\s<>"]+',
+    caseSensitive: false,
+  );
+
   bool _expanded = false;
+  final List<TapGestureRecognizer> _recognizers = [];
+  late List<InlineSpan> _spans;
+
+  @override
+  void initState() {
+    super.initState();
+    _spans = _buildSpans();
+  }
+
+  @override
+  void didUpdateWidget(_ExpandableMessageText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Распознаватели живут вместе со спанами, поэтому пересобираем их только
+    // при смене текста — на разворачивании они переиспользуются.
+    if (oldWidget.text != widget.text) {
+      _disposeRecognizers();
+      _spans = _buildSpans();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
 
   bool get _isLong =>
       widget.text.length > _ExpandableMessageText.collapseChars ||
       '\n'.allMatches(widget.text).length >=
           _ExpandableMessageText.collapseLines;
 
+  List<InlineSpan> _buildSpans() {
+    final text = widget.text;
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    for (final match in _urlPattern.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(
+          TextSpan(text: _wrapLongRuns(text.substring(cursor, match.start))),
+        );
+      }
+      final raw = match.group(0)!;
+      final url = _trimTrailingPunctuation(raw);
+      final recognizer = TapGestureRecognizer()..onTap = () => _open(url);
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          // Показываем ссылку с мягкими переносами, а открываем исходную:
+          // вставленные U+200B в Uri.parse не должны попадать.
+          text: _wrapLongRuns(url),
+          recognizer: recognizer,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      );
+      if (url.length < raw.length) {
+        spans.add(TextSpan(text: raw.substring(url.length)));
+      }
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: _wrapLongRuns(text.substring(cursor))));
+    }
+    return spans;
+  }
+
+  /// Точка или скобка после ссылки — это знак препинания фразы, а не часть
+  /// адреса. Парную скобку внутри адреса при этом не отрезаем.
+  String _trimTrailingPunctuation(String url) {
+    var end = url.length;
+    while (end > 0) {
+      final char = url[end - 1];
+      if (char == ')' && url.contains('(')) break;
+      if (!'.,;:!?»"\')]}'.contains(char)) break;
+      end--;
+    }
+    return end == 0 ? url : url.substring(0, end);
+  }
+
+  Future<void> _open(String url) async {
+    if (!mounted) return;
+    // Ссылки-приглашения до сюда не доходят: пузырь вырезает их из текста и
+    // рисует карточкой. Значит здесь всегда чужой адрес — сначала спрашиваем,
+    // потом отдаём браузеру.
+    await ExternalLink.open(context, url);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final text = _wrapLongRuns(widget.text);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text.rich(
           TextSpan(
-            text: text,
             children: [
+              ..._spans,
               if (widget.trailing != null)
                 WidgetSpan(
                   alignment: PlaceholderAlignment.bottom,
@@ -1773,9 +2032,9 @@ class _Composer extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
+                color: context.palette.inkA(0.04),
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: LoveColors.borderActive),
+                border: Border.all(color: context.palette.borderActive),
               ),
               // Кнопок в строке пять, и с дефолтными 48dp полю ввода
               // почти не остаётся места на узком экране.
@@ -1790,35 +2049,43 @@ class _Composer extends StatelessWidget {
                 child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  IconButton(
-                    tooltip: 'Прикрепить файл',
-                    onPressed: editing ? null : onAttach,
-                    color: LoveColors.textSecondary,
-                    icon: const Icon(Icons.add_rounded, size: 22),
-                  ),
-                  IconButton(
-                    tooltip: 'Эмодзи',
-                    onPressed: onEmoji,
-                    color: LoveColors.textSecondary,
-                    icon: const Icon(
-                      Icons.emoji_emotions_outlined,
-                      size: 20,
-                    ),
-                  ),
-                  if (!editing)
+                  // Во время записи прикрепление, эмодзи и капсула бесполезны, а
+                  // места в строке мало: без них волне остаётся вдвое больше
+                  // ширины, и панель выглядит как на ПК.
+                  if (!recordingVoice) ...[
                     IconButton(
-                      tooltip: 'Капсула времени',
-                      onPressed: onCapsule,
-                      color: capsuleAt != null
-                          ? Colors.white
-                          : LoveColors.textSecondary,
-                      icon: Icon(
-                        capsuleAt != null
-                            ? Icons.schedule_rounded
-                            : Icons.schedule_outlined,
+                      tooltip: 'Прикрепить файл',
+                      onPressed: editing ? null : onAttach,
+                      color: context.palette.textSecondary,
+                      icon: const Icon(Icons.add_rounded, size: 22),
+                    ),
+                    IconButton(
+                      tooltip: 'Эмодзи',
+                      onPressed: onEmoji,
+                      color: context.palette.textSecondary,
+                      icon: const Icon(
+                        Icons.emoji_emotions_outlined,
                         size: 20,
                       ),
                     ),
+                    if (!editing)
+                      IconButton(
+                        tooltip: 'Капсула времени',
+                        onPressed: onCapsule,
+                        color: capsuleAt != null
+                            ? context.palette.accent
+                            : context.palette.textSecondary,
+                        icon: Icon(
+                          capsuleAt != null
+                              ? Icons.schedule_rounded
+                              : Icons.schedule_outlined,
+                          size: 20,
+                        ),
+                      ),
+                  ],
+                  if (recordingVoice)
+                    const Expanded(child: _VoiceRecordingStrip())
+                  else
                   Expanded(
                     child: TextField(
                       controller: controller,
@@ -1826,19 +2093,17 @@ class _Composer extends StatelessWidget {
                       maxLines: 5,
                       textAlignVertical: TextAlignVertical.center,
                       textInputAction: TextInputAction.newline,
-                      cursorColor: LoveColors.textPrimary,
-                      style: const TextStyle(
-                        color: LoveColors.textPrimary,
+                      cursorColor: context.palette.textPrimary,
+                      style:  TextStyle(
+                        color: context.palette.textPrimary,
                         fontSize: 14.5,
                       ),
                       decoration: InputDecoration(
-                        hintText: recordingVoice
-                            ? 'Идёт запись голосового...'
-                            : editing
-                                ? 'Изменить сообщение...'
-                                : 'Написать...',
-                        hintStyle: const TextStyle(
-                          color: LoveColors.textMuted,
+                        hintText: editing
+                            ? 'Изменить сообщение...'
+                            : 'Написать...',
+                        hintStyle:  TextStyle(
+                          color: context.palette.textMuted,
                           fontSize: 14,
                         ),
                         // Рамку и фон рисует Container вокруг всей строки.
@@ -1865,8 +2130,8 @@ class _Composer extends StatelessWidget {
                           : 'Голосовое сообщение',
                       onPressed: onVoice,
                       color: recordingVoice
-                          ? LoveColors.danger
-                          : LoveColors.textSecondary,
+                          ? context.palette.danger
+                          : context.palette.textSecondary,
                       icon: Icon(
                         recordingVoice
                             ? Icons.stop_circle_outlined
@@ -1877,7 +2142,7 @@ class _Composer extends StatelessWidget {
                   IconButton(
                     tooltip: editing ? 'Сохранить' : 'Отправить',
                     onPressed: sending ? null : onSend,
-                    color: Colors.white,
+                    color: context.palette.accent,
                     icon: sending
                         ? const SizedBox(
                             width: 18,
@@ -1896,6 +2161,81 @@ class _Composer extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Полоска «идёт запись»: красная точка, время и живая волна уровня.
+///
+/// Отдельный виджет со своим таймером намеренно: иначе тик времени пришлось бы
+/// держать в состоянии всего экрана чата, и каждую секунду перестраивался бы
+/// весь список сообщений.
+class _VoiceRecordingStrip extends StatefulWidget {
+  const _VoiceRecordingStrip();
+
+  @override
+  State<_VoiceRecordingStrip> createState() => _VoiceRecordingStripState();
+}
+
+class _VoiceRecordingStripState extends State<_VoiceRecordingStrip> {
+  final Stopwatch _watch = Stopwatch()..start();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(
+      const Duration(milliseconds: 250),
+      (_) {
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _elapsed {
+    final total = _watch.elapsed.inSeconds;
+    final minutes = total ~/ 60;
+    final seconds = (total % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 4),
+        Container(
+          width: 8,
+          height: 8,
+          decoration:  BoxDecoration(
+            color: context.palette.danger,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _elapsed,
+          style: LoveText.monoTime(context.palette).copyWith(
+            fontSize: 12,
+            color: context.palette.textSecondary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: AudioLevelBars(
+            sample: () async =>
+                audioLevelFromPeak(await ChatNativeFiles.voiceAmplitude()),
+            height: 22,
+          ),
+        ),
+        const SizedBox(width: 4),
+      ],
     );
   }
 }
@@ -1943,9 +2283,9 @@ class _PendingAttachmentTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: context.palette.inkA(0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1957,7 +2297,7 @@ class _PendingAttachmentTile extends StatelessWidget {
                     ? Icons.image_outlined
                     : Icons.attach_file_rounded,
             size: 16,
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
           ),
           const SizedBox(width: 6),
           ConstrainedBox(
@@ -1966,10 +2306,10 @@ class _PendingAttachmentTile extends StatelessWidget {
               attachment.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style:  TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
-                color: LoveColors.textPrimary,
+                color: context.palette.textPrimary,
               ),
             ),
           ),
@@ -1983,10 +2323,10 @@ class _PendingAttachmentTile extends StatelessWidget {
           else
             InkWell(
               onTap: onRemove,
-              child: const Icon(
+              child:  Icon(
                 Icons.close_rounded,
                 size: 16,
-                color: LoveColors.textMuted,
+                color: context.palette.textMuted,
               ),
             ),
         ],

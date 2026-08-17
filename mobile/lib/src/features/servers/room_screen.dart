@@ -159,8 +159,8 @@ class _RoomHeader extends StatelessWidget {
     final banner = asText(space['banner']);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.22),
-        border: const Border(bottom: BorderSide(color: LoveColors.border)),
+        color: context.palette.sinkA(0.22),
+        border:  Border(bottom: BorderSide(color: context.palette.border)),
       ),
       child: Column(
         children: [
@@ -204,8 +204,8 @@ class _RoomHeader extends StatelessWidget {
                                 : '${_memberCount(space)} участников',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: LoveColors.textMuted,
+                        style:  TextStyle(
+                          color: context.palette.textMuted,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -243,7 +243,7 @@ class _RoomTabs extends StatelessWidget {
       child: LoveSurface(
         padding: const EdgeInsets.all(4),
         radius: 14,
-        color: Colors.white.withValues(alpha: 0.035),
+        color: context.palette.inkA(0.035),
         child: Row(
           children: [
             _RoomTabButton(
@@ -295,7 +295,7 @@ class _RoomTabButton extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? Colors.white : Colors.transparent,
+              color: selected ? context.palette.accent : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -304,7 +304,7 @@ class _RoomTabButton extends StatelessWidget {
                 Icon(
                   icon,
                   size: 17,
-                  color: selected ? Colors.black : LoveColors.textSecondary,
+                  color: selected ? context.palette.onAccent : context.palette.textSecondary,
                 ),
                 const SizedBox(width: 6),
                 Flexible(
@@ -313,7 +313,7 @@ class _RoomTabButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.black : LoveColors.textSecondary,
+                      color: selected ? context.palette.onAccent : context.palette.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
                     ),
@@ -436,7 +436,7 @@ class _MediaTile extends StatelessWidget {
     return LoveSurface(
       padding: EdgeInsets.zero,
       radius: 14,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       child: Material(
         type: MaterialType.transparency,
         borderRadius: BorderRadius.circular(14),
@@ -458,7 +458,7 @@ class _MediaTile extends StatelessWidget {
             '${item.message.authorName} · ${_formatDate(item.message.createdAt)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: LoveColors.textMuted),
+            style:  TextStyle(color: context.palette.textMuted),
           ),
           trailing: const Icon(Icons.open_in_new_rounded, size: 18),
         ),

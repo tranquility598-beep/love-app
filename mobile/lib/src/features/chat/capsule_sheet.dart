@@ -147,9 +147,9 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
             maxHeight: MediaQuery.of(context).size.height * 0.82,
           ),
           decoration: BoxDecoration(
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             borderRadius: const BorderRadius.all(LoveRadii.md),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -161,14 +161,14 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                       Text(
                         'Выбери срок, затем напиши сообщение и отправь его как '
                         'обычно — оно спрячется до этой даты. Получатель ничего '
                         'не увидит и не получит уведомление раньше времени.',
                         style: TextStyle(
                           fontSize: 12.5,
                           height: 1.45,
-                          color: LoveColors.textSecondary,
+                          color: context.palette.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -204,13 +204,13 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
                         ),
                       ],
                       const SizedBox(height: 20),
-                      const Text(
+                       Text(
                         'ЗАПЛАНИРОВАННЫЕ',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.2,
-                          color: LoveColors.textMuted,
+                          color: context.palette.textMuted,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -229,24 +229,24 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
   Widget _header() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: LoveColors.borderActive)),
+      decoration:  BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.palette.borderActive)),
       ),
       child: Row(
         children: [
-          const Icon(
+           Icon(
             Icons.schedule_rounded,
             size: 18,
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
           ),
           const SizedBox(width: 10),
-          const Expanded(
+           Expanded(
             child: Text(
               'Капсула времени',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: LoveColors.textPrimary,
+                color: context.palette.textPrimary,
               ),
             ),
           ),
@@ -254,7 +254,7 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
             tooltip: 'Закрыть',
             onPressed: () => Navigator.of(context).pop(),
             iconSize: 20,
-            color: LoveColors.textMuted,
+            color: context.palette.textMuted,
             icon: const Icon(Icons.close_rounded),
           ),
         ],
@@ -270,9 +270,9 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
       );
     }
     if (_capsules.isEmpty) {
-      return const Text(
+      return  Text(
         'Пока ни одной капсулы не запланировано.',
-        style: TextStyle(fontSize: 12.5, color: LoveColors.textMuted),
+        style: TextStyle(fontSize: 12.5, color: context.palette.textMuted),
       );
     }
     return Column(
@@ -309,13 +309,13 @@ class _PresetChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
           borderRadius: const BorderRadius.all(LoveRadii.sm),
-          border: Border.all(color: LoveColors.borderActive),
+          border: Border.all(color: context.palette.borderActive),
         ),
         child: Text(
           label,
-          style: const TextStyle(
+          style:  TextStyle(
             fontSize: 12.5,
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
           ),
         ),
       ),
@@ -340,9 +340,9 @@ class _CapsuleTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: LoveColors.bgTertiary,
+        color: context.palette.bgTertiary,
         borderRadius: const BorderRadius.all(LoveRadii.sm),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Row(
         children: [
@@ -353,11 +353,11 @@ class _CapsuleTile extends StatelessWidget {
               children: [
                 Text(
                   entry.whenLabel,
-                  style: const TextStyle(
+                  style:  TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
-                    color: Color(0xFFD9D9D9),
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -365,18 +365,18 @@ class _CapsuleTile extends StatelessWidget {
                   entry.preview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style:  TextStyle(
                     fontSize: 13,
-                    color: LoveColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
                 if (entry.where.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     entry.where,
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 11.5,
-                      color: LoveColors.textMuted,
+                      color: context.palette.textMuted,
                     ),
                   ),
                 ],

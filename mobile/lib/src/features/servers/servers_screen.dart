@@ -74,7 +74,7 @@ class _ServersScreenState extends State<ServersScreen> {
       trailing: IconButton(
         tooltip: 'Создать или войти',
         onPressed: _openCreateSheet,
-        color: LoveColors.textSecondary,
+        color: context.palette.textSecondary,
         iconSize: 22,
         icon: const Icon(Icons.add_rounded),
       ),
@@ -318,7 +318,7 @@ class _SpaceCard extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(14),
       radius: 16,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -364,8 +364,8 @@ class _SpaceCard extends StatelessWidget {
                       '$memberCount участников · ${textChannels.length} чат · $voiceCount войс',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: LoveColors.textMuted,
+                      style:  TextStyle(
+                        color: context.palette.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -396,8 +396,8 @@ class _SpaceCard extends StatelessWidget {
               description,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: LoveColors.textSecondary,
+              style:  TextStyle(
+                color: context.palette.textSecondary,
                 height: 1.35,
               ),
             ),
@@ -410,9 +410,9 @@ class _SpaceCard extends StatelessWidget {
               label: const Text('Открыть комнату'),
             )
           else if (textChannels.isEmpty && voiceChannels.isEmpty)
-            const Text(
+             Text(
               'Нет доступных каналов',
-              style: TextStyle(color: LoveColors.textMuted),
+              style: TextStyle(color: context.palette.textMuted),
             )
           else
             Wrap(
@@ -511,7 +511,7 @@ class _CreateSpaceSheetState extends State<_CreateSpaceSheet> {
       padding: EdgeInsets.fromLTRB(12, 0, 12, inset + 12),
       child: LoveSurface(
         radius: 22,
-        color: LoveColors.surfaceStrong,
+        color: context.palette.surfaceStrong,
         shadow: true,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
         child: SingleChildScrollView(
@@ -590,8 +590,8 @@ class _CreateSpaceSheetState extends State<_CreateSpaceSheet> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: LoveColors.textPrimary,
+                  style:  TextStyle(
+                    color: context.palette.textPrimary,
                     height: 1.35,
                   ),
                 ),
@@ -600,12 +600,12 @@ class _CreateSpaceSheetState extends State<_CreateSpaceSheet> {
               FilledButton.icon(
                 onPressed: _busy ? null : _submit,
                 icon: _busy
-                    ? const SizedBox(
+                    ?  SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.black,
+                          color: context.palette.onAccent,
                         ),
                       )
                     : Icon(
@@ -753,10 +753,10 @@ class _SpaceActionButton extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: selected
-                  ? Colors.white.withValues(alpha: 0.11)
-                  : Colors.white.withValues(alpha: 0.035),
+                  ? context.palette.inkA(0.11)
+                  : context.palette.inkA(0.035),
               border: Border.all(
-                color: selected ? LoveColors.borderActive : LoveColors.border,
+                color: selected ? context.palette.borderActive : context.palette.border,
               ),
               borderRadius: BorderRadius.circular(14),
             ),
@@ -776,8 +776,8 @@ class _SpaceActionButton extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
+                  style:  TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 11,
                   ),
                 ),
@@ -829,7 +829,7 @@ class _InviteFields extends StatelessWidget {
           LoveSurface(
             padding: const EdgeInsets.all(12),
             radius: 14,
-            color: Colors.white.withValues(alpha: 0.04),
+            color: context.palette.inkA(0.04),
             child: Row(
               children: [
                 LoveAvatar(
@@ -853,8 +853,8 @@ class _InviteFields extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         '${asText(preview['kind']) == 'room' ? 'Комната' : 'Сфера'} · ${asText(preview['memberCount'], '0')} участников',
-                        style: const TextStyle(
-                          color: LoveColors.textMuted,
+                        style:  TextStyle(
+                          color: context.palette.textMuted,
                           fontSize: 12,
                         ),
                       ),
@@ -879,16 +879,16 @@ class _KindPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: LoveColors.border),
+        color: context.palette.inkA(0.06),
+        border: Border.all(color: context.palette.border),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Text(
           text,
-          style: const TextStyle(
-            color: LoveColors.textSecondary,
+          style:  TextStyle(
+            color: context.palette.textSecondary,
             fontSize: 10,
             fontWeight: FontWeight.w900,
           ),

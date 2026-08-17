@@ -34,6 +34,14 @@ const notificationSchema = new mongoose.Schema({
   // Текстовое превью (сообщение/описание)
   preview: { type: String, default: '', maxlength: 300 },
 
+  // Чем было сообщение: text | image | video | voice | audio | file | mixed.
+  // Нужно, чтобы в ленте у карточки была иконка вложения, а не пустая строка,
+  // когда человек прислал одну фотографию или голосовое (см. utils/messagePreview).
+  previewKind: { type: String, default: 'text' },
+
+  // Ссылка на первую картинку сообщения — показываем само фото в уведомлении
+  previewImage: { type: String, default: null },
+
   // Навигационные ссылки
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'DirectMessage', default: null },
   channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', default: null },

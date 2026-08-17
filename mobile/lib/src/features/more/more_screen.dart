@@ -24,7 +24,7 @@ class MoreScreen extends StatelessWidget {
           LoveSurface(
             padding: const EdgeInsets.all(16),
             radius: 18,
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             child: Row(
               children: [
                 LoveAvatar(
@@ -51,8 +51,8 @@ class MoreScreen extends StatelessWidget {
                         _profileLine(user),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: LoveColors.textMuted,
+                        style:  TextStyle(
+                          color: context.palette.textMuted,
                           fontSize: 13,
                         ),
                       ),
@@ -137,7 +137,7 @@ class _MoreTile extends StatelessWidget {
       child: LoveSurface(
         padding: EdgeInsets.zero,
         radius: 16,
-        color: LoveColors.surfaceStrong,
+        color: context.palette.surfaceStrong,
         child: Material(
           type: MaterialType.transparency,
           borderRadius: BorderRadius.circular(16),
@@ -153,8 +153,8 @@ class _MoreTile extends StatelessWidget {
               height: 42,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.07),
-                border: Border.all(color: LoveColors.border),
+                color: context.palette.inkA(0.07),
+                border: Border.all(color: context.palette.border),
               ),
               child: Icon(icon, size: 21),
             ),
@@ -166,7 +166,7 @@ class _MoreTile extends StatelessWidget {
               subtitle,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: LoveColors.textMuted),
+              style:  TextStyle(color: context.palette.textMuted),
             ),
             trailing: const Icon(Icons.chevron_right_rounded),
           ),

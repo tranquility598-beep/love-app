@@ -31,7 +31,7 @@
 
 .media-filter {
     padding: 7px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--tint-a-10);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -43,15 +43,15 @@
 }
 
 .media-filter:hover {
-    border-color: rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--tint-a-30);
+    background: var(--tint-a-6);
     color: var(--text-primary);
 }
 
 .media-filter.active {
-    border-color: #fff;
-    background: #fff;
-    color: #0d0d0d;
+    border-color: var(--text-bright);
+    background: var(--text-bright);
+    color: var(--bg-secondary);
 }
 
 .media-refresh {
@@ -61,16 +61,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--tint-a-6);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--tint-a-3);
     color: var(--text-secondary);
     cursor: pointer;
     transition: var(--transition-smooth);
 }
 
 .media-refresh:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--tint-a-8);
     color: var(--text-primary);
 }
 
@@ -101,17 +101,17 @@
 .media-card {
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--tint-a-5);
     border-radius: var(--radius-lg, 14px);
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--tint-a-2);
     overflow: hidden;
     cursor: pointer;
     transition: var(--transition-smooth);
 }
 
 .media-card:hover {
-    border-color: rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--tint-a-14);
+    background: var(--tint-a-5);
     transform: translateY(-2px);
 }
 
@@ -121,7 +121,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--shade-a-30);
     overflow: hidden;
 }
 
@@ -143,9 +143,9 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-round, 999px);
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--shade-a-50);
     backdrop-filter: blur(4px);
-    color: #fff;
+    color: var(--text-bright);
     font-size: 14px;
     padding-left: 3px;
     pointer-events: none;
@@ -155,7 +155,7 @@
 .media-preview-file {
     aspect-ratio: auto;
     padding: 18px 12px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--tint-a-40);
 }
 
 .media-preview-file svg {
@@ -191,7 +191,7 @@
 
 .media-card-sub {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--tint-a-35);
     letter-spacing: 0.3px;
 }
 
@@ -208,7 +208,7 @@
 
 .media-state .helper-text {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--tint-a-35);
     letter-spacing: 0.4px;
     font-family: var(--font-sans);
 }
@@ -218,7 +218,7 @@
     align-self: center;
     margin: 0 0 var(--spacing-lg) 0;
     padding: 9px 22px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--tint-a-14);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -229,8 +229,8 @@
 }
 
 .media-load-more:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--tint-a-40);
+    background: var(--tint-a-8);
     color: var(--text-primary);
 }
 
@@ -244,7 +244,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-lg);
-    background: rgba(0, 0, 0, 0.82);
+    background: var(--shade-a-80);
     backdrop-filter: blur(8px);
 }
 
@@ -268,7 +268,7 @@
     max-width: 100%;
     max-height: 78vh;
     border-radius: var(--radius-lg, 14px);
-    background: #000;
+    background: var(--shade-solid);
     display: block;
 }
 
@@ -283,7 +283,7 @@
 .media-video-name {
     text-align: center;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--tint-a-55);
 }
 
 @media (max-width: 768px) {

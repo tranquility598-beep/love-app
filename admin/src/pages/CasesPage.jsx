@@ -351,7 +351,11 @@ export default function CasesPage() {
               <span>{kindLabels[detail.kind]}</span><span>{formatDate(detail.createdAt)}</span>
             </div>
 
-            <div className="case-person"><Avatar user={detail.reporter} size="avatar-small" /><span><strong>{detail.reporter?.nickname || detail.reporter?.username}</strong><small>Автор обращения</small></span></div>
+            {/* Автор. У обращений с формы на сайте аккаунта нет — там имя и
+                почта лежат в contact, и без этой ветки строка была бы пустой. */}
+            {detail.reporter
+              ? <div className="case-person"><Avatar user={detail.reporter} size="avatar-small" /><span><strong>{detail.reporter?.nickname || detail.reporter?.username}</strong><small>Автор обращения</small></span></div>
+              : <div className="case-person"><Avatar user={{ nickname: detail.contact?.name || '?' }} size="avatar-small" /><span><strong>{detail.contact?.name || text('Без имени', 'No name')}</strong><small>{detail.contact?.email ? <a href={`mailto:${detail.contact.email}`}>{detail.contact.email}</a> : text('Гость без аккаунта', 'Guest without an account')}{detail.contact?.source === 'site' ? text(' · форма на сайте', ' · site form') : ''}</small></span></div>}
             <p className="case-description">{detail.description}</p>
 
             {detail.evidenceSnapshot && <section className="case-evidence">

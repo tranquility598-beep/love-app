@@ -231,9 +231,8 @@ app.use(express.static(path.join(__dirname, '..', 'client')));
 
 // Админ-панель (React SPA) на том же домене.
 //
-// Поддомен admin.loveapp.chat не поднят, а панель нужна с телефона — держим её
-// здесь. Тот же origin ещё и удобен для adminOriginGuard: запросы к /api/admin
-// приходят как same-origin, без исключений в CORS.
+// Dedicated admin.loveapp.chat proxies its root here internally. The legacy
+// api.loveapp.chat/admin URL is retained only as a redirect to that host.
 //
 // index: false намеренно — маршруты react-router (/admin/users и т.п.) должен
 // отдавать fallback ниже, иначе при обновлении страницы будет 404.
@@ -241,6 +240,13 @@ const adminDistDir = path.join(__dirname, '..', 'admin', 'dist');
 const adminIndexFile = path.join(adminDistDir, 'index.html');
 app.use('/admin', express.static(adminDistDir, { index: false }));
 app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
+  // Keep the legacy API host from exposing the admin SPA. The dedicated
+  // admin.loveapp.chat vhost proxies its root to /admin/ internally, so that
+  // host must continue through to the SPA fallback below.
+  if (req.hostname !== 'admin.loveapp.chat') {
+    const suffix = req.originalUrl.replace(/^\/admin/, '') || '/';
+    return res.redirect(308, `https://admin.loveapp.chat${suffix}`);
+  }
   // admin/dist — артефакт сборки и в git не лежит (см. .gitignore). Если релиз
   // собрали без `npm run build` в admin/, честно говорим об этом: иначе
   // sendFile отдаёт голую 500 и причину приходится искать в логах.
@@ -268,6 +274,7 @@ const communityRoutes = require('./routes/community');
 const staffCommsRoutes = require('./routes/staffComms');
 const updatesRoutes = require('./routes/updates');
 const earlyAccessRoutes = require('./routes/earlyAccess');
+const supportRoutes = require('./routes/support');
 const releaseRoutes = require('./routes/release');
 const notificationRoutes = require('./routes/notifications');
 const webrtcRoutes = require('./routes/webrtc');
@@ -295,6 +302,8 @@ app.use('/api/cases', requireFeature('casesV1'), casesRoutes);
 app.use('/api/community', requireFeature('communityV1'), communityRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/early-access', earlyAccessRoutes);
+// Форма поддержки на сайте: без авторизации, свой лимит внутри роутера.
+app.use('/api/support', supportRoutes);
 app.use('/api/release', releaseRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/webrtc', webrtcRoutes);

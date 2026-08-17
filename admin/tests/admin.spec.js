@@ -25,6 +25,14 @@ test('login fits the viewport and exposes both credential fields', async ({ page
   await page.screenshot({ path: testInfo.outputPath('login.png'), fullPage: true });
 });
 
+test('admin subpath keeps the login route under /admin', async ({ page }) => {
+  await page.route('**/api/admin/auth/me', route => route.fulfill({ status: 401, json: { message: 'Нет сессии' } }));
+  await page.route('**/api/admin/auth/csrf', route => route.fulfill({ status: 401, json: { message: 'Нет сессии' } }));
+  await page.goto('/admin/');
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  await expect(page.getByRole('heading', { name: 'Вход в панель' })).toBeVisible();
+});
+
 test('local email preview lets a secondary browser continue safely', async ({ page }) => {
   await page.route('**/api/admin/auth/me', route => route.fulfill({ status: 401, json: { message: 'Нет сессии' } }));
   await page.route('**/api/admin/auth/csrf', route => route.fulfill({ status: 401, json: { message: 'Нет сессии' } }));
@@ -40,6 +48,59 @@ test('local email preview lets a secondary browser continue safely', async ({ pa
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.locator('input[name="verification-code"]')).toHaveValue('654321');
   await expect(page.getByText(/Локальная проверка: код 654321/)).toBeVisible();
+});
+
+test('server row opens details while delete remains a separate action', async ({ page }, testInfo) => {
+  await mockSession(page);
+  const server = {
+    _id: '64a2b3c4d5e6f78901234567',
+    name: 'Тестовый сервер',
+    icon: null,
+    owner: { _id: 'owner1', username: 'owner', email: 'owner@example.com' },
+    memberCount: 2,
+    channelCount: 2,
+    createdAt: '2026-07-23T10:00:00.000Z'
+  };
+  let detailRequests = 0;
+
+  await page.route('**/api/admin/servers?**', route => route.fulfill({ json: [server] }));
+  await page.route(`**/api/admin/servers/${server._id}`, route => {
+    detailRequests += 1;
+    return route.fulfill({ json: { server: {
+      ...server,
+      description: 'Описание тестового сервера',
+      settings: { kind: 'guild', isPublic: false, verificationLevel: 1, defaultNotifications: 'all' },
+      roleCount: 3,
+      inviteCount: 1,
+      categoryCount: 1,
+      members: [
+        { user: { _id: 'owner1', username: 'owner', nickname: 'Owner' }, joinedAt: '2026-07-23T10:00:00.000Z', roleCount: 2 },
+        { user: { _id: 'member1', username: 'member', nickname: 'Member' }, joinedAt: '2026-07-24T10:00:00.000Z', roleCount: 1 }
+      ],
+      channels: [
+        { _id: 'channel1', name: 'general', type: 'text', settings: {} },
+        { _id: 'channel2', name: 'voice', type: 'voice', settings: {} }
+      ]
+    } } });
+  });
+
+  await page.goto('/servers');
+  await page.locator('tbody tr').click();
+  const details = page.getByRole('dialog', { name: 'Тестовый сервер' });
+  await expect(details).toBeVisible();
+  await expect(details.getByText('Описание тестового сервера')).toBeVisible();
+  await expect(details.getByText('@owner', { exact: true })).toBeVisible();
+  await expect(details.getByText('general', { exact: true })).toBeVisible();
+  await expect(details.getByText('Member', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('server-details.png'), fullPage: true });
+  await details.getByTitle('Закрыть').click();
+
+  const deleteButton = page.getByTitle('Удалить сервер');
+  if (await deleteButton.isVisible()) {
+    await deleteButton.click();
+    await expect(page.getByRole('dialog', { name: 'Удаление сервера' })).toBeVisible();
+  }
+  expect(detailRequests).toBe(1);
 });
 
 test('Dev Log supports editing, live counters and inline comments', async ({ page }) => {

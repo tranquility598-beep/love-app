@@ -405,15 +405,15 @@ class _BottomLoveNav extends StatelessWidget {
     return Container(
       height: kBottomNavHeight + bottomInset,
       padding: EdgeInsets.only(bottom: bottomInset, left: 16, right: 16),
-      decoration: const BoxDecoration(
+      decoration:  BoxDecoration(
         color:
-            LoveColors.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
+            context.palette.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
         border: Border(
-          top: BorderSide(color: Color(0x14FFFFFF)), // rgba(255,255,255,0.08)
+          top: BorderSide(color: context.palette.inkA(0.08)), // rgba(255,255,255,0.08)
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(0x66000000), // 0 -8px 32px rgba(0,0,0,0.4)
+            color: context.palette.dropA(0.4), // 0 -8px 32px var(--shade-a-40)
             blurRadius: 32,
             offset: Offset(0, -8),
           ),
@@ -466,7 +466,7 @@ class _NavButton extends StatelessWidget {
         height: 44,
         decoration: BoxDecoration(
           color: active
-              ? Colors.white.withValues(alpha: 0.08)
+              ? context.palette.inkA(0.08)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(active ? 12 : 22),
         ),
@@ -475,7 +475,7 @@ class _NavButton extends StatelessWidget {
             glyph: glyph,
             filled: filled,
             glow: active,
-            color: active ? Colors.white : LoveColors.textSecondary,
+            color: active ? context.palette.accent : context.palette.textSecondary,
             size: 24,
           ),
         ),

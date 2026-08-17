@@ -153,7 +153,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           leading: IconButton(
             tooltip: 'Назад',
             onPressed: () => Navigator.of(context).pop(),
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           ),
           child: _body(),
@@ -176,7 +176,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: LoveColors.textMuted),
+                style:  TextStyle(color: context.palette.textMuted),
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -222,30 +222,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             label: _name,
             imageUrl: _avatar,
             size: 110,
-            borderColor: LoveColors.borderActive,
+            borderColor: context.palette.borderActive,
           ),
         ),
         const SizedBox(height: 18),
         Text(
           _name,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style:  TextStyle(
             fontFamily: LoveFonts.serif,
             fontStyle: FontStyle.italic,
             fontSize: 26,
             fontWeight: FontWeight.w500,
-            color: LoveColors.textPrimary,
+            color: context.palette.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           '@${username.toUpperCase()}',
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style:  TextStyle(
             fontFamily: LoveFonts.mono,
             fontSize: 11,
             letterSpacing: 1.5,
-            color: LoveColors.textMuted,
+            color: context.palette.textMuted,
           ),
         ),
         if (staffRoleLabel(asText(user['role'], asText(user['staffRank'])))
@@ -263,14 +263,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: context.palette.inkA(0.05),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: LoveColors.border),
+                border: Border.all(color: context.palette.border),
               ),
               child: Text(
                 status,
-                style: const TextStyle(
-                  color: LoveColors.textSecondary,
+                style:  TextStyle(
+                  color: context.palette.textSecondary,
                   fontSize: 13,
                 ),
               ),
@@ -285,12 +285,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: FilledButton.icon(
                   onPressed: _openingDm ? null : _openDm,
                   icon: _openingDm
-                      ? const SizedBox(
+                      ?  SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.black,
+                            color: context.palette.onAccent,
                           ),
                         )
                       : const Icon(Icons.chat_bubble_outline_rounded, size: 18),
@@ -310,17 +310,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
         const SizedBox(height: 22),
         Row(
-          children: const [
-            Expanded(child: Divider(color: LoveColors.border, height: 1)),
+          children:  [
+            Expanded(child: Divider(color: context.palette.border, height: 1)),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Icon(
                 Icons.favorite,
                 size: 12,
-                color: LoveColors.textMuted,
+                color: context.palette.textMuted,
               ),
             ),
-            Expanded(child: Divider(color: LoveColors.border, height: 1)),
+            Expanded(child: Divider(color: context.palette.border, height: 1)),
           ],
         ),
         if (bio.isNotEmpty)
@@ -328,8 +328,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             label: 'О себе',
             child: Text(
               bio,
-              style: const TextStyle(
-                color: LoveColors.textSecondary,
+              style:  TextStyle(
+                color: context.palette.textSecondary,
                 height: 1.5,
                 fontSize: 14,
               ),
@@ -340,8 +340,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             label: 'Настроение',
             child: Text(
               mood,
-              style: const TextStyle(
-                color: LoveColors.textPrimary,
+              style:  TextStyle(
+                color: context.palette.textPrimary,
                 fontSize: 15,
               ),
             ),
@@ -354,8 +354,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: musicUrl.isEmpty
                 ? Text(
                     listening.isNotEmpty ? listening : musicTitle,
-                    style: const TextStyle(
-                      color: LoveColors.textPrimary,
+                    style:  TextStyle(
+                      color: context.palette.textPrimary,
                       fontSize: 15,
                     ),
                   )
@@ -399,7 +399,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: LoveText.monoLabel),
+          Text(label.toUpperCase(), style: LoveText.monoLabel(context.palette)),
           const SizedBox(height: 10),
           child,
         ],

@@ -24,6 +24,8 @@ const DocumentationPage = lazy(() => import('./pages/DocumentationPage.jsx'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'));
 const StaffCommsPage = lazy(() => import('./pages/StaffCommsPage.jsx'));
 
+const routerBasename = /^\/admin(?:\/|$)/.test(window.location.pathname) ? '/admin' : undefined;
+
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -65,7 +67,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename}>
       <LocaleProvider>
         <AuthProvider>
           <AdminSocketProvider>

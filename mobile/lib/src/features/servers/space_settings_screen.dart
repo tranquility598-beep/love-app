@@ -229,19 +229,19 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: const TextStyle(color: LoveColors.textPrimary),
+              style:  TextStyle(color: context.palette.textPrimary),
             ),
           ],
           const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: isOwner && !_busy ? () => _saveOverview(isRoom) : null,
             icon: _busy
-                ? const SizedBox(
+                ?  SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.black,
+                      color: context.palette.onAccent,
                     ),
                   )
                 : const Icon(Icons.check_rounded),
@@ -260,9 +260,9 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
       child: Column(
         children: [
           if (members.isEmpty)
-            const Text(
+             Text(
               'Список участников пуст.',
-              style: TextStyle(color: LoveColors.textMuted),
+              style: TextStyle(color: context.palette.textMuted),
             )
           else
             for (final member in members) ...[
@@ -316,7 +316,7 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: const TextStyle(color: LoveColors.textPrimary),
+              style:  TextStyle(color: context.palette.textPrimary),
             ),
           ],
         ],
@@ -347,8 +347,8 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
             FilledButton.icon(
               onPressed: _busy ? null : _delete,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: context.palette.accent,
+                foregroundColor: context.palette.onAccent,
               ),
               icon: const Icon(Icons.delete_outline_rounded),
               label: Text(isRoom ? 'Удалить комнату' : 'Удалить сферу'),
@@ -357,7 +357,7 @@ class _SpaceSettingsScreenState extends State<SpaceSettingsScreen> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: const TextStyle(color: LoveColors.textPrimary),
+              style:  TextStyle(color: context.palette.textPrimary),
             ),
           ],
         ],
@@ -583,7 +583,7 @@ class _SpaceHeaderCard extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(16),
       radius: 18,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -616,7 +616,7 @@ class _SpaceHeaderCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${isRoom ? 'Комната' : 'Сфера'} · ${_memberCount(space)} участников',
-                      style: const TextStyle(color: LoveColors.textMuted),
+                      style:  TextStyle(color: context.palette.textMuted),
                     ),
                   ],
                 ),
@@ -643,7 +643,7 @@ class _SettingsNav extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(4),
       radius: 14,
-      color: Colors.white.withValues(alpha: 0.035),
+      color: context.palette.inkA(0.035),
       child: Row(
         children: [
           _NavButton(
@@ -700,7 +700,7 @@ class _NavButton extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 9),
             decoration: BoxDecoration(
-              color: selected ? Colors.white : Colors.transparent,
+              color: selected ? context.palette.accent : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -709,7 +709,7 @@ class _NavButton extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: selected ? Colors.black : LoveColors.textSecondary,
+                  color: selected ? context.palette.onAccent : context.palette.textSecondary,
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -717,7 +717,7 @@ class _NavButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected ? Colors.black : LoveColors.textSecondary,
+                    color: selected ? context.palette.onAccent : context.palette.textSecondary,
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
@@ -747,7 +747,7 @@ class _SettingsCard extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(16),
       radius: 18,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -758,7 +758,7 @@ class _SettingsCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: const TextStyle(color: LoveColors.textMuted, height: 1.35),
+            style:  TextStyle(color: context.palette.textMuted, height: 1.35),
           ),
           const SizedBox(height: 16),
           child,
@@ -787,7 +787,7 @@ class _MemberTile extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(12),
       radius: 14,
-      color: Colors.white.withValues(alpha: 0.035),
+      color: context.palette.inkA(0.035),
       child: Row(
         children: [
           LoveAvatar(
@@ -806,10 +806,10 @@ class _MemberTile extends StatelessWidget {
             ),
           ),
           if (isOwner)
-            const Text(
+             Text(
               'владелец',
               style: TextStyle(
-                color: LoveColors.textMuted,
+                color: context.palette.textMuted,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),

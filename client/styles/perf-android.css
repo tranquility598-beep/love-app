@@ -29,7 +29,7 @@
 
 /* Канвас давал фон — задаём сплошной тёмный, чтобы карточки без блюра
    лежали на ровной поверхности, а не на «дыре». */
-.perf-lite body { background-color: #0a0a0a !important; }
+.perf-lite body { background-color: var(--bg-primary) !important; }
 
 /* will-change держит лишние GPU-слои в памяти — на слабых Android это
    само по себе вызывает тормоза/вылеты. Освобождаем. */

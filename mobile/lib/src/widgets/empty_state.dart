@@ -34,22 +34,22 @@ class EmptyState extends StatelessWidget {
                 height: 88,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0x29FFFFFF)), // 0.16
+                  border: Border.all(color:  context.palette.inkA(0.16)), // 0.16
                 ),
-                child: Icon(icon, color: Colors.white, size: 30),
+                child: Icon(icon, color: context.palette.accent, size: 30),
               ),
               const SizedBox(height: 20),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: LoveText.serifTitle,
+                style: LoveText.serifTitle(context.palette),
               ),
               const SizedBox(height: 10),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: LoveColors.textMuted,
+                style:  TextStyle(
+                  color: context.palette.textMuted,
                   fontSize: 13.5,
                   height: 1.45,
                 ),

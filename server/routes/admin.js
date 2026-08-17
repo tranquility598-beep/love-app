@@ -11,6 +11,7 @@ const { authenticator } = require('otplib');
 // Модели
 const User = require('../models/User');
 const Server = require('../models/Server');
+const Channel = require('../models/Channel');
 const Message = require('../models/Message');
 const Report = require('../models/Report');
 const AuditLog = require('../models/AuditLog');
@@ -602,13 +603,83 @@ router.get('/servers', authMiddleware, isAdmin, requirePermission('servers.manag
     }
 
     const servers = await Server.find(filter)
+      .select('name icon owner members channels settings.kind createdAt')
       .populate('owner', 'username email')
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
-    res.json(servers);
+    res.json(servers.map(({ members = [], channels = [], ...server }) => ({
+      ...server,
+      memberCount: members.length,
+      channelCount: channels.length
+    })));
   } catch (error) {
     console.error('[Admin API] Get servers error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * GET /api/admin/servers/:id
+ * Детали сервера без кодов приглашений и внутренних permission-структур
+ */
+router.get('/servers/:id', authMiddleware, isAdmin, requirePermission('servers.manage'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Некорректный ID сервера' });
+    }
+
+    const serverObj = await Server.findById(id)
+      .select('name description icon banner owner members roles invites categories settings createdAt')
+      .populate('owner', 'username nickname email avatar role')
+      .populate('members.user', 'username nickname avatar')
+      .lean();
+
+    if (!serverObj) {
+      return res.status(404).json({ message: 'Сервер не найден' });
+    }
+
+    const channels = await Channel.find({ server: id })
+      .select('name type topic category position createdAt settings.nsfw settings.slowMode')
+      .sort({ position: 1, createdAt: 1 })
+      .lean();
+
+    res.json({
+      server: {
+        _id: serverObj._id,
+        name: serverObj.name,
+        description: serverObj.description,
+        icon: serverObj.icon,
+        banner: serverObj.banner,
+        owner: serverObj.owner,
+        createdAt: serverObj.createdAt,
+        settings: {
+          kind: serverObj.settings?.kind || 'guild',
+          isPublic: Boolean(serverObj.settings?.isPublic),
+          verificationLevel: Number(serverObj.settings?.verificationLevel || 0),
+          defaultNotifications: serverObj.settings?.defaultNotifications || 'all',
+          vibeStatus: serverObj.settings?.vibeStatus || '',
+          color: serverObj.settings?.color || ''
+        },
+        memberCount: serverObj.members?.length || 0,
+        channelCount: channels.length,
+        roleCount: serverObj.roles?.length || 0,
+        inviteCount: serverObj.invites?.length || 0,
+        categoryCount: serverObj.categories?.length || 0,
+        members: (serverObj.members || []).map(member => ({
+          user: member.user || null,
+          nickname: member.nickname || null,
+          joinedAt: member.joinedAt,
+          roleCount: member.roles?.length || 0
+        })),
+        channels
+      }
+    });
+  } catch (error) {
+    console.error('[Admin API] Get server details error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });
@@ -636,7 +707,6 @@ router.delete('/servers/:id', authMiddleware, isAdmin, requirePermission('server
     }
 
     // Удаляем связанные каналы и сообщения
-    const Channel = require('../models/Channel');
     const channels = await Channel.find({ server: id });
     const channelIds = channels.map(c => c._id);
     
@@ -1344,6 +1414,15 @@ router.post('/cases/:id/notes', authMiddleware, isSupport, async (req, res) => {
       const preview = `Новый ответ по обращению ${item.number}: ${body.slice(0, 180)}`;
       await createNotification(req.app.get('io'), { user: item.reporter._id, type: 'system', actorName: 'Love Support', preview, caseId: item._id });
       if (item.reporter.email) sendEmail(item.reporter.email, `Love: ответ по обращению ${item.number}`, `<p>${escapeHtml(preview)}</p>`).catch(() => {});
+    }
+    // Обращение с формы на сайте: аккаунта нет, уведомление внутри приложения
+    // показать некому — единственный канал ответа это почта из формы.
+    if (!internal && !item.reporter && item.contact?.email) {
+      sendEmail(
+        item.contact.email,
+        `Love: ответ по обращению ${item.number}`,
+        `<p>${escapeHtml(body.slice(0, 4000))}</p><p style="color:#888">Ответ по обращению ${escapeHtml(item.number)} — «${escapeHtml(item.title)}».</p>`
+      ).catch(() => {});
     }
     await logAudit(req.user._id, internal ? 'ADD_CASE_NOTE' : 'REPLY_CASE', 'case', item._id, {}, req);
     res.status(201).json({ note });

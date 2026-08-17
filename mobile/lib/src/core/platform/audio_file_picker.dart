@@ -109,4 +109,15 @@ class ChatNativeFiles {
     if (!Platform.isAndroid) return;
     await _channel.invokeMethod<void>('cancelVoiceRecording');
   }
+
+  /// Текущий пик микрофона, 0..32767 (0 — записи нет).
+  ///
+  /// Нативный MediaRecorder не отдаёт поток амплитуд, поэтому живая волна
+  /// при записи голосового строится опросом: каждый вызов возвращает максимум
+  /// с прошлого вызова.
+  static Future<int> voiceAmplitude() async {
+    if (!Platform.isAndroid) return 0;
+    final value = await _channel.invokeMethod<int>('voiceAmplitude');
+    return value ?? 0;
+  }
 }

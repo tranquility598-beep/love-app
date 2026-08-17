@@ -75,11 +75,56 @@ test('admin origin guard blocks an untrusted browser origin', () => {
 });
 
 test('admin origin guard accepts the configured local origin', () => {
-  const req = { headers: { origin: 'http://127.0.0.1:5173', 'sec-fetch-site': 'same-site' }, ip: '127.0.0.1', socket: {} };
+  const req = { method: 'POST', headers: { origin: 'http://127.0.0.1:5173', 'sec-fetch-site': 'same-site' }, ip: '127.0.0.1', socket: {} };
   const res = { status() { return this; }, json() { return this; } };
   let nextCalled = false;
   adminOriginGuard(req, res, () => { nextCalled = true; });
   assert.equal(nextCalled, true);
+});
+
+test('admin origin guard accepts an origin-less safe read in production', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousAllowNoOrigin = process.env.ADMIN_ALLOW_NO_ORIGIN;
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.ADMIN_ALLOW_NO_ORIGIN = 'false';
+    const req = { method: 'GET', headers: { 'sec-fetch-site': 'same-origin' }, ip: '127.0.0.1', socket: {} };
+    const res = { status() { return this; }, json() { return this; } };
+    let nextCalled = false;
+    adminOriginGuard(req, res, () => { nextCalled = true; });
+    assert.equal(nextCalled, true);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousAllowNoOrigin === undefined) delete process.env.ADMIN_ALLOW_NO_ORIGIN;
+    else process.env.ADMIN_ALLOW_NO_ORIGIN = previousAllowNoOrigin;
+  }
+});
+
+test('admin origin guard blocks an origin-less state change in production', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousAllowNoOrigin = process.env.ADMIN_ALLOW_NO_ORIGIN;
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.ADMIN_ALLOW_NO_ORIGIN = 'false';
+    const req = { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' }, ip: '127.0.0.1', socket: {} };
+    let statusCode = 200;
+    let payload = null;
+    const res = {
+      status(code) { statusCode = code; return this; },
+      json(value) { payload = value; return this; }
+    };
+    let nextCalled = false;
+    adminOriginGuard(req, res, () => { nextCalled = true; });
+    assert.equal(statusCode, 403);
+    assert.equal(nextCalled, false);
+    assert.match(payload.message, /Origin/);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousAllowNoOrigin === undefined) delete process.env.ADMIN_ALLOW_NO_ORIGIN;
+    else process.env.ADMIN_ALLOW_NO_ORIGIN = previousAllowNoOrigin;
+  }
 });
 
 test('production refuses weak or unsafe admin configuration', () => {

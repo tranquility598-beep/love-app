@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "server/**"
+      - "admin/**"
       - "client/**"
       - "sandbox/public/**"
       - "ops/production/**"
@@ -35,7 +36,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            server/package-lock.json
+            admin/package-lock.json
 
       - name: Install backend dependencies
         run: npm ci --prefix server --ignore-scripts
@@ -45,6 +48,15 @@ jobs:
 
       - name: Run backend tests
         run: npm test --prefix server
+
+      - name: Install admin dependencies
+        run: npm ci --prefix admin --ignore-scripts
+
+      - name: Verify and build admin panel
+        run: |
+          npm test --prefix admin
+          npm run lint --prefix admin
+          npm run build --prefix admin
 
       - name: Build immutable release archive
         shell: bash
@@ -58,7 +70,7 @@ jobs:
             --exclude='server/private-uploads' \
             --exclude='server/temp' \
             -czf love-release.tgz \
-            release-manifest.json package.json server client sandbox/public ops/production
+            release-manifest.json package.json server client sandbox/public ops/production admin/dist
           sha256sum love-release.tgz > love-release.tgz.sha256
 
       - name: Configure strict SSH host verification

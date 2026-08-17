@@ -23,12 +23,18 @@ function adminOriginGuard(req, res, next) {
   const origin = String(req.headers.origin || '').replace(/\/$/, '');
   const fetchSite = String(req.headers['sec-fetch-site'] || '');
   const production = process.env.NODE_ENV === 'production';
+  const safeMethod = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
 
   if (fetchSite === 'cross-site') {
     console.warn(`[admin-security] cross-site request blocked from ${requestIp(req)}`);
     return res.status(403).json({ message: 'Запрос из недоверенного источника отклонён' });
   }
   if (!origin) {
+    // Браузеры не обязаны отправлять Origin для same-origin GET/HEAD, в том
+    // числе EventSource. Эти запросы всё равно проходят обязательную проверку
+    // admin-сессии ниже по цепочке и не могут изменить состояние.
+    if (safeMethod) return next();
+
     if (production && process.env.ADMIN_ALLOW_NO_ORIGIN !== 'true') {
       console.warn(`[admin-security] origin-less request blocked from ${requestIp(req)}`);
       return res.status(403).json({ message: 'Origin обязателен для административного API' });

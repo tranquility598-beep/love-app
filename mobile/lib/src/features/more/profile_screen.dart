@@ -45,7 +45,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           leading: IconButton(
             tooltip: 'Назад',
             onPressed: () => Navigator.of(context).pop(),
-            color: LoveColors.textSecondary,
+            color: context.palette.textSecondary,
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           ),
           child: ListView(
@@ -61,23 +61,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Text(
                 user?.displayName ?? 'Love user',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontFamily: LoveFonts.serif,
                   fontStyle: FontStyle.italic,
                   fontSize: 26,
                   fontWeight: FontWeight.w500,
-                  color: LoveColors.textPrimary,
+                  color: context.palette.textPrimary,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 '@${(user?.username ?? 'love').toUpperCase()}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontFamily: LoveFonts.mono,
                   fontSize: 11,
                   letterSpacing: 1.5,
-                  color: LoveColors.textMuted,
+                  color: context.palette.textMuted,
                 ),
               ),
               if (staffRoleLabel(user?.role).isNotEmpty) ...[
@@ -105,8 +105,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'О себе',
                   child: Text(
                     bio,
-                    style: const TextStyle(
-                      color: LoveColors.textSecondary,
+                    style:  TextStyle(
+                      color: context.palette.textSecondary,
                       height: 1.5,
                       fontSize: 14,
                     ),
@@ -117,8 +117,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'Настроение',
                   child: Text(
                     mood,
-                    style: const TextStyle(
-                      color: LoveColors.textPrimary,
+                    style:  TextStyle(
+                      color: context.palette.textPrimary,
                       fontSize: 15,
                     ),
                   ),
@@ -131,8 +131,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: musicUrl.isEmpty
                       ? Text(
                           listening.isNotEmpty ? listening : musicTitle,
-                          style: const TextStyle(
-                              color: LoveColors.textPrimary, fontSize: 15),
+                          style:  TextStyle(
+                              color: context.palette.textPrimary, fontSize: 15),
                         )
                       : ProfileMusicPlayer(
                           title: musicTitle.isNotEmpty
@@ -214,7 +214,7 @@ class _Avatar extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.10),
+                  color: context.palette.inkA(0.10),
                   blurRadius: 34,
                   spreadRadius: 2,
                 ),
@@ -224,7 +224,7 @@ class _Avatar extends StatelessWidget {
               label: user?.displayName ?? 'Love user',
               imageUrl: user?.avatar,
               size: 110,
-              borderColor: LoveColors.borderActive,
+              borderColor: context.palette.borderActive,
             ),
           ),
           if (uploading)
@@ -237,18 +237,18 @@ class _Avatar extends StatelessWidget {
             right: 2,
             bottom: 2,
             child: Material(
-              color: const Color(0xFF1A1A1A),
-              shape: const CircleBorder(
-                side: BorderSide(color: LoveColors.bgAndroid, width: 2),
+              color:  context.palette.surfaceHighlight,
+              shape:  CircleBorder(
+                side: BorderSide(color: context.palette.bgAndroid, width: 2),
               ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: uploading ? null : onEdit,
-                child: const SizedBox(
+                child:  SizedBox(
                   width: 34,
                   height: 34,
                   child: Icon(Icons.photo_camera_outlined,
-                      size: 17, color: LoveColors.textPrimary),
+                      size: 17, color: context.palette.textPrimary),
                 ),
               ),
             ),
@@ -268,14 +268,14 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: context.palette.inkA(0.05),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: LoveColors.textSecondary,
+        style:  TextStyle(
+          color: context.palette.textSecondary,
           fontSize: 13,
         ),
       ),
@@ -289,13 +289,13 @@ class _HeartDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(child: Divider(color: LoveColors.border, height: 1)),
+      children:  [
+        Expanded(child: Divider(color: context.palette.border, height: 1)),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Icon(Icons.favorite, size: 12, color: LoveColors.textMuted),
+          child: Icon(Icons.favorite, size: 12, color: context.palette.textMuted),
         ),
-        Expanded(child: Divider(color: LoveColors.border, height: 1)),
+        Expanded(child: Divider(color: context.palette.border, height: 1)),
       ],
     );
   }
@@ -314,7 +314,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: LoveText.monoLabel),
+          Text(label.toUpperCase(), style: LoveText.monoLabel(context.palette)),
           const SizedBox(height: 10),
           child,
         ],

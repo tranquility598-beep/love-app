@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
+
+  // Масштаб интерфейса из настроек. Через зум страницы, а не font-size:
+  // вёрстка в px, корневой размер шрифта её не масштабирует.
+  setZoomFactor: (factor) => ipcRenderer.send('set-zoom-factor', factor),
   
   // Уведомления
   showNotification: (title, body, payload) => ipcRenderer.send('show-notification', { title, body, payload }),
@@ -57,6 +61,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Google Auth
   openGoogleLogin: () => ipcRenderer.send('google-login'),
   onGoogleAuthSuccess: (callback) => ipcRenderer.on('google-auth-success', (_event, token) => callback(token)),
+
+  // Приглашение из ссылки love-app://invite/КОД («Открыть в приложении» на
+  // веб-странице приглашения).
+  onDeepLinkInvite: (callback) => ipcRenderer.on('deep-link-invite', (_event, code) => callback(code)),
 
   // Безопасное хранилище токенов (только для сохранения/удаления)
   storeToken: (token) => ipcRenderer.invoke('store-token', token),

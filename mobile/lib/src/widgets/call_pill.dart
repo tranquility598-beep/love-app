@@ -9,6 +9,7 @@ import '../features/calls/call_session.dart';
 import '../features/chat/chat_models.dart';
 import '../features/chat/dm_call_controller.dart';
 import '../session/app_session.dart';
+import '../theme/love_tokens.dart';
 
 /// Глобальная «таблетка» активного войса/звонка (ч/б стиль).
 ///
@@ -314,14 +315,14 @@ class _CallPillWidgetState extends State<_CallPillWidget>
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xF2101010),
+              color:  context.palette.glassStrong,
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.18),
+                color: context.palette.inkA(0.18),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
+                  color: context.palette.dropA(0.45),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -330,10 +331,10 @@ class _CallPillWidgetState extends State<_CallPillWidget>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                 Icon(
                   Icons.graphic_eq_rounded,
                   size: 15,
-                  color: Colors.white,
+                  color: context.palette.accent,
                 ),
                 const SizedBox(width: 8),
                 ConstrainedBox(
@@ -342,8 +343,8 @@ class _CallPillWidgetState extends State<_CallPillWidget>
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:  TextStyle(
+                      color: context.palette.accent,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.2,
@@ -357,7 +358,7 @@ class _CallPillWidgetState extends State<_CallPillWidget>
                       ? Icons.drag_indicator_rounded
                       : Icons.open_in_full_rounded,
                   size: 13,
-                  color: Colors.white.withValues(alpha: 0.6),
+                  color: context.palette.inkA(0.6),
                 ),
               ],
             ),

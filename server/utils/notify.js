@@ -9,7 +9,8 @@ const Notification = require('../models/Notification');
 /**
  * @param {object} io      - экземпляр socket.io
  * @param {object} payload - { user, type, actor, actorName, actorAvatar, preview,
- *                             conversationId, channelId, serverId, serverName, caseId }
+ *                             previewKind, previewImage, conversationId, channelId,
+ *                             serverId, serverName, caseId }
  * @returns {Promise<object|null>} сохранённое уведомление (lean) или null
  */
 async function createNotification(io, payload) {
@@ -23,6 +24,8 @@ async function createNotification(io, payload) {
       actorName: payload.actorName || '',
       actorAvatar: payload.actorAvatar || null,
       preview: (payload.preview || '').toString().slice(0, 300),
+      previewKind: payload.previewKind || 'text',
+      previewImage: payload.previewImage || null,
       conversationId: payload.conversationId || null,
       channelId: payload.channelId || null,
       serverId: payload.serverId || null,

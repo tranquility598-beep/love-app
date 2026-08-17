@@ -32,12 +32,20 @@ class LovePrefs {
   /// When true, chat lists render denser (matches web `compact-mode`).
   final ValueNotifier<bool> compactMode = ValueNotifier<bool>(false);
 
+  /// Выбранная тема: dark | light | system (matches web `app-theme`).
+  /// «Системная» не хранится как итоговое значение — рендерится на лету
+  /// по platformBrightness, чтобы смена темы ОС подхватывалась живьём.
+  final ValueNotifier<String> theme = ValueNotifier<String>('dark');
+
   Future<void> init() async {
     if (_prefs != null) return;
     _prefs = await SharedPreferences.getInstance();
     uiScale.value = (getInt(K.uiScale, 100) / 100).clamp(0.75, 1.25);
     reduceMotion.value = !getBool(K.animations, true);
     compactMode.value = getBool(K.compactMode, false);
+    final savedTheme = getString(K.theme, 'dark');
+    theme.value =
+        savedTheme == 'light' || savedTheme == 'system' ? savedTheme : 'dark';
   }
 
   // ── Typed accessors ──────────────────────────────────────────────────
@@ -62,8 +70,10 @@ class LovePrefs {
   String getString(String key, String fallback) =>
       _p.getString(key) ?? fallback;
 
-  Future<void> setString(String key, String value) =>
-      _p.setString(key, value);
+  Future<void> setString(String key, String value) async {
+    await _p.setString(key, value);
+    if (key == K.theme) theme.value = value;
+  }
 
   // ── Dev Log votes (matches localStorage["love_devlog_votes"]) ────────────
 
@@ -104,7 +114,7 @@ class LovePrefs {
 /// exists; the rest use a stable `love_` prefix.
 class K {
   // Appearance
-  static const theme = 'app-theme'; // dark | light | system (mobile: dark only)
+  static const theme = 'app-theme'; // dark | light | system
   static const uiScale = 'ui-scale'; // 75..125
   static const compactMode = 'compact-mode';
   static const animations = 'animations';
@@ -116,6 +126,10 @@ class K {
   static const privacyActivity = 'privacy-activity';
   static const privacyFriendReq = 'privacy-friend-requests'; // all|fof|none
   static const privacyDm = 'privacy-dm'; // all|friends|none
+
+  /// Предупреждать при переходе по ссылке на сторонний сайт (свои домены —
+  /// без вопросов). Одноимённый ключ живёт в localStorage на ПК.
+  static const linkWarning = 'love_link_warning';
 
   // Notifications
   static const notifDesktop = 'notif-desktop';
@@ -153,6 +167,7 @@ class K {
   static const all = <String>[
     theme, uiScale, compactMode, animations, transparency,
     privacyOnline, privacyProfile, privacyActivity, privacyFriendReq, privacyDm,
+    linkWarning,
     notifDesktop, notifPush, notifMessages, notifMentions, notifAppUpdates,
     notifHub,
     voiceInputDevice, voiceOutputDevice, inputVolume, outputVolume,

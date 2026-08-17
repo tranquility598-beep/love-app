@@ -181,7 +181,7 @@ router.post('/', authMiddleware, requireCanCommunicate, sanitizeBody, validateSe
     
     // Создаем дефолтные каналы
     const generalChannel = new Channel({
-      name: 'general',
+      name: 'Чат',
       type: 'text',
       topic: 'Общий канал',
       server: server._id,

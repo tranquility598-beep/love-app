@@ -45,6 +45,8 @@
     .fsuccess .fs-icon { width: 52px; height: 52px; margin: 0 auto 16px; border: 1px solid rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; }
     .fsuccess h3 { margin: 0 0 8px; font-size: 20px; }
     .fsuccess p { color: rgba(255,255,255,0.55); margin: 0; }
+    .fsuccess .fnumber { margin-top: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: rgba(255,255,255,0.72); }
+    .fsuccess .fnumber[hidden] { display: none; }
   </style>
 
   <div class="sform" id="contact">
@@ -89,12 +91,18 @@
       <div class="fs-icon">✓</div>
       <h3><span class="l-en">Request Submitted</span><span class="l-ru">Обращение отправлено</span></h3>
       <p><span class="l-en">We’ve received your request and will respond within 24 hours.</span><span class="l-ru">Мы получили ваше обращение и ответим в течение 24 часов.</span></p>
+      <p class="fnumber" id="sf-number" hidden></p>
     </div>
   </div>
 
   <script>
   (function () {
-    var ENDPOINT = 'https://loveapp-1-dk8a.onrender.com/api/support';
+    // Адрес как у идей: с локальной копии — на локальный сервер, с боевого
+    // домена — на боевой API. Раньше здесь висел мёртвый адрес Render, а
+    // ошибку скрипт глотал — форма всегда рисовала «отправлено», и обращения
+    // просто исчезали.
+    var local = ['localhost', '127.0.0.1'].indexOf(location.hostname) >= 0;
+    var ENDPOINT = (local ? 'http://localhost:5555/api' : 'https://api.loveapp.chat/api') + '/support';
     var RU = function () { return document.documentElement.getAttribute('data-lang') === 'ru'; };
     var form = document.getElementById('support-form');
     var errEl = document.getElementById('sf-error');
@@ -115,15 +123,34 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError(RU() ? 'Введите корректный email.' : 'Please enter a valid email address.');
 
       var btn = document.getElementById('sf-submit');
+      var label = btn.innerHTML;
       btn.disabled = true; btn.textContent = RU() ? 'Отправка...' : 'Sending...';
 
       fetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, email: email, category: category, subject: subject, description: description })
-      }).catch(function () { /* show success anyway */ }).then(function () {
-        document.getElementById('form-wrap').style.display = 'none';
-        document.getElementById('sf-success').classList.add('show');
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          if (!res.ok) throw new Error(body.message || '');
+          document.getElementById('form-wrap').style.display = 'none';
+          var success = document.getElementById('sf-success');
+          success.classList.add('show');
+          // Номер обращения: по нему человек может сослаться в переписке.
+          var num = document.getElementById('sf-number');
+          if (num && body.number) {
+            num.textContent = (RU() ? 'Номер обращения: ' : 'Request number: ') + body.number;
+            num.hidden = false;
+          }
+        });
+      }).catch(function (err) {
+        // Форму не закрываем: обращение никуда не ушло, и человек должен об
+        // этом знать. Сообщение сервера уже человеческое, поэтому показываем
+        // его как есть; если сети нет вовсе — общий текст с почтой.
+        btn.disabled = false; btn.innerHTML = label;
+        showError((err && err.message) || (RU()
+          ? 'Не получилось отправить. Попробуйте ещё раз или напишите на support@loveapp.chat.'
+          : 'Couldn’t send it. Try again or write to support@loveapp.chat.'));
       });
     });
 

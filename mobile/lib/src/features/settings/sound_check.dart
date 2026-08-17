@@ -6,6 +6,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../../widgets/audio_level_bars.dart';
+
 /// Проигрывает короткий тестовый сигнал через динамики.
 ///
 /// Заменяет SystemSound.play(SystemSoundType.alert), который на Android
@@ -111,6 +113,15 @@ class _MicTestDialogState extends State<_MicTestDialog> {
     }
   }
 
+  /// Текущий уровень микрофона 0..1 для живой волны.
+  ///
+  /// Пакет `record` отдаёт амплитуду в дБFS (и −160 в тишине), поэтому шкала
+  /// здесь та же, что у записи голосового в чате.
+  Future<double> _sampleLevel() async {
+    final amplitude = await _recorder.getAmplitude();
+    return audioLevelFromDbfs(amplitude.current);
+  }
+
   Future<void> _replay() async {
     if (_path == null) return;
     setState(() => _phase = _MicPhase.playing);
@@ -153,8 +164,16 @@ class _MicTestDialogState extends State<_MicTestDialog> {
             const Icon(Icons.mic_rounded, size: 40),
             const SizedBox(height: 12),
             Text('Говорите… $_secondsLeft'),
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(),
+            const SizedBox(height: 14),
+            // Раньше здесь крутился бесконечный LinearProgressIndicator: он
+            // одинаково крутился и когда микрофон работает, и когда он занят
+            // другим приложением или физически выключен. Теперь полоски
+            // двигаются от голоса — сразу видно, что звук идёт.
+            AudioLevelBars(
+              sample: _sampleLevel,
+              interval: const Duration(milliseconds: 100),
+              height: 28,
+            ),
           ],
         );
       case _MicPhase.playing:

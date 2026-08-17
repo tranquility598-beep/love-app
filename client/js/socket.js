@@ -600,8 +600,16 @@ function handleVoiceUserLeft(data) {
 
 function handleVoiceMembersUpdate(data) {
   const { channelId, members } = data;
-  if (window.voiceManager && window.voiceManager.channelId === channelId) {
-    window.voiceManager.channelMembers = Array.isArray(members) ? members : [];
+  const manager = window.voiceManager;
+  // manager.channelId выставляется уже ПОСЛЕ emit'а voice:join, поэтому самый
+  // первый members_update отбрасывался этой проверкой — а вместе с ним терялись
+  // настоящие аватарки участников, и они проявлялись только после первого мута.
+  const isCurrent = !!manager && (
+    manager.channelId === channelId ||
+    (!manager.channelId && window.currentVoiceChannel === channelId)
+  );
+  if (isCurrent) {
+    manager.channelMembers = Array.isArray(members) ? members : [];
     window.CallStageController?.syncMembers(members);
   }
   updateVoiceChannelMembersUI(channelId, members);
@@ -666,9 +674,7 @@ function handleVoiceLeft(data) {
     window.voiceManager = null;
   }
   if (window.currentVoiceChannel === channelId) {
-    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-      window.NavigationController._commitState({ currentVoiceChannel: null }, 'handleVoiceLeft');
-    }
+    window.currentVoiceChannel = null;
   }
   window.pendingDMCall = null;
   hideVoicePanel();
@@ -1242,6 +1248,9 @@ async function initSocket() {
     console.log('[socket-lifecycle] Manager reconnect — reattaching all listeners');
     detachAllListeners();
     attachAllSocketListeners();
+    // Пока связи не было, сокет не получил ни одного события: тебе могли
+    // написать, а в открытом чате останется дырка. Перечитываем историю.
+    window.resyncActiveChat?.();
   });
 
   // Страховка №1: если менеджер всё-таки сдался — пересоздаём соединение целиком.
@@ -1513,6 +1522,16 @@ function socketSetVoiceMediaState(channelId, mode) {
  */
 function socketRequestCall(targetUserId, kind = 'audio') {
   if (socket && targetUserId) {
+    // Звонок и серверный войс делят один voiceManager и один микрофон. Если
+    // начать звонок из канала, поток уходит звонку, а в канале остаётся
+    // «призрак» — поэтому сначала просим выйти.
+    const current = String(window.currentVoiceChannel || '');
+    if (current && !current.startsWith('dm_call:')) {
+      if (typeof showToast === 'function') {
+        showToast('Звонок', 'Сначала выйдите из голосового канала — оттуда звонить нельзя.');
+      }
+      return;
+    }
     socket.emit('call:request', {
       targetUserId: targetUserId.toString(),
       kind: kind === 'video' ? 'video' : 'audio'
@@ -1522,6 +1541,13 @@ function socketRequestCall(targetUserId, kind = 'audio') {
 
 function socketSendCallResponse(callerId, accepted, meta = {}) {
   if (socket && callerId) {
+    // Принимаем звонок из канала — выходим из канала сами, иначе звонок
+    // отберёт микрофон, а участники продолжат видеть нас в войсе.
+    const current = String(window.currentVoiceChannel || '');
+    if (accepted && current && !current.startsWith('dm_call:')
+        && typeof window.leaveVoiceChannel === 'function') {
+      try { window.leaveVoiceChannel(); } catch (_) {}
+    }
     socket.emit('call:response', {
       callerId: callerId.toString(),
       accepted,

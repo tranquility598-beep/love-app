@@ -34,9 +34,9 @@ class ScreenFrame extends StatelessWidget {
             height: 64,
             padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
             decoration: showDivider
-                ? const BoxDecoration(
+                ?  BoxDecoration(
                     border: Border(
-                      bottom: BorderSide(color: LoveColors.border),
+                      bottom: BorderSide(color: context.palette.border),
                     ),
                   )
                 : null,
@@ -51,7 +51,7 @@ class ScreenFrame extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: titleStyle ?? LoveText.screenTitle,
+                    style: titleStyle ?? LoveText.screenTitle(context.palette),
                   ),
                 ),
                 if (trailing != null) trailing!,

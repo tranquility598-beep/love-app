@@ -28,7 +28,8 @@ class ConversationsScreen extends StatefulWidget {
   State<ConversationsScreen> createState() => _ConversationsScreenState();
 }
 
-class _ConversationsScreenState extends State<ConversationsScreen> {
+class _ConversationsScreenState extends State<ConversationsScreen>
+    with WidgetsBindingObserver {
   final _searchController = TextEditingController();
 
   /// Live presence overrides received over the socket (userId -> status).
@@ -42,17 +43,36 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     // Live updates: presence dots and new conversations/messages appear
     // without reloading the tab.
     widget.socket.on('user:status', _onUserStatus);
     widget.socket.on('dm:new_message', _onDmActivity);
+    // Пока приложение было свёрнуто, сокет молчал: превью и счётчики
+    // непрочитанного остались вчерашними. Перечитываем список, когда связь
+    // возвращается.
+    widget.socket.addConnectListener(_onSocketConnected);
+  }
+
+  /// Вернулись в приложение — список мог устареть, пока сокет был мёртв.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _conversations != null) {
+      unawaited(_silentRefresh());
+    }
+  }
+
+  void _onSocketConnected() {
+    if (mounted && _conversations != null) unawaited(_silentRefresh());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.socket.off('user:status', _onUserStatus);
     widget.socket.off('dm:new_message', _onDmActivity);
+    widget.socket.removeConnectListener(_onSocketConnected);
     _refreshDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -65,7 +85,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       trailing: IconButton(
         tooltip: 'Новая беседа',
         onPressed: _openStartDmSheet,
-        color: LoveColors.textSecondary,
+        color: context.palette.textSecondary,
         iconSize: 22,
         icon: const Icon(Icons.edit_square),
       ),
@@ -360,7 +380,7 @@ class _ConversationTile extends StatelessWidget {
                               fontSize: 14.5,
                               fontWeight:
                                   unread ? FontWeight.w700 : FontWeight.w500,
-                              color: LoveColors.textPrimary,
+                              color: context.palette.textPrimary,
                             ),
                           ),
                         ),
@@ -368,8 +388,8 @@ class _ConversationTile extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             timeLabel,
-                            style: const TextStyle(
-                              color: LoveColors.textMuted,
+                            style:  TextStyle(
+                              color: context.palette.textMuted,
                               fontSize: 11,
                             ),
                           ),
@@ -384,8 +404,8 @@ class _ConversationTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: unread
-                              ? LoveColors.textSecondary
-                              : LoveColors.textMuted,
+                              ? context.palette.textSecondary
+                              : context.palette.textMuted,
                           fontSize: 13,
                         ),
                       ),
@@ -398,9 +418,9 @@ class _ConversationTile extends StatelessWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: const BoxDecoration(
+                  decoration:  BoxDecoration(
                     shape: BoxShape.circle,
-                    color: LoveColors.textPrimary,
+                    color: context.palette.textPrimary,
                   ),
                 ),
               ],
@@ -443,7 +463,7 @@ class _StartDmSheetState extends State<_StartDmSheet> {
       padding: EdgeInsets.fromLTRB(12, 0, 12, inset + 12),
       child: LoveSurface(
         radius: 22,
-        color: LoveColors.surfaceStrong,
+        color: context.palette.surfaceStrong,
         shadow: true,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
         child: ConstrainedBox(
@@ -497,8 +517,8 @@ class _StartDmSheetState extends State<_StartDmSheet> {
                 const SizedBox(height: 10),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: LoveColors.textPrimary,
+                  style:  TextStyle(
+                    color: context.palette.textPrimary,
                     height: 1.35,
                   ),
                 ),
@@ -506,12 +526,12 @@ class _StartDmSheetState extends State<_StartDmSheet> {
               const SizedBox(height: 12),
               Flexible(
                 child: _results.isEmpty
-                    ? const Center(
+                    ?  Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 28),
                           child: Text(
                             'Введите минимум 2 символа',
-                            style: TextStyle(color: LoveColors.textMuted),
+                            style: TextStyle(color: context.palette.textMuted),
                           ),
                         ),
                       )
@@ -619,7 +639,7 @@ class _UserResultTile extends StatelessWidget {
     return LoveSurface(
       padding: EdgeInsets.zero,
       radius: 14,
-      color: Colors.white.withValues(alpha: 0.035),
+      color: context.palette.inkA(0.035),
       child: Material(
         type: MaterialType.transparency,
         borderRadius: BorderRadius.circular(14),
@@ -643,7 +663,7 @@ class _UserResultTile extends StatelessWidget {
             username.isEmpty ? status : '@$username · $status',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: LoveColors.textMuted),
+            style:  TextStyle(color: context.palette.textMuted),
           ),
           trailing: const Icon(Icons.chevron_right_rounded),
         ),

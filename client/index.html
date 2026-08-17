@@ -6,6 +6,23 @@
     <!-- CSP managed by Electron main.js onHeadersReceived -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:* http://127.0.0.1:* https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https: wss:; font-src 'self' data:; media-src 'self' blob: data: https: http: http://localhost:* http://127.0.0.1:*;">
     <title>Love — Full UX Prototype Sandbox</title>
+    <!-- Тема — до загрузки стилей, иначе при светлой теме будет чёрная
+         вспышка. Значение пишет SettingsManager (ключ app-theme), здесь
+         только читаем и ставим атрибут на <html>. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('app-theme');
+          if (t !== 'light' && t !== 'dark' && t !== 'system') t = 'dark';
+          if (t === 'system') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="styles/fonts.css">
     <link rel="stylesheet" href="styles/titlebar.css">
     <link rel="stylesheet" href="styles/style.css">
@@ -15,6 +32,7 @@
     <link rel="stylesheet" href="styles/capsules.css">
     <link rel="stylesheet" href="styles/media.css">
     <link rel="stylesheet" href="styles/perf-android.css">
+    <link rel="stylesheet" href="styles/appearance.css">
     <!-- Android WebView заметно слабее iOS: помечаем html.perf-lite, чтобы
          perf-android.css отключил дорогие эффекты (blur/backdrop/фоновые анимации). -->
     <script>(function(){try{if(/Android/i.test(navigator.userAgent||''))document.documentElement.classList.add('perf-lite');}catch(e){}})();</script>
@@ -1445,6 +1463,13 @@
                     <ul class="lvs-select-menu"><li data-value="all">Все</li><li data-value="friends">Друзья</li><li data-value="none">Никто</li></ul></div>
                 </div>
               </div>
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Ссылки</div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Предупреждать о чужих сайтах</div><div class="lvs-row-sub">Спрашивать перед переходом по ссылке за пределы LOVE</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" data-setting-key="love_link_warning" checked><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
             </section>
 
             <!-- ━━━━━━━━━ СЕКЦИЯ 4: ВНЕШНИЙ ВИД ━━━━━━━━━ -->
@@ -1457,16 +1482,52 @@
               <div class="lvs-card">
                 <div class="lvs-section-subtitle">Тема</div>
                 <div class="lvs-theme-grid">
-                  <button class="lvs-theme-option active" data-theme="dark">
-                    <span class="lvs-theme-swatch lvs-theme-swatch--dark"></span>
+                  <button class="lvs-theme-option" data-theme="dark">
+                    <span class="lvs-theme-swatch" aria-hidden="true">
+                      <span class="lvs-theme-mock is-dark">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                      </span>
+                    </span>
                     <span class="lvs-theme-name">Тёмная</span>
                   </button>
                   <button class="lvs-theme-option" data-theme="light">
-                    <span class="lvs-theme-swatch lvs-theme-swatch--light"></span>
+                    <span class="lvs-theme-swatch" aria-hidden="true">
+                      <span class="lvs-theme-mock is-light">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                      </span>
+                    </span>
                     <span class="lvs-theme-name">Светлая</span>
                   </button>
                   <button class="lvs-theme-option" data-theme="system">
-                    <span class="lvs-theme-swatch lvs-theme-swatch--system"></span>
+                    <span class="lvs-theme-swatch" aria-hidden="true">
+                      <span class="lvs-theme-mock is-dark">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                      </span>
+                      <!-- Светлая половина ложится диагональю поверх тёмной -->
+                      <span class="lvs-theme-mock is-light is-half">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                      </span>
+                    </span>
                     <span class="lvs-theme-name">Системная</span>
                   </button>
                 </div>
@@ -1490,7 +1551,7 @@
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Эффекты прозрачности</div><div class="lvs-row-sub">Размытие и стекло</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" name="transparency-effects" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="transparency-effects" data-setting-key="transparency-effects" checked><span class="lvs-toggle-track"></span></label>
                 </div>
               </div>
             </section>
@@ -1553,15 +1614,16 @@
                   <div class="lvs-select" id="lvs-input-device" data-value="default"><button class="lvs-select-btn"><span>Микрофон по умолчанию</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                     <ul class="lvs-select-menu"><li data-value="default">Микрофон по умолчанию</li></ul></div>
                 </div>
-                <div class="lvs-row">
-                  <div class="lvs-row-text"><div class="lvs-row-label">Громкость ввода</div></div>
+                <div class="lvs-row lvs-row--soon">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Громкость ввода</div><div class="lvs-row-sub">В разработке</div></div>
                   <div class="lvs-slider-wrap">
-                    <input type="range" class="lvs-slider" id="lvs-mic-volume" min="0" max="100" value="80">
-                    <span class="lvs-slider-value" id="lvs-mic-volume-value">80%</span>
+                    <input type="range" class="lvs-slider" id="lvs-mic-volume" min="0" max="100" value="100" disabled title="Ещё не реализовано">
+                    <span class="lvs-slider-value" id="lvs-mic-volume-value">100%</span>
                   </div>
                 </div>
                 <div class="lvs-meter"><div class="lvs-meter-fill" id="lvs-mic-meter"></div></div>
                 <div class="lvs-row lvs-row--end">
+                  <button class="lvs-btn" id="lvs-mic-monitor" title="Пустить микрофон в наушники — лучше слушать в наушниках, иначе будет свист">🎧 Слышать себя</button>
                   <button class="lvs-btn" id="lvs-mic-test">🎙 Проверить микрофон</button>
                 </div>
               </div>
@@ -1587,18 +1649,18 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Шумоподавление</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" name="noise-suppression" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="noise-suppression" data-setting-key="noise-suppression" checked><span class="lvs-toggle-track"></span></label>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Эхоподавление</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" name="echo-cancellation" checked><span class="lvs-toggle-track"></span></label>
+                  <label class="lvs-toggle"><input type="checkbox" name="echo-cancellation" data-setting-key="echo-cancellation" checked><span class="lvs-toggle-track"></span></label>
                 </div>
-                <div class="lvs-row">
-                  <div class="lvs-row-text"><div class="lvs-row-label">Активация по голосу</div></div>
-                  <label class="lvs-toggle"><input type="checkbox" name="voice-activation" checked><span class="lvs-toggle-track"></span></label>
+                <div class="lvs-row lvs-row--soon">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Активация по голосу</div><div class="lvs-row-sub">В разработке</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" name="voice-activation" disabled title="Ещё не реализовано"><span class="lvs-toggle-track"></span></label>
                 </div>
-                <div class="lvs-row">
-                  <div class="lvs-row-text"><div class="lvs-row-label">Push-to-Talk</div><div class="lvs-row-sub">Говорить при зажатой клавише</div></div>
+                <div class="lvs-row lvs-row--soon">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Push-to-Talk</div><div class="lvs-row-sub">В разработке</div></div>
                   <kbd class="lvs-kbd">V</kbd>
                 </div>
               </div>
@@ -2001,6 +2063,34 @@
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
             </button>
+        </div>
+    </div>
+
+    <!-- Большой просмотр демонстрации/камеры из войса: зум, панорама и полоска
+         остальных участников снизу. Не системный фуллскрин — окно приложения
+         остаётся, поэтому управление звонком и участники видны. -->
+    <div class="voice-theater hidden" id="voice-theater">
+        <div class="voice-theater-shell">
+            <header class="voice-theater-bar">
+                <span class="voice-theater-title" id="voice-theater-title">Демонстрация экрана</span>
+                <div class="voice-theater-zoom">
+                    <button type="button" class="voice-theater-btn" id="voice-theater-zoom-out" title="Отдалить" aria-label="Отдалить">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <button type="button" class="voice-theater-zoom-value" id="voice-theater-zoom-reset" title="Сбросить масштаб">100%</button>
+                    <button type="button" class="voice-theater-btn" id="voice-theater-zoom-in" title="Приблизить" aria-label="Приблизить">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                </div>
+                <button type="button" class="voice-theater-btn voice-theater-close" id="voice-theater-close" title="Закрыть" aria-label="Закрыть">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </header>
+            <div class="voice-theater-stage" id="voice-theater-stage">
+                <video class="voice-theater-video" id="voice-theater-video" autoplay playsinline muted></video>
+                <span class="voice-theater-empty hidden" id="voice-theater-empty">Никто не показывает экран или камеру</span>
+            </div>
+            <div class="voice-theater-strip" id="voice-theater-strip"></div>
         </div>
     </div>
 
@@ -2412,6 +2502,7 @@
     <!-- Real Transport Layer & APIs -->
     <script src="js/api.js"></script>
     <script src="js/sanitize.js"></script>
+    <script src="js/external-link-guard.js"></script>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="js/socket.js"></script>
     <script src="js/voice.js"></script>

@@ -8,6 +8,7 @@ import '../../core/prefs/love_prefs.dart';
 import '../../core/network/api_client.dart';
 import '../../core/realtime/love_socket.dart';
 import '../../core/services/screen_share_manager.dart';
+import '../../core/voice/channel_voice_controller.dart';
 import 'chat_models.dart';
 
 enum DmCallPhase {
@@ -119,6 +120,7 @@ class DmCallController extends ChangeNotifier {
     socket.on('voice:existing_members', _handleExistingMembers);
     socket.on('voice:user_left', _handleUserLeft);
     socket.on('voice:left', _handleVoiceLeft);
+    socket.on('voice:media_state', _handleMediaState);
     socket.on('webrtc:offer', _handleOffer);
     socket.on('webrtc:answer', _handleAnswer);
     socket.on('webrtc:ice_candidate', _handleIceCandidate);
@@ -132,6 +134,12 @@ class DmCallController extends ChangeNotifier {
     if (!canStart) return;
     if (!socket.isConnected) {
       _setError('Сокет еще не подключен');
+      return;
+    }
+    // Из войса звонить нельзя: микрофон и WebRTC-комната одни, звонок
+    // отобрал бы поток, а в канале остался бы «призрак».
+    if (ChannelVoiceController.instance.isActive) {
+      _setError('Сначала выйдите из войса — оттуда звонить нельзя');
       return;
     }
     _activePeerId = peerId;
@@ -148,6 +156,11 @@ class DmCallController extends ChangeNotifier {
   Future<void> acceptIncoming() async {
     if (phase != DmCallPhase.incoming || _activePeerId == null) return;
     final callerId = _activePeerId!;
+    // Принимаем звонок, находясь в войсе — выходим из канала сами, иначе
+    // микрофон уйдёт звонку, а участники продолжат видеть нас в войсе.
+    if (ChannelVoiceController.instance.isActive) {
+      await ChannelVoiceController.instance.leave();
+    }
     socket.emit('call:response', {
       'callerId': callerId,
       'accepted': true,
@@ -531,6 +544,24 @@ class DmCallController extends ChangeNotifier {
     _resetToIdle();
   }
 
+  // Единственный надёжный признак того, что собеседник выключил камеру или
+  // демонстрацию: onRemoveTrack в unified-plan не приходит, трек лишь уходит в
+  // muted, и на телефоне оставался застывший кадр.
+  void _handleMediaState(dynamic data) {
+    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
+    final raw = data.cast<String, dynamic>();
+    final socketId = asText(raw['socketId']);
+    // Сервер рассылает состояние всей комнате, включая отправителя, а своего
+    // socket.id у клиента нет — поэтому верим только известным пирам, иначе
+    // собственная камера поднимала бы peerHasVideo.
+    if (socketId.isEmpty || !_peerConnections.containsKey(socketId)) return;
+    final mode = asText(raw['mode']);
+    final hasVideo = mode == 'camera' || mode == 'screen';
+    if (remoteVideo[socketId] == hasVideo) return;
+    remoteVideo[socketId] = hasVideo;
+    _safeNotify();
+  }
+
   void _handleOffer(dynamic data) {
     unawaited(_handleOfferAsync(data));
   }
@@ -734,11 +765,16 @@ class DmCallController extends ChangeNotifier {
     };
 
     pc.onTrack = (event) {
-      if (event.streams.isEmpty) return;
       if (event.track.kind == 'video') {
         remoteVideo[socketId] = true;
       }
-      unawaited(_attachRemoteStream(socketId, event.streams.first));
+      // Аудио и видео у ПК идут разными MediaStream (localStream и
+      // screenStream/cameraStream). Рендерер один, и раньше он привязывался к
+      // первому попавшемуся потоку: если аудио приходило после видео, картинку
+      // вытесняло аудио — «демку включаю, на мобиле не появляется».
+      if (event.streams.isNotEmpty) {
+        unawaited(_attachRemoteStream(socketId, event.streams.first));
+      }
       _safeNotify();
     };
 
@@ -785,6 +821,15 @@ class DmCallController extends ChangeNotifier {
       renderer = RTCVideoRenderer();
       await renderer.initialize();
       _remoteRenderers[socketId] = renderer;
+    }
+    // Не подменяем поток с видео на поток без видео: иначе аудио-трек,
+    // пришедший вторым, гасил уже показанную камеру/демонстрацию.
+    final current = renderer.srcObject;
+    if (current != null &&
+        current.id != stream.id &&
+        stream.getVideoTracks().isEmpty &&
+        current.getVideoTracks().isNotEmpty) {
+      return;
     }
     renderer.srcObject = stream;
     await renderer.setVolume(1);
@@ -916,6 +961,7 @@ class DmCallController extends ChangeNotifier {
       socket.off('voice:existing_members', _handleExistingMembers);
       socket.off('voice:user_left', _handleUserLeft);
       socket.off('voice:left', _handleVoiceLeft);
+      socket.off('voice:media_state', _handleMediaState);
       socket.off('webrtc:offer', _handleOffer);
       socket.off('webrtc:answer', _handleAnswer);
       socket.off('webrtc:ice_candidate', _handleIceCandidate);

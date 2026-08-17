@@ -17,7 +17,7 @@ class MessageReportFlow {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.72),
+      barrierColor: context.palette.dropA(0.72),
       builder: (_) => _MessageReportSheet(api: api, message: message),
     );
   }
@@ -53,10 +53,10 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
       },
       child: Container(
         height: MediaQuery.sizeOf(context).height * 0.9,
-        decoration: const BoxDecoration(
-          color: Color(0xFF101010),
+        decoration:  BoxDecoration(
+          color: context.palette.bgTertiary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: LoveColors.borderActive)),
+          border: Border(top: BorderSide(color: context.palette.borderActive)),
         ),
         child: SafeArea(
           top: false,
@@ -81,8 +81,8 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
     final selected = _path.isNotEmpty;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
-      decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: LoveColors.border))),
+      decoration:  BoxDecoration(
+          border: Border(bottom: BorderSide(color: context.palette.border))),
       child: Column(
         children: [
           Center(
@@ -90,7 +90,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: LoveColors.borderActive,
+                      color: context.palette.borderActive,
                       borderRadius: BorderRadius.circular(99)))),
           const SizedBox(height: 10),
           Row(
@@ -103,7 +103,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
                 )
               else
                 const SizedBox(width: 48),
-              const Expanded(
+               Expanded(
                 child: Column(
                   children: [
                     Text('Жалоба на сообщение',
@@ -112,7 +112,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
                     SizedBox(height: 2),
                     Text('Модератор увидит защищённый снимок',
                         style: TextStyle(
-                            color: LoveColors.textMuted, fontSize: 11.5)),
+                            color: context.palette.textMuted, fontSize: 11.5)),
                   ],
                 ),
               ),
@@ -141,7 +141,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
             children: [
               Text(snapshot.error.toString(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: LoveColors.textSecondary)),
+                  style:  TextStyle(color: context.palette.textSecondary)),
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: () => setState(
@@ -187,12 +187,12 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.035),
+              color: context.palette.inkA(0.035),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: LoveColors.border)),
+              border: Border.all(color: context.palette.border)),
           child: Text(_path.map((item) => item.label).join('  ›  '),
-              style: const TextStyle(
-                  color: Color(0xFFFFA3AD),
+              style:  TextStyle(
+                  color: context.palette.dangerText,
                   fontWeight: FontWeight.w700,
                   height: 1.4)),
         ),
@@ -211,10 +211,10 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+         Text(
           'Автор жалобы не будет показан нарушителю. Ложные жалобы могут привести к предупреждению.',
           style: TextStyle(
-              color: LoveColors.textMuted, fontSize: 11.5, height: 1.4),
+              color: context.palette.textMuted, fontSize: 11.5, height: 1.4),
         ),
       ],
     );
@@ -225,17 +225,17 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
+          color: context.palette.inkA(0.04),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: LoveColors.border)),
+          border: Border.all(color: context.palette.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(widget.message.authorName,
-              style: const TextStyle(
+              style:  TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
-                  color: LoveColors.textSecondary)),
+                  color: context.palette.textSecondary)),
           const SizedBox(height: 5),
           Text(content.isEmpty ? 'Сообщение содержит вложение' : content,
               maxLines: 4,
@@ -250,9 +250,9 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
     final ready = _path.isNotEmpty && _path.last.isLeaf;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration: const BoxDecoration(
-          color: Color(0xFF0C0C0C),
-          border: Border(top: BorderSide(color: LoveColors.border))),
+      decoration:  BoxDecoration(
+          color: context.palette.bgPrimary,
+          border: Border(top: BorderSide(color: context.palette.border))),
       child: Row(
         children: [
           if (_path.isNotEmpty)
@@ -265,7 +265,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
           else
             Text('${roots.length} категорий',
                 style:
-                    const TextStyle(color: LoveColors.textMuted, fontSize: 12)),
+                     TextStyle(color: context.palette.textMuted, fontSize: 12)),
           const Spacer(),
           if (ready)
             FilledButton.icon(
@@ -322,7 +322,7 @@ class _ReasonTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
       child: Material(
-        color: Colors.white.withValues(alpha: 0.035),
+        color: context.palette.inkA(0.035),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
@@ -331,11 +331,11 @@ class _ReasonTile extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: LoveColors.border)),
+                border: Border.all(color: context.palette.border)),
             child: Row(
               children: [
-                const Icon(Icons.flag_outlined,
-                    size: 20, color: Color(0xFFFF909C)),
+                 Icon(Icons.flag_outlined,
+                    size: 20, color: context.palette.dangerText),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -346,16 +346,16 @@ class _ReasonTile extends StatelessWidget {
                       if (reason.description.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(reason.description,
-                            style: const TextStyle(
-                                color: LoveColors.textMuted,
+                            style:  TextStyle(
+                                color: context.palette.textMuted,
                                 fontSize: 12,
                                 height: 1.35)),
                       ],
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: LoveColors.textMuted),
+                 Icon(Icons.chevron_right_rounded,
+                    color: context.palette.textMuted),
               ],
             ),
           ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../../theme/love_theme.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/screen_share_viewer.dart';
@@ -115,7 +116,12 @@ class _CallScreenState extends State<CallScreen> {
         : session.subtitle;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      // Экран звонка — самый глубокий фон в приложении, но это не «кадр»:
+      // сверху лежат обычные аватарки, имена и кнопки. Через `onAccent` это
+      // писать нельзя, хотя в тёмной теме он и даёт нужный чёрный: в светлой
+      // тот же токен — белый, то есть ярче всех остальных экранов, ровно
+      // наоборот. `bgDeep` говорит то, что имелось в виду.
+      backgroundColor: context.palette.bgDeep,
       body: SafeArea(
         child: Column(
           children: [
@@ -126,9 +132,9 @@ class _CallScreenState extends State<CallScreen> {
                   IconButton(
                     tooltip: 'Скрыть',
                     onPressed: _hide,
-                    icon: const Icon(
+                    icon:  Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white,
+                      color: context.palette.accent,
                       size: 30,
                     ),
                   ),
@@ -140,11 +146,11 @@ class _CallScreenState extends State<CallScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontFamily: LoveFonts.serif,
                             fontSize: 19,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: context.palette.accent,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -153,9 +159,9 @@ class _CallScreenState extends State<CallScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 12.5,
-                            color: LoveColors.textMuted,
+                            color: context.palette.textMuted,
                           ),
                         ),
                       ],
@@ -177,7 +183,7 @@ class _CallScreenState extends State<CallScreen> {
                 child: Text(
                   session.errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: LoveColors.textMuted),
+                  style:  TextStyle(color: context.palette.textMuted),
                 ),
               ),
             Padding(
@@ -207,17 +213,17 @@ class _CallScreenState extends State<CallScreen> {
           const SizedBox(height: 20),
           Text(
             peer?.name ?? session.title,
-            style: const TextStyle(
+            style:  TextStyle(
               fontFamily: LoveFonts.serif,
               fontSize: 26,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: context.palette.accent,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+           Text(
             'Входящий звонок',
-            style: TextStyle(color: LoveColors.textMuted, fontSize: 14),
+            style: TextStyle(color: context.palette.textMuted, fontSize: 14),
           ),
         ],
       ),
@@ -257,10 +263,10 @@ class _CallScreenState extends State<CallScreen> {
 
     Widget grid;
     if (participants.isEmpty) {
-      grid = const Center(
+      grid =  Center(
         child: Text(
           'Никого нет',
-          style: TextStyle(color: LoveColors.textMuted),
+          style: TextStyle(color: context.palette.textMuted),
         ),
       );
     } else if (participants.length == 1) {
@@ -397,8 +403,8 @@ class _ParticipantTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          color: Colors.white.withValues(alpha: 0.045),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          color: context.palette.inkA(0.045),
+          border: Border.all(color: context.palette.inkA(0.12)),
         ),
         child: Stack(
           fit: StackFit.expand,
@@ -428,8 +434,8 @@ class _ParticipantTile extends StatelessWidget {
                             : participant.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style:  TextStyle(
+                          color: context.palette.accent,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -445,15 +451,15 @@ class _ParticipantTile extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
+                    color: context.palette.shadeA(0.55),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     participant.isSelf
                         ? '${participant.name} (вы)'
                         : participant.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:  TextStyle(
+                      color: context.palette.onShade,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -467,12 +473,12 @@ class _ParticipantTile extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
+                    color: context.palette.shadeA(0.55),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child:  Icon(
                     Icons.mic_off_rounded,
-                    color: Colors.white,
+                    color: context.palette.onShade,
                     size: 15,
                   ),
                 ),
@@ -518,26 +524,26 @@ class _RoundCallButton extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color:
-                  filled ? Colors.white : Colors.white.withValues(alpha: 0.06),
+                  filled ? context.palette.accent : context.palette.inkA(0.06),
               border: Border.all(
                 color: filled
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.16),
+                    ? context.palette.accent
+                    : context.palette.inkA(0.16),
               ),
             ),
             child: Icon(
               icon,
               size: size * 0.42,
-              color: filled ? Colors.black : Colors.white,
+              color: filled ? context.palette.onAccent : context.palette.accent,
             ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           caption,
-          style: const TextStyle(
+          style:  TextStyle(
             fontSize: 11,
-            color: LoveColors.textMuted,
+            color: context.palette.textMuted,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -606,8 +612,17 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
+  Widget build(BuildContext context) {
+    // Пятый кадр в приложении, живёт по тем же правилам: внутри тёмная палитра
+    // независимо от темы, иначе в светлой подложка станет белой, а заголовок и
+    // кнопки HUD — чёрными поверх тёмного видео. Тело вынесено в метод: область
+    // действия обёртки — только её потомки, и `context` самого `build` смотрел
+    // бы мимо неё.
+    return LoveFrameScope(builder: _page);
+  }
+
+  Widget _page(BuildContext context) => Scaffold(
+        backgroundColor: context.palette.onAccent,
         body: GestureDetector(
           onTap: () => setState(() => _controls = !_controls),
           onDoubleTap: _resetZoom,
@@ -641,8 +656,8 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                           IconButton(
                             tooltip: 'Закрыть',
                             onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close_rounded,
-                                color: Colors.white),
+                            icon:  Icon(Icons.close_rounded,
+                                color: context.palette.accent),
                           ),
                           Expanded(
                             child: Padding(
@@ -652,8 +667,8 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                                 textAlign: TextAlign.center,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style:  TextStyle(
+                                  color: context.palette.accent,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 15,
                                 ),
@@ -664,9 +679,9 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                             IconButton(
                               tooltip: 'Сбросить зум',
                               onPressed: _resetZoom,
-                              icon: const Icon(
+                              icon:  Icon(
                                 Icons.zoom_out_map_rounded,
-                                color: Colors.white,
+                                color: context.palette.accent,
                               ),
                             )
                           else

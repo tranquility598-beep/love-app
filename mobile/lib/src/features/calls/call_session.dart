@@ -214,7 +214,12 @@ class ChannelCallSession implements CallSession {
       final user = member['user'] is Map
           ? (member['user'] as Map).cast<String, dynamic>()
           : member;
-      final userId = asId(user['_id']);
+      // Сервер отдаёт участника войса как {userId, socketId, username, …} —
+      // поля `_id` там нет. Раньше себя искали только по `user['_id']`, отсев
+      // не срабатывал никогда, и в сетке висели две карточки одного меня.
+      final userId = asId(user['_id']).isNotEmpty
+          ? asId(user['_id'])
+          : asText(member['userId']);
       if (selfId.isNotEmpty && userId == selfId) continue;
       final socketId = asText(member['socketId']);
       final hasVideo = voice.remoteVideo[socketId] ?? false;

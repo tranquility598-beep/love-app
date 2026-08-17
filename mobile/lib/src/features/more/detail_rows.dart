@@ -22,13 +22,13 @@ class DetailStatGrid extends StatelessWidget {
           LoveSurface(
             padding: const EdgeInsets.all(14),
             radius: 16,
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             shadow: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(stat.icon, size: 20, color: LoveColors.textSecondary),
+                Icon(stat.icon, size: 20, color: context.palette.textSecondary),
                 const Spacer(),
                 Text(
                   stat.value,
@@ -44,8 +44,8 @@ class DetailStatGrid extends StatelessWidget {
                   stat.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
+                  style:  TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -87,7 +87,7 @@ class DetailRow extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(14),
       radius: 16,
-      color: LoveColors.surfaceStrong,
+      color: context.palette.surfaceStrong,
       shadow: false,
       child: Row(
         children: [
@@ -96,8 +96,8 @@ class DetailRow extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.07),
-              border: Border.all(color: LoveColors.border),
+              color: context.palette.inkA(0.07),
+              border: Border.all(color: context.palette.border),
             ),
             child: Icon(icon, size: 20),
           ),
@@ -108,8 +108,8 @@ class DetailRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
+                  style:  TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),

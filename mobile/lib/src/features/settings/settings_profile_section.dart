@@ -120,7 +120,7 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                         const SizedBox(height: 2),
                         Text(
                           '@${user?.username ?? 'love'}',
-                          style: const TextStyle(color: LoveColors.textMuted),
+                          style:  TextStyle(color: context.palette.textMuted),
                         ),
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
@@ -247,16 +247,16 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                       padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          const Icon(Icons.check_circle_rounded,
-                              size: 15, color: settingsSuccess),
+                          Icon(Icons.check_circle_rounded,
+                              size: 15, color: context.settingsSuccess),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               _musicTitle.isEmpty ? 'Трек загружен' : _musicTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: LoveColors.textMuted,
+                              style:  TextStyle(
+                                color: context.palette.textMuted,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -271,11 +271,11 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                     child: SettingsSubtitle('Сферы увлечений',
                         padding: const EdgeInsets.only(bottom: 4)),
                   ),
-                  const Padding(
+                   Padding(
                     padding: EdgeInsets.only(bottom: 10),
                     child: Text(
                       'До 5 увлечений, по 20 символов каждое.',
-                      style: TextStyle(color: LoveColors.textMuted, fontSize: 12),
+                      style: TextStyle(color: context.palette.textMuted, fontSize: 12),
                     ),
                   ),
                   HobbiesEditor(
@@ -291,19 +291,19 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
           const SizedBox(height: 12),
           Text(
             _error!,
-            style: const TextStyle(color: LoveColors.danger, height: 1.35),
+            style:  TextStyle(color: context.palette.danger, height: 1.35),
           ),
         ],
         const SizedBox(height: 18),
         FilledButton.icon(
           onPressed: _saving ? null : () => _saveProfile(session),
           icon: _saving
-              ? const SizedBox(
+              ?  SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.black,
+                    color: context.palette.onAccent,
                   ),
                 )
               : const Icon(Icons.check_rounded),

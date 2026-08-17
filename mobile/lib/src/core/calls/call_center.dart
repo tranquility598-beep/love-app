@@ -56,6 +56,17 @@ class CallCenter extends ChangeNotifier {
     return c;
   }
 
+  /// Идёт ли звонок в ЛС прямо сейчас (набор или разговор). Войс сфер
+  /// смотрит сюда, чтобы не отобрать микрофон у звонка.
+  bool get dmBusy {
+    final dm = activeDm;
+    return dm != null &&
+        (dm.phase == DmCallPhase.connecting ||
+            dm.phase == DmCallPhase.connected ||
+            dm.phase == DmCallPhase.outgoing ||
+            dm.phase == DmCallPhase.incoming);
+  }
+
   void init(LoveSocket socket) {
     if (_socket != null) return;
     _socket = socket;

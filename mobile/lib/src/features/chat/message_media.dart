@@ -8,6 +8,8 @@ import 'package:video_player/video_player.dart';
 
 import '../../config/app_config.dart';
 import 'chat_models.dart';
+import '../../theme/love_theme.dart';
+import '../../theme/love_tokens.dart';
 
 /// Скорости воспроизведения — тот же набор и тот же порядок перебора, что в
 /// десктопном плеере (`init-app.js`), чтобы привычка переносилась.
@@ -123,7 +125,7 @@ class _ImageAttachment extends StatelessWidget {
                 return Container(
                   width: maxWidth,
                   height: 150,
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: context.palette.inkA(0.05),
                   child: const Center(
                     child: SizedBox(
                       width: 22,
@@ -213,22 +215,36 @@ class _ImageViewerScreenState extends State<_ImageViewerScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Просмотрщик целиком занят кадром, поэтому внутри тёмная палитра
+    // независимо от темы приложения. Без этого в светлой теме подложка
+    // становилась белой (`onAccent` там белый), а подписи поверх картинки —
+    // чёрными на чёрной плашке. Тело вынесено в отдельный метод, потому что
+    // область действия обёртки — только её потомки: `context.palette` в самом
+    // `build` смотрел бы мимо неё.
+    return LoveFrameScope(builder: _viewer);
+  }
+
+  Widget _viewer(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.onAccent,
       // AppBar убран намеренно: он отъедал верх и добавлял ещё одну чёрную
       // полосу. Название и закрытие лежат поверх картинки.
       body: Stack(
         fit: StackFit.expand,
         children: [
-          InteractiveViewer(
-            transformationController: _transform,
-            minScale: 1,
-            maxScale: 6,
-            boundaryMargin: EdgeInsets.zero,
-            child: GestureDetector(
-              onTap: () => setState(() => _chrome = !_chrome),
-              onDoubleTapDown: (details) => _tapPoint = details.localPosition,
-              onDoubleTap: () => _handleDoubleTap(_tapPoint),
+          // GestureDetector снаружи InteractiveViewer, а не внутри: вложенный
+          // детектор с onTap/onDoubleTap отбирал жест у щипка, и зум не
+          // работал вообще. Заодно localPosition теперь в координатах
+          // вьюпорта — ровно в них считает трансформацию сам просмотрщик.
+          GestureDetector(
+            onTap: () => setState(() => _chrome = !_chrome),
+            onDoubleTapDown: (details) => _tapPoint = details.localPosition,
+            onDoubleTap: () => _handleDoubleTap(_tapPoint),
+            child: InteractiveViewer(
+              transformationController: _transform,
+              minScale: 1,
+              maxScale: 6,
+              boundaryMargin: EdgeInsets.zero,
               child: SizedBox.expand(
                 child: Image.network(
                   widget.url,
@@ -243,12 +259,12 @@ class _ImageViewerScreenState extends State<_ImageViewerScreen>
                       ),
                     );
                   },
-                  errorBuilder: (context, error, stack) => const Center(
+                  errorBuilder: (context, error, stack) =>  Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
                         'Не удалось загрузить изображение',
-                        style: TextStyle(color: Colors.white70),
+                        style: TextStyle(color: context.palette.inkA(0.7)),
                       ),
                     ),
                   ),
@@ -256,12 +272,20 @@ class _ImageViewerScreenState extends State<_ImageViewerScreen>
               ),
             ),
           ),
-          IgnorePointer(
-            ignoring: !_chrome,
-            child: AnimatedOpacity(
-              opacity: _chrome ? 1 : 0,
-              duration: const Duration(milliseconds: 180),
-              child: _topBar(),
+          // Панель именно в Positioned: непозиционированный ребёнок в
+          // StackFit.expand растягивается на весь экран, и Row центрировал
+          // кнопки по вертикали — они висели посередине картинки.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !_chrome,
+              child: AnimatedOpacity(
+                opacity: _chrome ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: _topBar(context),
+              ),
             ),
           ),
         ],
@@ -269,14 +293,16 @@ class _ImageViewerScreenState extends State<_ImageViewerScreen>
     );
   }
 
-  Widget _topBar() {
+  /// Контекст передаём аргументом: `State.context` лежит выше [LoveFrameScope],
+  /// и палитра из него была бы светлой.
+  Widget _topBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Colors.black.withValues(alpha: 0.65),
+            context.palette.shadeA(0.65),
             Colors.transparent,
           ],
         ),
@@ -300,7 +326,7 @@ class _ImageViewerScreenState extends State<_ImageViewerScreen>
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white.withValues(alpha: 0.8),
+                    color: context.palette.inkA(0.8),
                   ),
                 ),
               ),
@@ -411,7 +437,7 @@ class _AudioAttachmentPlayerState extends State<AudioAttachmentPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    final base = widget.own ? Colors.black : Colors.white;
+    final base = widget.own ? context.palette.onAccent : context.palette.accent;
     return Container(
       width: 250,
       margin: const EdgeInsets.only(top: 6),
@@ -637,8 +663,22 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     // Ландшафт разрешаем только на время фуллскрина: остальное приложение
-    // рассчитано на портрет.
-    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    // рассчитано на портрет. Широкое видео при этом сразу разворачиваем —
+    // в портрете 16/9 занимает меньше трети экрана и кадр читается как
+    // «сломанный», хотя геометрия верная.
+    final size = controller.value.size;
+    final wide = size.height > 0 && size.width / size.height > 1.2;
+    await SystemChrome.setPreferredOrientations(
+      wide
+          ? const [
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : DeviceOrientation.values,
+    );
+    // В фуллскрине убираем строку статуса и навигацию: sticky возвращает их
+    // по свайпу от края, поэтому выйти из просмотра всё равно можно.
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (!mounted) return;
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
@@ -649,6 +689,7 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
         ),
       ),
     );
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     await SystemChrome.setPreferredOrientations(
       const [DeviceOrientation.portraitUp],
     );
@@ -683,7 +724,7 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
       child: AspectRatio(
         aspectRatio: 16 / 9,
         child: Container(
-          color: const Color(0xFF0E0E0E),
+          color:  context.palette.bgSecondary,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -700,8 +741,8 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
                             child: Text(
                               _error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style:  TextStyle(
+                                color: context.palette.inkA(0.7),
                                 fontSize: 12,
                               ),
                             ),
@@ -711,12 +752,12 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
                             height: 54,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.14),
+                              color: context.palette.inkA(0.14),
                             ),
-                            child: const Icon(
+                            child:  Icon(
                               Icons.play_arrow_rounded,
                               size: 32,
-                              color: Colors.white,
+                              color: context.palette.accent,
                             ),
                           ),
               ),
@@ -735,7 +776,7 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: context.palette.inkA(0.75),
                           ),
                         ),
                       ),
@@ -746,7 +787,7 @@ class _VideoAttachmentPlayerState extends State<VideoAttachmentPlayer> {
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white.withValues(alpha: 0.45),
+                            color: context.palette.inkA(0.45),
                           ),
                         ),
                       ],
@@ -876,6 +917,14 @@ class _VideoStageState extends State<_VideoStage> {
 
   @override
   Widget build(BuildContext context) {
+    // Кадр видео тёмный в обеих темах: плашки поверх него залиты настоящим
+    // чёрным, значит и подписи, кнопки и спиннер на них должны быть светлыми.
+    // Заглушку до загрузки (`_poster`) оборачивать нельзя — она белая плашка с
+    // тёмным значком и в светлой теме уже права.
+    return LoveFrameScope(builder: _buildStage);
+  }
+
+  Widget _buildStage(BuildContext context) {
     final controller = widget.controller;
     final value = controller.value;
     final ratio = value.aspectRatio <= 0 ? 16 / 9 : value.aspectRatio;
@@ -928,12 +977,12 @@ class _VideoStageState extends State<_VideoStage> {
               height: 58,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.45),
+                color: context.palette.shadeA(0.45),
               ),
-              child: const Icon(
+              child:  Icon(
                 Icons.play_arrow_rounded,
                 size: 34,
-                color: Colors.white,
+                color: context.palette.accent,
               ),
             ),
           ),
@@ -950,15 +999,15 @@ class _VideoStageState extends State<_VideoStage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
+                color: context.palette.shadeA(0.6),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 _hud,
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w900,
-                  color: Colors.white,
+                  color: context.palette.accent,
                 ),
               ),
             ),
@@ -972,7 +1021,7 @@ class _VideoStageState extends State<_VideoStage> {
             child: AnimatedOpacity(
               opacity: _controlsVisible ? 1 : 0,
               duration: const Duration(milliseconds: 180),
-              child: _controlsBar(value),
+              child: _controlsBar(context, value),
             ),
           ),
         ),
@@ -983,7 +1032,9 @@ class _VideoStageState extends State<_VideoStage> {
     return AspectRatio(aspectRatio: ratio, child: stage);
   }
 
-  Widget _controlsBar(VideoPlayerValue value) {
+  /// Контекст передаём аргументом: `State.context` лежит выше [LoveFrameScope],
+  /// и палитра из него была бы светлой.
+  Widget _controlsBar(BuildContext context, VideoPlayerValue value) {
     final buffered = value.buffered.isEmpty
         ? Duration.zero
         : value.buffered.last.end;
@@ -995,7 +1046,7 @@ class _VideoStageState extends State<_VideoStage> {
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            Colors.black.withValues(alpha: 0.55),
+            context.palette.shadeA(0.55),
           ],
         ),
       ),
@@ -1026,10 +1077,10 @@ class _VideoStageState extends State<_VideoStage> {
               Text(
                 '${fmtMediaTime(value.position)} / '
                 '${fmtMediaTime(value.duration)}',
-                style: const TextStyle(
+                style:  TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: context.palette.accent,
                 ),
               ),
               const Spacer(),
@@ -1041,10 +1092,10 @@ class _VideoStageState extends State<_VideoStage> {
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                   child: Text(
                     fmtSpeed(value.playbackSpeed),
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: context.palette.accent,
                     ),
                   ),
                 ),
@@ -1082,7 +1133,7 @@ class _BarButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.all(6),
-        child: Icon(icon, size: 20, color: Colors.white),
+        child: Icon(icon, size: 20, color: context.palette.accent),
       ),
     );
   }
@@ -1098,7 +1149,7 @@ class MediaScrubber extends StatefulWidget {
     required this.buffered,
     required this.duration,
     required this.onSeek,
-    this.accent = Colors.white,
+    this.accent,
     this.height = 20,
     super.key,
   });
@@ -1109,7 +1160,7 @@ class MediaScrubber extends StatefulWidget {
 
   /// null — дорожка неактивна (файл ещё не загружен).
   final ValueChanged<Duration>? onSeek;
-  final Color accent;
+  final Color? accent;
   final double height;
 
   @override
@@ -1150,6 +1201,7 @@ class _MediaScrubberState extends State<MediaScrubber> {
           if (mounted) setState(() => _dragFraction = null);
         }
 
+        final accent = widget.accent ?? context.palette.accent;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) => track(details.localPosition.dx),
@@ -1166,9 +1218,9 @@ class _MediaScrubberState extends State<MediaScrubber> {
                 child: Stack(
                   alignment: Alignment.centerLeft,
                   children: [
-                    _bar(1, widget.accent.withValues(alpha: 0.2)),
-                    _bar(buffered, widget.accent.withValues(alpha: 0.32)),
-                    _bar(value, widget.accent.withValues(alpha: 0.95)),
+                    _bar(1, accent.withValues(alpha: 0.2)),
+                    _bar(buffered, accent.withValues(alpha: 0.32)),
+                    _bar(value, accent.withValues(alpha: 0.95)),
                     Align(
                       alignment: Alignment(-1 + 2 * value, 0),
                       child: Container(
@@ -1177,8 +1229,8 @@ class _MediaScrubberState extends State<MediaScrubber> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: enabled
-                              ? widget.accent
-                              : widget.accent.withValues(alpha: 0.35),
+                              ? accent
+                              : accent.withValues(alpha: 0.35),
                         ),
                       ),
                     ),
@@ -1219,43 +1271,53 @@ class FullscreenVideoPage extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LoveFrameScope(builder: _page);
+
+  Widget _page(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.onAccent,
       body: Stack(
+        // Без expand Stack считает размер по непозиционированному ребёнку —
+        // а это верхняя панель. Scaffold.body даёт нежёсткие констрейнты,
+        // поэтому стек схлопывался до высоты панели, и кадр видео жался в
+        // полоску сверху. Панель поэтому же ушла в Positioned.
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: _VideoStage(
-              controller: controller,
-              fullscreen: true,
-              onFullscreen: () => Navigator.of(context).pop(),
-            ),
+          _VideoStage(
+            controller: controller,
+            fullscreen: true,
+            onFullscreen: () => Navigator.of(context).pop(),
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                children: [
-                  _VideoOverlayButton(
-                    icon: Icons.close_rounded,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  if (title.isNotEmpty) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.8),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    _VideoOverlayButton(
+                      icon: Icons.close_rounded,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    if (title.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: context.palette.inkA(0.8),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1274,7 +1336,7 @@ class _VideoOverlayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.45),
+      color: context.palette.shadeA(0.45),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -1282,7 +1344,7 @@ class _VideoOverlayButton extends StatelessWidget {
         child: SizedBox(
           width: 34,
           height: 34,
-          child: Icon(icon, size: 20, color: Colors.white),
+          child: Icon(icon, size: 20, color: context.palette.accent),
         ),
       ),
     );
@@ -1316,8 +1378,8 @@ class FileChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: own
-                ? Colors.black.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.055),
+                ? context.palette.onBubbleOwnA(0.08)
+                : context.palette.inkA(0.055),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(

@@ -25,6 +25,8 @@ const { canManageServerMessages, canManageServerRoles } = require('../utils/serv
 const { sanitizeRolePermissions } = require('../utils/rolePermissions');
 const { isBlockedBetween } = require('../utils/blocking');
 const { parseDeliverAt } = require('../services/capsuleService');
+const { normalizeMessageAttachments } = require('../utils/messageAttachments');
+const { buildMessagePreview } = require('../utils/messagePreview');
 const registerAdminStaffSocket = require('./adminStaffSocket');
 const {
   applyVoiceMediaMode,
@@ -35,22 +37,6 @@ const {
 const { getJwtSecret } = require('../utils/jwtSecret');
 
 const JWT_SECRET = getJwtSecret();
-
-function normalizeMessageAttachments(raw) {
-  if (!raw || !Array.isArray(raw)) return [];
-  return raw
-    .map((a) => ({
-      filename: a.filename || a.name || 'file',
-      originalName: a.originalName || a.name || 'file',
-      url: a.url,
-      size: typeof a.size === 'number' ? a.size : 0,
-      type: a.type || (a.mimetype && String(a.mimetype).startsWith('audio') ? 'audio' : 'file'),
-      mimetype: a.mimetype || undefined,
-      width: a.width,
-      height: a.height
-    }))
-    .filter((a) => a && a.url);
-}
 
 // Хранилище подключенных пользователей
 // { userId: Set<socketId> }. One account can be open on several devices.
@@ -498,14 +484,15 @@ module.exports = (io) => {
                   arrayFilters: [{ 'elem.user': otherParticipant }]
                 });
                 
-                // Live-доставка сообщения, если получатель онлайн
-                const otherSocketId = connectedUsers.get(otherParticipant.toString());
-                if (otherSocketId) {
-                  io.to(`user:${otherParticipant}`).emit('dm:new_message', {
-                    conversationId: dm._id,
-                    message
-                  });
-                }
+                // Live-доставка сообщения. Без проверки connectedUsers: если
+                // получатель офлайн, комната `user:<id>` просто пуста и emit
+                // никуда не уйдёт. А сверяться с картой в памяти опасно — в
+                // момент переподключения она на доли секунды расходится с
+                // реальным составом комнаты, и сообщение молча теряется.
+                io.to(`user:${otherParticipant}`).emit('dm:new_message', {
+                  conversationId: dm._id,
+                  message
+                });
                 // Персистентное уведомление в ленту — ВСЕГДА (и онлайн, и офлайн).
                 // Онлайн-получатель увидит запись в окне уведомлений (createNotification
                 // сам шлёт notification:new, type new_dm → клиент кладёт в ленту без
@@ -516,7 +503,7 @@ module.exports = (io) => {
                   actor: userId,
                   actorName: socket.user.username,
                   actorAvatar: socket.user.avatar,
-                  preview: (content || '').toString().slice(0, 200),
+                  ...buildMessagePreview(content, normalizedAttachments),
                   conversationId: dm._id,
                   channelId
                 });
@@ -557,7 +544,7 @@ module.exports = (io) => {
                   actor: userId,
                   actorName: socket.user.username,
                   actorAvatar: socket.user.avatar,
-                  preview: content.substring(0, 200),
+                  ...buildMessagePreview(content, normalizedAttachments),
                   channelId,
                   serverId: message.server || null
                 });

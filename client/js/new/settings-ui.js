@@ -777,33 +777,44 @@
   /* ───────────────  Слайдеры  ─────────────── */
 
   function initSliders(shell) {
-    bindSlider(shell, '#lvs-scale-slider', '#lvs-scale-value', (v) => {
-      document.documentElement.style.fontSize = (16 * v / 100) + 'px';
-      return v + '%';
+    // Масштаб применяем только когда ползунок реально двигают: на старте
+    // в разметке стоит 100%, а сохранённое значение подставит
+    // initPrefsPersistence — иначе при запуске масштаб бы моргал на 100%.
+    bindSlider(shell, '#lvs-scale-slider', '#lvs-scale-value', (v) => v + '%', (v) => {
+      if (window.settingsManager) window.settingsManager.applyUIScale(v);
     });
     bindSlider(shell, '#lvs-mic-volume', '#lvs-mic-volume-value', (v) => v + '%');
-    bindSlider(shell, '#lvs-out-volume', '#lvs-out-volume-value', (v) => v + '%');
+    // Громкость вывода применяем на каждом движении — иначе ползунок ощущался
+    // бы мёртвым (сохранение — на change, в initPrefsPersistence).
+    bindSlider(shell, '#lvs-out-volume', '#lvs-out-volume-value', (v) => v + '%', (v) => {
+      if (window.settingsManager) window.settingsManager.applyOutputVolume(Number(v));
+    });
   }
 
-  function bindSlider(shell, sliderSel, valueSel, fmt) {
+  function bindSlider(shell, sliderSel, valueSel, fmt, onInput) {
     const slider = shell.querySelector(sliderSel);
     const value = shell.querySelector(valueSel);
     if (!slider) return;
-    const update = () => { if (value) value.textContent = fmt(slider.value); };
-    slider.addEventListener('input', update);
-    update();
+    const render = () => { if (value) value.textContent = fmt(slider.value); };
+    slider.addEventListener('input', () => {
+      render();
+      if (onInput) onInput(slider.value);
+    });
+    render();
   }
 
   /* ───────────────  Темы  ─────────────── */
 
   function initThemeOptions(shell) {
     const options = shell.querySelectorAll('.lvs-theme-option');
+    // Все три темы рабочие; применение идёт через settingsManager.applyTheme
+    // (атрибут на <html> + событие для starfield), здесь только подсветка.
     options.forEach(opt => {
       opt.addEventListener('click', () => {
         options.forEach(o => o.classList.remove('active'));
         opt.classList.add('active');
-        const theme = opt.dataset.theme;
-        document.documentElement.setAttribute('data-theme', theme);
+        const sm = window.settingsManager;
+        if (sm) sm.saveSetting('app-theme', opt.dataset.theme);
       });
     });
   }
@@ -826,50 +837,199 @@
   function initVoice(shell) {
     populateDevices(shell);
 
+    // Список устройств меняется на ходу (подключили гарнитуру) — перечитываем,
+    // иначе в меню остались бы мёртвые id.
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', () => populateDevices(shell));
+    }
+
     const testBtn = shell.querySelector('#lvs-mic-test');
+    const monitorBtn = shell.querySelector('#lvs-mic-monitor');
     const meter = shell.querySelector('#lvs-mic-meter');
+
     if (testBtn && meter) {
-      let running = false;
-      let raf = null;
-      let stream = null;
+      const TEST_IDLE = '🎙 Проверить микрофон';
+      const TEST_BUSY = '⏹ Остановить';
+      const MON_IDLE = '🎧 Слышать себя';
+      const MON_BUSY = '🔇 Не слышать себя';
+
+      let stream = null;      // один захват на уровень и на мониторинг
+      let streamPromise = null; // захват в процессе — чтобы не открыть микрофон дважды
+      let raf = null;         // индикатор уровня активен
       let audioCtx = null;
+      let monitorAudio = null;
+      let monitoring = false;
+      let meterStarting = false;
+      let monitorStarting = false;
+      // Номер «сессии» проверки. Растёт при каждом полном выключении, чтобы
+      // разрешение на микрофон, выданное уже после закрытия настроек, не
+      // оставило микрофон включённым.
+      let generation = 0;
 
-      testBtn.addEventListener('click', async () => {
-        if (running) { stopMeter(); return; }
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const source = audioCtx.createMediaStreamSource(stream);
-          const analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 256;
-          source.connect(analyser);
-          const buf = new Uint8Array(analyser.frequencyBinCount);
-
-          running = true;
-          testBtn.textContent = '⏹ Остановить';
-
-          const tick = () => {
-            analyser.getByteFrequencyData(buf);
-            let sum = 0;
-            for (let i = 0; i < buf.length; i++) sum += buf[i];
-            const level = Math.min(100, (sum / buf.length) * 1.6);
-            meter.style.width = level + '%';
-            raf = requestAnimationFrame(tick);
-          };
-          tick();
-        } catch (err) {
-          testBtn.textContent = '🎙 Нет доступа к микрофону';
-          setTimeout(() => { testBtn.textContent = '🎙 Проверить микрофон'; }, 2000);
+      /**
+       * Захват один на всех: и полоска уровня, и «слышать себя» слушают один
+       * трек. Констрейнты берём из настроек — раньше здесь стояло `audio: true`,
+       * поэтому проверка тестировала системный микрофон, а не выбранный.
+       *
+       * Незавершённый захват возвращаем как есть: если нажать обе кнопки
+       * подряд, getUserMedia не должен уйти дважды — второй стрим просто
+       * потерялся бы, оставив микрофон открытым.
+       */
+      function ensureStream(gen) {
+        if (stream) return Promise.resolve(stream);
+        if (!streamPromise) {
+          const constraints = typeof window.getVoiceAudioConstraints === 'function'
+            ? window.getVoiceAudioConstraints()
+            : true;
+          streamPromise = navigator.mediaDevices
+            .getUserMedia({ audio: constraints, video: false })
+            .then(s => {
+              streamPromise = null;
+              if (gen !== generation) {
+                // Пока браузер спрашивал доступ, проверку успели выключить
+                // (например, закрыли настройки). Микрофон гасим сразу.
+                s.getTracks().forEach(t => t.stop());
+                return null;
+              }
+              stream = s;
+              return s;
+            })
+            .catch(err => { streamPromise = null; throw err; });
         }
-      });
+        return streamPromise;
+      }
+
+      // Отпускаем микрофон только когда он больше никому не нужен — включая
+      // того, кто как раз в процессе запуска.
+      function releaseStreamIfIdle() {
+        if (raf || monitoring || meterStarting || monitorStarting) return;
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      }
+
+      async function startMeter() {
+        const s = await ensureStream(generation);
+        if (!s) return;   // проверку выключили, пока запрашивался доступ
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Свежий контекст может создаться в состоянии suspended — тогда
+        // анализатор отдавал бы нули и полоска выглядела бы мёртвой.
+        if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch (_) { /* ok */ } }
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        const buf = new Uint8Array(analyser.frequencyBinCount);
+
+        const tick = () => {
+          analyser.getByteFrequencyData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i];
+          meter.style.width = Math.min(100, (sum / buf.length) * 1.6) + '%';
+          raf = requestAnimationFrame(tick);
+        };
+        tick();
+        testBtn.textContent = TEST_BUSY;
+      }
 
       function stopMeter() {
-        running = false;
-        if (raf) cancelAnimationFrame(raf);
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        if (audioCtx) audioCtx.close();
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+        if (audioCtx) { try { audioCtx.close(); } catch (_) { /* уже закрыт */ } audioCtx = null; }
         meter.style.width = '0%';
-        testBtn.textContent = '🎙 Проверить микрофон';
+        testBtn.textContent = TEST_IDLE;
+        releaseStreamIfIdle();
+      }
+
+      /**
+       * «Слышать себя» — через <audio srcObject>, а не через AudioContext
+       * destination: только у медиа-элемента есть setSinkId, то есть только так
+       * мониторинг уходит в выбранное в настройках устройство вывода. Элемент
+       * держим в DOM с data-voice-output — тогда ползунок громкости вывода и
+       * смена устройства применяются к нему автоматически (см. settings.js).
+       */
+      async function startMonitor() {
+        const s = await ensureStream(generation);
+        if (!s) return;   // мониторинг выключили, пока запрашивался доступ
+        monitorAudio = document.createElement('audio');
+        monitorAudio.autoplay = true;
+        monitorAudio.style.display = 'none';
+        monitorAudio.srcObject = stream;
+        document.body.appendChild(monitorAudio);
+        if (typeof window.applyAudioOutputDevice === 'function') {
+          await window.applyAudioOutputDevice(monitorAudio);
+        }
+        try { await monitorAudio.play(); } catch (_) { /* autoplay уже сработал */ }
+        monitoring = true;
+        if (monitorBtn) monitorBtn.textContent = MON_BUSY;
+        _toast('Слышать себя', 'Лучше в наушниках — через динамики микрофон поймает сам себя.');
+      }
+
+      function stopMonitor() {
+        monitoring = false;
+        if (monitorAudio) {
+          monitorAudio.pause();
+          monitorAudio.srcObject = null;
+          monitorAudio.remove();
+          monitorAudio = null;
+        }
+        if (monitorBtn) monitorBtn.textContent = MON_IDLE;
+        releaseStreamIfIdle();
+      }
+
+      function stopAll() {
+        // Отменяем и то, что ещё только взлетает: иначе выданное с задержкой
+        // разрешение оставило бы микрофон открытым после закрытия настроек.
+        generation++;
+        meterStarting = false;
+        monitorStarting = false;
+        stopMeter();
+        stopMonitor();
+      }
+
+      function noAccess(btn, idle) {
+        btn.textContent = '🎙 Нет доступа к микрофону';
+        setTimeout(() => { btn.textContent = idle; }, 2000);
+      }
+
+      testBtn.addEventListener('click', async () => {
+        if (meterStarting) return;
+        if (raf) { stopMeter(); return; }
+        meterStarting = true;
+        try { await startMeter(); }
+        catch (err) { meterStarting = false; stopMeter(); noAccess(testBtn, TEST_IDLE); }
+        finally { meterStarting = false; }
+      });
+
+      if (monitorBtn) {
+        monitorBtn.addEventListener('click', async () => {
+          if (monitorStarting) return;
+          if (monitoring) { stopMonitor(); return; }
+          monitorStarting = true;
+          try { await startMonitor(); }
+          catch (err) { monitorStarting = false; stopMonitor(); noAccess(monitorBtn, MON_IDLE); }
+          finally { monitorStarting = false; }
+        });
+      }
+
+      // Сменили микрофон, пока тест открыт — перезахватываем, иначе проверка
+      // продолжила бы слушать прежнее устройство.
+      window.addEventListener('love:mic-device-changed', async () => {
+        if (!stream) return;
+        const meterWas = !!raf;
+        const monitorWas = monitoring;
+        stopAll();
+        try {
+          if (meterWas) await startMeter();
+          if (monitorWas) await startMonitor();
+        } catch (_) { stopAll(); }
+      });
+
+      // Закрыли настройки — микрофон обязан погаснуть. Ловим через класс панели,
+      // потому что закрыть можно по-разному: крестиком, кликом по фону,
+      // переходом на другую вкладку сайдбара.
+      const settingsPanel = document.getElementById('view-settings');
+      if (settingsPanel && window.MutationObserver) {
+        new MutationObserver(() => {
+          if (settingsPanel.classList.contains('panel-hidden')) stopAll();
+        }).observe(settingsPanel, { attributes: true, attributeFilter: ['class'] });
       }
     }
 
@@ -898,31 +1058,73 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      fillSelect(shell.querySelector('#lvs-input-device'), devices.filter(d => d.kind === 'audioinput'), 'Микрофон');
-      fillSelect(shell.querySelector('#lvs-output-device'), devices.filter(d => d.kind === 'audiooutput'), 'Динамик');
+      fillSelect(shell.querySelector('#lvs-input-device'), devices.filter(d => d.kind === 'audioinput'),
+        'Микрофон', 'voice-input-device', 'Микрофон по умолчанию');
+      fillSelect(shell.querySelector('#lvs-output-device'), devices.filter(d => d.kind === 'audiooutput'),
+        'Динамик', 'voice-output-device', 'Динамики по умолчанию');
     } catch (e) { /* noop */ }
   }
 
-  function fillSelect(select, devices, fallback) {
-    if (!select || !devices.length) return;
+  function fillSelect(select, devices, fallback, settingKey, defaultLabel) {
+    if (!select) return;
     const menu = select.querySelector('.lvs-select-menu');
     const label = select.querySelector('.lvs-select-btn span');
     if (!menu) return;
-    menu.innerHTML = '';
+
+    const sm = window.settingsManager;
+    const saved = (sm && sm.get(settingKey)) || 'default';
+    // Метку храним рядом со значением: id устройств меняются между сессиями,
+    // и по одному id сохранённый микрофон после перезапуска уже не найти.
+    const savedLabel = localStorage.getItem(settingKey + '-label') || '';
+
+    // «По умолчанию» держим всегда: до выдачи доступа к микрофону
+    // enumerateDevices отдаёт устройства без меток, и выбирать было бы не из чего.
+    const items = [{ value: 'default', text: defaultLabel }];
     devices.forEach((d, i) => {
+      if (d.deviceId === 'default') return; // уже стоит первой строкой
+      items.push({ value: d.deviceId || ('dev' + i), text: d.label || `${fallback} ${i + 1}` });
+    });
+
+    let active = items.find(it => it.value === saved);
+    if (!active && savedLabel) active = items.find(it => it.text === savedLabel);
+    if (!active && saved !== 'default' && savedLabel) {
+      // Устройство сейчас недоступно (например, отключили гарнитуру). Показываем
+      // его выбранным и настройку НЕ переписываем: выбор должен ожить сам, когда
+      // устройство вернётся. Захват при этом не падает — getVoiceAudioConstraints()
+      // просит deviceId через `ideal`, а не `exact`.
+      items.push({ value: saved, text: savedLabel + ' (недоступно)' });
+      active = items[items.length - 1];
+    }
+    if (!active) active = items[0];
+
+    menu.innerHTML = '';
+    items.forEach(it => {
       const li = document.createElement('li');
-      li.dataset.value = d.deviceId || ('dev' + i);
-      li.textContent = d.label || `${fallback} ${i + 1}`;
-      if (i === 0) { li.classList.add('selected'); if (label) label.textContent = li.textContent; }
+      li.dataset.value = it.value;
+      li.textContent = it.text;
+      if (it === active) li.classList.add('selected');
       li.addEventListener('click', () => {
-        select.dataset.value = li.dataset.value;
-        if (label) label.textContent = li.textContent;
+        select.dataset.value = it.value;
+        if (label) label.textContent = it.text;
         menu.querySelectorAll('li').forEach(x => x.classList.remove('selected'));
         li.classList.add('selected');
         select.classList.remove('open');
+        // Раньше выбор жил только в select.dataset.value — то есть не доживал
+        // ни до входа в войс, ни до перезапуска. Сохраняем через менеджер: он же
+        // применит устройство на живом соединении (см. applySetting в settings.js).
+        if (sm) sm.saveSetting(settingKey, it.value);
+        localStorage.setItem(settingKey + '-label', it.text);
+        // Тест микрофона держит свой захват — ему нужно перезапуститься,
+        // иначе он продолжит слушать прежнее устройство.
+        if (settingKey === 'voice-input-device') {
+          window.dispatchEvent(new CustomEvent('love:mic-device-changed'));
+        }
       });
       menu.appendChild(li);
     });
+
+    select.dataset.value = active.value;
+    if (label) label.textContent = active.text;
   }
 
   /* ───────────────  Опасные действия  ─────────────── */
@@ -980,9 +1182,25 @@
   }
 
   function resetSettings(shell) {
-    shell.querySelectorAll('.lvs-toggle input[type="checkbox"]').forEach(cb => { cb.checked = cb.hasAttribute('checked'); });
+    const sm = window.settingsManager;
+
+    // Тоглы возвращаем к значению из разметки и, если ключ известен
+    // менеджеру, сразу сохраняем и применяем — иначе после перезапуска
+    // вернулось бы старое.
+    shell.querySelectorAll('.lvs-toggle input[type="checkbox"]').forEach(cb => {
+      cb.checked = cb.hasAttribute('checked');
+      const key = cb.dataset.settingKey;
+      if (key && sm) sm.saveSetting(key, cb.checked);
+    });
+
     const scale = shell.querySelector('#lvs-scale-slider');
-    if (scale) { scale.value = 100; scale.dispatchEvent(new Event('input')); }
+    if (scale) {
+      scale.value = 100;
+      scale.dispatchEvent(new Event('input'));
+      if (sm) sm.saveSetting('ui-scale', 100);
+    }
+
+    // Инлайновый font-size могла оставить прежняя версия масштаба.
     document.documentElement.style.fontSize = '';
   }
 
@@ -1371,18 +1589,15 @@
   function initPrefsPersistence(shell) {
     const sm = window.settingsManager;
 
-    // Тема (data-theme на documentElement), ключ app-theme в localStorage
-    const savedTheme = localStorage.getItem('app-theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      shell.querySelectorAll('.lvs-theme-option').forEach(o =>
-        o.classList.toggle('active', o.dataset.theme === savedTheme));
-    }
-    shell.querySelectorAll('.lvs-theme-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        if (opt.dataset.theme) localStorage.setItem('app-theme', opt.dataset.theme);
-      });
-    });
+    // Тема: восстановление активной кнопки из settingsManager — он же
+    // применяет атрибут на старте (и до первой отрисовки это делает ещё
+    // раньше инлайновый скрипт в index.html, см. ключ app-theme).
+    const savedTheme = sm ? sm.get('app-theme') : localStorage.getItem('app-theme');
+    const activeTheme = (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system')
+      ? savedTheme
+      : 'dark';
+    shell.querySelectorAll('.lvs-theme-option').forEach(o =>
+      o.classList.toggle('active', o.dataset.theme === activeTheme));
 
     // Масштаб интерфейса (через settingsManager — он применяет на старте)
     const scale = shell.querySelector('#lvs-scale-slider');
@@ -1390,9 +1605,21 @@
     if (scale && sm) {
       const saved = Number(sm.get('ui-scale')) || 100;
       scale.value = saved;
-      document.documentElement.style.fontSize = (16 * saved / 100) + 'px';
       if (scaleVal) scaleVal.textContent = saved + '%';
       scale.addEventListener('change', () => sm.saveSetting('ui-scale', Number(scale.value)));
+    }
+
+    // Громкость вывода: раньше ползунок жил сам по себе и не сохранялся —
+    // то есть «Громкость вывода» не делала вообще ничего, хотя ключ
+    // output-volume читают и войс, и голосовые, и звуки уведомлений.
+    const outVol = shell.querySelector('#lvs-out-volume');
+    const outVolVal = shell.querySelector('#lvs-out-volume-value');
+    if (outVol && sm) {
+      const savedVol = Number(sm.get('output-volume'));
+      const vol = Number.isFinite(savedVol) ? savedVol : 100;
+      outVol.value = vol;
+      if (outVolVal) outVolVal.textContent = vol + '%';
+      outVol.addEventListener('change', () => sm.saveSetting('output-volume', Number(outVol.value)));
     }
 
     // Общие тоглы по [data-setting-key]

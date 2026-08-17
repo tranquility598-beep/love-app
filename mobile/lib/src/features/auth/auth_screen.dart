@@ -51,7 +51,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: LoveSurface(
                   radius: 22,
-                  color: LoveColors.surfaceStrong,
+                  color: context.palette.surfaceStrong,
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
                   child: AutofillGroup(
                     child: Column(
@@ -79,8 +79,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _note,
-                          style: const TextStyle(
-                            color: LoveColors.textSecondary,
+                          style:  TextStyle(
+                            color: context.palette.textSecondary,
                             height: 1.45,
                           ),
                         ),
@@ -105,12 +105,12 @@ class _AuthScreenState extends State<AuthScreen> {
                         FilledButton(
                           onPressed: session.isBusy ? null : _submit,
                           child: session.isBusy
-                              ? const SizedBox(
+                              ?  SizedBox(
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.black,
+                                    color: context.palette.onAccent,
                                   ),
                                 )
                               : Text(_buttonText),
@@ -341,20 +341,20 @@ class _AuthScreenState extends State<AuthScreen> {
             }
 
             return AlertDialog(
-              backgroundColor: LoveColors.surfaceStrong,
+              backgroundColor: context.palette.surfaceStrong,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: LoveColors.border),
+                side:  BorderSide(color: context.palette.border),
               ),
               title: const Text('Восстановить пароль'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                   Text(
                     'Отправим письмо со ссылкой и кодом для сброса.',
                     style: TextStyle(
-                      color: LoveColors.textSecondary,
+                      color: context.palette.textSecondary,
                       height: 1.4,
                     ),
                   ),
@@ -375,7 +375,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 10),
                     Text(
                       localError!,
-                      style: const TextStyle(color: LoveColors.danger),
+                      style:  TextStyle(color: context.palette.danger),
                     ),
                   ],
                 ],
@@ -389,12 +389,12 @@ class _AuthScreenState extends State<AuthScreen> {
                 FilledButton(
                   onPressed: submitting ? null : submit,
                   child: submitting
-                      ? const SizedBox(
+                      ?  SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.black,
+                            color: context.palette.onAccent,
                           ),
                         )
                       : const Text('Отправить'),
@@ -425,9 +425,9 @@ class _BrandMark extends StatelessWidget {
           height: 58,
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
+            color: context.palette.inkA(0.06),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: SvgPicture.asset('assets/icons/auth_mark.svg'),
         ),
@@ -457,9 +457,9 @@ class _AuthSwitch extends StatelessWidget {
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: context.palette.inkA(0.04),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Row(
         children: [
@@ -486,18 +486,18 @@ class _AuthDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(child: Divider(color: LoveColors.border)),
+         Expanded(child: Divider(color: context.palette.border)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
             'или',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LoveColors.textMuted,
+                  color: context.palette.textMuted,
                   fontWeight: FontWeight.w700,
                 ),
           ),
         ),
-        const Expanded(child: Divider(color: LoveColors.border)),
+         Expanded(child: Divider(color: context.palette.border)),
       ],
     );
   }
@@ -522,9 +522,9 @@ class _GoogleButton extends StatelessWidget {
           : const _GoogleMark(),
       label: const Text('Продолжить с Google'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: LoveColors.textPrimary,
+        foregroundColor: context.palette.textPrimary,
         minimumSize: const Size.fromHeight(48),
-        side: const BorderSide(color: LoveColors.borderActive),
+        side:  BorderSide(color: context.palette.borderActive),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
@@ -539,12 +539,16 @@ class _GoogleMark extends StatelessWidget {
     return SizedBox(
       width: 18,
       height: 18,
-      child: CustomPaint(painter: _GoogleMarkPainter()),
+      child: CustomPaint(painter: _GoogleMarkPainter(context.palette.textPrimary)),
     );
   }
 }
 
 class _GoogleMarkPainter extends CustomPainter {
+  _GoogleMarkPainter(this.color);
+
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final stroke = Paint()
@@ -552,7 +556,7 @@ class _GoogleMarkPainter extends CustomPainter {
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
     final rect = Offset.zero & size;
-    stroke.color = LoveColors.textPrimary;
+    stroke.color = color;
     canvas.drawArc(rect.deflate(2), -0.1, 5.5, false, stroke);
     canvas.drawLine(
       Offset(size.width * 0.55, size.height * 0.52),
@@ -588,7 +592,7 @@ class _SwitchButton extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white : Colors.transparent,
+              color: selected ? context.palette.accent : Colors.transparent,
               borderRadius: BorderRadius.circular(11),
             ),
             child: Text(
@@ -596,7 +600,7 @@ class _SwitchButton extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? Colors.black : LoveColors.textSecondary,
+                color: selected ? context.palette.onAccent : context.palette.textSecondary,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -657,15 +661,15 @@ class _ErrorBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: LoveColors.danger.withValues(alpha: 0.10),
+        color: context.palette.danger.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: LoveColors.danger.withValues(alpha: 0.28)),
+        border: Border.all(color: context.palette.danger.withValues(alpha: 0.28)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Text(
           message,
-          style: const TextStyle(color: LoveColors.textPrimary, height: 1.35),
+          style:  TextStyle(color: context.palette.textPrimary, height: 1.35),
         ),
       ),
     );

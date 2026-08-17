@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/network/love_api.dart';
 import 'core/calls/call_center.dart';
@@ -12,6 +13,7 @@ import 'features/shell/main_shell.dart';
 import 'features/support/restricted_access_screen.dart';
 import 'session/app_session.dart';
 import 'theme/love_theme.dart';
+import './theme/love_tokens.dart';
 
 class LoveMobileApp extends StatefulWidget {
   const LoveMobileApp({super.key});
@@ -55,42 +57,57 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
   Widget build(BuildContext context) {
     return AppSessionScope(
       session: session,
-      child: MaterialApp(
-        title: 'Love',
-        navigatorKey: CallCenter.navigatorKey,
-        scaffoldMessengerKey: _messengerKey,
-        debugShowCheckedModeBanner: false,
-        theme: LoveTheme.dark(),
-        builder: (context, child) {
-          // Apply the user's "Масштаб интерфейса" setting globally, matching
-          // the desktop app's root font-size scaling.
-          return ValueListenableBuilder<double>(
-            valueListenable: LovePrefs.instance.uiScale,
-            builder: (context, scale, _) {
-              final media = MediaQuery.of(context);
-              return MediaQuery(
-                data: media.copyWith(
-                  textScaler: TextScaler.linear(scale),
-                ),
-                child: child ?? const SizedBox.shrink(),
+      // Тема живёт в LovePrefs: dark | light | system. «Системная»
+      // резолвится здесь, над MaterialApp, — и по смене темы ОС тоже
+      // (слушатель платформенной яркости в _LoveThemeHost).
+      child: ValueListenableBuilder<String>(
+        valueListenable: LovePrefs.instance.theme,
+        builder: (context, mode, _) => _LoveThemeHost(
+          mode: mode,
+          child: MaterialApp(
+            title: 'Love',
+            navigatorKey: CallCenter.navigatorKey,
+            scaffoldMessengerKey: _messengerKey,
+            debugShowCheckedModeBanner: false,
+            theme: LoveTheme.light(),
+            darkTheme: LoveTheme.dark(),
+            themeMode: mode == 'light'
+                ? ThemeMode.light
+                : mode == 'system'
+                    ? ThemeMode.system
+                    : ThemeMode.dark,
+            builder: (context, child) {
+              // Apply the user's "Масштаб интерфейса" setting globally, matching
+              // the desktop app's root font-size scaling.
+              return ValueListenableBuilder<double>(
+                valueListenable: LovePrefs.instance.uiScale,
+                builder: (context, scale, _) {
+                  final media = MediaQuery.of(context);
+                  return MediaQuery(
+                    data: media.copyWith(
+                      textScaler: TextScaler.linear(scale),
+                    ),
+                    child: child ?? const SizedBox.shrink(),
+                  );
+                },
               );
             },
-          );
-        },
-        home: AnimatedBuilder(
-          animation: session,
-          builder: (context, _) {
-            if (session.isBooting) {
-              return const _BootScreen();
-            }
-            if (!session.isAuthenticated) {
-              return const AuthScreen();
-            }
-            if (session.isRestricted) {
-              return const RestrictedAccessScreen();
-            }
-            return const MainShell();
-          },
+            home: AnimatedBuilder(
+              animation: session,
+              builder: (context, _) {
+                if (session.isBooting) {
+                  return const _BootScreen();
+                }
+                if (!session.isAuthenticated) {
+                  return const AuthScreen();
+                }
+                if (session.isRestricted) {
+                  return const RestrictedAccessScreen();
+                }
+                return const MainShell();
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -181,18 +198,84 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
   }
 }
 
+/// Резолвит активную палитру и раздаёт её вниз через [LovePaletteScope].
+///
+/// Живёт над MaterialApp: «системная» тема должна переворачивать палитру
+/// по платформенной яркости, а не по MediaQuery внутри дерева MaterialApp.
+/// AnnotatedRegion красит иконки статус-бара: белые на тёмном, тёмные
+/// на светлом.
+class _LoveThemeHost extends StatefulWidget {
+  const _LoveThemeHost({required this.mode, required this.child});
+
+  final String mode;
+  final Widget child;
+
+  @override
+  State<_LoveThemeHost> createState() => _LoveThemeHostState();
+}
+
+class _LoveThemeHostState extends State<_LoveThemeHost>
+    with WidgetsBindingObserver {
+  Brightness _platformBrightness = Brightness.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _platformBrightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    setState(() {
+      _platformBrightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final light = widget.mode == 'light' ||
+        (widget.mode == 'system' && _platformBrightness == Brightness.light);
+    final palette = light ? lovePaletteLight : lovePaletteDark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: palette.systemUiOverlay,
+      child: LovePaletteScope(
+        palette: palette,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _BootScreen extends StatelessWidget {
   const _BootScreen();
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return  Scaffold(
       body: DecoratedBox(
         decoration: BoxDecoration(
+          // Виньетка: в центре поверхность на ступень выше, к краям — самая
+          // глубина. Крайней точкой был `onAccent`, и в тёмной теме он давал
+          // нужный чёрный, а в светлой — белый, то есть градиент разворачивался
+          // наизнанку: края становились ярче центра. Через bgSecondary →
+          // bgPrimary → bgDeep лестница монотонна в обеих темах.
           gradient: RadialGradient(
             center: Alignment.topCenter,
             radius: 1.2,
-            colors: [Color(0xFF101010), Color(0xFF050505), Colors.black],
+            colors: [
+              context.palette.bgSecondary,
+              context.palette.bgPrimary,
+              context.palette.bgDeep,
+            ],
           ),
         ),
         child: Center(

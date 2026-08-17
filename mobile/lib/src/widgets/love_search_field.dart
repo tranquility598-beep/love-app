@@ -46,10 +46,14 @@ class _LoveSearchFieldState extends State<LoveSearchField> {
       child: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: focused ? 0.4 : 0.25),
+          // Поле утоплено относительно экрана. Через `onAccent` это работало
+          // только в тёмной теме, где он чёрный; в светлой он белый, и поле
+          // оказывалось светлее фона — ступенькой вверх вместо вниз. В тёмной
+          // теме `sinkA` даёт ровно тот же чёрный, что и раньше.
+          color: context.palette.sinkA(focused ? 0.4 : 0.25),
           borderRadius: const BorderRadius.all(LoveRadii.sm),
           border: Border.all(
-            color: focused ? LoveColors.borderActive : LoveColors.border,
+            color: focused ? context.palette.borderActive : context.palette.border,
           ),
         ),
         alignment: Alignment.center,
@@ -58,9 +62,9 @@ class _LoveSearchFieldState extends State<LoveSearchField> {
           focusNode: _focus,
           autofocus: widget.autofocus,
           onChanged: widget.onChanged,
-          cursorColor: LoveColors.textPrimary,
-          style: const TextStyle(
-            color: LoveColors.textPrimary,
+          cursorColor: context.palette.textPrimary,
+          style:  TextStyle(
+            color: context.palette.textPrimary,
             fontSize: 14,
           ),
           decoration: InputDecoration(
@@ -71,8 +75,8 @@ class _LoveSearchFieldState extends State<LoveSearchField> {
             focusedBorder: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
             hintText: widget.hint,
-            hintStyle: const TextStyle(
-              color: LoveColors.textMuted,
+            hintStyle:  TextStyle(
+              color: context.palette.textMuted,
               fontSize: 14,
             ),
           ),

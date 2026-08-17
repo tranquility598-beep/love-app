@@ -4,6 +4,11 @@ temp/
 server/uploads/
 server/private-uploads/
 .env
+.eleven_key
+tools/sound-design/samples/
+tools/sound-design/out/
+__pycache__/
+*.pyc
 build/dist/
 .DS_Store
 send to ai/
@@ -23,9 +28,19 @@ notion/
 .devin/
 .workbuddy-ai/
 .claude/
+# Локальные MCP-серверы разработчика (адреса на 127.0.0.1) — к проекту не относятся
+.mcp.json
 
 # Артефакты сборки и разовые архивы
 *.zip
 !docs/**/*.zip
 dist/
 release/
+
+# Тестовые превью-мокапы лендинга — не боевые файлы, в публичный репозиторий не нужны
+site-mock/
+site-mock-claude/
+opus5-site-mock/
+
+# Рекламные видео и исходники монтажа: тяжёлые бинарники, репозиторий публичный
+Love-videos/

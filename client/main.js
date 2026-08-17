@@ -89,6 +89,15 @@ function startServer() {
 }
 
 /**
+ * Цвет нативного окна до первой отрисовки страницы. Выбор темы приложения
+ * живёт в localStorage рендерера и отсюда недоступен, поэтому стартуем по
+ * системной теме — главное, чтобы рамка не вспыхивала чёрным на светлой ОС.
+ */
+function windowBackgroundColor() {
+  return nativeTheme.shouldUseDarkColors ? '#040404' : '#ededed';
+}
+
+/**
  * Создает главное окно приложения
  */
 function createWindow() {
@@ -98,7 +107,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     frame: false,
-    backgroundColor: '#000000',
+    backgroundColor: windowBackgroundColor(),
     icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -117,13 +126,20 @@ function createWindow() {
   // Показываем окно когда оно готово
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    
+
     // Проверка начальных аргументов (deep link при первом запуске)
     if (process.platform === 'win32') {
       const url = process.argv.find(arg => arg.startsWith('love-app://'));
       if (url) {
         handleDeepLink(url);
       }
+    }
+  });
+
+  // Смена системной темы — перекрашиваем нативный фон вслед за ней
+  nativeTheme.on('updated', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(windowBackgroundColor());
     }
   });
 
@@ -259,6 +275,19 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('window-close', () => {
   if (mainWindow) mainWindow.close();
+});
+
+// Масштаб интерфейса (настройки → Внешний вид). Зумим то окно, которое
+// попросило: попап входящего звонка свой масштаб менять не должен.
+// Границы те же, что у ползунка в интерфейсе: 75–125%.
+ipcMain.on('set-zoom-factor', (event, factor) => {
+  const value = Number(factor);
+  if (!Number.isFinite(value)) return;
+  const clamped = Math.min(1.25, Math.max(0.75, value));
+  const contents = event.sender;
+  if (contents && !contents.isDestroyed()) {
+    contents.setZoomFactor(clamped);
+  }
 });
 
 // Обработчик для показа уведомлений (с опциональным payload для перехода по клику)
@@ -822,21 +851,51 @@ app.on('open-url', (event, url) => {
   handleDeepLink(url);
 });
 
-// Парсинг токена из ссылки (love-app://login-success?token=...)
+// Разбор ссылок love-app://
+//   love-app://login-success?token=…  — вход через Google;
+//   love-app://invite/КОД             — приглашение в сферу.
+// Второй случай раньше не обрабатывался вообще: кнопка «Открыть в приложении»
+// на странице приглашения запускала клиент, но окно даже не всплывало.
 function handleDeepLink(url) {
   try {
+    const raw = String(url == null ? '' : url).trim();
+    if (!raw.toLowerCase().startsWith('love-app://')) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    // Человек нажал ссылку — окно должно оказаться перед ним в любом случае,
+    // ещё до того, как мы поймём, что именно в ссылке.
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+
+    // Холодный старт: ссылка приходит раньше, чем рендерер успел навесить
+    // слушатель, поэтому при незакончившейся загрузке ждём did-finish-load.
+    const wc = mainWindow.webContents;
+    const send = (channel, payload) => {
+      if (wc.isLoadingMainFrame()) {
+        wc.once('did-finish-load', () => {
+          if (!wc.isDestroyed()) wc.send(channel, payload);
+        });
+      } else {
+        wc.send(channel, payload);
+      }
+    };
+
+    // Код инвайта — hex-подстрока: границы те же, что в utils/inviteLinks.js.
+    const inviteMatch = raw.match(/^love-app:\/\/invite\/([A-Za-z0-9-]{4,32})/i);
+    if (inviteMatch) {
+      send('deep-link-invite', inviteMatch[1]);
+      return;
+    }
+
     // НЕ логируем сам url целиком (содержит token).
     // Извлекаем токен через поиск параметра (надежнее для кастомных протоколов)
-    const tokenMatch = url.match(/[?&]token=([^&]+)/);
+    const tokenMatch = raw.match(/[?&]token=([^&]+)/);
     const token = tokenMatch ? tokenMatch[1] : null;
 
-    if (token && mainWindow) {
+    if (token) {
       // Отправляем токен в рендерер через IPC
-      mainWindow.webContents.send('google-auth-success', token);
-
-      // Фокусируемся на окне
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+      send('google-auth-success', token);
     }
   } catch (e) {
     console.error('Failed to parse deep link URL (redacted):', e.message);

@@ -86,9 +86,9 @@ class StaffRoleIcon extends StatelessWidget {
             height: size,
             padding: EdgeInsets.all(size * 0.22),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: context.palette.inkA(0.06),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: LoveColors.border),
+              border: Border.all(color: context.palette.border),
             ),
             child: SvgPicture.string(svg),
           ),
@@ -107,9 +107,9 @@ class StaffRoleIcon extends StatelessWidget {
           margin: const EdgeInsets.all(12),
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,8 +127,8 @@ class StaffRoleIcon extends StatelessWidget {
                     const SizedBox(height: 5),
                     Text(
                       _roleDescriptions[normalized] ?? '',
-                      style: const TextStyle(
-                          color: LoveColors.textSecondary, height: 1.4),
+                      style:  TextStyle(
+                          color: context.palette.textSecondary, height: 1.4),
                     ),
                   ],
                 ),
@@ -157,9 +157,9 @@ class StaffRoleIconStatic extends StatelessWidget {
       height: size,
       padding: EdgeInsets.all(size * 0.24),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
+        color: context.palette.inkA(0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: SvgPicture.string(svg),
     );
@@ -179,15 +179,15 @@ class StaffRoleLabel extends StatelessWidget {
       padding: EdgeInsets.symmetric(
           horizontal: compact ? 8 : 10, vertical: compact ? 4 : 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: context.palette.inkA(0.06),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LoveColors.borderActive),
+        border: Border.all(color: context.palette.borderActive),
       ),
       child: Text(label,
           style: TextStyle(
               fontSize: compact ? 10.5 : 12,
               fontWeight: FontWeight.w800,
-              color: LoveColors.textSecondary)),
+              color: context.palette.textSecondary)),
     );
   }
 }

@@ -14,6 +14,56 @@ function escHTML(s) {
 }
 window.escHTML = escHTML;
 
+// Текст сообщения → HTML: экранируем и заодно превращаем адреса в ссылки.
+// Раньше здесь был чистый escHTML, и ссылка в сообщении оставалась серым
+// текстом — ни подсветки, ни клика (на мобиле подсветка была).
+//
+// Один проход по СЫРОМУ тексту, а не escHTML + линкификация поверх: после
+// экранирования `&` в query становится `&amp;`, и href уезжает битым.
+const MSG_LINK_RE = /(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+
+// Знаки препинания в конце почти всегда принадлежат фразе, а не адресу:
+// «зашёл на example.com.» — точка не часть ссылки.
+function trimUrlTail(url) {
+    let body = url;
+    let tail = "";
+    for (;;) {
+        const last = body[body.length - 1];
+        if (!last) break;
+        if (".,!?;:«»\"'".indexOf(last) !== -1) { tail = last + tail; body = body.slice(0, -1); continue; }
+        // Закрывающую скобку отдаём фразе только если внутри адреса нет
+        // открывающей — иначе ломались бы ссылки вида /wiki/Foo_(bar).
+        if ((last === ")" && body.indexOf("(") === -1) ||
+            (last === "]" && body.indexOf("[") === -1)) {
+            tail = last + tail; body = body.slice(0, -1); continue;
+        }
+        break;
+    }
+    return [body, tail];
+}
+
+function renderMessageText(text) {
+    const src = String(text == null ? "" : text);
+    let html = "";
+    let last = 0;
+    let m;
+    MSG_LINK_RE.lastIndex = 0;
+    while ((m = MSG_LINK_RE.exec(src)) !== null) {
+        const parts = trimUrlTail(m[0]);
+        const shown = parts[0];
+        // Схему дописываем только для www.* — регексп других вариантов не пускает,
+        // так что javascript:/data: сюда попасть не может.
+        const href = /^www\./i.test(shown) ? "https://" + shown : shown;
+        html += escHTML(src.slice(last, m.index));
+        html += '<a class="msg-link" href="' + escHTML(href) + '" target="_blank" rel="noopener noreferrer">' + escHTML(shown) + "</a>";
+        html += escHTML(parts[1]);
+        last = m.index + m[0].length;
+    }
+    html += escHTML(src.slice(last));
+    return html;
+}
+window.renderMessageText = renderMessageText;
+
 const STAFF_ROLE_LABELS = {
     support: "Support",
     junior_moderator: "Младший модератор",
@@ -360,10 +410,21 @@ const btnEndCall = document.getElementById("btn-end-call");
 const EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)";
 const EASE_IN = "cubic-bezier(0.4, 0, 1, 1)";
 
+const FLIP_ANIM_ID = "love-layout-flip";
+
+// FLIP: раскладку меняем сразу, а визуально доводим плитки трансформом.
+// grid-column/grid-row и переход в position:absolute браузер не анимирует
+// вообще, поэтому без этого увеличение участника выглядит как рывок.
 function animateLayoutFlip(elements, mutate, options = {}) {
     const list = Array.from(elements || []).filter(Boolean);
+    // Замер до отмены прошлого FLIP — берём плитку там, где её видно сейчас,
+    // иначе повторный клик по недоигранной анимации даёт скачок.
     const first = new Map(list.map(el => [el, el.getBoundingClientRect()]));
+    list.forEach(el => {
+        el.getAnimations?.().forEach(anim => { if (anim.id === FLIP_ANIM_ID) anim.cancel(); });
+    });
     mutate();
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     list.forEach(el => el.getBoundingClientRect());
     requestAnimationFrame(() => {
         list.forEach(el => {
@@ -374,7 +435,11 @@ function animateLayoutFlip(elements, mutate, options = {}) {
             const dy = a.top - b.top;
             const sx = a.width / b.width;
             const sy = a.height / b.height;
-            el.animate([
+            // Сдвиг меньше полпикселя двигать нечем — только лишний слой композитинга.
+            const still = Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5
+                && Math.abs(sx - 1) < 0.005 && Math.abs(sy - 1) < 0.005;
+            if (still) return;
+            const anim = el.animate([
                 { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
                 { transform: "translate(0, 0) scale(1, 1)" }
             ], {
@@ -382,9 +447,14 @@ function animateLayoutFlip(elements, mutate, options = {}) {
                 easing: options.easing || EASE_OUT,
                 fill: "both"
             });
+            anim.id = FLIP_ANIM_ID;
+            // fill: both держит transform после конца — снимаем, чтобы плитка
+            // вернулась в обычный поток и не копила слои на каждом клике.
+            anim.finished.then(() => anim.cancel()).catch(() => {});
         });
     });
 }
+window.animateLayoutFlip = animateLayoutFlip;
 
 function animatePresence(el, show, options = {}) {
     if (!el) return Promise.resolve();
@@ -423,6 +493,10 @@ function setIconSwap(button, onSelector, offSelector, enabled) {
 function setCallFeedVisible(feed, visible, options = {}) {
     if (!feed) return;
     feed.classList.toggle("is-screenshare", !!options.screenshare);
+    // Анимация с fill: "both" переживает смену классов и продолжает держать
+    // элемент на opacity: 0 с блюром. Из-за этого поток собеседника шёл, класс
+    // hidden снимался, а кадра не было видно. Гасим прошлую перед новой.
+    feed.getAnimations?.().forEach(animation => animation.cancel());
     if (visible) {
         feed.classList.remove("hidden", "stream-leaving");
         feed.classList.add("stream-entering");
@@ -435,6 +509,13 @@ function setCallFeedVisible(feed, visible, options = {}) {
         return;
     }
     feed.classList.remove("stream-entering");
+    // Прятать нечего: элемент уже скрыт. Анимация ухода в этом случае просто
+    // оставляла после себя залипший opacity: 0 — ровно так аудио-звонок делал
+    // будущее видео невидимым заранее.
+    if (feed.classList.contains("hidden")) {
+        feed.classList.remove("stream-leaving", "is-screenshare");
+        return;
+    }
     feed.classList.add("stream-leaving");
     feed.animate([
         { opacity: 1, transform: "scale(1)", filter: "none" },
@@ -839,7 +920,7 @@ function renderChatMessages(conv) {
         const isOwn = msg.sender === 'own';
         let actionsHtml = '';
 
-        const bubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${escHTML(msg.text)}</div>` : '';
+        const bubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${renderMessageText(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
             ${bubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
@@ -1485,10 +1566,14 @@ function handleMiniBarDragMove(clientX, clientY) {
     const el = miniBar;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
+    // Титлбар перекрывает плашку (он выше по z-index), поэтому выше него не пускаем.
+    const topLimit = document.body.classList.contains('is-electron')
+        ? (document.querySelector('.window-titlebar')?.offsetHeight || 32) + 4
+        : 0;
     let tx = clientX - _miniBarDrag.offsetX;
     let ty = clientY - _miniBarDrag.offsetY;
     tx = Math.max(0, Math.min(tx, window.innerWidth - w));
-    ty = Math.max(0, Math.min(ty, window.innerHeight - h));
+    ty = Math.max(topLimit, Math.min(ty, window.innerHeight - h));
     _miniBarDrag.targetX = tx;
     _miniBarDrag.targetY = ty;
     if (!_miniBarDrag.rafId) {
@@ -1910,9 +1995,32 @@ function renderUnifiedSidebar() {
     });
 }
 
+// После выхода из войса вид уже переключается на чат, а в панели каналов
+// оставался подсвеченным голосовой канал — выглядело так, будто ты сидишь
+// в двух местах сразу. Переводим выделение на текстовый канал, который
+// реально открыт (по window.currentChannelId), иначе на первый текстовый.
+function syncChannelSelectionAfterVoiceLeave() {
+    const serverData = mockServers[activeServerId];
+    const channels = serverData?.channels;
+    if (!Array.isArray(channels) || channels.length === 0) return;
+
+    // Двигаем выделение только если сейчас выбран именно голосовой канал этой
+    // сферы: в ЛС-звонках и в комнатах трогать выбор нечего.
+    const current = channels.find(ch => ch.id === activeServerChannelId);
+    if (!current || current.type !== 'voice') return;
+
+    const openId = String(window.currentChannelId || '');
+    const target = channels.find(ch => ch.type === 'text' && String(ch._realId || '') === openId)
+        || channels.find(ch => ch.type === 'text');
+    if (!target) return;
+
+    activeServerChannelId = target.id;
+    renderUnifiedSidebar();
+}
+window.syncChannelSelectionAfterVoiceLeave = syncChannelSelectionAfterVoiceLeave;
+
 // Функция выбора сервера или комнаты
-function transitionPanels(panelToShow, panelsToHide, callback) {
-    const visiblePanels = panelsToHide.filter(p => p && !p.classList.contains("hidden"));
+function transitionPanels(panelToShow, panelsToHide, callback) {    const visiblePanels = panelsToHide.filter(p => p && !p.classList.contains("hidden"));
 
     if (visiblePanels.length > 0) {
         visiblePanels.forEach(p => {
@@ -2091,6 +2199,21 @@ let roomVoiceConnected = false;
 
 let voiceMembers = [];
 
+// Свой участник в войсе: ищем по userId, а на флаг isOwn падаем только если
+// своего id ещё нет. Кнопки камеры/экрана раньше брали `find(m => m.isOwn)` из
+// возможно устаревшего списка и переключали стрим не тому человеку.
+function getOwnVoiceMember() {
+    const list = (window.voiceMembers && window.voiceMembers.length) ? window.voiceMembers : voiceMembers;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const selfId = String(window.currentUser?._id || '');
+    if (selfId) {
+        const byId = list.find(m => m && String(m.userId || '') === selfId);
+        if (byId) return byId;
+    }
+    return list.find(m => m && m.isOwn) || null;
+}
+window.getOwnVoiceMember = getOwnVoiceMember;
+
 let voiceControlsInitialized = false;
 let _streamAnimating = false;
 const _streamAnimTimer = () => setTimeout(() => { _streamAnimating = false; }, 800);
@@ -2217,7 +2340,7 @@ function initVoiceControls() {
         micBtn.addEventListener("click", () => {
             voiceState.micActive = !voiceState.micActive;
             _applyBtnIconState(micBtn, voiceState.micActive, "Выключить микрофон", "Включить микрофон");
-            const ownMember = voiceMembers.find(m => m.isOwn);
+            const ownMember = getOwnVoiceMember();
             if (ownMember) ownMember.speaking = false;
             if (typeof syncRoomBtns === 'function') syncRoomBtns();
             renderVoiceChannel();
@@ -2229,7 +2352,7 @@ function initVoiceControls() {
     if (camBtn) {
         camBtn.addEventListener("click", () => {
             if (_streamAnimating) return;
-            const ownMember = voiceMembers.find(m => m.isOwn);
+            const ownMember = getOwnVoiceMember();
             const ps = window._voicePreviewState || {};
             if (voiceState.camActive) {
                 _streamAnimating = true; _streamAnimTimer();
@@ -2289,7 +2412,7 @@ function initVoiceControls() {
     if (shareBtn) {
         shareBtn.addEventListener("click", () => {
             if (_streamAnimating) return;
-            const ownMember = voiceMembers.find(m => m.isOwn);
+            const ownMember = getOwnVoiceMember();
             const ps = window._voicePreviewState || {};
             if (voiceState.shareActive) {
                 _streamAnimating = true; _streamAnimTimer();
@@ -2527,7 +2650,17 @@ function _doRenderVoiceChannel() {
 
     if (!gridConstellation) return;
 
-    if (window.CallStageController?.renderServer(window.voiceMembers || [])) {
+    // Сцене отдаём «сырых» участников от сервера: в них настоящие ссылки на
+    // аватарки и актуальный muted/mediaMode. window.voiceMembers — копия для
+    // старой констелляции, там avatar подменён инициалами, и от неё аватарки
+    // в плитках ломались.
+    const stageMembers = (window.voiceManager?.channelMembers?.length)
+        ? window.voiceManager.channelMembers
+        : (window.voiceMembers || []);
+    if (window.CallStageController?.renderServer(stageMembers)) {
+        // Сцена могла отрисоваться в контейнер комнаты — кнопки комнаты
+        // синхронизируются ниже в легаси-ветке, а мы до неё не доходим.
+        if (typeof syncRoomBtns === 'function') syncRoomBtns();
         return;
     }
 
@@ -3037,13 +3170,18 @@ function showServerVoice(channelName) {
         window.voiceSimTimer1 = null;
         window.voiceSimTimer2 = null;
 
-        // Load active channel members from WebRTC state if present
-        if (window.voiceMembers && window.voiceMembers.length > 0) {
-            voiceMembers = window.voiceMembers;
-        } else if (window.voiceManager && window.voiceManager.channelMembers) {
-            voiceMembers = window.voiceManager.channelMembers.map(m => {
+        // Живой список участников важнее кэша window.voiceMembers: кэш остаётся
+        // с прошлого захода в войс, и в нём ни настоящих аватарок, ни актуальных
+        // флагов камеры/микрофона — из-за него плитки жили прошлой сессией.
+        const managerMembers = window.voiceManager?.channelMembers;
+        if (Array.isArray(managerMembers) && managerMembers.length > 0) {
+            // isOwn считаем только когда свой id реально известен: иначе
+            // String(undefined) === String(undefined) помечал «своим» кого попало,
+            // и кнопка камеры уезжала в чужого участника.
+            const selfId = String(window.currentUser?._id || '');
+            voiceMembers = managerMembers.map(m => {
                 const name = m.nickname || m.username || 'User';
-                const isOwn = String(m.userId) === String(window.currentUser?._id);
+                const isOwn = !!selfId && String(m.userId || '') === selfId;
                 return {
                     name: name,
                     avatar: (m.avatarLetters || name.charAt(0)).slice(0, 2),
@@ -3052,7 +3190,9 @@ function showServerVoice(channelName) {
                     // Источник истины по стримам — сервер (screenSharing/cameraOn).
                     hasCam: !!(m.hasCam || m.cameraOn),
                     hasShare: !!(m.hasShare || m.screenSharing),
+                    mediaMode: m.mediaMode || '',
                     isOwn: isOwn,
+                    muted: !!m.muted,
                     micActive: !m.muted,
                     soundActive: !m.deafened,
                     userId: m.userId,
@@ -3060,6 +3200,8 @@ function showServerVoice(channelName) {
                 };
             });
             window.voiceMembers = voiceMembers;
+        } else if (window.voiceMembers && window.voiceMembers.length > 0) {
+            voiceMembers = window.voiceMembers;
         } else {
             const isConnected = !!window.currentVoiceChannel;
             if (isConnected) {
@@ -3310,7 +3452,7 @@ function renderRoomChat() {
         
         const bubbleWrap = document.createElement("div");
         bubbleWrap.className = "message-bubble-wrap";
-        const roomBubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${escHTML(msg.text)}</div>` : '';
+        const roomBubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${renderMessageText(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
             ${roomBubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
@@ -3393,13 +3535,8 @@ if (roomScreenshareBtn) {
     });
 }
 
-const roomTheaterToggle = document.getElementById("room-theater-toggle");
-if (roomTheaterToggle) {
-    roomTheaterToggle.addEventListener("click", () => {
-        const theaterModal = document.getElementById("theater-modal");
-        if (theaterModal) theaterModal.classList.remove("hidden");
-    });
-}
+// Кнопку «Увеличить в Кинотеатр» ведёт CallStageController.openTheater —
+// прежний обработчик открывал модалку-заглушку с нарисованным экраном.
 
 const addServerBtn = document.querySelector(".add-server-btn");
 if (addServerBtn) {
@@ -3420,7 +3557,7 @@ function integrateServerIntoUI(realServer, doSelect = true) {
     const kind = realServer.settings?.kind === 'room' ? 'room' : 'server';
     const channels = (realServer.channels || []).map(ch => ({
         id: 'ch-' + ch._id,
-        name: ch.name || 'general',
+        name: ch.name || 'Чат',
         type: ch.type || 'text',
         messages: [],
         _realId: ch._id
@@ -3460,6 +3597,32 @@ function integrateServerIntoUI(realServer, doSelect = true) {
 }
 window.integrateServerIntoUI = integrateServerIntoUI;
 
+// Открыть сферу, в которой мы уже состоим, по инвайт-коду. Нужно, когда сервер
+// на join отвечает «вы уже являетесь участником»: для человека это не ошибка,
+// он ждёт, что его просто пустят внутрь.
+async function openJoinedSpaceByCode(code) {
+    if (!code || typeof ServersAPI === 'undefined' || !ServersAPI.invitePreview) return null;
+    try {
+        const preview = await ServersAPI.invitePreview(code);
+        const realId = preview && preview.id;
+        if (!realId) return null;
+        const localId = 'srv-' + realId;
+        if (mockServers[localId]) {
+            selectServerOrRoom(localId, mockServers[localId]._kind === 'room' ? 'room' : 'server');
+            return localId;
+        }
+        // Локальный список мог устареть (вошли с другого устройства) — дотянем сферу.
+        const fresh = await ServersAPI.get(realId);
+        const realServer = fresh && (fresh.server || fresh);
+        if (realServer && realServer._id) return integrateServerIntoUI(realServer, true);
+        return null;
+    } catch (e) {
+        console.warn('[join] open existing failed:', e);
+        return null;
+    }
+}
+window.openJoinedSpaceByCode = openJoinedSpaceByCode;
+
 // Войти в сервер/сферу по инвайт-коду: вызвать API, интегрировать в UI и
 // открыть. Переиспользуется модалкой «Войти» и кнопкой в карточке чата.
 // Возвращает локальный id или null. forceSelect — открыть после входа.
@@ -3480,10 +3643,15 @@ async function joinSpaceByCode(code, { silent = false } = {}) {
     } catch (err) {
         console.error('[join] failed:', err);
         const msg = (err && err.message) || '';
-        if (!silent) {
-            showToast('Ошибка', /уже являетесь/i.test(msg) ? 'Вы уже участник.' : 'Ссылка недействительна или истекла.');
+        const already = /уже являетесь/i.test(msg);
+        // Уже участник — открываем существующую сферу вместо тоста с ошибкой.
+        if (already) {
+            const existing = await openJoinedSpaceByCode(code);
+            if (existing) return existing;
         }
-        // Если уже участник — попробуем просто открыть существующий сервер.
+        if (!silent) {
+            showToast('Ошибка', already ? 'Вы уже участник.' : 'Ссылка недействительна или истекла.');
+        }
         return null;
     }
 }
@@ -3747,7 +3915,7 @@ function renderServerChat() {
 
         let actionsHtml = '';
 
-        const srvBubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${escHTML(msg.text)}</div>` : '';
+        const srvBubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${renderMessageText(msg.text)}</div>` : '';
         bubbleWrap.innerHTML = `
             ${srvBubbleText}
             <span class="message-meta">${escHTML(msg.time)}</span>
@@ -4429,18 +4597,90 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
 // и кнопками «Отмена»/«Отправить» → загрузка аудио → отправка как вложение.
 (function initVoiceMessages() {
     const MAX_MS = 5 * 60 * 1000; // авто-стоп через 5 минут
+    const WAVE_BARS = 32;         // при шаге 60мс это ~2 секунды истории
+    const WAVE_STEP_MS = 60;
     let mediaRecorder = null, chunks = [], micStream = null;
     let startTs = 0, timerId = null, maxTimerId = null, activeForm = null, bar = null, shouldSend = false;
+    let audioCtx = null, analyser = null, waveBuf = null, waveLevels = null, waveEls = null;
 
     const isRec = () => mediaRecorder && mediaRecorder.state === 'recording';
 
     function stopTracks() {
         if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     }
+
+    /**
+     * Живой уровень с микрофона для полоски записи.
+     *
+     * Раньше на панели записи были только красная точка и таймер, и по ним
+     * невозможно понять, слышно ли тебя: микрофон мог быть занят другим
+     * приложением, выбран не тот или физически выключен — панель выглядела
+     * одинаково. Теперь полоски двигаются от голоса.
+     *
+     * Волна необязательна: если звуковой граф не создался, запись должна
+     * продолжаться как раньше, поэтому все сбои здесь глушим.
+     */
+    function startWave() {
+        if (!micStream) return;
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            // Свежий контекст иногда создаётся приостановленным — тогда
+            // анализатор отдавал бы нули и волна выглядела бы мёртвой.
+            if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512;
+            audioCtx.createMediaStreamSource(micStream).connect(analyser);
+            waveBuf = new Uint8Array(analyser.fftSize);
+        } catch (e) {
+            analyser = null;
+            waveBuf = null;
+        }
+    }
+
+    function stopWave() {
+        analyser = null;
+        waveBuf = null;
+        waveLevels = null;
+        waveEls = null;
+        if (audioCtx) { try { audioCtx.close(); } catch (_) { /* уже закрыт */ } audioCtx = null; }
+    }
+
+    /**
+     * Громкость как RMS по временной форме сигнала. По частотным данным
+     * получалось бы хуже: тихий фоновый шум даёт там заметные пики, и полоски
+     * дрожали бы в тишине — ровно то, от чего мы уходим.
+     */
+    function readLevel() {
+        if (!analyser || !waveBuf) return 0;
+        analyser.getByteTimeDomainData(waveBuf);
+        let sum = 0;
+        for (let i = 0; i < waveBuf.length; i++) {
+            const v = (waveBuf[i] - 128) / 128;
+            sum += v * v;
+        }
+        const rms = Math.sqrt(sum / waveBuf.length);
+        // Порог шума: тишина в комнате — это RMS порядка 0.005, и без вычета
+        // полоски всё время слегка подрагивали бы, то есть волна снова ничего
+        // не значила бы. Корень после него растягивает тихую часть шкалы:
+        // обычная речь — RMS 0.05–0.2, на линейной шкале она почти не поднялась
+        // бы над дном.
+        return Math.min(1, Math.sqrt(Math.max(0, rms - 0.008) * 3.2));
+    }
+
+    function drawWave() {
+        if (!waveEls || !waveLevels) return;
+        waveLevels.push(readLevel());
+        waveLevels.shift();
+        for (let i = 0; i < waveEls.length; i++) {
+            waveEls[i].style.height = (2 + waveLevels[i] * 20).toFixed(1) + 'px';
+        }
+    }
+
     function cleanupBar() {
         if (timerId) { clearInterval(timerId); timerId = null; }
         if (maxTimerId) { clearTimeout(maxTimerId); maxTimerId = null; }
         if (bar) { bar.remove(); bar = null; }
+        stopWave();
         activeForm = null;
     }
     function fmt(ms) {
@@ -4451,7 +4691,12 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
     async function start(form) {
         if (isRec()) return;
         try {
-            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Настройки микрофона и обработки звука: раньше здесь стояло
+            // `audio: true`, и голосовое всегда писалось с системного
+            // микрофона, даже если в настройках выбран другой.
+            micStream = await navigator.mediaDevices.getUserMedia({
+                audio: typeof getVoiceAudioConstraints === 'function' ? getVoiceAudioConstraints() : true
+            });
         } catch (e) {
             showToast('Ошибка', 'Нет доступа к микрофону.');
             return;
@@ -4469,6 +4714,7 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         mediaRecorder.start();
         startTs = Date.now();
         activeForm = form;
+        startWave();
         showBar(form);
         maxTimerId = setTimeout(() => { shouldSend = true; if (isRec()) mediaRecorder.stop(); }, MAX_MS);
     }
@@ -4480,16 +4726,25 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         bar.innerHTML = `
             <span class="voice-rec-dot"></span>
             <span class="voice-rec-time">0:00</span>
-            <span class="voice-rec-spacer"></span>
+            <span class="voice-rec-wave">${'<i></i>'.repeat(WAVE_BARS)}</span>
             <button type="button" class="voice-rec-cancel">Отмена</button>
             <button type="button" class="voice-rec-send">Отправить</button>`;
         form.appendChild(bar);
         bar.querySelector('.voice-rec-cancel').addEventListener('click', () => { shouldSend = false; if (isRec()) mediaRecorder.stop(); });
         bar.querySelector('.voice-rec-send').addEventListener('click', () => { shouldSend = true; if (isRec()) mediaRecorder.stop(); });
+        waveEls = Array.from(bar.querySelectorAll('.voice-rec-wave i'));
+        waveLevels = new Array(WAVE_BARS).fill(0);
+        // Один интервал на таймер и на волну: шаг задаёт волна (60мс), запись
+        // цифр времени на этом фоне бесплатна. requestAnimationFrame намеренно
+        // не используем: в скрытом или свёрнутом окне он даёт ровно ноль кадров
+        // (проверено замером), и тогда замер бы не только волна, но и таймер
+        // записи. setInterval в этом случае лишь замедляется до ~2 тиков в
+        // секунду — цифры продолжают идти.
         timerId = setInterval(() => {
             const t = bar && bar.querySelector('.voice-rec-time');
             if (t) t.textContent = fmt(Date.now() - startTs);
-        }, 200);
+            drawWave();
+        }, WAVE_STEP_MS);
     }
 
     async function onStop() {
@@ -5198,7 +5453,8 @@ function loadFriends(type) {
         });
 
         card.querySelector(".call-action").addEventListener("click", () => {
-            startDirectCall(friend.name, friend.avatar, false, friend._realId);
+            // friend.avatar — буква-фолбэк, картинка лежит в avatarUrl.
+            startDirectCall(friend.name, friend.avatar, false, friend._realId, false, friend.avatarUrl || '');
         });
 
         card.querySelector(".remove-friend-action").addEventListener("click", async () => {
@@ -5228,23 +5484,142 @@ function loadFriends(type) {
 // Love Hub статичный: реальная версия приложения. Полноценная история
 // обновлений и управление появятся позже через админ-панель.
 const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion === 'function')
-    ? (window.electronAPI.getVersion() || '2.0.4')
-    : '2.0.4';
+    ? (window.electronAPI.getVersion() || '2.1.0')
+    : '2.1.0';
 
+// История выпусков — та же, что на сайте и в мобильном Love Hub. Номер текущей
+// версии подставляется из сборки, чтобы после релиза не править его руками.
 let mockHubUpdates = [
     {
         id: 1,
         version: "v" + APP_VERSION,
-        date: "",
+        date: "август 2026",
         tag: "Текущая версия",
-        title: "Love App v" + APP_VERSION,
-        desc: "Уведомления: нативные на ПК, категории в панели, рабочие заявки. Камера-флип на мобиле.",
+        title: "Приглашения, уведомления и спокойный войс",
+        desc: "Ссылка-приглашение теперь работает откуда угодно, уведомления перестали засыпать вас карточками, а войс в сферах выглядит и ведёт себя как звонок в личке.",
         changes: [
-            "Панель уведомлений: вкладки «Обычные» и «Системные»",
-            "Заявки в друзья прямо из уведомлений — кнопки «Принять» / «Отклонить»",
-            "Нативные ПК-уведомления при свёрнутом окне (сообщения, заявки, упоминания, звонки) + иконка",
-            "Кнопка разворота камеры (фронт/зад) на мобиле",
-            "Авто-обновления и канал Beta (из 2.0.3)"
+            "Приглашения: одна ссылка открывает превью в браузере и саму сферу в приложении. Молча никуда не вступаете — сначала видно, кто и куда зовёт",
+            "Уведомления: десять сообщений от одного человека — одна карточка. Фото показываются миниатюрой, голосовые, видео и файлы — подписью",
+            "Войс в сферах: та же панель, что в звонках. Аватарки видно с первой секунды, кнопки камеры и демонстрации управляют только вашим потоком",
+            "Демонстрацию можно открыть на весь экран, приближать колесом, и остальные участники при этом остаются полоской сбоку",
+            "Медиа: зум фотографий, видео во весь экран — одинаково на компьютере и телефоне",
+            "Голосовые: живая волна уровня во время записи",
+            "Светлая тема — целиком, а не местами. И нормальные иконки тем в «Внешнем виде»",
+            "Ссылки на чужие сайты сначала спрашивают, точно ли вы туда хотите",
+            "Сообщения, пришедшие пока окно было свёрнуто, больше не теряются: при возвращении переписка дочитывается сама"
+        ]
+    },
+    {
+        id: 2,
+        version: "v2.0.7",
+        date: "август 2026",
+        tag: "Обновление",
+        title: "Звонки, которые не мешают",
+        desc: "Пачка правок по звонкам: демонстрация запускается с первого раза, картинку можно приблизить, а разговор не обрывается, если уйти с экрана.",
+        changes: [
+            "Демонстрация экрана запускается в правильном порядке — больше не бывает чёрного кадра вместо картинки",
+            "Зум и «картинка в картинке» во время звонка",
+            "Переключение камеры и таблетка активного звонка",
+            "Действия с сообщениями по правому клику на компьютере",
+            "Видео из сообщений открывается одинаково на телефоне и на ПК"
+        ]
+    },
+    {
+        id: 3,
+        version: "v2.0.6",
+        date: "июль 2026",
+        tag: "Обновление",
+        title: "Звонок слышно, даже когда приложение свёрнуто",
+        desc: "Android научился обновляться сам, а входящий звонок приходит полноэкранным уведомлением — даже если приложение закрыто.",
+        changes: [
+            "Обновления внутри приложения на Android: проверяет, скачивает и ставит само, браузер не нужен",
+            "Входящий звонок — полноэкранное уведомление с «Принять» и «Отклонить». Пока идёт разговор, в шторке висит микрофон и «Завершить»",
+            "Компактный вид сообщений, отдельные переключатели уведомлений и выключатель анимаций",
+            "Уход с экрана переписки больше не сбрасывает звонок",
+            "Кнопка микрофона перестала срабатывать через раз",
+            "Связь не сдаётся: переподключение бесконечное, с растущей паузой"
+        ]
+    },
+    {
+        id: 4,
+        version: "v2.0.5",
+        date: "июль 2026",
+        tag: "Обновление",
+        title: "Стабильный войс и присутствие на телефоне",
+        desc: "Можно быть залогиненным на компьютере и телефоне одновременно — звонки приходят на оба.",
+        changes: [
+            "Войс на нескольких устройствах: оба получают звонки и заходят в каналы независимо",
+            "Панель войса на телефоне: кто в канале, микрофон, наушники, вход и выход с подтверждением сервера",
+            "Переключение или отключение микрофона больше не ломает разговор",
+            "Иконки и баннеры для сфер и комнат",
+            "Публичный сайт loveapp.chat с историей версий и поддержкой"
+        ]
+    },
+    {
+        id: 5,
+        version: "v2.0.4",
+        date: "июнь 2026",
+        tag: "Обновление",
+        title: "Уведомления — как надо",
+        desc: "Настоящие уведомления системы, пока приложение свёрнуто, и заявки в друзья прямо из панели.",
+        changes: [
+            "Нативные уведомления на компьютере: сообщения, заявки, упоминания, пропущенные звонки. Клик ведёт сразу в нужное место",
+            "Две вкладки в панели: «Обычные» и «Системные»",
+            "Заявки в друзья с кнопками «Принять» и «Отклонить» прямо там",
+            "Переворот камеры на телефоне во время видеозвонка"
+        ]
+    },
+    {
+        id: 6,
+        version: "v2.0.3",
+        date: "июнь 2026",
+        tag: "Обновление",
+        title: "Всегда актуальная версия",
+        desc: "Обновления скачиваются в фоне и ставятся при перезапуске.",
+        changes: [
+            "Автообновления на компьютере",
+            "Настройки → Обновления: версия, статус, прогресс и «Перезапустить и установить»",
+            "Бета-канал для тех, кому интересно раньше",
+            "Музыка в профиле снова стабильно слышна друзьям"
+        ]
+    },
+    {
+        id: 7,
+        version: "v2.0.2",
+        date: "май 2026",
+        tag: "Обновление",
+        title: "Голос, который соединяет",
+        desc: "Спокойные переподключения и чище звук.",
+        changes: [
+            "Стабильнее голосовые соединения",
+            "Аккуратные переподключения без выпадения из канала",
+            "Лучше качество звука в звонках и комнатах"
+        ]
+    },
+    {
+        id: 8,
+        version: "v2.0.1",
+        date: "май 2026",
+        tag: "Обновление",
+        title: "Более плавный старт",
+        desc: "Первый запуск и вход стали быстрее и тише.",
+        changes: [
+            "Спокойнее и быстрее первый запуск и вход",
+            "Полировка и мелкие исправления по всему приложению"
+        ]
+    },
+    {
+        id: 9,
+        version: "v2.0.0",
+        date: "май 2026",
+        tag: "Большое обновление",
+        title: "Общение, переосмысленное",
+        desc: "Новый голосовой движок, демонстрация экрана до 1080p и чёрно-белый мир, сделанный для сосредоточенности.",
+        changes: [
+            "Голосовые комнаты 2.0: новый движок, орбы присутствия, камера",
+            "Демонстрация экрана до 1080p 60 кадров с выбором окна или дисплея",
+            "Всё в реальном времени: сообщения, звонки и статусы без перезагрузок",
+            "Дизайн ваби-саби: профили, настроения, музыка и интересы в одном спокойном интерфейсе"
         ]
     }
 ];
@@ -6217,11 +6592,8 @@ if (roomDisconnectBtn) {
     });
 }
 
-if (theaterToggle && theaterModal) {
-    theaterToggle.addEventListener("click", () => {
-        theaterModal.classList.remove("hidden");
-    });
-}
+// Кнопку «на весь экран» обслуживает CallStageController.openTheater —
+// раньше она открывала модалку-заглушку, и живой демки в ней не было.
 
 if (theaterClose && theaterModal) {
     theaterClose.addEventListener("click", () => {
@@ -6286,11 +6658,13 @@ if (notifFeedContainer) {
     notifFeedContainer.addEventListener("click", (e) => {
         const el = e.target.closest("[data-notif-action]");
         if (!el || !notifFeedContainer.contains(el)) return;
-        const { notifAction, notifId, convId, serverId, name, actorId } = el.dataset;
+        const { notifAction, notifId, notifIds, convId, serverId, name, actorId } = el.dataset;
 
         switch (notifAction) {
             case "close":          removeNotification(e, Number(notifId)); break;
+            case "close-group":    removeNotificationGroup(e, notifIds); break;
             case "goto-chat":      goToNotificationChat(serverId); break;
+            case "open-dm":        openNotificationDM(e, notifIds, convId); break;
             case "friend-accept":  handleFriendAccept(Number(notifId), actorId, name); break;
             case "friend-decline": handleFriendDecline(Number(notifId), actorId, name); break;
             case "callback":       handleCallbackCall(name, actorId); break;
@@ -6300,11 +6674,100 @@ if (notifFeedContainer) {
     notifFeedContainer.addEventListener("submit", (e) => {
         const form = e.target.closest('form[data-notif-action="reply-submit"]');
         if (!form || !notifFeedContainer.contains(form)) return;
-        handleNotificationReply(e, Number(form.dataset.notifId), form.dataset.convId);
+        handleNotificationReply(e, form.dataset.notifIds, form.dataset.convId, form.dataset.channelId);
     });
 }
 
 let notifActiveTab = "normal"; // 'normal' | 'system'
+
+// ── Превью вложений в карточке уведомления ────────────────────────────────
+// Сервер отдаёт previewKind (image | video | voice | audio | file | mixed) и
+// previewImage — ссылку на первую картинку сообщения (server/utils/
+// messagePreview.js). Раньше в уведомление уходил только текст, поэтому
+// сообщение из одной фотографии превращалось в карточку с именем и пустотой.
+const NOTIF_SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+const NOTIF_KIND_ICONS = {
+    image: NOTIF_SVG_OPEN + '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
+    video: NOTIF_SVG_OPEN + '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>',
+    voice: NOTIF_SVG_OPEN + '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>',
+    audio: NOTIF_SVG_OPEN + '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>',
+    file:  NOTIF_SVG_OPEN + '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>',
+    mixed: NOTIF_SVG_OPEN + '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>'
+};
+
+// Одна строка превью: миниатюра, если пришло фото, иначе значок вложения.
+function notifPreviewLine(n) {
+    const kind = n.previewKind || "text";
+    const rawUrl = n.previewImage || "";
+    // Cloudinary отдаёт абсолютный адрес, локальные загрузки — путь вида
+    // /uploads/... Логика та же, что у _media() в init-app.js; getAvatarUrl
+    // здесь не годится, он строит ссылку на аватар пользователя.
+    const url = rawUrl && !/^https?:|^data:|^blob:/.test(rawUrl)
+        ? (window.BASE_URL || "") + rawUrl
+        : rawUrl;
+    const thumb = url
+        ? `<span class="notif-preview-thumb"><img src="${escHTML(url)}" alt="" loading="lazy"></span>`
+        : "";
+    const icon = (!thumb && kind !== "text" && NOTIF_KIND_ICONS[kind])
+        ? `<span class="notif-preview-icon">${NOTIF_KIND_ICONS[kind]}</span>`
+        : "";
+    const text = n.text ? `<span class="notif-preview-text">${escHTML(n.text)}</span>` : "";
+    if (!thumb && !icon) return `<p class="notif-message-text">${escHTML(n.text || "")}</p>`;
+    return `<div class="notif-preview-line">${thumb}${icon}${text}</div>`;
+}
+
+function notifMessagesWord(count) {
+    const mod100 = count % 100;
+    const mod10 = count % 10;
+    if (mod100 >= 11 && mod100 <= 14) return "сообщений";
+    if (mod10 === 1) return "сообщение";
+    if (mod10 >= 2 && mod10 <= 4) return "сообщения";
+    return "сообщений";
+}
+
+// Личные сообщения от одного человека сходятся в одну карточку: раньше десять
+// сообщений подряд давали десять одинаковых карточек с формой ответа в каждой.
+// Список приходит от новых к старым, поэтому первый элемент группы — свежий,
+// его время и идёт в заголовок.
+const NOTIF_GROUP_PREVIEW_LIMIT = 3;
+
+function groupNotifications(list) {
+    const entries = [];
+    const groups = new Map();
+
+    list.forEach(n => {
+        if (n.type !== "dm") { entries.push({ single: n }); return; }
+
+        const key = "dm:" + String(n.actorId || n.convId || n.name);
+        const existing = groups.get(key);
+        if (existing) {
+            existing.items.push(n);
+            existing.unread = existing.unread || !!n.unread;
+            // Ссылки на диалог могли не попасть в самое свежее уведомление
+            // (старые записи в базе без channelId) — добираем из следующих.
+            existing.convId = existing.convId || n.convId || "";
+            existing.channelId = existing.channelId || n.channelId || "";
+            return;
+        }
+
+        const group = {
+            items: [n],
+            type: "dm",
+            name: n.name,
+            avatar: n.avatar,
+            avatarUrl: n.avatarUrl || "",
+            actorId: n.actorId || "",
+            convId: n.convId || "",
+            channelId: n.channelId || "",
+            time: n.time,
+            unread: !!n.unread
+        };
+        groups.set(key, group);
+        entries.push({ group });
+    });
+
+    return entries;
+}
 
 function loadNotifications() {
     notifFeedContainer.innerHTML = "";
@@ -6324,20 +6787,31 @@ function loadNotifications() {
         return;
     }
 
-    list.forEach(notif => {
+    groupNotifications(list).forEach(entry => {
+        // Для сгруппированной карточки notif — самое свежее уведомление группы;
+        // covered — всё, что карточка закрывает (прочитать/удалить надо все).
+        const notif = entry.single || entry.group.items[0];
+        const covered = entry.group ? entry.group.items : [entry.single];
         const item = document.createElement("div");
-        
-        if (notif.type === "dm") {
-            item.className = `notification-item notif-card-dm ${notif.unread ? 'unread' : ''}`;
+
+        if (entry.group) {
+            const g = entry.group;
+            const count = g.items.length;
+            const ids = g.items.map(n => n.id).join(",");
+            const shown = g.items.slice(0, NOTIF_GROUP_PREVIEW_LIMIT);
+            const hidden = count - shown.length;
+
+            item.className = `notification-item notif-card-dm ${g.unread ? 'unread' : ''} ${count > 1 ? 'notif-card-grouped' : ''}`;
             item.innerHTML = `
                 <div class="notif-card-header">
-                    <div class="notif-avatar">${escHTML(notif.avatar)}</div>
+                    <div class="notif-avatar" style="${avatarStyle(g.avatarUrl)}">${avatarInner(g.avatarUrl, g.avatar)}</div>
                     <div class="notif-meta-info">
-                        <span class="notif-user-name">${escHTML(notif.name)}</span>
-                        <span class="notif-time">${escHTML(notif.time)}</span>
+                        <span class="notif-user-name">${escHTML(g.name)}</span>
+                        <span class="notif-time">${escHTML(g.time)}</span>
                     </div>
-                    ${notif.unread ? '<span class="notif-unread-dot"></span>' : ''}
-                    <button class="notif-close-btn" data-notif-action="close" data-notif-id="${notif.id}">
+                    ${count > 1 ? `<span class="notif-count-badge">${count} ${notifMessagesWord(count)}</span>` : ''}
+                    ${g.unread ? '<span class="notif-unread-dot"></span>' : ''}
+                    <button class="notif-close-btn" data-notif-action="close-group" data-notif-ids="${ids}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -6345,12 +6819,14 @@ function loadNotifications() {
                     </button>
                 </div>
                 <div class="notif-card-body">
-                    <p class="notif-message-text">${escHTML(notif.text)}</p>
+                    ${shown.map(notifPreviewLine).join("")}
+                    ${hidden > 0 ? `<div class="notif-preview-more">и ещё ${hidden} ${notifMessagesWord(hidden)}</div>` : ''}
                 </div>
                 <div class="notif-card-actions">
-                    <form class="notif-reply-form" data-notif-action="reply-submit" data-notif-id="${notif.id}" data-conv-id="${escHTML(notif.convId)}">
+                    <form class="notif-reply-form" data-notif-action="reply-submit" data-notif-ids="${ids}" data-conv-id="${escHTML(g.convId)}" data-channel-id="${escHTML(g.channelId)}">
                         <input type="text" placeholder="Написать ответ..." class="notif-reply-input" required autocomplete="off">
                         <button type="submit" class="notif-action-btn primary">Ответить</button>
+                        <button type="button" class="notif-action-btn notif-btn-bw" data-notif-action="open-dm" data-notif-ids="${ids}" data-conv-id="${escHTML(g.convId)}">Открыть чат</button>
                     </form>
                 </div>
             `;
@@ -6361,7 +6837,7 @@ function loadNotifications() {
                 <div class="notif-card-header">
                     <div class="notif-avatar-combo">
                         <div class="notif-avatar group-avatar">${escHTML(notif.groupAvatar)}</div>
-                        <div class="notif-avatar sender-avatar-mini">${escHTML(notif.senderAvatar)}</div>
+                        <div class="notif-avatar sender-avatar-mini" style="${avatarStyle(notif.avatarUrl)}">${avatarInner(notif.avatarUrl, notif.senderAvatar)}</div>
                     </div>
                     <div class="notif-meta-info">
                         <span class="notif-user-name">${escHTML(notif.name)}</span>
@@ -6377,6 +6853,7 @@ function loadNotifications() {
                 </div>
                 <div class="notif-card-body">
                     <p class="notif-message-text"><strong>${escHTML(notif.name)}</strong> упомянул вас в <strong>[${escHTML(notif.groupName)}]</strong>: "${escHTML(notif.text)}"</p>
+                    ${(notif.previewImage || (notif.previewKind && notif.previewKind !== "text")) ? notifPreviewLine({ previewKind: notif.previewKind, previewImage: notif.previewImage, text: "" }) : ''}
                 </div>
                 <div class="notif-card-actions">
                     <button class="notif-action-btn" data-notif-action="goto-chat" data-server-id="${escHTML(notif.serverId)}">Перейти к чату</button>
@@ -6387,7 +6864,7 @@ function loadNotifications() {
             item.className = `notification-item notif-card-request ${notif.unread ? 'unread' : ''}`;
             item.innerHTML = `
                 <div class="notif-card-header">
-                    <div class="notif-avatar">${escHTML(notif.avatar)}</div>
+                    <div class="notif-avatar" style="${avatarStyle(notif.avatarUrl)}">${avatarInner(notif.avatarUrl, notif.avatar)}</div>
                     <div class="notif-meta-info">
                         <span class="notif-user-name">${escHTML(notif.name)}</span>
                         <span class="notif-time">${escHTML(notif.time)}</span>
@@ -6413,7 +6890,7 @@ function loadNotifications() {
             item.className = `notification-item notif-card-system notif-card-call ${notif.unread ? 'unread' : ''}`;
             item.innerHTML = `
                 <div class="notif-card-header">
-                    <div class="notif-avatar call-avatar">${escHTML(notif.avatar)}</div>
+                    <div class="notif-avatar call-avatar" style="${avatarStyle(notif.avatarUrl)}">${avatarInner(notif.avatarUrl, notif.avatar)}</div>
                     <div class="notif-meta-info">
                         <span class="notif-user-name">${escHTML(notif.name)}</span>
                         <span class="notif-time">${escHTML(notif.time)}</span>
@@ -6444,7 +6921,7 @@ function loadNotifications() {
             item.className = `notification-item notif-card-system notif-card-joined ${notif.unread ? 'unread' : ''}`;
             item.innerHTML = `
                 <div class="notif-card-header">
-                    <div class="notif-avatar joined-avatar">${escHTML(notif.avatar)}</div>
+                    <div class="notif-avatar joined-avatar" style="${avatarStyle(notif.avatarUrl)}">${avatarInner(notif.avatarUrl, notif.avatar)}</div>
                     <div class="notif-meta-info">
                         <span class="notif-user-name">${escHTML(notif.name)}</span>
                         <span class="notif-time">${escHTML(notif.time)}</span>
@@ -6468,14 +6945,19 @@ function loadNotifications() {
             if (e.target.closest("button, input, form")) {
                 return;
             }
-            notif.unread = false;
+            // Карточка может закрывать несколько уведомлений (сгруппированная
+            // личка) — читаем все, иначе бейдж останется висеть.
+            covered.forEach(n => {
+                if (!n.unread) return;
+                n.unread = false;
+                if (n._realId && typeof NotificationsAPI !== "undefined") {
+                    NotificationsAPI.markRead(n._realId).catch(() => {});
+                }
+            });
             item.classList.remove("unread");
             const dot = item.querySelector(".notif-unread-dot");
             if (dot) dot.remove();
             checkUnreadNotifications();
-            if (notif._realId && typeof NotificationsAPI !== "undefined") {
-                NotificationsAPI.markRead(notif._realId).catch(() => {});
-            }
             if (notif.caseId && typeof window.openSupportCase === "function") {
                 window.openSupportCase(notif.caseId);
             }
@@ -6500,6 +6982,55 @@ window.removeNotification = function(e, id) {
     loadNotifications();
     checkUnreadNotifications();
     showToast("Удалено", "Уведомление стерто из списка.");
+};
+
+// Сгруппированная карточка закрывает несколько уведомлений, поэтому её крестик
+// присылает список локальных id строкой «3,7,12».
+function _dropNotifIds(ids) {
+    const list = String(ids || "").split(",").map(Number).filter(n => !Number.isNaN(n));
+    if (!list.length) return 0;
+    const set = new Set(list);
+    list.forEach(id => _removeNotifServerSide(id));   // ищет в mockNotifications — до фильтра
+    mockNotifications = mockNotifications.filter(n => !set.has(n.id));
+    loadNotifications();
+    checkUnreadNotifications();
+    return list.length;
+}
+
+window.removeNotificationGroup = function(e, ids) {
+    if (e) e.stopPropagation();
+    const removed = _dropNotifIds(ids);
+    if (!removed) return;
+    showToast("Удалено", removed > 1
+        ? `Уведомлений стерто: ${removed}.`
+        : "Уведомление стерто из списка.");
+};
+
+// Пометить прочитанной всю группу (человек ушёл читать переписку).
+function _markNotifIdsRead(ids) {
+    const set = new Set(String(ids || "").split(",").map(Number).filter(n => !Number.isNaN(n)));
+    if (!set.size) return;
+    let changed = false;
+    mockNotifications.forEach(n => {
+        if (!set.has(n.id) || !n.unread) return;
+        n.unread = false;
+        changed = true;
+        if (n._realId && typeof NotificationsAPI !== "undefined") {
+            NotificationsAPI.markRead(n._realId).catch(() => {});
+        }
+    });
+    if (!changed) return;
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+}
+
+window.openNotificationDM = function(e, ids, convId) {
+    if (e) e.stopPropagation();
+    if (!convId) { showToast("Чат", "Диалог не найден."); return; }
+    _markNotifIdsRead(ids);
+    const chatBtn = document.querySelector('[data-target="view-chats"]');
+    if (chatBtn) chatBtn.click();
+    setTimeout(() => { selectConversation(convId); }, 100);
 };
 
 // Принять заявку в друзья прямо из панели уведомлений.
@@ -7832,28 +8363,50 @@ document.addEventListener("click", (e) => {
 });
 
 // Глобальные обработчики действий для интерактивных карточек уведомлений
-window.handleNotificationReply = function(e, notifId, convId) {
+//
+// Ответ из карточки раньше только дописывался в локальный mockConversations и
+// showToast бодро сообщал «Ответ отправлен» — на самом деле собеседник ничего
+// не получал. Теперь идём тем же путём, что и композер чата: через сокет.
+window.handleNotificationReply = function(e, ids, convId, channelId) {
     if (e) e.preventDefault();
     const form = e.target;
     const input = form.querySelector(".notif-reply-input");
-    const replyText = input.value.trim();
+    const replyText = input ? input.value.trim() : "";
     if (!replyText) return;
-    
-    // Находим беседу
+
     const conv = mockConversations.find(c => c.id === convId);
-    if (conv) {
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        conv.messages.push({ sender: "own", text: replyText, time: timeStr });
-        
-        if (activeConversationId === convId && activeView === "view-chats") {
-            renderChatMessages(conv);
+    let sentTempId = null;
+
+    if (conv && conv._realId && typeof window._sendRealDMMessage === "function") {
+        sentTempId = window._sendRealDMMessage(conv, replyText);
+        if (sentTempId) {
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            conv.messages.push({
+                sender: "own",
+                text: replyText,
+                time: timeStr,
+                _pending: true,
+                _tempId: sentTempId
+            });
+            if (activeConversationId === convId && activeView === "view-chats") {
+                renderChatMessages(conv);
+            }
+            renderConversationsList(searchInput ? searchInput.value : "");
         }
-        renderConversationsList(searchInput.value);
+    } else if (channelId && typeof window._sendRealChannelMessage === "function") {
+        // Диалога может не быть в списке (он подгружается отдельным запросом) —
+        // тогда отправляем прямо в канал, ответ всё равно дойдёт.
+        sentTempId = window._sendRealChannelMessage(channelId, replyText);
     }
-    
-    // Удаляем уведомление
-    removeNotification(e, notifId);
+
+    if (!sentTempId) {
+        showToast("Не отправлено", "Нет связи с сервером. Откройте чат и попробуйте снова.");
+        return;
+    }
+
+    if (input) input.value = "";
+    _dropNotifIds(ids);
     showToast("Ответ отправлен", `Вы ответили: "${replyText}"`);
 };
 

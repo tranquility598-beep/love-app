@@ -26,7 +26,15 @@ const activitySchema = new mongoose.Schema({
 const caseSchema = new mongoose.Schema({
   number: { type: String, unique: true, index: true },
   kind: { type: String, enum: ['report', 'bug', 'idea', 'appeal', 'support'], required: true, index: true },
-  reporter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  // Пусто у обращений с формы на сайте: там человек не залогинен, и связь с
+  // ним держится в `contact`. У всего, что приходит из приложения, заполнено.
+  reporter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  // Как связаться с автором, у которого нет аккаунта.
+  contact: {
+    name: { type: String, default: '', maxlength: 120 },
+    email: { type: String, default: '', maxlength: 254 },
+    source: { type: String, default: '', maxlength: 40 }
+  },
   subjectUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
   subjectServer: { type: mongoose.Schema.Types.ObjectId, ref: 'Server', default: null },
   subjectMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },

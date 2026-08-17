@@ -58,11 +58,11 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = active ? Colors.white : const Color(0x66FFFFFF); // 0.4
+    final fg = active ? context.palette.accent :  context.palette.inkA(0.4); // 0.4
     return Material(
       color: active
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.white.withValues(alpha: 0.03),
+          ? context.palette.inkA(0.08)
+          : context.palette.inkA(0.03),
       borderRadius: BorderRadius.circular(99),
       child: InkWell(
         borderRadius: BorderRadius.circular(99),
@@ -73,7 +73,7 @@ class _Pill extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(99),
             border: Border.all(
-              color: active ? LoveColors.borderActive : LoveColors.border,
+              color: active ? context.palette.borderActive : context.palette.border,
             ),
           ),
           child: Row(
@@ -92,9 +92,9 @@ class _Pill extends StatelessWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: const BoxDecoration(
+                  decoration:  BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white,
+                    color: context.palette.accent,
                   ),
                 ),
               ],

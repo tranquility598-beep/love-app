@@ -34,9 +34,9 @@ class LoveHubScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
-              const Text(
+               Text(
                 'Центр управления сообществом и обновлениями',
-                style: TextStyle(color: LoveColors.textSecondary, fontSize: 14),
+                style: TextStyle(color: context.palette.textSecondary, fontSize: 14),
               ),
               const SizedBox(height: 14),
               // Action buttons
@@ -84,12 +84,12 @@ class LoveHubScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                     Text(
                       'Спасибо, что вы с нами. Полная история обновлений и '
                       'голосование за идеи появятся в одном из ближайших '
                       'релизов.',
                       style: TextStyle(
-                          color: LoveColors.textSecondary, height: 1.45),
+                          color: context.palette.textSecondary, height: 1.45),
                     ),
                   ],
                 ),
@@ -100,13 +100,13 @@ class LoveHubScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                     Text(
                       'Версия',
                       style: TextStyle(
                         fontFamily: LoveFonts.mono,
                         fontSize: 11,
                         letterSpacing: 1.0,
-                        color: LoveColors.textMuted,
+                        color: context.palette.textMuted,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -120,10 +120,10 @@ class LoveHubScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                     Text(
                       'установлена',
                       style: TextStyle(
-                          color: LoveColors.textMuted, fontSize: 12.5),
+                          color: context.palette.textMuted, fontSize: 12.5),
                     ),
                   ],
                 ),
@@ -143,11 +143,11 @@ class LoveHubScreen extends StatelessWidget {
                           TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                     Text(
                       'Голосуйте за лучшие предложения в реальном времени. '
                       'Функция появится в следующем обновлении.',
                       style: TextStyle(
-                          color: LoveColors.textSecondary, height: 1.4),
+                          color: context.palette.textSecondary, height: 1.4),
                     ),
                   ],
                 ),
@@ -193,10 +193,10 @@ class LoveHubScreen extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                    const Text(
+                     Text(
                       'Полный список изменений будет доступен здесь.',
                       style: TextStyle(
-                          color: LoveColors.textSecondary, height: 1.4),
+                          color: context.palette.textSecondary, height: 1.4),
                     ),
                   ],
                 ),
@@ -214,11 +214,11 @@ class LoveHubScreen extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                    const Text(
+                     Text(
                       'Голосуйте за идеи и направление развития — ♥ за, '
                       '💔 против.',
                       style: TextStyle(
-                          color: LoveColors.textSecondary, height: 1.4),
+                          color: context.palette.textSecondary, height: 1.4),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -227,7 +227,7 @@ class LoveHubScreen extends StatelessWidget {
                           'Открыть и проголосовать',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: context.palette.inkA(0.9),
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -286,7 +286,7 @@ class LoveHubScreen extends StatelessWidget {
           Text(
             info.lead,
             style:
-                const TextStyle(color: LoveColors.textSecondary, height: 1.5),
+                 TextStyle(color: context.palette.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < info.items.length; i++)
@@ -376,9 +376,9 @@ class _CommunityIdeasListState extends State<_CommunityIdeasList> {
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: context.palette.inkA(0.03),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: LoveColors.border),
+                  border: Border.all(color: context.palette.border),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,8 +407,8 @@ class _CommunityIdeasListState extends State<_CommunityIdeasList> {
                           const SizedBox(height: 6),
                           Text(
                             idea['summary']?.toString() ?? 'Без описания',
-                            style: const TextStyle(
-                              color: LoveColors.textSecondary,
+                            style:  TextStyle(
+                              color: context.palette.textSecondary,
                               height: 1.4,
                             ),
                           ),
@@ -424,8 +424,8 @@ class _CommunityIdeasListState extends State<_CommunityIdeasList> {
                           icon: Icon(
                             Icons.keyboard_arrow_up_rounded,
                             color: idea['_myVote'] == 1
-                                ? Colors.white
-                                : LoveColors.textMuted,
+                                ? context.palette.accent
+                                : context.palette.textMuted,
                           ),
                         ),
                         Text(
@@ -441,8 +441,8 @@ class _CommunityIdeasListState extends State<_CommunityIdeasList> {
                           icon: Icon(
                             Icons.keyboard_arrow_down_rounded,
                             color: idea['_myVote'] == -1
-                                ? Colors.white
-                                : LoveColors.textMuted,
+                                ? context.palette.accent
+                                : context.palette.textMuted,
                           ),
                         ),
                       ],
@@ -529,7 +529,7 @@ class _CommunityCaseFormState extends State<_CommunityCaseForm> {
           widget.isBug
               ? 'Опишите, что произошло, что ожидалось и как повторить ошибку.'
               : 'Расскажите, что стоит добавить и какую проблему это решает.',
-          style: const TextStyle(color: LoveColors.textSecondary, height: 1.45),
+          style:  TextStyle(color: context.palette.textSecondary, height: 1.45),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -648,7 +648,7 @@ class _IconEmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 8),
       child: Column(
         children: [
-          Icon(icon, size: 38, color: LoveColors.textMuted),
+          Icon(icon, size: 38, color: context.palette.textMuted),
           const SizedBox(height: 12),
           Text(title,
               textAlign: TextAlign.center,
@@ -657,8 +657,8 @@ class _IconEmptyState extends StatelessWidget {
           const SizedBox(height: 7),
           Text(text,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: LoveColors.textSecondary, height: 1.4)),
+              style:  TextStyle(
+                  color: context.palette.textSecondary, height: 1.4)),
           if (action != null) ...[const SizedBox(height: 16), action!],
         ],
       ),
@@ -688,9 +688,9 @@ class _BentoCard extends StatelessWidget {
     final content = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x0DFFFFFF)),
+        border: Border.all(color:  context.palette.inkA(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,8 +705,8 @@ class _BentoCard extends StatelessWidget {
                 ],
                 const Spacer(),
                 if (onTap != null)
-                  const Icon(Icons.north_east_rounded,
-                      size: 16, color: LoveColors.textMuted),
+                   Icon(Icons.north_east_rounded,
+                      size: 16, color: context.palette.textMuted),
               ],
             ),
             const SizedBox(height: 14),
@@ -739,9 +739,9 @@ class _BentoTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: solid ? Colors.white : Colors.white.withValues(alpha: 0.05),
+        color: solid ? context.palette.accent : context.palette.inkA(0.05),
         borderRadius: BorderRadius.circular(6),
-        border: solid ? null : Border.all(color: LoveColors.borderActive),
+        border: solid ? null : Border.all(color: context.palette.borderActive),
       ),
       child: Text(
         text.toUpperCase(),
@@ -751,10 +751,10 @@ class _BentoTag extends StatelessWidget {
           letterSpacing: 0.6,
           fontWeight: FontWeight.w500,
           color: solid
-              ? Colors.black
+              ? context.palette.onAccent
               : muted
-                  ? LoveColors.textMuted
-                  : LoveColors.textSecondary,
+                  ? context.palette.textMuted
+                  : context.palette.textSecondary,
         ),
       ),
     );
@@ -789,7 +789,7 @@ class _LinkRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.02),
+      color: context.palette.inkA(0.02),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -798,7 +798,7 @@ class _LinkRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: LoveColors.border),
+            border: Border.all(color: context.palette.border),
           ),
           child: Row(
             children: [
@@ -807,8 +807,8 @@ class _LinkRow extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w500, fontSize: 14)),
               ),
-              const Icon(Icons.north_east_rounded,
-                  size: 15, color: LoveColors.textMuted),
+               Icon(Icons.north_east_rounded,
+                  size: 15, color: context.palette.textMuted),
             ],
           ),
         ),
@@ -837,21 +837,157 @@ class _HubUpdate {
   final List<String> changes;
 }
 
+// История выпусков — та же, что на сайте, только короче: здесь её читают с
+// телефона, между делом. Текущая версия берёт номер из сборки, чтобы после
+// релиза не пришлось править её здесь руками.
 List<_HubUpdate> _seedUpdates(String version) => [
       _HubUpdate(
         version: 'v$version',
-        date: '',
+        date: 'август 2026',
         tag: 'Текущая версия',
-        title: 'Love App v$version',
-        desc: 'Уведомления: нативные на ПК, категории в панели, рабочие '
-            'заявки. Камера-флип на мобиле.',
+        title: 'Приглашения, уведомления и спокойный войс',
+        desc: 'Ссылка-приглашение теперь работает откуда угодно, уведомления '
+            'перестали засыпать вас карточками, а войс в сферах выглядит и '
+            'ведёт себя как звонок в личке.',
         changes: const [
-          'Панель уведомлений: вкладки «Обычные» и «Системные»',
-          'Заявки в друзья прямо из уведомлений — кнопки «Принять» / «Отклонить»',
-          'Нативные ПК-уведомления при свёрнутом окне (сообщения, заявки, '
-              'упоминания, звонки) + иконка',
-          'Кнопка разворота камеры (фронт/зад) на мобиле',
-          'Авто-обновления и канал Beta (из 2.0.3)',
+          'Приглашения: одна ссылка открывает превью в браузере и саму сферу в '
+              'приложении. Молча никуда не вступаете — сначала видно, кто и '
+              'куда зовёт',
+          'Уведомления: десять сообщений от одного человека — одна карточка. '
+              'Фото показываются миниатюрой, голосовые, видео и файлы — '
+              'подписью',
+          'Войс в сферах: та же панель, что в звонках. Аватарки видно с первой '
+              'секунды, кнопки камеры и демонстрации управляют только вашим '
+              'потоком',
+          'Демонстрацию можно открыть на весь экран, приближать пальцами, и '
+              'остальные участники при этом остаются полоской сбоку',
+          'Медиа: зум фотографий пальцами, видео во весь экран и в ландшафте',
+          'Голосовые: живая волна уровня во время записи',
+          'Светлая тема — целиком, а не местами. И нормальные иконки тем в '
+              '«Внешнем виде»',
+          'Ссылки на чужие сайты сначала спрашивают, точно ли вы туда хотите',
+          'Сообщения, пришедшие пока приложение было свёрнуто, больше не '
+              'теряются: при возвращении переписка дочитывается сама',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.7',
+        date: 'август 2026',
+        tag: 'Обновление',
+        title: 'Звонки, которые не мешают',
+        desc: 'Пачка правок по звонкам: демонстрация запускается с первого '
+            'раза, картинку можно приблизить, а разговор не обрывается, если '
+            'уйти с экрана.',
+        changes: [
+          'Демонстрация экрана запускается в правильном порядке — больше не '
+              'бывает чёрного кадра вместо картинки',
+          'Зум и «картинка в картинке» во время звонка',
+          'Переключение камеры и таблетка активного звонка на компьютере',
+          'Видео из сообщений открывается одинаково на телефоне и на ПК',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.6',
+        date: 'июль 2026',
+        tag: 'Обновление',
+        title: 'Звонок слышно, даже когда приложение свёрнуто',
+        desc: 'Android научился обновляться сам, а входящий звонок приходит '
+            'полноэкранным уведомлением — даже если приложение закрыто.',
+        changes: [
+          'Обновления внутри приложения на Android: проверяет, скачивает и '
+              'ставит само, браузер не нужен',
+          'Входящий звонок — полноэкранное уведомление с «Принять» и '
+              '«Отклонить». Пока идёт разговор, в шторке висит микрофон и '
+              '«Завершить»',
+          'Компактный вид сообщений, отдельные переключатели уведомлений и '
+              'выключатель анимаций',
+          'Уход с экрана переписки больше не сбрасывает звонок',
+          'Кнопка микрофона перестала срабатывать через раз',
+          'Связь не сдаётся: переподключение бесконечное, с растущей паузой',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.5',
+        date: 'июль 2026',
+        tag: 'Обновление',
+        title: 'Стабильный войс и присутствие на телефоне',
+        desc: 'Можно быть залогиненным на компьютере и телефоне одновременно — '
+            'звонки приходят на оба.',
+        changes: [
+          'Войс на нескольких устройствах: оба получают звонки и заходят в '
+              'каналы независимо',
+          'Панель войса на телефоне: кто в канале, микрофон, наушники, вход и '
+              'выход с подтверждением сервера',
+          'Переключение или отключение микрофона больше не ломает разговор',
+          'Иконки и баннеры для сфер и комнат',
+          'Публичный сайт loveapp.chat с историей версий и поддержкой',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.4',
+        date: 'июнь 2026',
+        tag: 'Обновление',
+        title: 'Уведомления — как надо',
+        desc: 'Настоящие уведомления системы, пока приложение свёрнуто, и '
+            'заявки в друзья прямо из панели.',
+        changes: [
+          'Нативные уведомления на компьютере: сообщения, заявки, упоминания, '
+              'пропущенные звонки. Клик ведёт сразу в нужное место',
+          'Две вкладки в панели: «Обычные» и «Системные»',
+          'Заявки в друзья с кнопками «Принять» и «Отклонить» прямо там',
+          'Переворот камеры на телефоне во время видеозвонка',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.3',
+        date: 'июнь 2026',
+        tag: 'Обновление',
+        title: 'Всегда актуальная версия',
+        desc: 'Обновления скачиваются в фоне и ставятся при перезапуске.',
+        changes: [
+          'Автообновления на компьютере',
+          'Настройки → Обновления: версия, статус, прогресс и «Перезапустить и '
+              'установить»',
+          'Бета-канал для тех, кому интересно раньше',
+          'Музыка в профиле снова стабильно слышна друзьям',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.2',
+        date: 'май 2026',
+        tag: 'Обновление',
+        title: 'Голос, который соединяет',
+        desc: 'Спокойные переподключения и чище звук.',
+        changes: [
+          'Стабильнее голосовые соединения',
+          'Аккуратные переподключения без выпадения из канала',
+          'Лучше качество звука в звонках и комнатах',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.1',
+        date: 'май 2026',
+        tag: 'Обновление',
+        title: 'Более плавный старт',
+        desc: 'Первый запуск и вход стали быстрее и тише.',
+        changes: [
+          'Спокойнее и быстрее первый запуск и вход',
+          'Полировка и мелкие исправления по всему приложению',
+        ],
+      ),
+      const _HubUpdate(
+        version: 'v2.0.0',
+        date: 'май 2026',
+        tag: 'Большое обновление',
+        title: 'Общение, переосмысленное',
+        desc: 'Новый голосовой движок, демонстрация экрана до 1080p и '
+            'чёрно-белый мир, сделанный для сосредоточенности.',
+        changes: [
+          'Голосовые комнаты 2.0: новый движок, орбы присутствия, камера',
+          'Демонстрация экрана до 1080p 60 кадров с выбором окна или дисплея',
+          'Всё в реальном времени: сообщения, звонки и статусы без перезагрузок',
+          'Дизайн ваби-саби: профили, настроения, музыка и интересы в одном '
+              'спокойном интерфейсе',
         ],
       ),
     ];
@@ -866,9 +1002,9 @@ class _UpdateItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -882,18 +1018,18 @@ class _UpdateItem extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(update.version,
-                  style: const TextStyle(
+                  style:  TextStyle(
                       fontFamily: LoveFonts.mono,
                       fontSize: 12.5,
-                      color: LoveColors.textSecondary)),
+                      color: context.palette.textSecondary)),
             ],
           ),
           const SizedBox(height: 6),
           _BentoTag(update.tag),
           const SizedBox(height: 10),
           Text(update.desc,
-              style: const TextStyle(
-                  color: LoveColors.textSecondary, height: 1.4)),
+              style:  TextStyle(
+                  color: context.palette.textSecondary, height: 1.4)),
           const SizedBox(height: 10),
           for (final change in update.changes)
             Padding(
@@ -901,12 +1037,12 @@ class _UpdateItem extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('•  ',
-                      style: TextStyle(color: LoveColors.textMuted)),
+                   Text('•  ',
+                      style: TextStyle(color: context.palette.textMuted)),
                   Expanded(
                     child: Text(change,
-                        style: const TextStyle(
-                            color: LoveColors.textSecondary,
+                        style:  TextStyle(
+                            color: context.palette.textSecondary,
                             fontSize: 13,
                             height: 1.35)),
                   ),
@@ -1014,8 +1150,8 @@ class _InfoItem extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.06),
-                border: Border.all(color: LoveColors.border),
+                color: context.palette.inkA(0.06),
+                border: Border.all(color: context.palette.border),
               ),
               child: Text('$index',
                   style: const TextStyle(
@@ -1040,8 +1176,8 @@ class _InfoItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(item.text,
-                    style: const TextStyle(
-                        color: LoveColors.textSecondary,
+                    style:  TextStyle(
+                        color: context.palette.textSecondary,
                         fontSize: 13,
                         height: 1.4)),
               ],
@@ -1291,11 +1427,11 @@ class _DevLogFeedState extends State<_DevLogFeed> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
+         Padding(
           padding: EdgeInsets.only(bottom: 12),
           child: Text(
             'Заметки разработки. Голосуйте за идеи — ♥ за, 💔 против.',
-            style: TextStyle(color: LoveColors.textMuted, fontSize: 12.5),
+            style: TextStyle(color: context.palette.textMuted, fontSize: 12.5),
           ),
         ),
         if (_error != null) ...[
@@ -1369,9 +1505,9 @@ class _DevLogCardState extends State<_DevLogCard> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LoveColors.border),
+        border: Border.all(color: context.palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1384,8 +1520,8 @@ class _DevLogCardState extends State<_DevLogCard> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                  border: Border.all(color: LoveColors.border),
+                  color: context.palette.inkA(0.08),
+                  border: Border.all(color: context.palette.border),
                 ),
                 child: LoveAvatar(
                     label: post.authorName,
@@ -1402,14 +1538,14 @@ class _DevLogCardState extends State<_DevLogCard> {
               ],
               const Spacer(),
               Text(post.date,
-                  style: const TextStyle(
-                      color: LoveColors.textMuted, fontSize: 12)),
+                  style:  TextStyle(
+                      color: context.palette.textMuted, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 12),
           Text(post.text,
-              style: const TextStyle(
-                  color: LoveColors.textSecondary, height: 1.45)),
+              style:  TextStyle(
+                  color: context.palette.textSecondary, height: 1.45)),
           const SizedBox(height: 14),
           // Vote bar
           ClipRRect(
@@ -1417,8 +1553,8 @@ class _DevLogCardState extends State<_DevLogCard> {
             child: LinearProgressIndicator(
               value: total == 0 ? 0 : hearts / total,
               minHeight: 6,
-              backgroundColor: Colors.white.withValues(alpha: 0.06),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              backgroundColor: context.palette.inkA(0.06),
+              valueColor:  AlwaysStoppedAnimation<Color>(context.palette.accent),
             ),
           ),
           const SizedBox(height: 12),
@@ -1439,8 +1575,8 @@ class _DevLogCardState extends State<_DevLogCard> {
               ),
               const Spacer(),
               Text('$pct% за',
-                  style: const TextStyle(
-                      color: LoveColors.textMuted,
+                  style:  TextStyle(
+                      color: context.palette.textMuted,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
             ],
@@ -1494,8 +1630,8 @@ class _DevLogCardState extends State<_DevLogCard> {
     return Container(
       margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.only(top: 12),
-      decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: LoveColors.border))),
+      decoration:  BoxDecoration(
+          border: Border(top: BorderSide(color: context.palette.border))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1505,11 +1641,11 @@ class _DevLogCardState extends State<_DevLogCard> {
                     padding: EdgeInsets.all(18),
                     child: CircularProgressIndicator()))
           else if (_comments.isEmpty)
-            const Padding(
+             Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
               child: Text('Комментариев пока нет.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: LoveColors.textMuted)),
+                  style: TextStyle(color: context.palette.textMuted)),
             )
           else
             for (final comment in _comments) _commentTile(comment),
@@ -1518,14 +1654,14 @@ class _DevLogCardState extends State<_DevLogCard> {
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
+                  color: context.palette.inkA(0.04),
                   borderRadius: BorderRadius.circular(10)),
               child: Row(
                 children: [
                   Expanded(
                       child: Text('Ответ для ${_commentAuthor(_replyTo!)}',
-                          style: const TextStyle(
-                              color: LoveColors.textSecondary, fontSize: 12))),
+                          style:  TextStyle(
+                              color: context.palette.textSecondary, fontSize: 12))),
                   IconButton(
                       tooltip: 'Отменить ответ',
                       onPressed: () => setState(() => _replyTo = null),
@@ -1576,9 +1712,9 @@ class _DevLogCardState extends State<_DevLogCard> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.025),
+            color: context.palette.inkA(0.025),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LoveColors.border)),
+            border: Border.all(color: context.palette.border)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1599,8 +1735,8 @@ class _DevLogCardState extends State<_DevLogCard> {
             ),
             const SizedBox(height: 6),
             Text(asText(comment['body']),
-                style: const TextStyle(
-                    color: LoveColors.textSecondary, height: 1.4)),
+                style:  TextStyle(
+                    color: context.palette.textSecondary, height: 1.4)),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
@@ -1669,7 +1805,7 @@ class _VoteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: active ? Colors.white.withValues(alpha: 0.12) : _hubFill,
+      color: active ? context.palette.inkA(0.12) : context.palette.inkA(0.03),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
@@ -1679,20 +1815,20 @@ class _VoteButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-                color: active ? LoveColors.borderActive : LoveColors.border),
+                color: active ? context.palette.borderActive : context.palette.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon,
                   size: 15,
-                  color: active ? Colors.white : LoveColors.textSecondary),
+                  color: active ? context.palette.accent : context.palette.textSecondary),
               const SizedBox(width: 6),
               Text('$count',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : LoveColors.textSecondary,
+                    color: active ? context.palette.accent : context.palette.textSecondary,
                   )),
             ],
           ),
@@ -1702,7 +1838,7 @@ class _VoteButton extends StatelessWidget {
   }
 }
 
-const _hubFill = Color(0x08FFFFFF);
+
 
 String _ideaCategory(String value) {
   return const {

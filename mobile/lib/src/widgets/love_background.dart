@@ -16,7 +16,7 @@ class LoveBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: LoveColors.bgAndroid,
+      color: context.palette.bgAndroid,
       child: child,
     );
   }

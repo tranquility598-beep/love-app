@@ -5,7 +5,7 @@
 
 .capsule-trigger.active svg,
 .capsule-trigger:hover svg {
-    color: #fff;
+    color: var(--text-bright);
 }
 
 /* ── Плашка «капсула выставлена» ──────────────────────────────────────── */
@@ -16,10 +16,10 @@
     gap: var(--spacing-sm);
     margin-bottom: var(--spacing-sm);
     padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-left: 2px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid var(--tint-a-14);
+    border-left: 2px solid var(--tint-a-50);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--tint-a-5);
     color: var(--text-primary);
     font-size: 13px;
 }
@@ -28,7 +28,7 @@
     width: 16px;
     height: 16px;
     display: block;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--tint-a-70);
 }
 
 .capsule-banner-text {
@@ -46,7 +46,7 @@
     flex-shrink: 0;
     width: 24px;
     height: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--tint-a-14);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -57,9 +57,9 @@
 }
 
 .capsule-banner-cancel:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    border-color: var(--tint-a-40);
+    background: var(--tint-a-10);
+    color: var(--text-bright);
 }
 
 /* ── Модалка ──────────────────────────────────────────────────────────── */
@@ -72,7 +72,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--spacing-md);
-    background: rgba(0, 0, 0, 0.62);
+    background: var(--shade-a-60);
     backdrop-filter: blur(6px);
 }
 
@@ -81,10 +81,10 @@
     max-height: 84vh;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    border: 1px solid var(--tint-a-16);
     border-radius: var(--radius-md);
-    background: #0f0f11;
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+    background: var(--bg-secondary);
+    box-shadow: 0 24px 70px var(--shade-a-70);
     font-family: var(--font-sans);
 }
 
@@ -94,7 +94,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--tint-a-8);
 }
 
 .capsule-modal-header h3 {
@@ -117,7 +117,7 @@
 }
 
 .capsule-modal-close:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--tint-a-6);
     color: var(--text-primary);
 }
 
@@ -142,7 +142,7 @@
 
 .capsule-preset {
     padding: 8px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--tint-a-14);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -153,9 +153,9 @@
 }
 
 .capsule-preset:hover {
-    border-color: rgba(255, 255, 255, 0.45);
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
+    border-color: var(--tint-a-45);
+    background: var(--tint-a-6);
+    color: var(--text-bright);
 }
 
 .capsule-field {
@@ -184,12 +184,12 @@
 
 .capsule-field input:focus {
     outline: none;
-    border-color: rgba(255, 255, 255, 0.45);
+    border-color: var(--tint-a-45);
 }
 
 .capsule-error {
     min-height: 16px;
-    color: #f87171;
+    color: var(--danger-text);
     font-size: 12px;
 }
 
@@ -213,26 +213,26 @@
 }
 
 .capsule-btn-ghost {
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--tint-a-14);
     background: transparent;
     color: var(--text-secondary);
 }
 
 .capsule-btn-ghost:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    color: #fff;
+    border-color: var(--tint-a-40);
+    color: var(--text-bright);
 }
 
 .capsule-btn-primary {
-    border: 1px solid #fff;
-    background: #fff;
-    color: #0d0d0d;
+    border: 1px solid var(--text-bright);
+    background: var(--text-bright);
+    color: var(--bg-secondary);
     font-weight: 600;
 }
 
 .capsule-btn-primary:hover {
-    background: #d8d8d8;
-    border-color: #d8d8d8;
+    background: var(--text-primary);
+    border-color: var(--text-primary);
 }
 
 /* ── Список капсул ────────────────────────────────────────────────────── */
@@ -261,7 +261,7 @@
 }
 
 .capsule-item-when {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--tint-a-85);
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.3px;
@@ -283,7 +283,7 @@
 .capsule-item-cancel {
     flex-shrink: 0;
     padding: 7px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--tint-a-14);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
@@ -294,9 +294,9 @@
 }
 
 .capsule-item-cancel:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.45);
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    border-color: var(--tint-a-45);
+    background: var(--tint-a-8);
+    color: var(--text-bright);
 }
 
 .capsule-item-cancel:disabled {

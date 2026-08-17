@@ -74,8 +74,8 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                 height: 42,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                  border: Border.all(color: LoveColors.border),
+                  color: context.palette.inkA(0.08),
+                  border: Border.all(color: context.palette.border),
                 ),
                 child: const Icon(Icons.music_note_rounded, size: 20),
               ),
@@ -89,19 +89,19 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                       widget.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style:  TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: LoveColors.textPrimary,
+                        color: context.palette.textPrimary,
                       ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         _error!,
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 11,
-                          color: LoveColors.textMuted,
+                          color: context.palette.textMuted,
                         ),
                       ),
                     ],
@@ -110,7 +110,7 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
               ),
               const SizedBox(width: 8),
               Material(
-                color: Colors.white,
+                color: context.palette.accent,
                 shape: const CircleBorder(),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -127,11 +127,11 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                     width: 42,
                     height: 42,
                     child: !_ready && _error == null
-                        ? const Padding(
+                        ?  Padding(
                             padding: EdgeInsets.all(12),
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.black,
+                              color: context.palette.onAccent,
                             ),
                           )
                         : Icon(
@@ -139,7 +139,7 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                                 ? Icons.pause_rounded
                                 : Icons.play_arrow_rounded,
                             size: 24,
-                            color: Colors.black,
+                            color: context.palette.onAccent,
                           ),
                   ),
                 ),
@@ -160,10 +160,10 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                   SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 3,
-                      activeTrackColor: Colors.white,
+                      activeTrackColor: context.palette.accent,
                       inactiveTrackColor:
-                          Colors.white.withValues(alpha: 0.14),
-                      thumbColor: Colors.white,
+                          context.palette.inkA(0.14),
+                      thumbColor: context.palette.accent,
                       thumbShape: const RoundSliderThumbShape(
                         enabledThumbRadius: 6,
                       ),
@@ -187,18 +187,18 @@ class _ProfileMusicPlayerState extends State<ProfileMusicPlayer> {
                     children: [
                       Text(
                         _fmt(position),
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: LoveColors.textMuted,
+                          color: context.palette.textMuted,
                         ),
                       ),
                       Text(
                         maxMs > 0 ? _fmt(duration) : '--:--',
-                        style: const TextStyle(
+                        style:  TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: LoveColors.textMuted,
+                          color: context.palette.textMuted,
                         ),
                       ),
                     ],

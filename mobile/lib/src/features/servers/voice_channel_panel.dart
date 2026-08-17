@@ -196,7 +196,7 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
         LoveSurface(
           padding: const EdgeInsets.all(18),
           radius: 18,
-          color: LoveColors.surfaceStrong,
+          color: context.palette.surfaceStrong,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -212,14 +212,14 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
               Text(
                 _statusText,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: LoveColors.textMuted),
+                style:  TextStyle(color: context.palette.textMuted),
               ),
               if (_voice.errorMessage != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   _voice.errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: LoveColors.textPrimary),
+                  style:  TextStyle(color: context.palette.textPrimary),
                 ),
               ],
               if (!_joinedHere && _voice.isActive) ...[
@@ -227,8 +227,8 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
                 Text(
                   'Вы сейчас в «${_voice.channelTitle}» — при входе сюда переключитесь автоматически.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: LoveColors.textMuted,
+                  style:  TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 12.5,
                   ),
                 ),
@@ -240,8 +240,8 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
                   child: FilledButton.icon(
                     onPressed: _join,
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      backgroundColor: context.palette.accent,
+                      foregroundColor: context.palette.onAccent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(27),
                       ),
@@ -334,27 +334,27 @@ class _RoundVoiceButton extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: filled
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.06),
+                  ? context.palette.accent
+                  : context.palette.inkA(0.06),
               border: Border.all(
                 color: filled
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.16),
+                    ? context.palette.accent
+                    : context.palette.inkA(0.16),
               ),
             ),
             child: Icon(
               icon,
               size: 26,
-              color: filled ? Colors.black : Colors.white,
+              color: filled ? context.palette.onAccent : context.palette.accent,
             ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           caption,
-          style: const TextStyle(
+          style:  TextStyle(
             fontSize: 11,
-            color: LoveColors.textMuted,
+            color: context.palette.textMuted,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -380,7 +380,7 @@ class VoiceMemberTile extends StatelessWidget {
     return LoveSurface(
       padding: const EdgeInsets.all(12),
       radius: 14,
-      color: Colors.white.withValues(alpha: 0.035),
+      color: context.palette.inkA(0.035),
       child: Row(
         children: [
           LoveAvatar(
@@ -398,16 +398,16 @@ class VoiceMemberTile extends StatelessWidget {
             ),
           ),
           if (deafened) ...[
-            const Icon(
+             Icon(
               Icons.volume_off_rounded,
-              color: LoveColors.textMuted,
+              color: context.palette.textMuted,
               size: 18,
             ),
             const SizedBox(width: 8),
           ],
           Icon(
             muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-            color: muted ? LoveColors.textMuted : Colors.white,
+            color: muted ? context.palette.textMuted : context.palette.accent,
             size: 18,
           ),
         ],

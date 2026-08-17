@@ -137,7 +137,7 @@ class _NavItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: LoveColors.surfaceStrong,
+        color: context.palette.surfaceStrong,
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -145,7 +145,7 @@ class _NavItem extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0x0DFFFFFF)),
+              border: Border.all(color:  context.palette.inkA(0.05)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -155,8 +155,8 @@ class _NavItem extends StatelessWidget {
                   height: 42,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.07),
-                    border: Border.all(color: LoveColors.border),
+                    color: context.palette.inkA(0.07),
+                    border: Border.all(color: context.palette.border),
                   ),
                   child: Icon(meta.icon, size: 21),
                 ),
@@ -175,14 +175,14 @@ class _NavItem extends StatelessWidget {
                         meta.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: LoveColors.textMuted, fontSize: 12.5),
+                        style:  TextStyle(
+                            color: context.palette.textMuted, fontSize: 12.5),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: LoveColors.textMuted),
+                 Icon(Icons.chevron_right_rounded,
+                    color: context.palette.textMuted),
               ],
             ),
           ),
@@ -320,6 +320,18 @@ class _PrivacySection extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        SettingsCard(
+          title: 'Ссылки',
+          children: [
+            PrefToggleRow(
+              title: 'Предупреждать о чужих сайтах',
+              subtitle: 'Спрашивать перед переходом по ссылке за пределы LOVE',
+              prefKey: K.linkWarning,
+              defaultValue: true,
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -337,6 +349,11 @@ class _AppearanceSection extends StatefulWidget {
 class _AppearanceSectionState extends State<_AppearanceSection> {
   late int _scale = LovePrefs.instance.getInt(K.uiScale, 100);
 
+  void _pickTheme(String mode) {
+    LovePrefs.instance.setString(K.theme, mode);
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -350,31 +367,34 @@ class _AppearanceSectionState extends State<_AppearanceSection> {
         SettingsCard(
           title: 'Тема',
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  _ThemeOption(
-                    label: 'Тёмная',
-                    icon: Icons.dark_mode_rounded,
-                    active: true,
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  _ThemeOption(
-                    label: 'Светлая',
-                    icon: Icons.light_mode_rounded,
-                    active: false,
-                    onTap: () => _comingSoon(context),
-                  ),
-                  const SizedBox(width: 8),
-                  _ThemeOption(
-                    label: 'Системная',
-                    icon: Icons.brightness_auto_rounded,
-                    active: false,
-                    onTap: () => _comingSoon(context),
-                  ),
-                ],
+            ValueListenableBuilder<String>(
+              valueListenable: LovePrefs.instance.theme,
+              builder: (context, mode, _) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    _ThemeOption(
+                      label: 'Тёмная',
+                      icon: Icons.dark_mode_rounded,
+                      active: mode == 'dark',
+                      onTap: () => _pickTheme('dark'),
+                    ),
+                    const SizedBox(width: 8),
+                    _ThemeOption(
+                      label: 'Светлая',
+                      icon: Icons.light_mode_rounded,
+                      active: mode == 'light',
+                      onTap: () => _pickTheme('light'),
+                    ),
+                    const SizedBox(width: 8),
+                    _ThemeOption(
+                      label: 'Системная',
+                      icon: Icons.brightness_auto_rounded,
+                      active: mode == 'system',
+                      onTap: () => _pickTheme('system'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -420,11 +440,6 @@ class _AppearanceSectionState extends State<_AppearanceSection> {
     );
   }
 
-  void _comingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Пока доступна только тёмная тема')),
-    );
-  }
 }
 
 class _ThemeOption extends StatelessWidget {
@@ -442,9 +457,10 @@ class _ThemeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Expanded(
       child: Material(
-        color: active ? Colors.white.withValues(alpha: 0.08) : _fill,
+        color: active ? palette.inkA(0.08) : palette.inkA(0.03),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -454,21 +470,23 @@ class _ThemeOption extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: active ? Colors.white : LoveColors.border,
+                color: active ? palette.accent : palette.border,
               ),
             ),
             child: Column(
               children: [
                 Icon(icon,
                     size: 20,
-                    color: active ? Colors.white : LoveColors.textSecondary),
+                    color:
+                        active ? palette.accent : palette.textSecondary),
                 const SizedBox(height: 6),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : LoveColors.textSecondary,
+                    color:
+                        active ? palette.accent : palette.textSecondary,
                   ),
                 ),
               ],
@@ -479,8 +497,6 @@ class _ThemeOption extends StatelessWidget {
     );
   }
 }
-
-const _fill = Color(0x08FFFFFF);
 
 // ── Notifications ────────────────────────────────────────────────────────────
 
@@ -501,9 +517,9 @@ class _NotificationsSection extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: LoveColors.surfaceStrong,
+            color: context.palette.surfaceStrong,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: LoveColors.borderActive),
+            border: Border.all(color: context.palette.borderActive),
           ),
           child: Row(
             children: [
@@ -512,13 +528,13 @@ class _NotificationsSection extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                  border: Border.all(color: LoveColors.borderActive),
+                  color: context.palette.inkA(0.08),
+                  border: Border.all(color: context.palette.borderActive),
                 ),
                 child: const Icon(Icons.favorite_rounded, size: 18),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -526,7 +542,7 @@ class _NotificationsSection extends StatelessWidget {
                     SizedBox(height: 2),
                     Text('Так будут выглядеть ваши уведомления',
                         style: TextStyle(
-                            color: LoveColors.textMuted, fontSize: 12.5)),
+                            color: context.palette.textMuted, fontSize: 12.5)),
                   ],
                 ),
               ),
@@ -1003,7 +1019,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
             width: 96,
             child: Text(label,
                 style:
-                    const TextStyle(color: LoveColors.textMuted, fontSize: 13)),
+                     TextStyle(color: context.palette.textMuted, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,
@@ -1019,7 +1035,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor:  context.palette.bgTertiary,
         title: const Text('Сбросить настройки?'),
         content: const Text(
             'Все настройки приложения вернутся к значениям по умолчанию.'),
@@ -1030,7 +1046,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: LoveColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.palette.danger),
             child: const Text('Сбросить'),
           ),
         ],
@@ -1072,8 +1088,8 @@ class _AboutSection extends StatelessWidget {
                 height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
-                  border: Border.all(color: LoveColors.borderActive),
+                  color: context.palette.inkA(0.06),
+                  border: Border.all(color: context.palette.borderActive),
                 ),
                 child: const Icon(Icons.favorite_rounded, size: 30),
               ),
@@ -1095,14 +1111,14 @@ class _AboutSection extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              const Text(
+               Text(
                 'Мессенджер, сделанный с любовью.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: LoveColors.textSecondary),
+                style: TextStyle(color: context.palette.textSecondary),
               ),
-              const Padding(
+               Padding(
                 padding: EdgeInsets.symmetric(vertical: 18),
-                child: Divider(height: 1, color: LoveColors.border),
+                child: Divider(height: 1, color: context.palette.border),
               ),
               const Align(
                 alignment: Alignment.centerLeft,
@@ -1117,14 +1133,14 @@ class _AboutSection extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.08),
-                      border: Border.all(color: LoveColors.border),
+                      color: context.palette.inkA(0.08),
+                      border: Border.all(color: context.palette.border),
                     ),
                     child: const Text('А',
                         style: TextStyle(fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Александр',
@@ -1132,7 +1148,7 @@ class _AboutSection extends StatelessWidget {
                       SizedBox(height: 2),
                       Text('Основатель',
                           style: TextStyle(
-                              color: LoveColors.textMuted, fontSize: 12.5)),
+                              color: context.palette.textMuted, fontSize: 12.5)),
                     ],
                   ),
                 ],
@@ -1169,16 +1185,16 @@ class _AboutSection extends StatelessWidget {
         Center(
           child: Text(
             AppConfig.supportEmail,
-            style: const TextStyle(
+            style:  TextStyle(
                 fontFamily: LoveFonts.mono,
                 fontSize: 12,
-                color: LoveColors.textMuted),
+                color: context.palette.textMuted),
           ),
         ),
         const SizedBox(height: 6),
-        const Center(
+         Center(
           child: Text('Сделано с ♥',
-              style: TextStyle(color: LoveColors.textMuted, fontSize: 12.5)),
+              style: TextStyle(color: context.palette.textMuted, fontSize: 12.5)),
         ),
       ],
     );
@@ -1195,9 +1211,9 @@ class LoveSurfaceCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: LoveColors.surfaceStrong,
+        color: context.palette.surfaceStrong,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0x0DFFFFFF)),
+        border: Border.all(color:  context.palette.inkA(0.05)),
       ),
       child: child,
     );

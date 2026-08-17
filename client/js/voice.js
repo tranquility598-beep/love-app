@@ -1225,6 +1225,106 @@ class VoiceManager {
   }
 
   /**
+   * Перезахватить микрофон по текущим настройкам и подменить трек на живых
+   * соединениях. Констрейнты берутся из getVoiceAudioConstraints(), поэтому
+   * метод покрывает и смену устройства, и шумодав/эхоподавление/автоусиление:
+   * getUserMedia читает эти параметры только в момент захвата, и без
+   * перезахвата настройка честно «не применялась в реальном времени».
+   *
+   * Подмена через replaceTrack — ренеготиация не нужна, для собеседников
+   * переключение незаметно (тот же приём, что в flipCamera).
+   * Вызывать: window.voiceManager.switchMicrophone().
+   */
+  async switchMicrophone() {
+    if (!this.localStream) return false;   // не в войсе — менять нечего
+
+    // Пока идёт перезахват, новый запрос не отбрасываем, а запоминаем: иначе
+    // при быстром перещёлкивании устройств применилось бы промежуточное
+    // значение, а последнее выбранное — нет.
+    if (this._micSwitching) {
+      this._micSwitchPending = true;
+      return false;
+    }
+
+    this._micSwitching = true;
+    let result = false;
+    try {
+      result = await this._reacquireMicrophone();
+    } finally {
+      this._micSwitching = false;
+    }
+
+    if (this._micSwitchPending) {
+      this._micSwitchPending = false;
+      return this.switchMicrophone();
+    }
+    return result;
+  }
+
+  /** Собственно перезахват + подмена. Только через switchMicrophone(). */
+  async _reacquireMicrophone() {
+    const audioConstraints = typeof getVoiceAudioConstraints === 'function'
+      ? getVoiceAudioConstraints()
+      : true;
+
+    let newStream = null;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: false
+      });
+    } catch (error) {
+      // Устройство пропало или занято другим приложением — остаёмся на текущем.
+      // Ронять войс из-за смены микрофона нельзя.
+      console.warn('[Voice] switchMicrophone failed, keeping current mic:', error && error.message);
+      if (typeof showToast === 'function') {
+        showToast('Микрофон', 'Не удалось переключиться на выбранное устройство.');
+      }
+      return false;
+    }
+
+    const newTrack = newStream.getAudioTracks()[0];
+    if (!newTrack) {
+      newStream.getTracks().forEach(t => t.stop());
+      return false;
+    }
+
+    // Мут переносим ДО подмены: иначе замученный человек на мгновение
+    // оказался бы в эфире с новым (включённым по умолчанию) треком.
+    newTrack.enabled = !this.isMuted;
+
+    for (const [, pc] of this.peerConnections) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+      if (!sender) continue;
+      try {
+        await sender.replaceTrack(newTrack);
+      } catch (err) {
+        console.warn('[Voice] switchMicrophone replaceTrack:', err && err.message);
+      }
+    }
+
+    if (this.localStream) this.localStream.getTracks().forEach(track => track.stop());
+    this.localStream = newStream;
+
+    // Анализатор говорения был привязан к старому стриму: без пересоздания
+    // индикатор «говорит» замер бы навсегда. Старый AudioContext обязательно
+    // закрываем — иначе к нему добавится вторая цепочка таймеров checkSpeaking.
+    if (this.speakingCheckInterval) {
+      clearTimeout(this.speakingCheckInterval);
+      this.speakingCheckInterval = null;
+    }
+    this.analyser = null;
+    if (this.audioContext) {
+      try { this.audioContext.close(); } catch (_) { /* уже закрыт */ }
+      this.audioContext = null;
+    }
+    this.setupAudioAnalyser();
+
+    console.log('🎙️ Микрофон переключён:', newTrack.label || '(без метки)');
+    return true;
+  }
+
+  /**
    * Пересогласование WebRTC соединения (при добавлении/удалении треков)
    */
   async renegotiate(socketId) {
@@ -1314,12 +1414,28 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
     return _voiceJoinPromise;
   }
 
-  // Если уже в этом же голосовом канале — переключаем интерфейс обратно на полнoэкранный Voice View
+  // ЛС-звонок держит тот же voiceManager и тот же микрофон. Заход в серверный
+  // (или комнатный) войс поверх звонка уходил ниже в leaveVoiceChannel и рвал
+  // звонок, оставляя оверлей висеть. Пока звонок идёт — не пускаем.
+  if (String(window.currentVoiceChannel || '').startsWith('dm_call:')) {
+    if (typeof showToast === 'function') {
+      showToast('Голосовой канал', 'Сначала завершите звонок — во время звонка нельзя зайти в голосовой.');
+    }
+    console.log('[Voice] join blocked: DM call is active');
+    return;
+  }
+
+  // Если уже в этом же голосовом канале — просто возвращаем человека на экран
+  // войса, без повторного захода. Раньше здесь звался showVoiceView(), которого
+  // в проекте нет (как и NavigationController), поэтому клик по своему каналу
+  // не делал вообще ничего. Живой путь — window.showVoicePanel: init-app.js
+  // перекрывает его и уводит в showServerVoice / панель комнаты.
   if (window.currentVoiceChannel === channelId &&
       window.voiceManager?.channelId === channelId &&
       window.voiceManager?.localStream) {
-    if (typeof showVoiceView === 'function') {
-      showVoiceView();
+    window.voiceChannelName = channelName || window.voiceChannelName;
+    if (typeof window.showVoicePanel === 'function') {
+      window.showVoicePanel(window.voiceChannelName, serverName);
     }
     console.log('ℹ️ Already in this voice channel');
     return;
@@ -1330,16 +1446,23 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
   try {
     // Если уже в другом голосовом канале - выходим
     if (window.currentVoiceChannel) {
-      await leaveVoiceChannel();
+      await leaveVoiceChannel({ switching: true });
     }
 
     window.voiceManager = new VoiceManager();
     // Set currentVoiceChannel BEFORE the socket emit happens inside joinChannel,
     // otherwise voice:members_update can arrive before this assignment and the
     // self user will be dropped by updateVoicePanelMembers' channel-id guard.
-    if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-      window.NavigationController._commitState({ currentVoiceChannel: channelId }, 'joinVoiceChannel');
-    }
+    //
+    // Раньше здесь (и ещё в пяти местах) состояние писалось через
+    // window.NavigationController._commitState — а такого объекта в проекте нет
+    // вообще: ни определения, ни присваивания, только чтения. То есть значение
+    // не выставлялось никогда, и всё, что на него опирается, было мёртвым:
+    // защита от повторного входа (каждый клик по голосовому каналу заново
+    // перезаходил), выход из прежнего канала при переключении,
+    // updateVoicePanelMembers и защита от устаревшего voice:left.
+    // Пишем напрямую — без посредника, которого не существует.
+    window.currentVoiceChannel = channelId;
     let success = await window.voiceManager.joinChannel(channelId);
     if (!success && window.socket?.connected) {
       await new Promise(resolve => setTimeout(resolve, 650));
@@ -1354,9 +1477,7 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
       console.log(`[Voice] Connected to channel "${channelName}"`);
     } else {
       // Roll back so subsequent updates aren't routed to a non-joined channel
-      if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-        window.NavigationController._commitState({ currentVoiceChannel: null }, 'joinVoiceChannel-fail');
-      }
+      window.currentVoiceChannel = null;
       window.voiceManager?.cleanup();
       window.voiceManager = null;
       if (typeof showToast === 'function') showToast('Голосовой канал', 'Не удалось подключиться. Попробуйте ещё раз.');
@@ -1372,15 +1493,13 @@ async function joinVoiceChannel(channelId, channelName, serverName) {
 /**
  * Покинуть голосовой канал
  */
-async function leaveVoiceChannel() {
+async function leaveVoiceChannel(options = {}) {
   if (window.voiceManager) {
     window.voiceManager.leaveChannel();
     window.voiceManager = null;
   }
   window.pendingDMCall = null;
-  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-    window.NavigationController._commitState({ currentVoiceChannel: null }, 'leaveVoiceChannel');
-  }
+  window.currentVoiceChannel = null;
   hideVoicePanel();
   window.voiceChannelName = null;
   if (typeof updateVoiceMiniBar === 'function') setTimeout(updateVoiceMiniBar, 0);
@@ -1393,6 +1512,13 @@ async function leaveVoiceChannel() {
     } else {
       if (typeof showFriendsView === 'function') showFriendsView();
     }
+  }
+
+  // Выделение в списке каналов должно уехать на текст вместе с видом.
+  // При переходе войс → войс этого делать нельзя: там сразу заходим в другой
+  // голосовой канал, и подсвеченным должен остаться он.
+  if (!options.switching && typeof window.syncChannelSelectionAfterVoiceLeave === 'function') {
+    window.syncChannelSelectionAfterVoiceLeave();
   }
 }
 
@@ -1550,10 +1676,9 @@ function showVoicePanel(channelName, serverName) {
   const viewTitle = document.getElementById('voice-view-channel-name');
   if (viewTitle) viewTitle.textContent = channelName + (serverName ? ` (${serverName})` : '');
 
-  // Переключаем интерфейс на экран голосового чата
-  if (typeof showVoiceView === 'function') {
-    showVoiceView();
-  }
+  // Сам экран войса открывает обёртка из init-app.js (showServerVoice для сфер,
+  // панель комнаты для комнат) — она вызывает эту функцию последней. Здесь
+  // раньше стоял вызов showVoiceView(), функции с таким именем в проекте нет.
 }
 
 /**
@@ -1885,7 +2010,19 @@ function updateVoiceChannelMembersUI(channelId, members) {
  */
 function updateVoicePanelMembers(channelId, members) {
   if (window.currentVoiceChannel !== channelId) return;
-  
+
+  // Живой рендер участников и демки давно живёт в CallStageController
+  // (showScreenShareVideo/hideScreenShareVideo* уходят в него первой строкой),
+  // а #voice-panel-members в разметке вообще нет, а #voice-view-grid остался
+  // скрытой заглушкой для легаси-транспорта (index.html, display:none).
+  // Пока эти контейнеры не видны — не пересобираем их innerHTML на каждое
+  // обновление участников: браузер всё равно грузит аватарки из display:none.
+  const legacyGrid = document.getElementById('voice-view-grid');
+  if (!document.getElementById('voice-panel-members') &&
+      (!legacyGrid || legacyGrid.offsetParent === null)) {
+    return;
+  }
+
   // Обновляем маленькую боковую панель
   const panelMembers = document.getElementById('voice-panel-members');
   if (panelMembers) {
@@ -2236,9 +2373,7 @@ async function handleDMCallResponse(accepted, responderId, meta = {}) {
 
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || responderId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
-  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-    window.NavigationController._commitState({ currentVoiceChannel: callRoomId }, 'handleDMCallResponse');
-  }
+  window.currentVoiceChannel = callRoomId;
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
   if (window.pendingDMCallKind === 'video') {
@@ -2298,9 +2433,7 @@ async function startWebRTCCall(callerId, meta = {}) {
 
   const callRoomId = `dm_call:${meta.conversationId || window.currentDMConversationId || meta.channelId || callerId}`;
   if (!window.voiceManager) window.voiceManager = new VoiceManager();
-  if (window.NavigationController && typeof window.NavigationController._commitState === 'function') {
-    window.NavigationController._commitState({ currentVoiceChannel: callRoomId }, 'startWebRTCCall');
-  }
+  window.currentVoiceChannel = callRoomId;
   window.voiceManager.channelId = callRoomId;
   await window.voiceManager.joinChannel(callRoomId);
   if ((meta.kind || window.pendingDMCall?.kind) === 'video') {

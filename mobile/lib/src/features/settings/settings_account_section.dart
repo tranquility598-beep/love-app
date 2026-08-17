@@ -92,21 +92,21 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+               Text(
                 'Опасная зона',
                 style: TextStyle(
                   fontFamily: LoveFonts.mono,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                   letterSpacing: 1.0,
-                  color: LoveColors.danger,
+                  color: context.palette.danger,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+               Text(
                 'Удаление аккаунта необратимо. Все сообщения, серверы и данные '
                 'будут стёрты навсегда.',
-                style: TextStyle(color: LoveColors.textSecondary, height: 1.4),
+                style: TextStyle(color: context.palette.textSecondary, height: 1.4),
               ),
               const SizedBox(height: 14),
               DangerButton(
@@ -229,7 +229,7 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor:  context.palette.bgTertiary,
         title: const Text('Удалить аккаунт?'),
         content: const Text(
           'Это действие необратимо. Все данные будут стёрты навсегда.',
@@ -241,7 +241,7 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: LoveColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.palette.danger),
             child: const Text('Удалить'),
           ),
         ],
@@ -354,17 +354,17 @@ class _AccountFormState extends State<_AccountForm> {
           const SizedBox(height: 4),
         ],
         if (_error != null) ...[
-          Text(_error!, style: const TextStyle(color: LoveColors.danger)),
+          Text(_error!, style:  TextStyle(color: context.palette.danger)),
           const SizedBox(height: 10),
         ],
         FilledButton(
           onPressed: _busy ? null : _submit,
           child: _busy
-              ? const SizedBox(
+              ?  SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.black),
+                      strokeWidth: 2, color: context.palette.onAccent),
                 )
               : const Text('Подтвердить'),
         ),
@@ -384,7 +384,7 @@ class _EditButton extends StatelessWidget {
       style: TextButton.styleFrom(
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        foregroundColor: LoveColors.textPrimary,
+        foregroundColor: context.palette.textPrimary,
       ),
       child: const Text('Изменить'),
     );
@@ -411,9 +411,9 @@ class LoveSurfaceDanger extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: LoveColors.dangerBg,
+        color: context.palette.dangerBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: LoveColors.dangerBorder),
+        border: Border.all(color: context.palette.dangerBorder),
       ),
       child: child,
     );

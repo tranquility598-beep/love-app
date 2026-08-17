@@ -350,7 +350,7 @@
 </nav>
 
 <header class="hero" id="top">
-  <div class="hero-badge"><span class="pulse"></span><span class="js-ver">v 2.0.5</span>&nbsp;·&nbsp;<span class="ru">Официальный сайт</span><span class="en">Official site</span></div>
+  <div class="hero-badge"><span class="pulse"></span><span class="js-ver">v 2.1.0</span>&nbsp;·&nbsp;<span class="ru">Официальный сайт</span><span class="en">Official site</span></div>
   <h1 class="split ru"><span class="row">Общение</span><span class="row outline">без границ</span></h1>
   <h1 class="split en"><span class="row">Connect</span><span class="row outline">without limits</span></h1>
   <p class="sub">
@@ -359,8 +359,8 @@
   </p>
   <div class="hero-ctas">
     <!-- Подпись и ссылка подставляются по системе гостя (js-dl-auto ниже).
-         Без JS остаётся страница релизов — там есть сборки под всё. -->
-    <a class="btn btn-w js-dl-auto" href="https://github.com/tranquility598-beep/love-app/releases/latest"><span><span class="ru">Скачать LOVE</span><span class="en">Download LOVE</span></span></a>
+         Без JS ведём в список платформ: там прямые ссылки на файлы. -->
+    <a class="btn btn-w js-dl-auto" href="#download"><span><span class="ru">Скачать LOVE</span><span class="en">Download LOVE</span></span></a>
     <a class="btn btn-ow" href="#download"><span><span class="ru">Другие платформы</span><span class="en">All platforms</span></span></a>
   </div>
   <p class="hero-hint js-dl-hint" hidden><span class="ru"></span><span class="en"></span></p>
@@ -493,25 +493,25 @@
     </p></div>
 
     <div class="dl-grid reveal d2">
-      <a class="dl-card js-dl-win" data-os="win" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-win" data-os="win" href="https://api.loveapp.chat/api/updates/download/win">
         <span class="os">Windows</span>
         <span class="fmt">.exe · Windows 10 / 11</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
         <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-mac-as" data-os="mac-as" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-mac-as" data-os="mac-as" href="https://api.loveapp.chat/api/updates/download/mac-arm64">
         <span class="os">macOS</span>
         <span class="fmt">.dmg · Apple Silicon</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
         <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-mac-intel" data-os="mac-intel" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-mac-intel" data-os="mac-intel" href="https://api.loveapp.chat/api/updates/download/mac-x64">
         <span class="os">macOS</span>
         <span class="fmt">.dmg · Intel</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
         <span class="dl-your"><span class="ru">Ваша система</span><span class="en">Your system</span></span>
       </a>
-      <a class="dl-card js-dl-android" data-os="android" href="https://github.com/tranquility598-beep/love-app/releases/latest">
+      <a class="dl-card js-dl-android" data-os="android" href="https://api.loveapp.chat/api/updates/download/android">
         <span class="os">Android</span>
         <span class="fmt">.apk · Android 8+</span>
         <span class="get"><span class="ru">Скачать</span><span class="en">Download</span> ↓</span>
@@ -525,7 +525,7 @@
     </p>
 
     <div class="dl-meta">
-      <span class="js-ver">v 2.0.5</span>
+      <span class="js-ver">v 2.1.0</span>
       <span class="ru">Бесплатно</span><span class="en">Free</span>
       <span class="ru">Автообновления</span><span class="en">Auto-updates</span>
     </div>
@@ -647,21 +647,28 @@
     } catch (e) { return null; }
   }
 
+  // Файлы отдаёт наш бэкенд: он тянет свежий релиз с GitHub у себя и стримит
+  // installer с правильным именем и типом. Раньше ссылка на файл подставлялась
+  // из браузера через api.github.com — там лимит 60 запросов в час на IP, и у
+  // мобильных операторов (общий IP) он вечно исчерпан: ссылка оставалась на
+  // страницу релизов, человека уносило на GitHub, а файл не скачивался.
+  var DL = "https://api.loveapp.chat/api/updates/download/";
+
   var PLANS = {
-    windows: { cls: "js-dl-win", card: "win",
+    windows: { cls: "js-dl-win", card: "win", href: DL + "win",
       ru: "Скачать для Windows", en: "Download for Windows",
       hintRu: ".exe · Windows 10 / 11", hintEn: ".exe · Windows 10 / 11" },
-    macArm: { cls: "js-dl-mac-as", card: "mac-as",
+    macArm: { cls: "js-dl-mac-as", card: "mac-as", href: DL + "mac-arm64",
       ru: "Скачать для macOS", en: "Download for macOS",
       hintRu: ".dmg · Apple Silicon", hintEn: ".dmg · Apple Silicon" },
-    macArmMaybe: { cls: "js-dl-mac-as", card: "mac-as",
+    macArmMaybe: { cls: "js-dl-mac-as", card: "mac-as", href: DL + "mac-arm64",
       ru: "Скачать для macOS", en: "Download for macOS",
       hintRu: ".dmg · Apple Silicon — если у вас Mac на Intel, возьмите версию ниже",
       hintEn: ".dmg · Apple Silicon — on an Intel Mac pick the build below" },
-    macIntel: { cls: "js-dl-mac-intel", card: "mac-intel",
+    macIntel: { cls: "js-dl-mac-intel", card: "mac-intel", href: DL + "mac-x64",
       ru: "Скачать для macOS", en: "Download for macOS",
       hintRu: ".dmg · Intel", hintEn: ".dmg · Intel" },
-    android: { cls: "js-dl-android", card: "android",
+    android: { cls: "js-dl-android", card: "android", href: DL + "android",
       ru: "Скачать для Android", en: "Download for Android",
       hintRu: ".apk · Android 8+ · при установке разрешите этот источник",
       hintEn: ".apk · Android 8+ · allow installs from this source" },
@@ -687,9 +694,8 @@
     return arm === true ? PLANS.macArm : PLANS.macArmMaybe;
   }
 
-  // Подписи ставим сразу, не дожидаясь GitHub: если его API недоступен или
-  // упёрся в лимит запросов, кнопка всё равно названа правильно и ведёт на
-  // страницу релизов.
+  // Подписи и ссылки ставим сразу, до любых запросов в сеть: кнопка ведёт на
+  // конкретный файл с первой отрисовки, даже если по ней ткнули мгновенно.
   var plan = pickPlan();
   if (plan) {
     document.querySelectorAll(".js-dl-auto").forEach(function (el) {
@@ -712,34 +718,17 @@
     }
   }
 
-  // Актуальная версия и прямые ссылки — с GitHub Releases
-  var REPO = "tranquility598-beep/love-app";
-  fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
-    .then(function (r) { return r.json(); })
-    .then(function (rel) {
-      if (!rel) return;
-      var v = (rel.tag_name || "").replace(/^v/, "");
-      if (v) document.querySelectorAll(".js-ver").forEach(function (el) { el.textContent = "v " + v; });
-      var assets = rel.assets || [];
-      function url(match) {
-        for (var i = 0; i < assets.length; i++) if (match(assets[i].name || "")) return assets[i].browser_download_url;
-        return null;
-      }
-      function set(cls, u) {
-        if (!u) return;
-        document.querySelectorAll("." + cls).forEach(function (el) { el.href = u; });
-      }
-      var urls = {
-        "js-dl-win": url(function (n) { return /\.exe$/i.test(n); }),
-        "js-dl-mac-as": url(function (n) { return /arm64\.dmg$/i.test(n); }),
-        "js-dl-mac-intel": url(function (n) { return /\.dmg$/i.test(n) && !/arm64/i.test(n); }),
-        "js-dl-android": url(function (n) { return /love-mobile.*\.apk$/i.test(n); }) || url(function (n) { return /\.apk$/i.test(n); })
-      };
-      Object.keys(urls).forEach(function (cls) { set(cls, urls[cls]); });
-      // Главная кнопка ведёт на тот же файл, что и подсвеченная карточка.
-      if (plan && plan.cls) set("js-dl-auto", urls[plan.cls]);
+  // Номер версии — единственное, за чем ходим в сеть. Не получилось (нет связи,
+  // сервер лёг) — останется значение из разметки, а скачивание не зависит от
+  // этого запроса вообще.
+  fetch("https://api.loveapp.chat/api/updates/version")
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (info) {
+      var v = info && info.version;
+      if (!v) return;
+      document.querySelectorAll(".js-ver").forEach(function (el) { el.textContent = "v " + v; });
     })
-    .catch(function () { /* останутся ссылки на страницу релизов */ });
+    .catch(function () { /* останется версия из разметки */ });
 })();
 </script>
 </body>

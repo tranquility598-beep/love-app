@@ -131,8 +131,8 @@ class _InvitePromptSheetState extends State<_InvitePromptSheet> {
       ),
       child: Container(
         clipBehavior: Clip.antiAlias,
-        decoration: const BoxDecoration(
-          color: LoveColors.surfaceStrong,
+        decoration:  BoxDecoration(
+          color: context.palette.surfaceStrong,
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
         child: SafeArea(
@@ -145,7 +145,7 @@ class _InvitePromptSheetState extends State<_InvitePromptSheet> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: LoveColors.borderActive,
+                  color: context.palette.borderActive,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -193,19 +193,19 @@ class _InviteError extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+           Icon(
             Icons.link_off_rounded,
             size: 30,
-            color: LoveColors.textMuted,
+            color: context.palette.textMuted,
           ),
           const SizedBox(height: 12),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style:  TextStyle(
               fontSize: 14,
               height: 1.45,
-              color: LoveColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
           ),
           const SizedBox(height: 18),
@@ -284,13 +284,13 @@ class _InviteBody extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                         Text(
                           'ПРИГЛАШЕНИЕ В LOVE',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 1.3,
-                            color: LoveColors.textMuted,
+                            color: context.palette.textMuted,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -298,19 +298,19 @@ class _InviteBody extends StatelessWidget {
                           name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.w900,
-                            color: LoveColors.textPrimary,
+                            color: context.palette.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${isRoom ? 'Комната' : 'Сфера'} · '
                           '${_membersLabel(memberCount)}',
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 12,
-                            color: LoveColors.textMuted,
+                            color: context.palette.textMuted,
                           ),
                         ),
                       ],
@@ -324,10 +324,10 @@ class _InviteBody extends StatelessWidget {
                   description,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style:  TextStyle(
                     fontSize: 13.5,
                     height: 1.45,
-                    color: LoveColors.textSecondary,
+                    color: context.palette.textSecondary,
                   ),
                 ),
               ],
@@ -339,15 +339,15 @@ class _InviteBody extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: LoveColors.dangerBg,
-                    border: Border.all(color: LoveColors.dangerBorder),
+                    color: context.palette.dangerBg,
+                    border: Border.all(color: context.palette.dangerBorder),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     error!,
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 12.5,
-                      color: LoveColors.danger,
+                      color: context.palette.danger,
                     ),
                   ),
                 ),
@@ -372,12 +372,12 @@ class _InviteBody extends StatelessWidget {
                   child: FilledButton(
                     onPressed: joining ? null : onJoin,
                     child: joining
-                        ? const SizedBox(
+                        ?  SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.black,
+                              color: context.palette.onAccent,
                             ),
                           )
                         : Text(isRoom ? 'Вступить в комнату' : 'Вступить'),
@@ -422,15 +422,15 @@ class _BannerFallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withValues(alpha: 0.1),
-            Colors.white.withValues(alpha: 0.02),
+            context.palette.inkA(0.1),
+            context.palette.inkA(0.02),
           ],
         ),
       ),
       child: Icon(
         Icons.favorite,
         size: 26,
-        color: Colors.white.withValues(alpha: 0.22),
+        color: context.palette.inkA(0.22),
       ),
     );
   }

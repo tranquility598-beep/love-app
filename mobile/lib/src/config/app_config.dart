@@ -6,7 +6,7 @@ class AppConfig {
 
   /// Product version shown in Settings/Hub (mirrors the desktop `getVersion()`
   /// fallback). Independent from the Flutter package version.
-  static const productVersion = '2.0.6';
+  static const productVersion = '2.1.0';
   static const website = 'https://loveapp.chat';
   static const supportEmail = 'support@loveapp.chat';
 

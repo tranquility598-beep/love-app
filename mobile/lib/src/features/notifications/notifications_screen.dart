@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../core/network/love_api.dart';
 import '../../core/realtime/app_events.dart';
 import '../../theme/love_tokens.dart';
@@ -77,6 +78,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return _systemKeywords.any(type.contains);
   }
 
+  /// Личные сообщения от одного человека сходятся в одну карточку: десять
+  /// сообщений подряд раньше давали десять одинаковых карточек. Список приходит
+  /// от новых к старым, поэтому первый элемент группы — самый свежий, его время
+  /// и попадает в заголовок.
+  static List<List<Map<String, dynamic>>> _groupNotifications(
+    List<Map<String, dynamic>> list,
+  ) {
+    final groups = <List<Map<String, dynamic>>>[];
+    final byActor = <String, List<Map<String, dynamic>>>{};
+
+    for (final n in list) {
+      if (asText(n['type']) != 'new_dm') {
+        groups.add([n]);
+        continue;
+      }
+      final actor = asId(n['actor']);
+      final key = actor.isNotEmpty ? actor : asText(n['actorName']);
+      final existing = byActor[key];
+      if (existing != null) {
+        existing.add(n);
+        continue;
+      }
+      final group = [n];
+      byActor[key] = group;
+      groups.add(group);
+    }
+
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScreenFrame(
@@ -104,6 +135,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               builder: (context, _) {
                 final items =
                     _items.where((n) => _isSystem(n) == (_tab == 1)).toList();
+                final groups = _groupNotifications(items);
                 return RefreshIndicator(
                   onRefresh: _refresh,
                   child: items.isEmpty
@@ -119,8 +151,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       ? 'Ответы, упоминания, заявки в друзья и звонки появятся здесь.'
                                       : 'Системные события — принятые заявки, объявления — появятся здесь.',
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Color(0x59FFFFFF),
+                                  style:  TextStyle(
+                                    color: context.palette.inkA(0.35),
                                     fontSize: 14,
                                     letterSpacing: 0.5,
                                   ),
@@ -131,19 +163,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                          itemCount: items.length,
+                          itemCount: groups.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 16),
                           itemBuilder: (context, index) {
-                            final n = items[index];
+                            final group = groups[index];
+                            final head = group.first;
                             return _NotificationCard(
-                              notification: n,
-                              onTap: () => _tapNotification(n),
-                              onClose: () => _dismiss(n),
-                              onAccept:
-                                  _isFriendRequest(n) ? () => _accept(n) : null,
-                              onReject:
-                                  _isFriendRequest(n) ? () => _reject(n) : null,
+                              items: group,
+                              onTap: () => _tapNotification(group),
+                              onClose: () => _dismiss(group),
+                              onAccept: _isFriendRequest(head)
+                                  ? () => _accept(head)
+                                  : null,
+                              onReject: _isFriendRequest(head)
+                                  ? () => _reject(head)
+                                  : null,
                             );
                           },
                         ),
@@ -161,29 +196,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return type.contains('friend') && type.contains('request');
   }
 
-  void _markRead(Map<String, dynamic> n) {
-    if (asBool(n['read'])) return;
-    final id = asId(n['_id']);
-    widget.events.markRead(id);
-    widget.api.markNotificationsRead(id: id);
+  // Карточка может закрывать несколько уведомлений (сгруппированная личка), так
+  // что читаем и стираем всё, что она показывает, иначе счётчик непрочитанных
+  // останется висеть.
+  void _markRead(List<Map<String, dynamic>> group) {
+    for (final n in group) {
+      if (asBool(n['read'])) continue;
+      final id = asId(n['_id']);
+      if (id.isEmpty) continue;
+      widget.events.markRead(id);
+      widget.api.markNotificationsRead(id: id);
+    }
   }
 
-  void _tapNotification(Map<String, dynamic> n) {
-    _markRead(n);
-    final caseId = asId(n['caseId']);
+  void _tapNotification(List<Map<String, dynamic>> group) {
+    _markRead(group);
+    final caseId = asId(group.first['caseId']);
     if (caseId.isNotEmpty) widget.onOpenCase(caseId);
   }
 
-  Future<void> _dismiss(Map<String, dynamic> n) async {
-    final id = asId(n['_id']);
-    widget.events.removeNotification(id);
-    await widget.api.markNotificationsRead(id: id);
+  Future<void> _dismiss(List<Map<String, dynamic>> group) async {
+    var failed = false;
+    for (final n in group) {
+      final id = asId(n['_id']);
+      if (id.isEmpty) continue;
+      widget.events.removeNotification(id);
+      try {
+        await widget.api.deleteNotification(id);
+      } catch (_) {
+        failed = true;
+      }
+    }
+    if (failed) _snack('Уведомление стёрто только на этом устройстве');
   }
 
   Future<void> _accept(Map<String, dynamic> n) async {
     try {
       await widget.api.acceptFriend(asId(n['actor']));
-      await _dismiss(n);
+      await _dismiss([n]);
     } catch (error) {
       _snack(error.toString());
     }
@@ -192,7 +242,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _reject(Map<String, dynamic> n) async {
     try {
       await widget.api.declineFriend(asId(n['actor']));
-      await _dismiss(n);
+      await _dismiss([n]);
     } catch (error) {
       _snack(error.toString());
     }
@@ -234,7 +284,7 @@ class _HeaderTextButton extends StatelessWidget {
     return TextButton(
       onPressed: onTap,
       style: TextButton.styleFrom(
-        foregroundColor: LoveColors.textSecondary,
+        foregroundColor: context.palette.textSecondary,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -252,16 +302,41 @@ class _HeaderTextButton extends StatelessWidget {
   }
 }
 
+/// Сколько превью показываем внутри сгруппированной карточки.
+const _notifPreviewLimit = 3;
+
+/// Значок вместо картинки, когда во вложении не фото. previewKind приходит с
+/// сервера (server/utils/messagePreview.js).
+const _notifKindIcons = <String, IconData>{
+  'image': Icons.image_outlined,
+  'video': Icons.videocam_outlined,
+  'voice': Icons.mic_none_rounded,
+  'audio': Icons.music_note_outlined,
+  'file': Icons.insert_drive_file_outlined,
+  'mixed': Icons.attach_file_rounded,
+};
+
+String _messagesWord(int count) {
+  final mod100 = count % 100;
+  final mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) return 'сообщений';
+  if (mod10 == 1) return 'сообщение';
+  if (mod10 >= 2 && mod10 <= 4) return 'сообщения';
+  return 'сообщений';
+}
+
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
-    required this.notification,
+    required this.items,
     required this.onTap,
     required this.onClose,
     this.onAccept,
     this.onReject,
   });
 
-  final Map<String, dynamic> notification;
+  /// Одно или несколько уведомлений, которые показывает карточка. Первое —
+  /// самое свежее: список приходит от новых к старым.
+  final List<Map<String, dynamic>> items;
   final VoidCallback onTap;
   final VoidCallback onClose;
   final VoidCallback? onAccept;
@@ -269,15 +344,18 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unread = !asBool(notification['read']);
-    final name = asText(notification['actorName'], 'Love');
-    final body = asText(notification['preview'], 'Новое событие');
-    final time = _relativeTime(notification['createdAt']);
+    final head = items.first;
+    final unread = items.any((n) => !asBool(n['read']));
+    final name = asText(head['actorName'], 'Love');
+    final time = _relativeTime(head['createdAt']);
+    final count = items.length;
+    final shown = items.take(_notifPreviewLimit).toList();
+    final hidden = count - shown.length;
 
     return Material(
       color: unread
-          ? Colors.white.withValues(alpha: 0.025)
-          : Colors.white.withValues(alpha: 0.015),
+          ? context.palette.inkA(0.025)
+          : context.palette.inkA(0.015),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -288,8 +366,8 @@ class _NotificationCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: unread
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.white.withValues(alpha: 0.03),
+                  ? context.palette.inkA(0.06)
+                  : context.palette.inkA(0.03),
             ),
           ),
           child: Column(
@@ -300,7 +378,7 @@ class _NotificationCard extends StatelessWidget {
                 children: [
                   LoveAvatar(
                     label: name,
-                    imageUrl: asText(notification['actorAvatar']),
+                    imageUrl: asText(head['actorAvatar']),
                     size: 44,
                   ),
                   const SizedBox(width: 14),
@@ -312,15 +390,32 @@ class _NotificationCard extends StatelessWidget {
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: LoveColors.textPrimary,
+                            color: context.palette.textPrimary,
                           ),
                         ),
-                        if (time.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(time, style: LoveText.monoTime),
+                        if (time.isNotEmpty || count > 1) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              if (time.isNotEmpty)
+                                Text(
+                                  time,
+                                  style: LoveText.monoTime(context.palette),
+                                ),
+                              if (count > 1) ...[
+                                if (time.isNotEmpty) const SizedBox(width: 8),
+                                Flexible(
+                                  child: _CountBadge(
+                                    count: count,
+                                    unread: unread,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ],
                       ],
                     ),
@@ -331,10 +426,10 @@ class _NotificationCard extends StatelessWidget {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        color: context.palette.accent,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.7),
+                            color: context.palette.glowA(0.7),
                             blurRadius: 10,
                           ),
                         ],
@@ -345,17 +440,30 @@ class _NotificationCard extends StatelessWidget {
                   _CloseButton(onTap: onClose),
                 ],
               ),
-              if (body.isNotEmpty) ...[
+              for (var i = 0; i < shown.length; i++) ...[
+                if (i == 0)
+                  const SizedBox(height: 8)
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Container(
+                      height: 1,
+                      color: context.palette.inkA(0.05),
+                    ),
+                  ),
+                _NotifPreviewRow(
+                  notification: shown[i],
+                  unread: unread,
+                  // «Новое событие» вместо пустоты нужно только когда карточка
+                  // одна: в группе пустая строка и так подпёрта соседями.
+                  fallback: count == 1 ? 'Новое событие' : '',
+                ),
+              ],
+              if (hidden > 0) ...[
                 const SizedBox(height: 8),
                 Text(
-                  body,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    height: 1.55,
-                    color: unread
-                        ? LoveColors.textPrimary
-                        : Colors.white.withValues(alpha: 0.75),
-                  ),
+                  'и ещё $hidden ${_messagesWord(hidden)}',
+                  style: LoveText.monoTime(context.palette),
                 ),
               ],
               if (onAccept != null) ...[
@@ -366,7 +474,7 @@ class _NotificationCard extends StatelessWidget {
                       child: OutlinedButton(
                         onPressed: onAccept,
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.08),
+                          backgroundColor: context.palette.inkA(0.08),
                           minimumSize: const Size(0, 40),
                         ),
                         child: const Text('Принять'),
@@ -377,7 +485,7 @@ class _NotificationCard extends StatelessWidget {
                       child: OutlinedButton(
                         onPressed: onReject,
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.02),
+                          backgroundColor: context.palette.inkA(0.02),
                           minimumSize: const Size(0, 40),
                         ),
                         child: const Text('Отклонить'),
@@ -394,6 +502,119 @@ class _NotificationCard extends StatelessWidget {
   }
 }
 
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count, required this.unread});
+  final int count;
+  final bool unread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: context.palette.inkA(unread ? 0.12 : 0.08),
+      ),
+      child: Text(
+        '$count ${_messagesWord(count)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: LoveFonts.mono,
+          fontSize: 10,
+          letterSpacing: 0.2,
+          color: unread
+              ? context.palette.textPrimary
+              : context.palette.inkA(0.55),
+        ),
+      ),
+    );
+  }
+}
+
+/// Одна строка превью: миниатюра, если в сообщении было фото, иначе значок
+/// вложения. Раньше в карточку уходил только текст, поэтому сообщение из одной
+/// фотографии выглядело как имя и пустота.
+class _NotifPreviewRow extends StatelessWidget {
+  const _NotifPreviewRow({
+    required this.notification,
+    required this.unread,
+    this.fallback = '',
+  });
+
+  final Map<String, dynamic> notification;
+  final bool unread;
+  final String fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = asText(notification['previewKind'], 'text');
+    final thumb = AppConfig.mediaUrl(asText(notification['previewImage']));
+    final text = asText(notification['preview'], fallback);
+    final icon = thumb == null ? _notifKindIcons[kind] : null;
+
+    final textStyle = TextStyle(
+      fontSize: 13.5,
+      height: 1.55,
+      color: unread
+          ? context.palette.textPrimary
+          : context.palette.inkA(0.75),
+    );
+
+    if (thumb == null && icon == null) {
+      if (text.isEmpty) return const SizedBox.shrink();
+      return Text(text, style: textStyle);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (thumb != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              thumb,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: 44,
+                height: 44,
+                color: context.palette.inkA(0.06),
+                child: Icon(
+                  Icons.image_outlined,
+                  size: 16,
+                  color: context.palette.inkA(0.35),
+                ),
+              ),
+            ),
+          )
+        else
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: context.palette.inkA(0.07),
+            ),
+            child: Icon(icon, size: 14, color: context.palette.inkA(0.6)),
+          ),
+        if (text.isNotEmpty) ...[
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textStyle,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _CloseButton extends StatelessWidget {
   const _CloseButton({required this.onTap});
   final VoidCallback onTap;
@@ -403,10 +624,10 @@ class _CloseButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: const SizedBox(
+      child:  SizedBox(
         width: 32,
         height: 32,
-        child: Icon(Icons.close_rounded, size: 16, color: Color(0x40FFFFFF)),
+        child: Icon(Icons.close_rounded, size: 16, color: context.palette.inkA(0.25)),
       ),
     );
   }

@@ -21,6 +21,23 @@
   let nebulae = [];
   const numStars = 300; // Больше звезд для заполнения всего экрана
   const numNebulae = 3; // Меньше туманностей чтобы не мешали
+  // Тема: звёзды и вуаль берутся из CSS-токенов, чтобы светлая тема
+  // перекрашивала их в тёмные (в лоб белый на белом невидим).
+  let starRgb = '255, 255, 255';
+  let veilColor = 'rgba(0, 0, 0, 0.8)';
+  let nebulaeOn = true;
+
+  function refreshTheme() {
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      const rgb = cs.getPropertyValue('--star-rgb').trim();
+      const veil = cs.getPropertyValue('--starfield-veil').trim();
+      if (rgb) starRgb = rgb;
+      if (veil) veilColor = veil;
+      nebulaeOn = cs.getPropertyValue('--starfield-nebulae').trim() !== 'off';
+    } catch (e) {}
+  }
+
   let mouseX = 0;
   let mouseY = 0;
   let targetX = 0;
@@ -31,6 +48,8 @@
   function init() {
     window.addEventListener('resize', resize);
     window.addEventListener('mousemove', onMouseMove);
+    refreshTheme();
+    window.addEventListener('themechange', refreshTheme);
     resize();
     createStars();
     createNebulae();
@@ -165,7 +184,7 @@
     // Основное тело звезды (яркий центр без blur)
     ctx.beginPath();
     ctx.arc(0, 0, size * 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.fillStyle = `rgba(${starRgb}, ${alpha})`;
     ctx.fill();
     
     // Рисуем 4 основных луча (крестик) - четкие и яркие
@@ -174,18 +193,18 @@
     
     // Горизонтальный луч
     const gradientH = ctx.createLinearGradient(-rayLength, 0, rayLength, 0);
-    gradientH.addColorStop(0, `rgba(255, 255, 255, 0)`);
-    gradientH.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.9})`);
-    gradientH.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    gradientH.addColorStop(0, `rgba(${starRgb}, 0)`);
+    gradientH.addColorStop(0.5, `rgba(${starRgb}, ${alpha * 0.9})`);
+    gradientH.addColorStop(1, `rgba(${starRgb}, 0)`);
     
     ctx.fillStyle = gradientH;
     ctx.fillRect(-rayLength, -rayWidth / 2, rayLength * 2, rayWidth);
     
     // Вертикальный луч
     const gradientV = ctx.createLinearGradient(0, -rayLength, 0, rayLength);
-    gradientV.addColorStop(0, `rgba(255, 255, 255, 0)`);
-    gradientV.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.9})`);
-    gradientV.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    gradientV.addColorStop(0, `rgba(${starRgb}, 0)`);
+    gradientV.addColorStop(0.5, `rgba(${starRgb}, ${alpha * 0.9})`);
+    gradientV.addColorStop(1, `rgba(${starRgb}, 0)`);
     
     ctx.fillStyle = gradientV;
     ctx.fillRect(-rayWidth / 2, -rayLength, rayWidth, rayLength * 2);
@@ -196,26 +215,26 @@
     const thinRayLength = rayLength * 0.7;
     
     const gradientD1 = ctx.createLinearGradient(-thinRayLength, 0, thinRayLength, 0);
-    gradientD1.addColorStop(0, `rgba(255, 255, 255, 0)`);
-    gradientD1.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.6})`);
-    gradientD1.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    gradientD1.addColorStop(0, `rgba(${starRgb}, 0)`);
+    gradientD1.addColorStop(0.5, `rgba(${starRgb}, ${alpha * 0.6})`);
+    gradientD1.addColorStop(1, `rgba(${starRgb}, 0)`);
     
     ctx.fillStyle = gradientD1;
     ctx.fillRect(-thinRayLength, -thinRayWidth / 2, thinRayLength * 2, thinRayWidth);
     
     const gradientD2 = ctx.createLinearGradient(0, -thinRayLength, 0, thinRayLength);
-    gradientD2.addColorStop(0, `rgba(255, 255, 255, 0)`);
-    gradientD2.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.6})`);
-    gradientD2.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    gradientD2.addColorStop(0, `rgba(${starRgb}, 0)`);
+    gradientD2.addColorStop(0.5, `rgba(${starRgb}, ${alpha * 0.6})`);
+    gradientD2.addColorStop(1, `rgba(${starRgb}, 0)`);
     
     ctx.fillStyle = gradientD2;
     ctx.fillRect(-thinRayWidth / 2, -thinRayLength, thinRayWidth, thinRayLength * 2);
     
     // Легкое свечение вокруг звезды
     const glowGradient = ctx.createRadialGradient(0, 0, size * 0.8, 0, 0, size * 2.5);
-    glowGradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.3})`);
-    glowGradient.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.1})`);
-    glowGradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    glowGradient.addColorStop(0, `rgba(${starRgb}, ${alpha * 0.3})`);
+    glowGradient.addColorStop(0.5, `rgba(${starRgb}, ${alpha * 0.1})`);
+    glowGradient.addColorStop(1, `rgba(${starRgb}, 0)`);
     
     ctx.fillStyle = glowGradient;
     ctx.beginPath();
@@ -232,7 +251,7 @@
     }
 
     // Четкий фон для звезд без следов
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; 
+    ctx.fillStyle = veilColor;
     ctx.fillRect(0, 0, width, height);
 
     // Вращение всего экрана (медленнее)
@@ -261,9 +280,12 @@
     ctx.rotate(screenRotation);
     ctx.translate(-width / 2, -height / 2);
 
-    // Рисуем туманности (более прозрачные)
-    for (let i = 0; i < numNebulae; i++) {
-      drawNebula(nebulae[i], cx, cy);
+    // Рисуем туманности (более прозрачные). На светлой теме цветные
+    // пятна гасим — звёздного неба на светлом фоне не подразумевается.
+    if (nebulaeOn) {
+      for (let i = 0; i < numNebulae; i++) {
+        drawNebula(nebulae[i], cx, cy);
+      }
     }
 
     // Рисуем звезды
@@ -310,13 +332,13 @@
         // Мелкие звезды без лучей - просто яркие точки
         ctx.beginPath();
         ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${twinkle})`;
+        ctx.fillStyle = `rgba(${starRgb}, ${twinkle})`;
         ctx.fill();
         
         // Легкое свечение для мелких звезд
         const smallGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 1.5);
-        smallGlow.addColorStop(0, `rgba(255, 255, 255, ${twinkle * 0.3})`);
-        smallGlow.addColorStop(1, `rgba(255, 255, 255, 0)`);
+        smallGlow.addColorStop(0, `rgba(${starRgb}, ${twinkle * 0.3})`);
+        smallGlow.addColorStop(1, `rgba(${starRgb}, 0)`);
         ctx.fillStyle = smallGlow;
         ctx.beginPath();
         ctx.arc(x, y, size * 1.5, 0, Math.PI * 2);

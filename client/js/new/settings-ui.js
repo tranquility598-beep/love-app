@@ -1215,24 +1215,27 @@
     }
   }
 
-  // Единый источник версии: Electron API, package.json, или fallback.
+  // Единый источник версии: сначала Electron (версия установленной сборки),
+  // затем общий APP_VERSION из script.js. Своих зашитых номеров здесь нет —
+  // из-за них настройки показывали 2.0.0 даже на 2.1.0.
   function getAppVersion() {
     if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
-      return window.electronAPI.getVersion() || '2.0.0';
+      const fromApp = window.electronAPI.getVersion();
+      if (fromApp) return fromApp;
     }
-    return '2.0.0';
+    return window.LOVE_APP_VERSION || '';
   }
 
   function initVersions(shell) {
     const ver = getAppVersion();
     // About page
     const aboutVer = document.getElementById('settings-about-version');
-    if (aboutVer) aboutVer.textContent = 'v' + ver;
+    if (aboutVer && ver) aboutVer.textContent = 'v' + ver;
     const aboutBuild = document.getElementById('settings-about-build');
     if (aboutBuild) aboutBuild.textContent = 'build ' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
     // Updates page
     const updVer = document.getElementById('settings-updates-version');
-    if (updVer) updVer.textContent = ver;
+    if (updVer && ver) updVer.textContent = ver;
   }
 
   function initAdvanced(shell) {

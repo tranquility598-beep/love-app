@@ -23,12 +23,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Пути
   getDownloadsPath: () => ipcRenderer.invoke('get-downloads-path'),
   
-  // Версия приложения
+  // Версия приложения. Спрашиваем у main-процесса синхронно: require
+  // package.json здесь не работает — preload изолирован от файлов сборки,
+  // и раньше из-за этого интерфейс молча показывал захардкоженную 2.0.0.
   getVersion: () => {
     try {
-      return require('../package.json').version;
+      return ipcRenderer.sendSync('get-app-version-sync') || '';
     } catch (e) {
-      return process.env.npm_package_version || '2.0.0';
+      return '';
     }
   },
   

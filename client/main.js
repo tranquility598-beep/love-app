@@ -561,6 +561,14 @@ ipcMain.on('get-backend-mode-sync', (event) => {
   };
 });
 
+// Версия синхронно: интерфейс подставляет её сразу при отрисовке (Love Hub,
+// «О программе», раздел обновлений), а не после промиса. app.getVersion() —
+// единственный честный источник: в сборке это версия установленного
+// приложения, в разработке — версия из package.json.
+ipcMain.on('get-app-version-sync', (event) => {
+  event.returnValue = app.getVersion();
+});
+
 // Обработчик для получения пути к папке загрузок
 ipcMain.handle('get-downloads-path', () => {
   return app.getPath('downloads');

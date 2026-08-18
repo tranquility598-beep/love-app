@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="LOVE release history: nine versions from the 2.0.0 rebuild to the current 2.1.0, with what was added, fixed and changed in each." />
+<meta name="description" content="LOVE release history: ten versions from the 2.0.0 rebuild to the current 2.1.1, with what was added, fixed and changed in each." />
 <title>Changelog — LOVE</title>
 
 <!-- ============================================================
@@ -91,7 +91,7 @@
   <!-- средний декор -->
   <div class="layer depth-2" data-depth="2" aria-hidden="true">
     <div class="grid-v"></div>
-    <div class="ghost float-y" style="left:50%;top:11%">2.1.0</div>
+    <div class="ghost float-y" style="left:50%;top:11%">2.1.1</div>
   </div>
 
   <!-- содержимое -->
@@ -103,12 +103,12 @@
         <span class="ln"><i><span class="ru">версий</span><span class="en">history</span></i></span>
       </h1>
       <p class="doc-lede" data-animate="up">
-        <span class="ru">Девять выпусков: от 2.0.0, где появились голосовые комнаты, до сегодняшнего 2.1.0. Видно, что добавилось, что починили и что поменяли по ходу. С 2.0.3 обновления приходят сами, с 2.0.6 — и на Android тоже.</span>
-        <span class="en">Nine releases: from 2.0.0, which brought voice rooms, to today’s 2.1.0. You can see what was added, what got fixed and what changed along the way. Updates have arrived on their own since 2.0.3 — and since 2.0.6 on Android too.</span>
+        <span class="ru">Десять выпусков: от 2.0.0, где появились голосовые комнаты, до сегодняшнего 2.1.1. Видно, что добавилось, что починили и что поменяли по ходу. С 2.0.3 обновления приходят сами, с 2.0.6 — и на Android тоже.</span>
+        <span class="en">Ten releases: from 2.0.0, which brought voice rooms, to today’s 2.1.1. You can see what was added, what got fixed and what changed along the way. Updates have arrived on their own since 2.0.3 — and since 2.0.6 on Android too.</span>
       </p>
       <p class="doc-updated" data-animate="wipe">
-        <span class="ru">Текущая версия · v 2.1.0</span>
-        <span class="en">Current version · v 2.1.0</span>
+        <span class="ru">Текущая версия · v 2.1.1</span>
+        <span class="en">Current version · v 2.1.1</span>
       </p>
     </div>
   </div>
@@ -148,11 +148,45 @@
     <div class="doc-wrap">
       <div class="tl">
 
-        <!-- ===== v 2.1.0 — текущая ===== -->
+        <!-- ===== v 2.1.1 — текущая ===== -->
         <article class="rel is-latest" data-animate="up">
           <div class="rel-head">
-            <h2 class="rel-v">2.1.0</h2>
+            <h2 class="rel-v">2.1.1</h2>
             <span class="rel-badge"><span class="ru">Актуальная</span><span class="en">Current</span></span>
+            <span class="rel-meta"><span class="ru">3 изменения</span><span class="en">3 changes</span></span>
+          </div>
+          <p class="rel-title">
+            <span class="ru">Приложение больше не называет себя версией 2.0.0.</span>
+            <span class="en">The app no longer calls itself version 2.0.0.</span>
+          </p>
+
+          <div class="rel-group">
+            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
+            <ul class="rel-list ru">
+              <li><b>Версия показывалась неправильно.</b> В настройках, в Love Hub и в этой самой истории стояло 2.0.0, хотя установлено было 2.1.0. Обновлялось всё честно — врала только надпись. Теперь номер берётся у самой сборки.</li>
+              <li><b>Свежая запись в истории подписывалась чужим номером.</b> Верхняя запись подставляла номер установленной сборки, из-за чего прошлый выпуск мог оказаться подписан новой версией.</li>
+            </ul>
+            <ul class="rel-list en">
+              <li><b>The version was displayed wrong.</b> Settings, Love Hub and this very history all said 2.0.0 while 2.1.0 was installed. The update itself was real — only the label lied. The number now comes from the build itself.</li>
+              <li><b>The newest entry borrowed the wrong number.</b> The top entry took the installed version, so an older release could end up labelled with a newer number.</li>
+            </ul>
+          </div>
+
+          <div class="rel-group">
+            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
+            <ul class="rel-list ru">
+              <li><b>Сборка релиза проверяет номер версии.</b> Если его забыли обновить хоть в одном месте, релиз просто не собирается — так этот баг больше не вернётся.</li>
+            </ul>
+            <ul class="rel-list en">
+              <li><b>The release build now checks the version number.</b> Miss it in a single place and the build stops — so this bug can’t come back.</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ===== v 2.1.0 ===== -->
+        <article class="rel" data-animate="up">
+          <div class="rel-head">
+            <h2 class="rel-v">2.1.0</h2>
             <span class="rel-meta"><span class="ru">12 изменений</span><span class="en">12 changes</span></span>
           </div>
           <p class="rel-title">

@@ -3,170 +3,448 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="The rules for using LOVE: age, accounts, what you may and may not do, content ownership, voice and screen sharing, liability. In effect since June 25, 2026." />
 <title>Terms of Service — LOVE</title>
+
+<!-- ============================================================
+     ПРИМЕНЁННЫЕ ТЕХНИКИ НА ЭТОЙ СТРАНИЦЕ
+     · WebGL-3D    — не используется: это юридический документ
+     · CSS-3D      — только врезка «если коротко» (perspective + наклон по курсору)
+     · 2.5D        — 3 сцены по 3–4 слоя, амплитуда параллакса 60px (.doc)
+     · Типографика — крупный ghost за шапкой, номер раздела моношрифтом
+     · Появления   — протяжка надзаголовка, построчный h1, подъём разделов
+     · Навигация   — оглавление на 14 якорей, плавный скролл к разделу
+     · GSAP        — только усиление; без него страница работает полностью
+     · Экспозиция  — финальная сцена белая: выдох после длинного тёмного текста
+
+     ЧЕСТНО ПРО ТЕКСТ: пункты условий перенесены из боевого terms.html почти
+     дословно, как и в privacy.html. Причина та же: в договоре смысл держится
+     на формулировке. «Мы не несём ответственности за косвенные убытки» нельзя
+     сделать теплее, не сдвинув обязательство. Переписаны только надзаголовок,
+     лид, врезка «если коротко» и финальная сцена — обрамление, не сам договор.
+
+     ЧТО Я ЗАМЕТИЛ В ИСХОДНИКЕ И НЕ СТАЛ ПРАВИТЬ САМ (в отчёт):
+     1. Раздел 13 «Применимое право» ссылается на «применимое международное
+        право» без указания юрисдикции, и оборот «без учёта норм о коллизии
+        законов» относить не к чему. Обычно здесь называют страну. Это решение
+        владельца и юриста, а не редизайна: дописывать юрисдикцию от себя я не
+        имею права, поэтому перенёс как есть.
+     2. Нигде не названо лицо, которое стоит за словом «Love»: ни компания, ни
+        ИП, ни адрес. Для условий использования это существенный пробел.
+     3. В английской версии возраст «13 years» не выделен, в русской «13 лет»
+        выделено жирным. Мелочь, но два языка выглядят по-разному; я выровнял
+        выделение — это оформление, а не смысл.
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Рукопожатие с CDN начинаем заранее: GSAP грузится отсюда. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="core.css" />
 <link rel="stylesheet" href="doc.css" />
 <script src="lang.js"></script>
+
+<style>
+  /* Обязательный фолбэк доступности прямо в документе. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  .cv { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+</style>
 </head>
-<body>
-<nav>
+<body class="doc">
+
+<a class="skip-link" href="#main"><span class="ru">К содержимому</span><span class="en">Skip to content</span></a>
+<div id="progress" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ===== Навигация ===================================================== -->
+<nav class="site-nav">
   <div class="nav-inner">
-    <a class="brand" href="index.html"><span class="dot"></span>LOVE</a>
+    <a class="brand" href="index.html" aria-label="LOVE"><span class="dot" aria-hidden="true"></span>LOVE</a>
     <div class="nav-links">
-      <a href="privacy.html"><span class="l-en">Privacy</span><span class="l-ru">Конфиденциальность</span></a>
-      <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a>
-      <button class="lang-btn" onclick="toggleLang()" aria-label="Switch language"><span class="l-en">RU</span><span class="l-ru">EN</span></button>
+      <a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
+      <a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
+      <a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
+      <a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy</span></a>
+      <a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a>
+      <button class="lang-btn" onclick="toggleLang()" data-aria-ru="Сменить язык" aria-label="Switch language"><span class="ru">EN</span><span class="en">RU</span></button>
+      <a class="nav-cta" href="index.html#download"><span class="ru">Скачать</span><span class="en">Get LOVE</span></a>
     </div>
   </div>
 </nav>
 
-<div class="wrap">
-<div class="l-en">
-  <div class="kicker">Legal</div>
-  <h1>Terms of Service</h1>
-  <p class="updated">Effective: June 25, 2026</p>
+<main id="main">
 
-  <h2>1. Acceptance of Terms</h2>
-  <p>By accessing or using Love (“the Service”), you agree to be bound by these Terms of Service (“Terms”). If you do not agree to these Terms, do not use the Service.</p>
+<!-- ===== СЦЕНА 1 — ШАПКА ================================================
+     Четыре слоя. Ghost-надпись уходит за правый край — сцена её обрезает
+     (.scene { overflow: clip }), горизонтального скролла не появляется.
+     ===================================================================== -->
+<header class="scene" data-scene="tos-head" style="--scene-height: auto">
 
-  <h2>2. Age Requirement</h2>
-  <p>You must be at least 13 years of age to use Love. By using the Service, you represent and warrant that you meet this minimum age requirement. If you are under 18, you must have the consent of a parent or legal guardian.</p>
+  <!-- дальний фон -->
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
 
-  <h2>3. Account Registration</h2>
-  <p>To use certain features of Love, you must create an account. You agree to:</p>
-  <ul>
-    <li>provide accurate and complete registration information;</li>
-    <li>maintain the security of your password and account credentials;</li>
-    <li>promptly update your account information if it changes;</li>
-    <li>accept responsibility for all activity that occurs under your account.</li>
-  </ul>
-  <p>You must not share your account credentials with others or create multiple accounts for a single individual.</p>
+  <!-- свечение -->
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow doc-glow-a float-breathe"></div>
+    <div class="glow doc-glow-b float-breathe fd-2"></div>
+  </div>
 
-  <h2>4. Acceptable Use</h2>
-  <p>You agree not to use Love to:</p>
-  <ul>
-    <li>violate any applicable local, national, or international law or regulation;</li>
-    <li>send, share, or distribute content that is illegal, harmful, threatening, abusive, harassing, defamatory, or otherwise objectionable;</li>
-    <li>impersonate any person or entity, or falsely state or misrepresent your affiliation;</li>
-    <li>distribute spam, unsolicited advertisements, or chain messages;</li>
-    <li>upload or transmit malware, viruses, or other malicious code;</li>
-    <li>attempt to gain unauthorized access to other users' accounts, servers, or networks;</li>
-    <li>interfere with or disrupt the Service or servers connected to the Service;</li>
-    <li>collect or harvest personal information of other users without their consent;</li>
-    <li>engage in any form of automated data collection (scraping, crawling) without prior written consent.</li>
-  </ul>
+  <!-- средний декор -->
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="grid-v"></div>
+    <div class="ghost float-y" style="right:-4vw;top:14%"><span class="ru">Правила</span><span class="en">Rules</span></div>
+  </div>
 
-  <h2>5. Content</h2>
-  <p><strong>Your Content.</strong> You retain ownership of any content you create, send, or share through Love. By using the Service, you grant Love a limited, non-exclusive license to store, transmit, and display your content solely for the purpose of providing the Service to you.</p>
-  <p><strong>Content Moderation.</strong> Love reserves the right to remove content that violates these Terms or community guidelines, and to suspend or terminate accounts that repeatedly violate them.</p>
+  <!-- содержимое -->
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-head">
+      <span class="kicker" data-animate="wipe"><span class="ru">Документы</span><span class="en">Legal</span></span>
+      <h1 class="doc-h1" data-animate="lines">
+        <span class="ru">Условия<br />использования</span>
+        <span class="en">Terms of<br />Service</span>
+      </h1>
+      <p class="doc-lede" data-animate="up">
+        <span class="ru">Договор между вами и Love: с какого возраста можно, что нельзя делать в чужих переписках, кому принадлежат ваши сообщения и за что мы не отвечаем. Читается за пять минут.</span>
+        <span class="en">The agreement between you and Love: how old you have to be, what you may not do to other people, who owns your messages, and where our responsibility ends. Five minutes to read.</span>
+      </p>
+      <p class="doc-updated" data-animate="up">
+        <span class="ru">Действует с 25 июня 2026</span>
+        <span class="en">In effect since June 25, 2026</span>
+      </p>
+    </div>
+  </div>
 
-  <h2>6. Voice and Screen Sharing</h2>
-  <p>Love provides voice communication and screen sharing features. By using these features, you acknowledge that:</p>
-  <ul>
-    <li>screen sharing transmits your screen content to other participants in the voice channel;</li>
-    <li>other participants may capture or record shared content; Love cannot prevent this;</li>
-    <li>you should not share sensitive or confidential information via screen sharing unless you trust all participants.</li>
-  </ul>
+</header>
+<!-- ===== СЦЕНА 2 — ДОКУМЕНТ =============================================
+     Тело условий. Четырнадцать разделов — это много, поэтому оглавление здесь
+     не украшение: человек почти всегда приходит за одним пунктом. Номера
+     набраны моношрифтом и работают как типографический акцент, цвета нет.
+     ===================================================================== -->
+<section class="scene cv" data-scene="tos-body" style="--scene-height: auto">
 
-  <h2>7. Intellectual Property</h2>
-  <p>The Service, including its design, code, graphics, trademarks, and documentation, is the intellectual property of Love and is protected by applicable copyright, trademark, and other intellectual property laws. You may not copy, modify, distribute, or reverse-engineer any part of the Service without prior written consent.</p>
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
 
-  <h2>8. Privacy</h2>
-  <p>Your use of the Service is also governed by our <a href="privacy.html">Privacy Policy</a>, which describes how we collect, use, and protect your personal data. By using Love, you consent to the practices described in the Privacy Policy.</p>
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:-18%;top:22%;width:40vw;height:40vw;opacity:.18"></div>
+  </div>
 
-  <h2>9. Termination</h2>
-  <p>You may terminate your account at any time by deleting it through the application settings. Love may suspend or terminate your access to the Service at any time, with or without notice, for conduct that we determine violates these Terms or is harmful to other users, third parties, or the business interests of Love.</p>
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+    <div class="grid-v"></div>
+  </div>
 
-  <h2>10. Disclaimer of Warranties</h2>
-  <p>The Service is provided “as is” and “as available” without warranties of any kind, whether express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, and non-infringement. Love does not warrant that the Service will be uninterrupted, error-free, or secure.</p>
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-body doc-narrow">
 
-  <h2>11. Limitation of Liability</h2>
-  <p>To the maximum extent permitted by applicable law, Love shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other intangible losses resulting from your use of the Service.</p>
+      <!-- Врезка «если коротко»: единственный элемент с наклоном по курсору. -->
+      <div class="doc-card tilt" data-tilt="3" data-animate="up">
+        <h2>
+          <span class="ru">Если коротко</span>
+          <span class="en">The short version</span>
+        </h2>
+        <p class="ru">Не мешайте другим людям, не ломайте сервис, не выдавайте себя за кого-то другого. Всё, что вы написали, остаётся вашим. Аккаунт можно удалить в любой момент из настроек. Мы можем закрыть доступ тому, кто вредит остальным.</p>
+        <p class="en">Don’t make life worse for other people, don’t break the service, don’t pretend to be someone you aren’t. Everything you write stays yours. You can delete your account from settings whenever you like. We can shut out anyone who harms the rest.</p>
+      </div>
 
-  <h2>12. Changes to Terms</h2>
-  <p>Love reserves the right to modify these Terms at any time. We will notify users of material changes through the Service or by email. Your continued use of the Service after such changes constitutes acceptance of the updated Terms.</p>
+      <!-- Оглавление: якоря к разделам. -->
+      <nav class="toc" style="margin-top:var(--s7)" data-animate="up" data-aria-ru="Разделы условий" aria-label="Terms sections">
+        <a href="#tos-1"><span class="ru">1. Принятие</span><span class="en">1. Acceptance</span></a>
+        <a href="#tos-2"><span class="ru">2. Возраст</span><span class="en">2. Age</span></a>
+        <a href="#tos-3"><span class="ru">3. Аккаунт</span><span class="en">3. Account</span></a>
+        <a href="#tos-4"><span class="ru">4. Что нельзя</span><span class="en">4. Acceptable use</span></a>
+        <a href="#tos-5"><span class="ru">5. Контент</span><span class="en">5. Content</span></a>
+        <a href="#tos-6"><span class="ru">6. Голос и экран</span><span class="en">6. Voice &amp; screen</span></a>
+        <a href="#tos-7"><span class="ru">7. Права на Сервис</span><span class="en">7. IP</span></a>
+        <a href="#tos-8"><span class="ru">8. Конфиденциальность</span><span class="en">8. Privacy</span></a>
+        <a href="#tos-9"><span class="ru">9. Прекращение</span><span class="en">9. Termination</span></a>
+        <a href="#tos-10"><span class="ru">10. Отказ от гарантий</span><span class="en">10. Warranties</span></a>
+        <a href="#tos-11"><span class="ru">11. Ответственность</span><span class="en">11. Liability</span></a>
+        <a href="#tos-12"><span class="ru">12. Изменения</span><span class="en">12. Changes</span></a>
+        <a href="#tos-13"><span class="ru">13. Применимое право</span><span class="en">13. Governing law</span></a>
+        <a href="#tos-14"><span class="ru">14. Контакты</span><span class="en">14. Contact</span></a>
+      </nav>
 
-  <h2>13. Governing Law</h2>
-  <p>These Terms shall be governed by and construed in accordance with applicable international law, without regard to its conflict of law principles.</p>
+      <p class="ru" data-animate="up">Ниже — полный текст. Он написан юридическим языком не для важности: каждый пункт что-то обещает или от чего-то освобождает, и переписать его «попроще» — значит незаметно изменить обязательство.</p>
+      <p class="en" data-animate="up">The full text follows. It reads like a contract for a reason: every clause either promises something or releases someone, and rewriting it “in plain words” would quietly change what it commits us to.</p>
 
-  <h2>14. Contact</h2>
-  <p>If you have questions about these Terms, please contact us at <a href="mailto:support@loveapp.chat">support@loveapp.chat</a> or visit our <a href="support.html">Support page</a>.</p>
-</div>
-<div class="l-ru">
-  <div class="kicker">Юридическое</div>
-  <h1>Условия использования</h1>
-  <p class="updated">Действует с: 25 июня 2026 г.</p>
+      <section class="doc-sec" id="tos-1" data-animate="up">
+        <span class="num">01</span>
+        <h2><span class="ru">Принятие условий</span><span class="en">Acceptance of Terms</span></h2>
+        <p class="ru">Получая доступ к Love («Сервис») или используя его, вы соглашаетесь соблюдать настоящие Условия использования («Условия»). Если вы не согласны с этими Условиями, не используйте Сервис.</p>
+        <p class="en">By accessing or using Love (“the Service”), you agree to be bound by these Terms of Service (“Terms”). If you do not agree to these Terms, do not use the Service.</p>
+      </section>
 
-  <h2>1. Принятие условий</h2>
-  <p>Получая доступ к Love («Сервис») или используя его, вы соглашаетесь соблюдать настоящие Условия использования («Условия»). Если вы не согласны с этими Условиями, не используйте Сервис.</p>
+      <section class="doc-sec" id="tos-2" data-animate="up">
+        <span class="num">02</span>
+        <h2><span class="ru">Возрастное ограничение</span><span class="en">Age requirement</span></h2>
+        <p class="ru">Для использования Love вам должно быть не менее <strong>13 лет</strong>. Используя Сервис, вы подтверждаете и гарантируете, что соответствуете этому минимальному возрастному требованию. Если вам не исполнилось 18 лет, необходимо согласие родителя или законного опекуна.</p>
+        <p class="en">You must be at least <strong>13 years of age</strong> to use Love. By using the Service, you represent and warrant that you meet this minimum age requirement. If you are under 18, you must have the consent of a parent or legal guardian.</p>
+      </section>
 
-  <h2>2. Возрастное ограничение</h2>
-  <p>Для использования Love вам должно быть не менее <strong>13 лет</strong>. Используя Сервис, вы подтверждаете и гарантируете, что соответствуете этому минимальному возрастному требованию. Если вам не исполнилось 18 лет, необходимо согласие родителя или законного опекуна.</p>
+      <section class="doc-sec" id="tos-3" data-animate="up">
+        <span class="num">03</span>
+        <h2><span class="ru">Регистрация аккаунта</span><span class="en">Account registration</span></h2>
+        <p class="ru">Для использования некоторых функций Love необходимо создать аккаунт. Вы обязуетесь:</p>
+        <p class="en">To use certain features of Love, you must create an account. You agree to:</p>
+        <ul class="ru">
+          <li>предоставлять точную и полную информацию при регистрации;</li>
+          <li>обеспечивать безопасность пароля и учётных данных;</li>
+          <li>своевременно обновлять информацию об аккаунте при её изменении;</li>
+          <li>нести ответственность за всю деятельность, осуществляемую с использованием вашего аккаунта.</li>
+        </ul>
+        <ul class="en">
+          <li>provide accurate and complete registration information;</li>
+          <li>maintain the security of your password and account credentials;</li>
+          <li>promptly update your account information if it changes;</li>
+          <li>accept responsibility for all activity that occurs under your account.</li>
+        </ul>
+        <p class="ru">Вы не должны передавать свои учётные данные другим лицам или создавать несколько аккаунтов для одного человека.</p>
+        <p class="en">You must not share your account credentials with others or create multiple accounts for a single individual.</p>
+      </section>
 
-  <h2>3. Регистрация аккаунта</h2>
-  <p>Для использования некоторых функций Love необходимо создать аккаунт. Вы обязуетесь:</p>
-  <ul>
-    <li>предоставлять точную и полную информацию при регистрации;</li>
-    <li>обеспечивать безопасность пароля и учётных данных;</li>
-    <li>своевременно обновлять информацию об аккаунте при её изменении;</li>
-    <li>нести ответственность за всю деятельность, осуществляемую с использованием вашего аккаунта.</li>
-  </ul>
-  <p>Вы не должны передавать свои учётные данные другим лицам или создавать несколько аккаунтов для одного человека.</p>
+      <section class="doc-sec" id="tos-4" data-animate="up">
+        <span class="num">04</span>
+        <h2><span class="ru">Допустимое использование</span><span class="en">Acceptable use</span></h2>
+        <p class="ru">Вы соглашаетесь не использовать Love для:</p>
+        <p class="en">You agree not to use Love to:</p>
+        <ul class="ru">
+          <li>нарушения применимых местных, национальных или международных законов и нормативных актов;</li>
+          <li>отправки, публикации или распространения контента, являющегося незаконным, вредоносным, угрожающим, оскорбительным, преследующим, клеветническим или иным образом нежелательным;</li>
+          <li>выдачи себя за любое лицо или организацию либо ложного указания своей принадлежности;</li>
+          <li>распространения спама, несанкционированной рекламы или цепочек сообщений;</li>
+          <li>загрузки или передачи вредоносных программ, вирусов или другого опасного кода;</li>
+          <li>попыток несанкционированного доступа к аккаунтам других пользователей, серверам или сетям;</li>
+          <li>вмешательства в работу Сервиса или связанных с ним серверов либо нарушения их работы;</li>
+          <li>сбора или извлечения персональных данных других пользователей без их согласия;</li>
+          <li>любой формы автоматизированного сбора данных (скрейпинг, краулинг) без предварительного письменного согласия.</li>
+        </ul>
+        <ul class="en">
+          <li>violate any applicable local, national, or international law or regulation;</li>
+          <li>send, share, or distribute content that is illegal, harmful, threatening, abusive, harassing, defamatory, or otherwise objectionable;</li>
+          <li>impersonate any person or entity, or falsely state or misrepresent your affiliation;</li>
+          <li>distribute spam, unsolicited advertisements, or chain messages;</li>
+          <li>upload or transmit malware, viruses, or other malicious code;</li>
+          <li>attempt to gain unauthorised access to other users’ accounts, servers, or networks;</li>
+          <li>interfere with or disrupt the Service or servers connected to the Service;</li>
+          <li>collect or harvest personal information of other users without their consent;</li>
+          <li>engage in any form of automated data collection (scraping, crawling) without prior written consent.</li>
+        </ul>
+      </section>
 
-  <h2>4. Допустимое использование</h2>
-  <p>Вы соглашаетесь не использовать Love для:</p>
-  <ul>
-    <li>нарушения применимых местных, национальных или международных законов и нормативных актов;</li>
-    <li>отправки, публикации или распространения контента, являющегося незаконным, вредоносным, угрожающим, оскорбительным, преследующим, клеветническим или иным образом нежелательным;</li>
-    <li>выдачи себя за любое лицо или организацию либо ложного указания своей принадлежности;</li>
-    <li>распространения спама, несанкционированной рекламы или цепочек сообщений;</li>
-    <li>загрузки или передачи вредоносных программ, вирусов или другого опасного кода;</li>
-    <li>попыток несанкционированного доступа к аккаунтам других пользователей, серверам или сетям;</li>
-    <li>вмешательства в работу Сервиса или связанных с ним серверов либо нарушения их работы;</li>
-    <li>сбора или извлечения персональных данных других пользователей без их согласия;</li>
-    <li>любой формы автоматизированного сбора данных (скрейпинг, краулинг) без предварительного письменного согласия.</li>
-  </ul>
+      <section class="doc-sec" id="tos-5" data-animate="up">
+        <span class="num">05</span>
+        <h2><span class="ru">Контент</span><span class="en">Content</span></h2>
+        <p class="ru"><strong>Ваш контент.</strong> Вы сохраняете право собственности на любой контент, который вы создаёте, отправляете или публикуете через Love. Используя Сервис, вы предоставляете Love ограниченную неисключительную лицензию на хранение, передачу и отображение вашего контента исключительно в целях предоставления вам Сервиса.</p>
+        <p class="en"><strong>Your content.</strong> You retain ownership of any content you create, send, or share through Love. By using the Service, you grant Love a limited, non-exclusive licence to store, transmit, and display your content solely for the purpose of providing the Service to you.</p>
+        <p class="ru"><strong>Модерация контента.</strong> Love оставляет за собой право удалять контент, нарушающий настоящие Условия или правила сообщества, а также приостанавливать или прекращать аккаунты, систематически нарушающие их.</p>
+        <p class="en"><strong>Content moderation.</strong> Love reserves the right to remove content that violates these Terms or community guidelines, and to suspend or terminate accounts that repeatedly violate them.</p>
+      </section>
+      <section class="doc-sec" id="tos-6" data-animate="up">
+        <span class="num">06</span>
+        <h2><span class="ru">Голосовая связь и демонстрация экрана</span><span class="en">Voice and screen sharing</span></h2>
+        <p class="ru">Love предоставляет функции голосовой связи и демонстрации экрана. Используя эти функции, вы подтверждаете, что:</p>
+        <p class="en">Love provides voice communication and screen sharing features. By using these features, you acknowledge that:</p>
+        <ul class="ru">
+          <li>демонстрация экрана передаёт содержимое вашего экрана другим участникам голосового канала;</li>
+          <li>другие участники могут захватывать или записывать демонстрируемый контент; Love не может этому воспрепятствовать;</li>
+          <li>не следует транслировать конфиденциальную информацию через демонстрацию экрана, если вы не доверяете всем участникам.</li>
+        </ul>
+        <ul class="en">
+          <li>screen sharing transmits your screen content to other participants in the voice channel;</li>
+          <li>other participants may capture or record shared content, and Love cannot prevent this;</li>
+          <li>you should not share sensitive or confidential information via screen sharing unless you trust everyone present.</li>
+        </ul>
+      </section>
 
-  <h2>5. Контент</h2>
-  <p><strong>Ваш контент.</strong> Вы сохраняете право собственности на любой контент, который вы создаёте, отправляете или публикуете через Love. Используя Сервис, вы предоставляете Love ограниченную неисключительную лицензию на хранение, передачу и отображение вашего контента исключительно в целях предоставления вам Сервиса.</p>
-  <p><strong>Модерация контента.</strong> Love оставляет за собой право удалять контент, нарушающий настоящие Условия или правила сообщества, а также приостанавливать или прекращать аккаунты, систематически нарушающие их.</p>
+      <section class="doc-sec" id="tos-7" data-animate="up">
+        <span class="num">07</span>
+        <h2><span class="ru">Интеллектуальная собственность</span><span class="en">Intellectual property</span></h2>
+        <p class="ru">Сервис, включая его дизайн, код, графику, товарные знаки и документацию, является интеллектуальной собственностью Love и защищается применимым законодательством об авторском праве, товарных знаках и других правах на интеллектуальную собственность. Вы не вправе копировать, модифицировать, распространять или декомпилировать любую часть Сервиса без предварительного письменного согласия.</p>
+        <p class="en">The Service, including its design, code, graphics, trademarks, and documentation, is the intellectual property of Love and is protected by applicable copyright, trademark, and other intellectual property laws. You may not copy, modify, distribute, or reverse-engineer any part of the Service without prior written consent.</p>
+      </section>
 
-  <h2>6. Голосовая связь и демонстрация экрана</h2>
-  <p>Love предоставляет функции голосовой связи и демонстрации экрана. Используя эти функции, вы подтверждаете, что:</p>
-  <ul>
-    <li>демонстрация экрана передаёт содержимое вашего экрана другим участникам голосового канала;</li>
-    <li>другие участники могут захватывать или записывать демонстрируемый контент; Love не может этому воспрепятствовать;</li>
-    <li>не следует транслировать конфиденциальную информацию через демонстрацию экрана, если вы не доверяете всем участникам.</li>
-  </ul>
+      <section class="doc-sec" id="tos-8" data-animate="up">
+        <span class="num">08</span>
+        <h2><span class="ru">Конфиденциальность</span><span class="en">Privacy</span></h2>
+        <p class="ru">Использование вами Сервиса также регулируется нашей <a href="privacy.html">Политикой конфиденциальности</a>, которая описывает, как мы собираем, используем и защищаем ваши персональные данные. Используя Love, вы соглашаетесь с практиками, описанными в Политике конфиденциальности.</p>
+        <p class="en">Your use of the Service is also governed by our <a href="privacy.html">Privacy Policy</a>, which describes how we collect, use, and protect your personal data. By using Love, you consent to the practices described in the Privacy Policy.</p>
+      </section>
 
-  <h2>7. Интеллектуальная собственность</h2>
-  <p>Сервис, включая его дизайн, код, графику, товарные знаки и документацию, является интеллектуальной собственностью Love и защищается применимым законодательством об авторском праве, товарных знаках и других правах на интеллектуальную собственность. Вы не вправе копировать, модифицировать, распространять или декомпилировать любую часть Сервиса без предварительного письменного согласия.</p>
+      <section class="doc-sec" id="tos-9" data-animate="up">
+        <span class="num">09</span>
+        <h2><span class="ru">Прекращение доступа</span><span class="en">Termination</span></h2>
+        <p class="ru">Вы можете прекратить использование аккаунта в любое время, удалив его через настройки приложения. Love может приостановить или прекратить ваш доступ к Сервису в любое время, с уведомлением или без него, за действия, которые мы определим как нарушение настоящих Условий либо наносящие вред другим пользователям, третьим лицам или деловым интересам Love.</p>
+        <p class="en">You may terminate your account at any time by deleting it in the application settings. Love may suspend or terminate your access to the Service at any time, with or without notice, for conduct that we determine violates these Terms or is harmful to other users, third parties, or the business interests of Love.</p>
+      </section>
 
-  <h2>8. Конфиденциальность</h2>
-  <p>Использование вами Сервиса также регулируется нашей <a href="privacy.html">Политикой конфиденциальности</a>, которая описывает, как мы собираем, используем и защищаем ваши персональные данные. Используя Love, вы соглашаетесь с практиками, описанными в Политике конфиденциальности.</p>
+      <section class="doc-sec" id="tos-10" data-animate="up">
+        <span class="num">10</span>
+        <h2><span class="ru">Отказ от гарантий</span><span class="en">Disclaimer of warranties</span></h2>
+        <p class="ru">Сервис предоставляется «как есть» и «по мере доступности» без каких-либо гарантий, явных или подразумеваемых, включая, помимо прочего, подразумеваемые гарантии товарной пригодности, пригодности для конкретной цели и ненарушения прав. Love не гарантирует, что Сервис будет бесперебойным, безошибочным или защищённым.</p>
+        <p class="en">The Service is provided “as is” and “as available” without warranties of any kind, whether express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, and non-infringement. Love does not warrant that the Service will be uninterrupted, error-free, or secure.</p>
+      </section>
 
-  <h2>9. Прекращение доступа</h2>
-  <p>Вы можете прекратить использование аккаунта в любое время, удалив его через настройки приложения. Love может приостановить или прекратить ваш доступ к Сервису в любое время, с уведомлением или без него, за действия, которые мы определим как нарушение настоящих Условий либо наносящие вред другим пользователям, третьим лицам или деловым интересам Love.</p>
+      <section class="doc-sec" id="tos-11" data-animate="up">
+        <span class="num">11</span>
+        <h2><span class="ru">Ограничение ответственности</span><span class="en">Limitation of liability</span></h2>
+        <p class="ru">В максимально допустимой применимым правом степени Love не несёт ответственности за любые косвенные, случайные, специальные, побочные или штрафные убытки, а также за потерю прибыли или доходов — будь то прямые или опосредованные — или потерю данных, использования, деловой репутации или иных нематериальных потерь, возникших в результате использования вами Сервиса.</p>
+        <p class="en">To the maximum extent permitted by applicable law, Love shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other intangible losses resulting from your use of the Service.</p>
+      </section>
 
-  <h2>10. Отказ от гарантий</h2>
-  <p>Сервис предоставляется «как есть» и «по мере доступности» без каких-либо гарантий, явных или подразумеваемых, включая, помимо прочего, подразумеваемые гарантии товарной пригодности, пригодности для конкретной цели и ненарушения прав. Love не гарантирует, что Сервис будет бесперебойным, безошибочным или защищённым.</p>
+      <section class="doc-sec" id="tos-12" data-animate="up">
+        <span class="num">12</span>
+        <h2><span class="ru">Изменение условий</span><span class="en">Changes to Terms</span></h2>
+        <p class="ru">Love оставляет за собой право изменять настоящие Условия в любое время. Мы уведомим пользователей о существенных изменениях через Сервис или по электронной почте. Продолжение использования Сервиса после таких изменений означает согласие с обновлёнными Условиями.</p>
+        <p class="en">Love reserves the right to modify these Terms at any time. We will notify users of material changes through the Service or by email. Your continued use of the Service after such changes constitutes acceptance of the updated Terms.</p>
+      </section>
 
-  <h2>11. Ограничение ответственности</h2>
-  <p>В максимально допустимой применимым правом степени Love не несёт ответственности за любые косвенные, случайные, специальные, побочные или штрафные убытки, а также за потерю прибыли или доходов — будь то прямые или опосредованные — или потерю данных, использования, деловой репутации или иных нематериальных потерь, возникших в результате использования вами Сервиса.</p>
+      <!-- ПЕРЕНЕСЕНО КАК В ИСХОДНИКЕ. Юрисдикция здесь не названа, а оборот
+           «без учёта норм о коллизии законов» относится к незаданному праву.
+           Дописывать страну от себя нельзя: это изменило бы договор. Вынесено
+           в отчёт как пункт для юриста. -->
+      <section class="doc-sec" id="tos-13" data-animate="up">
+        <span class="num">13</span>
+        <h2><span class="ru">Применимое право</span><span class="en">Governing law</span></h2>
+        <p class="ru">Настоящие Условия регулируются и толкуются в соответствии с применимым международным правом, без учёта норм о коллизии законов.</p>
+        <p class="en">These Terms shall be governed by and construed in accordance with applicable international law, without regard to its conflict of law principles.</p>
+      </section>
 
-  <h2>12. Изменение условий</h2>
-  <p>Love оставляет за собой право изменять настоящие Условия в любое время. Мы уведомим пользователей о существенных изменениях через Сервис или по электронной почте. Продолжение использования Сервиса после таких изменений означает согласие с обновлёнными Условиями.</p>
+      <section class="doc-sec" id="tos-14" data-animate="up">
+        <span class="num">14</span>
+        <h2><span class="ru">Контакты</span><span class="en">Contact</span></h2>
+        <p class="ru">Вопросы по настоящим Условиям — на <a href="mailto:support@loveapp.chat">support@loveapp.chat</a> или через <a href="support.html">страницу поддержки</a>.</p>
+        <p class="en">Questions about these Terms go to <a href="mailto:support@loveapp.chat">support@loveapp.chat</a> or through our <a href="support.html">support page</a>.</p>
+      </section>
 
-  <h2>13. Применимое право</h2>
-  <p>Настоящие Условия регулируются и толкуются в соответствии с применимым международным правом, без учёта норм о коллизии законов.</p>
+    </div>
+  </div>
 
-  <h2>14. Контакты</h2>
-  <p>Если у вас есть вопросы по настоящим Условиям, свяжитесь с нами по адресу <a href="mailto:support@loveapp.chat">support@loveapp.chat</a> или посетите нашу страницу <a href="support.html">поддержки</a>.</p>
-</div>
-</div>
+</section>
+<!-- ===== СЦЕНА 3 — ЗАКРЫТИЕ ==============================================
+     Светлая сцена после длинного тёмного документа: смена экспозиции читается
+     как выдох и отделяет договор от живой ссылки на людей.
+     ===================================================================== -->
+<section class="scene cv on-paper" data-scene="tos-ask" style="--scene-height: auto">
 
-<footer>
-  <span><span class="l-en">© 2026 LOVE. Crafted with care.</span><span class="l-ru">© 2026 LOVE. Сделано с заботой.</span></span>
-  <span><a href="terms.html"><span class="l-en">Terms</span><span class="l-ru">Условия</span></a> · <a href="privacy.html"><span class="l-en">Privacy</span><span class="l-ru">Конфиденциальность</span></a> · <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a></span>
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="grid-v"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe" style="left:48%;top:-24%;width:46vw;height:46vw;transform:translateX(-50%)"></div>
+  </div>
+
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="hair-x" style="left:50%;top:8%"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-body doc-narrow doc-cta">
+      <h2 class="flow-h2" data-animate="lines">
+        <span class="ru">Что-то непонятно<br />в формулировке?</span>
+        <span class="en">Something here<br />reads oddly?</span>
+      </h2>
+      <p class="flow-lede" data-animate="up">
+        <span class="ru">Спросите — объясним по-человечески, без ссылок на пункты. А если заметили, что пункт противоречит тому, как приложение работает на самом деле, тем более напишите: значит, документ отстал от продукта.</span>
+        <span class="en">Ask, and we’ll explain it in plain words instead of citing clauses. And if you spot a clause that contradicts how the app actually behaves, please do tell us — that means the document has fallen behind the product.</span>
+      </p>
+      <p class="doc-actions" data-animate="up">
+        <a class="btn btn-w btn-sm" href="support.html#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a>
+        <a class="btn btn-ow btn-sm" href="privacy.html"><span class="ru">Политика конфиденциальности</span><span class="en">Privacy Policy</span></a>
+      </p>
+    </div>
+  </div>
+
+</section>
+
+</main>
+
+<!-- ===== Подвал ========================================================= -->
+<footer class="scene" data-scene="footer" style="--scene-height: auto">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:-14%;bottom:-40%;width:48vw;height:48vw"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <a class="brand" href="index.html"><span class="dot" aria-hidden="true"></span>LOVE</a>
+          <p class="foot-about">
+            <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
+            <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
+          </p>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
+          <ul>
+            <li><a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
+            <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
+            <li><a href="ideas.html"><span class="ru">Идеи сообщества</span><span class="en">Community ideas</span></a></li>
+            <li><a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
+          <ul>
+            <li><a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a></li>
+            <li><a href="support.html#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
+          <ul>
+            <li><a href="terms.html" aria-current="page"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
+            <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
+        <div class="mono">loveapp.chat</div>
+      </div>
+    </div>
+  </div>
+
 </footer>
+
+<!-- GSAP только усиливает уже работающие появления: без него отрабатывает
+     IntersectionObserver в depth.js, и страница остаётся читаемой целиком. -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="depth.js" defer></script>
+
+<script>
+  /* Заголовок вкладки — единственная строка, которую нельзя продублировать
+     парой .ru/.en: <title> не рендерится, CSS до него не достаёт. */
+  (function () {
+    "use strict";
+    function syncTitle() {
+      document.title = (window.loveLang && loveLang() === "ru")
+        ? "Условия использования — LOVE" : "Terms of Service — LOVE";
+    }
+    syncTitle();
+    window.addEventListener("love:lang", syncTitle);
+  })();
+</script>
+
 </body>
 </html>

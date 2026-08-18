@@ -3,207 +3,647 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="LOVE support: installation, account, calls and updates. Ask a question — we answer within 24 hours." />
 <title>Support — LOVE</title>
+
+<!-- ============================================================
+     ПРИМЕНЁННЫЕ ТЕХНИКИ НА ЭТОЙ СТРАНИЦЕ
+     · WebGL-3D    — не используется: страница служебная, читаемость важнее
+     · CSS-3D      — не используется. Наклон по курсору тут был бы только у
+                     карточки с формой, а качающийся контейнер полей ввода —
+                     помеха, а не украшение. Объём держат слои и параллакс.
+     · 2.5D        — 3 сцены по 3–4 слоя, амплитуда параллакса снижена до 60px
+     · Типографика — ghost-надпись на фоне, крупный doc-заголовок
+     · Появления   — маскированный занавес строк, stagger, протяжка clip-path
+     · Аккордеон   — grid-template-rows + clip-path (исключение задокументировано
+                     в doc.css), содержимое — только transform/opacity
+     · GSAP        — только усиление; без него страница полностью работает
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Рукопожатие с CDN начинаем заранее: GSAP грузится отсюда. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="core.css" />
 <link rel="stylesheet" href="doc.css" />
 <script src="lang.js"></script>
+
+<style>
+  /* Обязательный фолбэк доступности прямо в документе. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  .cv { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+</style>
 </head>
-<body>
-<nav>
+<body class="doc">
+
+<a class="skip-link" href="#main"><span class="ru">К содержимому</span><span class="en">Skip to content</span></a>
+<div id="progress" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ===== Навигация ===================================================== -->
+<nav class="site-nav">
   <div class="nav-inner">
-    <a class="brand" href="index.html"><span class="dot"></span>LOVE</a>
+    <a class="brand" href="index.html" aria-label="LOVE"><span class="dot" aria-hidden="true"></span>LOVE</a>
     <div class="nav-links">
-      <a href="index.html#download"><span class="l-en">Download</span><span class="l-ru">Скачать</span></a>
-      <a href="changelog.html"><span class="l-en">Changelog</span><span class="l-ru">История версий</span></a>
-      <button class="lang-btn" onclick="toggleLang()" aria-label="Switch language"><span class="l-en">RU</span><span class="l-ru">EN</span></button>
+      <a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
+      <a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
+      <a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
+      <a href="ideas.html"><span class="ru">Идеи</span><span class="en">Ideas</span></a>
+      <a href="support.html" aria-current="page"><span class="ru">Поддержка</span><span class="en">Support</span></a>
+      <button class="lang-btn" onclick="toggleLang()" data-aria-ru="Сменить язык" aria-label="Switch language"><span class="ru">EN</span><span class="en">RU</span></button>
+      <a class="nav-cta" href="#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a>
     </div>
   </div>
 </nav>
 
-<div class="wrap">
-  <div class="kicker"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></div>
-  <h1><span class="l-en">How can we help?</span><span class="l-ru">Чем помочь?</span></h1>
-  <p class="updated"><span class="l-en">Our support team typically responds within 24 hours</span><span class="l-ru">Служба поддержки обычно отвечает в течение 24 часов</span></p>
+<main id="main">
 
-  <style>
-    .sform { border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 26px; margin: 26px 0 40px; background: rgba(255,255,255,0.02); }
-    .sform h2 { margin-top: 0; }
-    .fgroup { margin-bottom: 16px; }
-    .fgroup label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-bottom: 7px; }
-    .fgroup input, .fgroup select, .fgroup textarea { width: 100%; box-sizing: border-box; background: #101010; border: 1px solid rgba(255,255,255,0.14); border-radius: 9px; color: #f5f5f5; font: inherit; font-size: 14px; padding: 11px 13px; outline: none; transition: border-color .2s; }
-    .fgroup input:focus, .fgroup select:focus, .fgroup textarea:focus { border-color: rgba(255,255,255,0.45); }
-    .fgroup textarea { min-height: 130px; resize: vertical; }
-    .fgroup select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 13px center; cursor: pointer; }
-    .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 640px) { .frow { grid-template-columns: 1fr; } }
+<!-- ===== СЦЕНА 1 — ШАПКА СТРАНИЦЫ ======================================
+     Четыре слоя глубины. Здесь параллакс тише, чем на лендинге: --par
+     уменьшен до 60px правилом .doc, поэтому фон дышит, а не летает.
+     ===================================================================== -->
+<header class="scene" data-scene="support-head" style="--scene-height: auto">
 
-    .fsubmit { display: inline-block; background: #f5f5f5; color: #0a0a0a; border: none; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; padding: 12px 26px; cursor: pointer; transition: transform .15s, opacity .15s; }
-    .fsubmit:hover { transform: translateY(-1px); }
-    .fsubmit:disabled { opacity: 0.5; cursor: default; transform: none; }
-    .ferror { color: #ff6b6b; font-size: 13px; margin: 10px 0 0; }
-    .fsuccess { display: none; text-align: center; padding: 34px 20px; }
-    .fsuccess.show { display: block; }
-    .fsuccess .fs-icon { width: 52px; height: 52px; margin: 0 auto 16px; border: 1px solid rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-    .fsuccess h3 { margin: 0 0 8px; font-size: 20px; }
-    .fsuccess p { color: rgba(255,255,255,0.55); margin: 0; }
-    .fsuccess .fnumber { margin-top: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: rgba(255,255,255,0.72); }
-    .fsuccess .fnumber[hidden] { display: none; }
-  </style>
+  <!-- дальний фон -->
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
 
-  <div class="sform" id="contact">
-    <div id="form-wrap">
-      <h2><span class="l-en">Submit a request</span><span class="l-ru">Отправить обращение</span></h2>
-      <p><span class="l-en">Can’t find what you’re looking for? Fill out the form and our support team will get back to you within 24 hours.</span><span class="l-ru">Не нашли ответ? Заполните форму — команда поддержки ответит в течение 24 часов.</span></p>
-      <form id="support-form" novalidate>
-        <div class="frow">
-          <div class="fgroup">
-            <label for="sf-name"><span class="l-en">Full Name</span><span class="l-ru">Имя</span></label>
-            <input type="text" id="sf-name" required placeholder="John Doe" data-ph-ru="Иван Иванов" />
-          </div>
-          <div class="fgroup">
-            <label for="sf-email"><span class="l-en">Email Address</span><span class="l-ru">Email</span></label>
-            <input type="email" id="sf-email" required placeholder="john@example.com" data-ph-ru="ivan@example.com" />
-          </div>
-        </div>
-        <div class="fgroup">
-          <label for="sf-category"><span class="l-en">Category</span><span class="l-ru">Категория</span></label>
-          <select id="sf-category">
-            <option value="bug">Bug Report</option>
-            <option value="account">Account Issue</option>
-            <option value="feature">Feature Request</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="fgroup">
-          <label for="sf-subject"><span class="l-en">Subject</span><span class="l-ru">Тема</span></label>
-          <input type="text" id="sf-subject" required placeholder="Brief description of your issue" data-ph-ru="Кратко опишите проблему" />
-        </div>
-        <div class="fgroup">
-          <label for="sf-description"><span class="l-en">Description</span><span class="l-ru">Описание</span></label>
-          <textarea id="sf-description" required placeholder="Describe your issue in detail. Include steps to reproduce if applicable." data-ph-ru="Опишите проблему подробно. Если возможно — шаги воспроизведения."></textarea>
-        </div>
+  <!-- свечение -->
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow doc-glow-a float-breathe"></div>
+    <div class="glow doc-glow-b float-breathe fd-2"></div>
+  </div>
 
-        <button type="submit" class="fsubmit" id="sf-submit"><span class="l-en">Submit Request</span><span class="l-ru">Отправить</span></button>
-        <p class="ferror" id="sf-error" hidden></p>
-      </form>
-      <p class="fhint" style="margin-top:14px"><span class="l-en">Prefer email? Write to</span><span class="l-ru">Удобнее почтой? Напишите на</span> <a href="mailto:support@loveapp.chat">support@loveapp.chat</a>.</p>
-    </div>
-    <div class="fsuccess" id="sf-success">
-      <div class="fs-icon">✓</div>
-      <h3><span class="l-en">Request Submitted</span><span class="l-ru">Обращение отправлено</span></h3>
-      <p><span class="l-en">We’ve received your request and will respond within 24 hours.</span><span class="l-ru">Мы получили ваше обращение и ответим в течение 24 часов.</span></p>
-      <p class="fnumber" id="sf-number" hidden></p>
+  <!-- средний декор: контурная надпись за заголовком -->
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="grid-v"></div>
+    <div class="ghost float-y" style="left:52%;top:14%">
+      <span class="ru">ПОМОЩЬ</span><span class="en">HELP</span>
     </div>
   </div>
 
-  <script>
-  (function () {
-    // Адрес как у идей: с локальной копии — на локальный сервер, с боевого
-    // домена — на боевой API. Раньше здесь висел мёртвый адрес Render, а
-    // ошибку скрипт глотал — форма всегда рисовала «отправлено», и обращения
-    // просто исчезали.
-    var local = ['localhost', '127.0.0.1'].indexOf(location.hostname) >= 0;
-    var ENDPOINT = (local ? 'http://localhost:5555/api' : 'https://api.loveapp.chat/api') + '/support';
-    var RU = function () { return document.documentElement.getAttribute('data-lang') === 'ru'; };
-    var form = document.getElementById('support-form');
-    var errEl = document.getElementById('sf-error');
+  <!-- содержимое -->
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-head">
+      <span class="kicker" data-animate="wipe"><span class="ru">Поддержка</span><span class="en">Support</span></span>
+      <h1 class="doc-h1" data-animate="lines">
+        <span class="ln"><i><span class="ru">Чем помочь?</span><span class="en">How can we help?</span></i></span>
+      </h1>
+      <p class="doc-lede" data-animate="up">
+        <span class="ru">Ниже — ответы на вопросы, которые задают чаще всего. Если вашего среди них нет, напишите: живой человек прочитает и ответит в течение суток.</span>
+        <span class="en">Below are the questions people ask most. If yours isn’t here, write to us — a real person reads every message and answers within a day.</span>
+      </p>
+      <p class="doc-updated" data-animate="wipe">
+        <span class="ru">Обычно отвечаем в течение 24 часов</span>
+        <span class="en">We usually reply within 24 hours</span>
+      </p>
+    </div>
+  </div>
 
-    function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
-    function clearError() { errEl.hidden = true; }
+</header>
 
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      clearError();
-      var name = document.getElementById('sf-name').value.trim();
-      var email = document.getElementById('sf-email').value.trim();
-      var category = document.getElementById('sf-category').value;
-      var subject = document.getElementById('sf-subject').value.trim();
-      var description = document.getElementById('sf-description').value.trim();
+<!-- ===== СЦЕНА 2 — КОНТАКТ =============================================
+     Бриф просит заметный блок связи, поэтому он идёт до FAQ, а не после:
+     человек, который уже знает свою проблему, не должен листать девять
+     вопросов. Карточка слегка наклоняется по курсору — это CSS-3D, один
+     из двух объёмных приёмов на служебной странице.
+     ===================================================================== -->
+<section class="scene cv" id="contact" data-scene="support-form" style="--scene-height: auto">
 
-      if (!name || !email || !subject || !description) return showError(RU() ? 'Заполните все поля.' : 'Please fill in all fields.');
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError(RU() ? 'Введите корректный email.' : 'Please enter a valid email address.');
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="grid-v"></div>
+  </div>
 
-      var btn = document.getElementById('sf-submit');
-      var label = btn.innerHTML;
-      btn.disabled = true; btn.textContent = RU() ? 'Отправка...' : 'Sending...';
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:-12%;top:8%;width:40vw;height:40vw"></div>
+  </div>
 
-      fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, email: email, category: category, subject: subject, description: description })
-      }).then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (body) {
-          if (!res.ok) throw new Error(body.message || '');
-          document.getElementById('form-wrap').style.display = 'none';
-          var success = document.getElementById('sf-success');
-          success.classList.add('show');
-          // Номер обращения: по нему человек может сослаться в переписке.
-          var num = document.getElementById('sf-number');
-          if (num && body.number) {
-            num.textContent = (RU() ? 'Номер обращения: ' : 'Request number: ') + body.number;
-            num.hidden = false;
-          }
-        });
-      }).catch(function (err) {
-        // Форму не закрываем: обращение никуда не ушло, и человек должен об
-        // этом знать. Сообщение сервера уже человеческое, поэтому показываем
-        // его как есть; если сети нет вовсе — общий текст с почтой.
-        btn.disabled = false; btn.innerHTML = label;
-        showError((err && err.message) || (RU()
-          ? 'Не получилось отправить. Попробуйте ещё раз или напишите на support@loveapp.chat.'
-          : 'Couldn’t send it. Try again or write to support@loveapp.chat.'));
-      });
-    });
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+  </div>
 
-    ['sf-name', 'sf-email', 'sf-subject', 'sf-description'].forEach(function (id) {
-      document.getElementById(id).addEventListener('input', clearError);
-    });
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap">
 
-    var optEn = { bug: 'Bug Report', account: 'Account Issue', feature: 'Feature Request', other: 'Other' };
-    var optRu = { bug: 'Сообщение об ошибке', account: 'Проблема с аккаунтом', feature: 'Предложение функции', other: 'Другое' };
-    function localizeOptions() {
-      var m = RU() ? optRu : optEn;
-      Array.prototype.forEach.call(document.getElementById('sf-category').options, function (o) {
-        if (m[o.value]) o.textContent = m[o.value];
-      });
-    }
-    new MutationObserver(localizeOptions).observe(document.documentElement, { attributes: true, attributeFilter: ['data-lang'] });
-    localizeOptions();
-  })();
-  </script>
+      <!-- Наклона у формы нет намеренно. Класс .tilt тут стоял, но без
+           data-tilt переменные --rx/--ry никто не писал, и наклон всё равно
+           не работал. Дописывать атрибут я не стал: под курсором поехал бы
+           контейнер с полями ввода — целиться в поле по движущейся мишени
+           неприятно, а для моторики это прямая помеха. Форма стоит ровно. -->
+      <div class="sform" id="form-wrap" data-animate="up">
+        <h2><span class="ru">Написать в поддержку</span><span class="en">Write to support</span></h2>
+        <p>
+          <span class="ru">Опишите, что происходит. Чем конкретнее — тем быстрее разберёмся: версия приложения и шаги, после которых всё сломалось, экономят целый круг переписки.</span>
+          <span class="en">Tell us what’s happening. The more specific, the faster we get to it — your app version and the steps that led to the problem save a whole round of back-and-forth.</span>
+        </p>
 
-  <h2><span class="l-en">Frequently asked questions</span><span class="l-ru">Частые вопросы</span></h2>
+        <form id="support-form" novalidate>
+          <div class="frow">
+            <div class="fgroup">
+              <label for="sf-name"><span class="ru">Имя</span><span class="en">Full name</span></label>
+              <input type="text" id="sf-name" name="name" required autocomplete="name"
+                     placeholder="John Doe" data-ph-ru="Иван Иванов" data-ph-en="John Doe" />
+            </div>
+            <div class="fgroup">
+              <label for="sf-email"><span class="ru">Email</span><span class="en">Email address</span></label>
+              <input type="email" id="sf-email" name="email" required autocomplete="email"
+                     placeholder="john@example.com" data-ph-ru="ivan@example.com" data-ph-en="john@example.com" />
+            </div>
+          </div>
 
-  <h2 style="font-size:17px"><span class="l-en">How do I get access to Love?</span><span class="l-ru">Как получить доступ к Love?</span></h2>
-  <p><span class="l-en">Love is currently in early access. You can request an invitation on our main page — after review, you'll receive an access code via email. Access is granted manually while the platform is being tested.</span><span class="l-ru">Love сейчас в раннем доступе. Запросить приглашение можно на главной странице — после рассмотрения вы получите код доступа на почту. Пока платформа тестируется, доступ выдаётся вручную.</span></p>
+          <div class="fgroup">
+            <label for="sf-category"><span class="ru">Категория</span><span class="en">Category</span></label>
+            <select id="sf-category" name="category">
+              <option value="bug">Bug report</option>
+              <option value="account">Account issue</option>
+              <option value="feature">Feature request</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
 
-  <h2 style="font-size:17px"><span class="l-en">How do I report a bug?</span><span class="l-ru">Как сообщить об ошибке?</span></h2>
-  <p><span class="l-en">You can report bugs directly inside the app: open <strong>Love Hub → “Report a Bug”</strong>, or use the <a href="#contact">form above</a>. Please include steps to reproduce and your app version.</span><span class="l-ru">Сообщить об ошибке можно прямо в приложении: откройте <strong>Love Hub → «Сообщить об ошибке»</strong> или воспользуйтесь <a href="#contact">формой выше</a>. Пожалуйста, укажите шаги воспроизведения и версию приложения.</span></p>
+          <div class="fgroup">
+            <label for="sf-subject"><span class="ru">Тема</span><span class="en">Subject</span></label>
+            <input type="text" id="sf-subject" name="subject" required
+                   placeholder="Brief description of your issue" data-ph-ru="Кратко: что не работает"
+                   data-ph-en="Brief description of your issue" />
+          </div>
 
-  <h2 style="font-size:17px"><span class="l-en">I can't log into my account. What do I do?</span><span class="l-ru">Не могу войти в аккаунт. Что делать?</span></h2>
-  <p><span class="l-en">First, try resetting your password via the login screen. If you no longer have access to your email, contact us with your username and registration email — we'll help verify your identity.</span><span class="l-ru">Сначала попробуйте сбросить пароль на экране входа. Если доступа к почте больше нет, напишите нам, указав имя пользователя и почту регистрации — мы поможем подтвердить личность.</span></p>
+          <div class="fgroup">
+            <label for="sf-description"><span class="ru">Описание</span><span class="en">Description</span></label>
+            <textarea id="sf-description" name="description" required
+                      placeholder="Describe your issue in detail. Include steps to reproduce if applicable."
+                      data-ph-ru="Опишите подробно. Если получается повторить — напишите шаги."
+                      data-ph-en="Describe your issue in detail. Include steps to reproduce if applicable."></textarea>
+          </div>
 
-  <h2 style="font-size:17px"><span class="l-en">What's the difference between a Server and a Room?</span><span class="l-ru">Чем сервер отличается от комнаты?</span></h2>
-  <p><span class="l-en">Servers are traditional community spaces with channels, categories, and roles. Rooms are a simpler format — a single space for text and voice, ideal for small groups and focused conversations.</span><span class="l-ru">Серверы — классические пространства сообществ с каналами, категориями и ролями. Комнаты — более простой формат: единое пространство для текста и голоса, идеально для небольших групп и сфокусированных разговоров.</span></p>
+          <button type="submit" class="btn btn-w" id="sf-submit">
+            <span class="ru">Отправить</span><span class="en">Send</span>
+          </button>
+          <p class="ferror" id="sf-error" hidden role="alert"></p>
+        </form>
 
-  <h2 style="font-size:17px"><span class="l-en">My microphone isn't working in voice channels.</span><span class="l-ru">Микрофон не работает в голосовых каналах.</span></h2>
-  <p><span class="l-en">Make sure Love has microphone permissions in your system settings (Windows: Settings → Privacy → Microphone). Also check that the correct input device is selected in <strong>Love Settings → Audio</strong>.</span><span class="l-ru">Убедитесь, что у Love есть разрешение на микрофон в настройках системы (Windows: Параметры → Конфиденциальность → Микрофон). Также проверьте, что в <strong>Настройках Love → Аудио</strong> выбрано правильное устройство ввода.</span></p>
+        <p class="fhint">
+          <span class="ru">Удобнее почтой? Пишите на</span><span class="en">Prefer email? Write to</span>
+          <a href="mailto:support@loveapp.chat">support@loveapp.chat</a>
+        </p>
+      </div>
 
-  <h2 style="font-size:17px"><span class="l-en">How do app updates work?</span><span class="l-ru">Как работают обновления приложения?</span></h2>
-  <p><span class="l-en">Love updates automatically. When a new version is available, you'll see a banner at the top of the app — click it to download and restart. You can always check your current version in <strong>Settings → About</strong>.</span><span class="l-ru">Love обновляется автоматически. Когда доступна новая версия, вверху приложения появится баннер — нажмите его, чтобы скачать и перезапустить. Текущую версию всегда видно в <strong>Настройки → О приложении</strong>.</span></p>
+      <!-- Экран благодарности: тот же блок, только другое состояние -->
+      <div class="sform fsuccess" id="sf-success" role="status">
+        <div class="fs-icon" aria-hidden="true">✓</div>
+        <h3><span class="ru">Обращение отправлено</span><span class="en">Request sent</span></h3>
+        <p>
+          <span class="ru">Мы его получили и ответим в течение 24 часов на указанную почту.</span>
+          <span class="en">We’ve got it and will reply to that address within 24 hours.</span>
+        </p>
+        <!-- Номер обращения: по нему можно сослаться на переписку. Заполняется
+             скриптом, поэтому по умолчанию пусто и скрыто. -->
+        <p class="fnumber" id="sf-number" hidden></p>
+      </div>
 
-  <h2 style="font-size:17px"><span class="l-en">Windows says the installer is from an unknown publisher</span><span class="l-ru">Windows пишет, что установщик от неизвестного издателя</span></h2>
-  <p><span class="l-en">That's Windows SmartScreen being cautious with new apps. Click <strong>More info → Run anyway</strong>. The installer is the official build from this site.</span><span class="l-ru">Это Windows SmartScreen осторожничает с новыми приложениями. Нажмите <strong>Подробнее → Выполнить в любом случае</strong>. Установщик — официальная сборка с этого сайта.</span></p>
+    </div>
+  </div>
 
-  <h2 style="font-size:17px"><span class="l-en">macOS says the app “cannot be verified”</span><span class="l-ru">macOS пишет, что приложение «не может быть проверено»</span></h2>
-  <p><span class="l-en">Right-click (Control-click) the app → <strong>Open</strong> → confirm. You only need to do this once, on first launch.</span><span class="l-ru">Кликните по приложению правой кнопкой (Control-клик) → <strong>Открыть</strong> → подтвердите. Это нужно сделать один раз, при первом запуске.</span></p>
+</section>
 
-  <h2 style="font-size:17px"><span class="l-en">Android won't install the APK</span><span class="l-ru">Android не устанавливает APK</span></h2>
-  <p><span class="l-en">Enable <strong>“Install from unknown sources”</strong> for your browser or file manager the first time. After that, updates install normally.</span><span class="l-ru">Разрешите <strong>«Установку из неизвестных источников»</strong> для браузера или файлового менеджера один раз. Дальше обновления ставятся как обычно.</span></p>
-</div>
 
-<footer>
-  <span><span class="l-en">© 2026 LOVE. Crafted with care.</span><span class="l-ru">© 2026 LOVE. Сделано с заботой.</span></span>
-  <span><a href="terms.html"><span class="l-en">Terms</span><span class="l-ru">Условия</span></a> · <a href="privacy.html"><span class="l-en">Privacy</span><span class="l-ru">Конфиденциальность</span></a> · <a href="support.html"><span class="l-en">Support</span><span class="l-ru">Поддержка</span></a></span>
+<!-- ===== СЦЕНА 3 — FAQ =================================================
+     Девять вопросов из живой поддержки, сгруппированные по четырём темам.
+     Сверху — таблетки локальной навигации: девять аккордеонов подряд читать
+     тяжело, а по группам человек находит свой случай за один взгляд.
+     Раскрытие — grid-template-rows (исключение задокументировано в doc.css).
+     ===================================================================== -->
+<section class="scene cv" id="faq" data-scene="support-faq" style="--scene-height: auto">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow doc-glow-b float-breathe fd-1"></div>
+  </div>
+
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="grid-v"></div>
+    <div class="ghost float-y fd-2" style="left:46%;top:6%">
+      <span class="ru">ВОПРОСЫ</span><span class="en">ANSWERS</span>
+    </div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-body">
+
+      <nav class="toc" data-animate="stagger" data-aria-ru="Разделы помощи" aria-label="Help topics">
+        <a href="#faq-access"><span class="ru">Доступ и аккаунт</span><span class="en">Access &amp; account</span></a>
+        <a href="#faq-install"><span class="ru">Установка</span><span class="en">Installing</span></a>
+        <a href="#faq-talk"><span class="ru">Звонки и сферы</span><span class="en">Calls &amp; spheres</span></a>
+        <a href="#faq-updates"><span class="ru">Обновления и ошибки</span><span class="en">Updates &amp; bugs</span></a>
+      </nav>
+
+      <!-- ГРУППА 01 — доступ и аккаунт -->
+      <div class="doc-sec" id="faq-access">
+        <span class="num" data-animate="wipe">01</span>
+        <h2 data-animate="up"><span class="ru">Доступ и аккаунт</span><span class="en">Access &amp; account</span></h2>
+
+        <div class="acc" data-animate="up" style="--d:.06s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-a1">
+            <span><span class="ru">Как получить доступ к LOVE?</span><span class="en">How do I get access to LOVE?</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-a1">
+            <div>
+              <p>
+                <span class="ru">Сейчас LOVE в раннем доступе. Оставьте заявку на главной — мы просматриваем их вручную и присылаем код доступа на почту. Обычно это занимает пару дней.</span>
+                <span class="en">LOVE is in early access right now. Request an invitation on the main page — we go through requests by hand and send an access code by email. It usually takes a couple of days.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc" data-animate="up" style="--d:.1s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-a2">
+            <span><span class="ru">Не могу войти в аккаунт</span><span class="en">I can’t log in to my account</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-a2">
+            <div>
+              <p>
+                <span class="ru">Сначала попробуйте сбросить пароль на экране входа. Если письмо не приходит или сброс не помогает — напишите нам и укажите имя пользователя и почту, на которую регистрировались. Так мы найдём аккаунт быстрее всего.</span>
+                <span class="en">Start with the password reset on the login screen. If the email never arrives or the reset doesn’t help, write to us with your username and the email you signed up with — that’s the fastest way for us to find the account.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ГРУППА 02 — установка. Три системы, три разных предупреждения ОС -->
+      <div class="doc-sec" id="faq-install">
+        <span class="num" data-animate="wipe">02</span>
+        <h2 data-animate="up"><span class="ru">Установка</span><span class="en">Installing</span></h2>
+
+        <div class="acc" data-animate="up" style="--d:.06s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-i1">
+            <span><span class="ru">Windows пишет «неизвестный издатель»</span><span class="en">Windows says “unknown publisher”</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-i1">
+            <div>
+              <p>
+                <span class="ru">Это SmartScreen: он так реагирует на любое приложение, у которого пока нет платной подписи Microsoft. Нажмите «Подробнее», затем «Выполнить в любом случае» — установка пойдёт как обычно.</span>
+                <span class="en">That’s SmartScreen. It shows this for any app that doesn’t yet carry a paid Microsoft signature. Click “More info”, then “Run anyway”, and the install continues as normal.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc" data-animate="up" style="--d:.1s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-i2">
+            <span><span class="ru">macOS не даёт открыть приложение</span><span class="en">macOS won’t let me open the app</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-i2">
+            <div>
+              <p>
+                <span class="ru">Если система пишет, что разработчика не удалось проверить — щёлкните по приложению правой кнопкой и выберите «Открыть». Подтвердить нужно один раз, дальше оно запускается обычным двойным щелчком.</span>
+                <span class="en">If macOS says the developer can’t be verified, right-click the app and choose “Open”. You only confirm once — after that it launches with a normal double-click.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc" data-animate="up" style="--d:.14s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-i3">
+            <span><span class="ru">Android не устанавливает APK</span><span class="en">Android won’t install the APK</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-i3">
+            <div>
+              <p>
+                <span class="ru">Android по умолчанию запрещает установку файлов не из Google Play. Когда система спросит, разрешите установку из этого источника — один раз, для браузера или файлового менеджера, из которого открываете APK.</span>
+                <span class="en">By default Android blocks files that didn’t come from Google Play. When it asks, allow installs from this source — once, for the browser or file manager you opened the APK from.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ГРУППА 03 — что происходит внутри приложения -->
+      <div class="doc-sec" id="faq-talk">
+        <span class="num" data-animate="wipe">03</span>
+        <h2 data-animate="up"><span class="ru">Звонки и сферы</span><span class="en">Calls &amp; spheres</span></h2>
+
+        <div class="acc" data-animate="up" style="--d:.06s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-t1">
+            <span><span class="ru">Не работает микрофон</span><span class="en">My microphone isn’t working</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-t1">
+            <div>
+              <p>
+                <span class="ru">Сначала проверьте доступ на уровне системы: в Windows это «Параметры» → «Конфиденциальность» → «Микрофон». Затем откройте настройки LOVE и убедитесь, что в разделе аудио выбрано то устройство, в которое вы действительно говорите — чаще всего дело именно в этом.</span>
+                <span class="en">First check the permission at the system level: on Windows that’s Settings → Privacy → Microphone. Then open LOVE’s settings and make sure the audio input device is the one you’re actually speaking into — that’s usually the culprit.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc" data-animate="up" style="--d:.1s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-t2">
+            <span><span class="ru">Чем сфера отличается от комнаты?</span><span class="en">What’s the difference between a sphere and a room?</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-t2">
+            <div>
+              <p>
+                <span class="ru">Сфера — это целое пространство: внутри каналы, категории и роли участников. Комната проще — одно место, где рядом живут текст и голос, без разделения на каналы. Сферу берут под сообщество, комнату — под компанию друзей.</span>
+                <span class="en">A sphere is a whole space: channels, categories and member roles inside it. A room is simpler — one place where text and voice live side by side, with no channels to split things up. Spheres suit communities; rooms suit a group of friends.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ГРУППА 04 — обновления и то, что сломалось -->
+      <div class="doc-sec" id="faq-updates">
+        <span class="num" data-animate="wipe">04</span>
+        <h2 data-animate="up"><span class="ru">Обновления и ошибки</span><span class="en">Updates &amp; bugs</span></h2>
+
+        <div class="acc" data-animate="up" style="--d:.06s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-u1">
+            <span><span class="ru">Как обновить LOVE?</span><span class="en">How do I update LOVE?</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-u1">
+            <div>
+              <p>
+                <span class="ru">Обновления приходят сами: когда выходит новая версия, наверху появляется полоска с предложением обновиться. Текущую версию всегда видно в настройках, в разделе «О приложении».</span>
+                <span class="en">Updates arrive on their own: when a new version ships, a banner appears at the top offering to update. You can always see which version you’re on in Settings → About.</span>
+              </p>
+              <p>
+                <span class="ru">Что именно поменялось — <a href="changelog.html">в списке изменений</a>.</span>
+                <span class="en">What changed in each release is <a href="changelog.html">in the changelog</a>.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc" data-animate="up" style="--d:.1s">
+          <button class="acc-btn" type="button" aria-expanded="false" aria-controls="p-u2">
+            <span><span class="ru">Как сообщить об ошибке?</span><span class="en">How do I report a bug?</span></span>
+            <span class="acc-sign" aria-hidden="true"></span>
+          </button>
+          <div class="acc-panel" id="p-u2">
+            <div>
+              <p>
+                <span class="ru">Прямо из приложения: Love Hub → «Сообщить об ошибке». Или <a href="#contact">через форму выше</a>. В любом случае напишите шаги, после которых всё сломалось, и версию приложения — с ними мы повторяем проблему у себя, а не переспрашиваем неделю.</span>
+                <span class="en">Straight from the app: Love Hub → “Report a Bug”. Or <a href="#contact">use the form above</a>. Either way, include the steps that led to the problem and your app version — with those we can reproduce it ourselves instead of asking questions for a week.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+</main>
+
+<!-- ===== ПОДВАЛ — тот же, что на лендинге, три слоя глубины ============= -->
+<footer class="scene site-foot" data-scene="foot">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="grid-v"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:-14%;bottom:-40%;width:48vw;height:48vw"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <a class="brand" href="index.html"><span class="dot" aria-hidden="true"></span>LOVE</a>
+          <p class="foot-about">
+            <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
+            <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
+          </p>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
+          <ul>
+            <li><a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
+            <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
+            <li><a href="ideas.html"><span class="ru">Идеи сообщества</span><span class="en">Community ideas</span></a></li>
+            <li><a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
+          <ul>
+            <li><a href="#faq">FAQ</a></li>
+            <li><a href="#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a></li>
+            <li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
+          <ul>
+            <li><a href="terms.html"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
+            <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
+        <div class="mono">loveapp.chat</div>
+      </div>
+    </div>
+  </div>
+
 </footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="depth.js" defer></script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ===== Заголовок вкладки следом за языком =====
+     Через событие love:lang, а не через обёртку над window.toggleLang:
+     обёртка ловила только клик по кнопке языка и промолчала бы, если язык
+     сменится как-то иначе. Слушаем на window — именно туда его шлёт lang.js
+     (на document CustomEvent с window не приходит, это и был баг: заголовок
+     менялся обёрткой, а подписи <option> — нет). */
+  function syncTitle() {
+    document.title = (window.loveLang && loveLang() === "ru")
+      ? "Поддержка — LOVE"
+      : "Support — LOVE";
+  }
+  syncTitle();
+
+  /* ===== Аккордеон =====
+     Сам переключатель живёт в depth.js (§11) — он общий для всех страниц мока.
+     Здесь его НЕ дублируем: два обработчика на одной кнопке давали двойной
+     toggle, то есть клик визуально не делал ничего. Источник правды —
+     aria-expanded на кнопке, класс .is-open на обёртке нужен только затем,
+     чтобы правило раскрытия не зависело от :has().
+     Странице остаётся своё: раскрыть нужный вопрос при заходе по прямой ссылке. */
+
+  /* Приход по ссылке #faq-... раскрывать нечего — это заголовок группы,
+     а вот прямая ссылка на конкретный вопрос должна его открыть. */
+  function openFromHash() {
+    var id = (location.hash || "").slice(1);
+    if (!id) return;
+    var panel = document.getElementById(id);
+    if (!panel || !panel.classList.contains("acc-panel")) return;
+    var acc = panel.closest(".acc");
+    var btn = acc && acc.querySelector(".acc-btn");
+    if (btn) { btn.setAttribute("aria-expanded", "true"); acc.classList.add("is-open"); }
+  }
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
+
+  /* ===== Локализация <option> =====
+     Внутри option разметка не работает, поэтому подписи меняем текстом.
+     На событие love:lang, которое шлёт lang.js, — без наблюдателя за DOM. */
+  var CAT = {
+    bug:     { ru: "Ошибка в приложении",   en: "Bug report" },
+    account: { ru: "Проблема с аккаунтом",  en: "Account issue" },
+    feature: { ru: "Идея или пожелание",    en: "Feature request" },
+    other:   { ru: "Другое",                en: "Other" }
+  };
+  var sel = document.getElementById("sf-category");
+  function syncOptions() {
+    if (!sel) return;
+    var l = (window.loveLang && loveLang() === "ru") ? "ru" : "en";
+    Array.prototype.forEach.call(sel.options, function (o) {
+      if (CAT[o.value]) o.textContent = CAT[o.value][l];
+    });
+  }
+  syncOptions();
+  window.addEventListener("love:lang", function () { syncTitle(); syncOptions(); });
+
+  /* ===== Форма =====
+     Валидация своя (novalidate), чтобы сообщения были на языке страницы,
+     а не системные. Проверяем то же, что и на боевом сайте: все поля
+     заполнены и почта похожа на почту. */
+  var form = document.getElementById("support-form");
+  var err = document.getElementById("sf-error");
+  var btn = document.getElementById("sf-submit");
+  var wrap = document.getElementById("form-wrap");
+  var done = document.getElementById("sf-success");
+  var MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  var MSG = {
+    empty: { ru: "Заполните все поля — без них мы не поймём, с чем помочь.",
+             en: "Please fill in every field — without them we can’t tell what to help with." },
+    mail:  { ru: "Проверьте адрес почты: ответ уйдёт именно туда.",
+             en: "Check the email address — that’s where the reply goes." },
+    /* Сеть отвалилась или сервер ответил ошибкой. Врать «отправлено» нельзя:
+       человек уйдёт довольный, а обращения не будет. Даём почту — так письмо
+       дойдёт даже если API лежит. */
+    fail:  { ru: "Не получилось отправить. Попробуйте ещё раз или напишите на support@loveapp.chat.",
+             en: "Couldn’t send it. Try again or write to support@loveapp.chat." }
+  };
+  function say(key, custom) {
+    var l = (window.loveLang && loveLang() === "ru") ? "ru" : "en";
+    err.textContent = custom || MSG[key][l];
+    err.hidden = false;
+  }
+
+  /* Одного сообщения в role="alert" мало: незрячий человек услышит текст, но не
+     узнает, какое поле виновато. Поэтому виноватые поля помечаем aria-invalid,
+     а фокус переводим на первое из них — тогда ошибка сразу и озвучена, и
+     показана, и курсор стоит там, где надо править. */
+  var FIELDS = ["name", "email", "subject", "description"];
+  function mark(bad) {
+    for (var i = 0; i < FIELDS.length; i++) {
+      var f = form[FIELDS[i]];
+      if (!f) continue;
+      if (bad.indexOf(FIELDS[i]) < 0) f.removeAttribute("aria-invalid");
+      else f.setAttribute("aria-invalid", "true");
+    }
+    if (bad.length && form[bad[0]]) form[bad[0]].focus();
+  }
+
+  if (form) form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var d = {
+      name: form.name.value.trim(),
+      email: form.email.value.trim(),
+      category: form.category.value,
+      subject: form.subject.value.trim(),
+      description: form.description.value.trim()
+    };
+    if (!d.name || !d.email || !d.subject || !d.description) {
+      var bad = [];
+      for (var i = 0; i < FIELDS.length; i++) if (!d[FIELDS[i]]) bad.push(FIELDS[i]);
+      say("empty"); mark(bad); return;
+    }
+    if (!MAIL.test(d.email)) { say("mail"); mark(["email"]); return; }
+    mark([]);
+    err.hidden = true;
+
+    btn.disabled = true;
+    btn.dataset.busy = "1";
+    var l = (window.loveLang && loveLang() === "ru") ? "ru" : "en";
+    var label = btn.innerHTML;
+    btn.textContent = l === "ru" ? "Отправляем…" : "Sending…";
+
+    /* Адрес тот же, что у идей: с локальной копии сайта — на локальный сервер,
+       с боевого домена — на боевой API. */
+    var local = ["localhost", "127.0.0.1"].includes(location.hostname);
+    var apiBase = local ? "http://localhost:5555/api" : "https://api.loveapp.chat/api";
+
+    function unlock() {
+      btn.disabled = false;
+      delete btn.dataset.busy;
+      btn.innerHTML = label;
+    }
+    function finish(number) {
+      wrap.hidden = true;
+      done.classList.add("show");
+      var num = document.getElementById("sf-number");
+      if (num && number) {
+        num.textContent = (l === "ru" ? "Номер обращения: " : "Request number: ") + number;
+        num.hidden = false;
+      }
+      done.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    fetch(apiBase + "/support", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(d)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.message || "");
+        finish(body.number);
+      });
+    }).catch(function (e) {
+      /* Сообщение сервера показываем как есть (оно человеческое: «заполните
+         поля», «слишком много обращений за час»), иначе — общий текст. */
+      unlock();
+      say("fail", e && e.message ? e.message : "");
+    });
+  });
+})();
+</script>
+
 </body>
 </html>

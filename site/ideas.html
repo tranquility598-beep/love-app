@@ -1,63 +1,408 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Публичный каталог идей сообщества Love.">
-  <title>Идеи сообщества - Love</title>
-  <link rel="stylesheet" href="community.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Public catalogue of LOVE community ideas: what people asked for, what is planned and what already shipped." />
+<title>Ideas — LOVE</title>
+
+<!-- ============================================================
+     ПРИМЕНЁННЫЕ ТЕХНИКИ НА ЭТОЙ СТРАНИЦЕ
+     · WebGL-3D    — не используется: страница-каталог, читаемость важнее
+     · CSS-3D      — карточки идей отзываются на курсор (perspective + rotate),
+                     плюс наклон блока-легенды
+     · 2.5D        — 4 сцены по 3–4 слоя, амплитуда параллакса снижена до 60px
+     · Типографика — ghost-надпись за заголовком, крупный doc-заголовок
+     · Появления   — маскированный занавес строк, stagger сетки, clip-path
+     · Состояния   — статусы идей различаются знаком и весом, а не цветом
+     · GSAP        — только усиление; без него страница полностью работает
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- Рукопожатие с CDN начинаем заранее: GSAP грузится отсюда, и без этой
+     строки соединение открывается только когда парсер дойдёт до тега. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="core.css" />
+<link rel="stylesheet" href="doc.css" />
+<script src="lang.js"></script>
+
+<style>
+  /* Обязательный фолбэк доступности прямо в документе. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  .cv { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+</style>
 </head>
-<body>
-  <nav class="site-nav">
-    <div class="nav-inner">
-      <a class="brand" href="index.html"><span></span>LOVE</a>
-      <div class="nav-links">
-        <a href="changelog.html">Что нового</a>
-        <a href="support.html">Поддержка</a>
-        <a class="active" href="ideas.html">Идеи</a>
+<body class="doc">
+
+<a class="skip-link" href="#main"><span class="ru">К содержимому</span><span class="en">Skip to content</span></a>
+<div id="progress" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ===== Навигация ===================================================== -->
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html" aria-label="LOVE"><span class="dot" aria-hidden="true"></span>LOVE</a>
+    <div class="nav-links">
+      <a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
+      <a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
+      <a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
+      <a href="ideas.html" aria-current="page"><span class="ru">Идеи</span><span class="en">Ideas</span></a>
+      <a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a>
+      <button class="lang-btn" onclick="toggleLang()" data-aria-ru="Сменить язык" aria-label="Switch language"><span class="ru">EN</span><span class="en">RU</span></button>
+      <a class="nav-cta" href="#catalog"><span class="ru">К каталогу</span><span class="en">To the catalogue</span></a>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+<!-- ===== СЦЕНА 1 — ШАПКА СТРАНИЦЫ ======================================
+     Четыре слоя глубины. Как и на поддержке, --par здесь 60px (правило .doc):
+     фон дышит, но не летает — каталог читают, а не пролистывают.
+     ===================================================================== -->
+<header class="scene" data-scene="ideas-head" style="--scene-height: auto">
+
+  <!-- дальний фон -->
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
+
+  <!-- свечение -->
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow doc-glow-a float-breathe"></div>
+    <div class="glow doc-glow-b float-breathe fd-2"></div>
+  </div>
+
+  <!-- средний декор: контурная надпись за заголовком -->
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="grid-v"></div>
+    <div class="ghost float-y" style="left:50%;top:13%">
+      <span class="ru">ИДЕИ</span><span class="en">IDEAS</span>
+    </div>
+  </div>
+
+  <!-- содержимое -->
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-head">
+      <span class="kicker" data-animate="wipe"><span class="ru">Сообщество LOVE</span><span class="en">LOVE community</span></span>
+      <!-- Строк ровно две в ОБОИХ языках. Раскладка «.ln» одна на два языка,
+           поэтому третья строка, нужная только английскому, оставила бы в
+           русском пустую строку высотой в кегль — заметную дыру под «Идеи». -->
+      <h1 class="doc-h1" data-animate="lines">
+        <span class="ln"><i><span class="ru">Идеи</span><span class="en">Ideas from</span></i></span>
+        <span class="ln"><i><span class="ru">сообщества</span><span class="en">the community</span></i></span>
+      </h1>
+      <p class="doc-lede" data-animate="up">
+        <span class="ru">Здесь лежат предложения, которые прошли проверку команды и стали публичными. Видно, что уже в работе, что запланировано, а что мы решили не делать — и почему очередь выглядит именно так.</span>
+        <span class="en">These are the suggestions that passed our review and went public. You can see what’s in progress, what’s planned and what we decided against — and why the queue looks the way it does.</span>
+      </p>
+      <p class="doc-updated" data-animate="wipe">
+        <span class="ru">Голосовать и предлагать новое — из Love Hub в приложении</span>
+        <span class="en">Vote and submit new ideas from Love Hub inside the app</span>
+      </p>
+    </div>
+  </div>
+
+</header>
+
+<!-- ===== СЦЕНА 2 — ПУТЬ ИДЕИ ============================================
+     Двойная работа: рассказывает порядок и заодно служит легендой к бейджам
+     в каталоге. Статусы взяты ровно те, что существуют на сервере
+     (under_review, planned, in_progress, completed, declined) — ничего
+     придуманного. В каталоге они приходят машинными слагами, и на боевом
+     сайте так и печатаются; здесь у каждого есть человеческая подпись.
+     Различие статусов — знаком и весом, не цветом: контур, половина,
+     залитый квадрат, точка, перечёркнутый — в порядке движения по очереди.
+     ===================================================================== -->
+<section class="scene cv" id="how" data-scene="ideas-flow" style="--scene-height: auto">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="grid-v"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-2" style="right:-14%;top:-10%;width:44vw;height:44vw"></div>
+  </div>
+
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap">
+      <h2 class="flow-h2" data-animate="wipe">
+        <span class="ru">Как идея проходит очередь</span>
+        <span class="en">How an idea moves through the queue</span>
+      </h2>
+      <p class="flow-lede" data-animate="up">
+        <span class="ru">Пять состояний, ничего скрытого. Бейдж на карточке — это одно из них.</span>
+        <span class="en">Five states, nothing hidden. The badge on a card is one of them.</span>
+      </p>
+
+      <ol class="legend tilt" data-tilt="3" data-animate="stagger">
+        <li class="lg" style="--i:0">
+          <span class="state s-review" aria-hidden="true"></span>
+          <b><span class="ru">На рассмотрении</span><span class="en">Under review</span></b>
+          <span class="lg-x"><span class="ru">Прочитали, обсуждаем. Ещё не решили.</span><span class="en">We’ve read it and are talking it over. No decision yet.</span></span>
+        </li>
+        <li class="lg" style="--i:1">
+          <span class="state s-planned" aria-hidden="true"></span>
+          <b><span class="ru">Запланировано</span><span class="en">Planned</span></b>
+          <span class="lg-x"><span class="ru">Решили делать. Даты пока не обещаем.</span><span class="en">We’re doing it. We won’t promise a date yet.</span></span>
+        </li>
+        <li class="lg" style="--i:2">
+          <span class="state s-progress" aria-hidden="true"></span>
+          <b><span class="ru">В работе</span><span class="en">In progress</span></b>
+          <span class="lg-x"><span class="ru">Кто-то уже пишет этот код прямо сейчас.</span><span class="en">Someone is writing that code right now.</span></span>
+        </li>
+        <li class="lg" style="--i:3">
+          <span class="state s-done" aria-hidden="true"></span>
+          <b><span class="ru">Готово</span><span class="en">Completed</span></b>
+          <span class="lg-x"><span class="ru">Вышло в обновлении — ищите в истории версий.</span><span class="en">Shipped in an update — look for it in the changelog.</span></span>
+        </li>
+        <li class="lg" style="--i:4">
+          <span class="state s-declined" aria-hidden="true"></span>
+          <b><span class="ru">Отклонено</span><span class="en">Declined</span></b>
+          <span class="lg-x"><span class="ru">Не будем делать. Идея остаётся на виду, а не исчезает.</span><span class="en">We won’t build it. The idea stays visible instead of vanishing.</span></span>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+</section>
+
+<!-- ===== СЦЕНА 3 — КАТАЛОГ ==============================================
+     Все идентификаторы — те же, что на боевом сайте (#ideas-grid, #idea-sort,
+     #ideas-status, #ideas-prev/next, #ideas-page, #ideas-count, #idea-search):
+     логика переносится файлом, а не переписыванием разметки.
+     Карточки рисует community.js. Наклон по курсору навешивается на каждую
+     карточку там же, потому что до загрузки их в DOM ещё нет.
+     ===================================================================== -->
+<section class="scene cv" id="catalog" data-scene="ideas-catalog" style="--scene-height: auto" aria-labelledby="catalog-title">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe" style="left:-16%;top:26%;width:38vw;height:38vw"></div>
+  </div>
+
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="grid-v"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap">
+      <div class="catalog">
+
+        <div class="catalog-toolbar" data-animate="up">
+          <div>
+            <h2 id="catalog-title"><span class="ru">Каталог</span><span class="en">Catalogue</span></h2>
+            <span id="ideas-count"><span class="ru">Загружаем…</span><span class="en">Loading…</span></span>
+          </div>
+          <div class="controls">
+            <label class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+              <input id="idea-search" type="search" autocomplete="off"
+                     placeholder="Поиск по идеям"
+                     data-ph-ru="Поиск по идеям"
+                     data-ph-en="Search ideas"
+                     data-aria-ru="Поиск по идеям"
+                     aria-label="Search ideas" />
+            </label>
+            <!-- Подписи <option> переводит скрипт страницы: внутрь option
+                 разметку с .ru/.en положить нельзя. -->
+            <select id="idea-sort" data-aria-ru="Сортировка" aria-label="Sort order">
+              <option value="score">По рейтингу</option>
+              <option value="new">Сначала новые</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Одно место для всех «не карточек»: загрузка, пусто, ошибка.
+             role="status" оставлен от оригинала — смена текста озвучивается. -->
+        <div id="ideas-status" class="status" role="status">
+          <div class="status-in">
+            <span class="status-mark" aria-hidden="true"></span>
+            <b id="ideas-status-title"><span class="ru">Загружаем идеи</span><span class="en">Loading ideas</span></b>
+            <span id="ideas-status-text"><span class="ru">Секунду — забираем список с сервера.</span><span class="en">One moment — fetching the list from the server.</span></span>
+            <button type="button" class="btn btn-ow btn-sm" id="ideas-retry" hidden>
+              <span class="ru">Попробовать снова</span><span class="en">Try again</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="ideas-grid" class="ideas-grid" hidden></div>
+
+        <div class="pagination" id="ideas-pagination" hidden>
+          <button id="ideas-prev" type="button" data-aria-ru="Предыдущая страница" aria-label="Previous page">
+            <span class="ru">Назад</span><span class="en">Back</span>
+          </button>
+          <span id="ideas-page"></span>
+          <button id="ideas-next" type="button" data-aria-ru="Следующая страница" aria-label="Next page">
+            <span class="ru">Вперёд</span><span class="en">Next</span>
+          </button>
+        </div>
+
       </div>
     </div>
-  </nav>
+  </div>
 
-  <main>
-    <header class="page-head">
-      <p class="eyebrow">LOVE COMMUNITY</p>
-      <h1>Идеи сообщества</h1>
-      <p>Предложения, которые прошли проверку команды. Голосовать и отправлять новые идеи можно из Love Hub в приложении.</p>
-    </header>
+</section>
 
-    <section class="catalog" aria-labelledby="catalog-title">
-      <div class="catalog-toolbar">
+<!-- ===== СЦЕНА 4 — ГДЕ ГОЛОСОВАТЬ =======================================
+     Оригинал говорит это одной строкой в шапке; выношу в отдельный блок,
+     потому что это единственное действие, которое человек может здесь
+     совершить. Ссылки наружу нет намеренно: Love Hub живёт в приложении.
+     ===================================================================== -->
+<section class="scene cv" data-scene="ideas-cta" style="--scene-height: auto">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="vignette-d"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:44%;top:-24%;width:46vw;height:46vw"></div>
+  </div>
+
+  <div class="layer depth-2" data-depth="2" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="doc-wrap doc-body doc-narrow doc-cta">
+      <div class="doc-card tilt" data-tilt="4" data-animate="up">
+        <h2><span class="ru">Своя идея?</span><span class="en">Got an idea?</span></h2>
+        <p>
+          <span class="ru">Предлагать своё и голосовать за чужое можно только из приложения — раздел Love Hub. Оттуда идея приходит к нам. Решим показать её всем — она появится на этой странице со своим статусом.</span>
+          <span class="en">Writing your own and voting on other people’s happens inside the app — the Love Hub section. That’s how an idea reaches us. If we decide to show it publicly, it lands on this page with a status.</span>
+        </p>
+        <p class="fhint">
+          <span class="ru">Нашли ошибку, а не идею? Это</span><span class="en">Found a bug rather than an idea? That’s</span>
+          <a href="support.html#contact"><span class="ru">поддержка</span><span class="en">support</span></a>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+</main>
+
+<!-- ===== Подвал ========================================================= -->
+<footer class="scene" data-scene="footer" style="--scene-height: auto">
+
+  <div class="layer depth-0" data-depth="0" aria-hidden="true">
+    <div class="hair-h" style="top:0"></div>
+  </div>
+
+  <div class="layer depth-1" data-depth="1" aria-hidden="true">
+    <div class="glow float-breathe fd-3" style="left:-14%;bottom:-40%;width:48vw;height:48vw"></div>
+  </div>
+
+  <div class="layer layer--flow depth-4" data-depth="4">
+    <div class="wrap">
+      <div class="foot-grid">
         <div>
-          <h2 id="catalog-title">Каталог</h2>
-          <span id="ideas-count">Загрузка...</span>
+          <a class="brand" href="index.html"><span class="dot" aria-hidden="true"></span>LOVE</a>
+          <p class="foot-about">
+            <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
+            <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
+          </p>
         </div>
-        <div class="controls">
-          <label class="search">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-            <input id="idea-search" type="search" placeholder="Поиск по идеям" autocomplete="off">
-          </label>
-          <select id="idea-sort" aria-label="Сортировка">
-            <option value="score">По рейтингу</option>
-            <option value="new">Сначала новые</option>
-          </select>
+        <div>
+          <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
+          <ul>
+            <li><a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
+            <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
+            <li><a href="ideas.html"><span class="ru">Идеи сообщества</span><span class="en">Community ideas</span></a></li>
+            <li><a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
+          <ul>
+            <li><a href="support.html#faq">FAQ</a></li>
+            <li><a href="support.html#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a></li>
+            <li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </div>
+        <div>
+          <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
+          <ul>
+            <li><a href="terms.html"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
+            <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
+          </ul>
         </div>
       </div>
-
-      <div id="ideas-status" class="status" role="status">Загружаем идеи...</div>
-      <div id="ideas-grid" class="ideas-grid" hidden></div>
-      <div class="pagination" id="ideas-pagination" hidden>
-        <button id="ideas-prev" type="button" aria-label="Предыдущая страница">Назад</button>
-        <span id="ideas-page"></span>
-        <button id="ideas-next" type="button" aria-label="Следующая страница">Вперёд</button>
+      <div class="foot-bottom">
+        <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
+        <div class="mono">loveapp.chat</div>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
-  <footer>
-    <span>© 2026 LOVE</span>
-    <div><a href="terms.html">Условия</a><a href="privacy.html">Конфиденциальность</a></div>
-  </footer>
-  <script src="community.js" defer></script>
+</footer>
+
+<!-- Порядок не косметический: скрипты с defer выполняются строго по документу,
+     поэтому каталог стоит первым — запрос данных не должен ждать выполнения
+     декоративной библиотеки. Наклон он при этом навесить ещё не сможет
+     (window.loveBindTilt появится позже), но depth.js при старте сам обходит
+     все [data-tilt], включая уже отрисованные карточки — ради этого в draw()
+     и стоит проверка на существование функции.
+     Оговорка про замеры: локально до первой карточки проходит ~3.3 с, но это
+     не порядок скриптов. Запрос уходит на 709 мс и 2351 мс умирает — столько
+     Chromium стучится в закрытый порт localhost. В продакшене API отвечает,
+     и этой задержки нет. -->
+<script src="community.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="depth.js" defer></script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ===== Заголовок вкладки и подписи сортировки =====
+     Слушаем love:lang на window — именно туда его отправляет lang.js.
+     На document это событие не приходит (проверено на поддержке: там из-за
+     этого подписи <option> молча не переводились). */
+  var SORT = {
+    score: { ru: "По рейтингу", en: "Top rated" },
+    new:   { ru: "Сначала новые", en: "Newest first" }
+  };
+
+  function syncTitle() {
+    document.title = (window.loveLang && loveLang() === "ru")
+      ? "Идеи сообщества — LOVE"
+      : "Ideas — LOVE";
+  }
+
+  function syncOptions() {
+    var l = (window.loveLang && loveLang()) === "ru" ? "ru" : "en";
+    var opts = document.querySelectorAll("#idea-sort option");
+    for (var i = 0; i < opts.length; i++) {
+      var t = SORT[opts[i].value];
+      if (t) opts[i].textContent = t[l];
+    }
+  }
+
+  syncTitle();
+  syncOptions();
+  window.addEventListener("love:lang", function () { syncTitle(); syncOptions(); });
+})();
+</script>
+
 </body>
 </html>

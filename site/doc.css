@@ -1,65 +1,676 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #0a0a0a; color: #fff; font-size: 16px; line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-::selection { background: #fff; color: #0a0a0a; }
-a { color: #fff; }
-nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(10,10,10,0.55);
-  -webkit-backdrop-filter: saturate(120%) blur(18px);
-  backdrop-filter: saturate(120%) blur(18px);
-  border-bottom: 1px solid rgba(255,255,255,0.12);
-}
-.nav-inner {
-  max-width: 1120px; margin: 0 auto; padding: 0 32px;
-  height: 56px; display: flex; align-items: center; justify-content: space-between;
-}
-.brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: 0.34em; font-size: 13px; text-decoration: none; }
-.brand .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.nav-links { display: flex; align-items: center; gap: 24px; }
-.nav-links a { font-size: 13px; color: rgba(255,255,255,0.65); text-decoration: none; transition: color 0.3s; }
-.nav-links a:hover { color: #fff; }
-.wrap { max-width: 780px; margin: 0 auto; padding: 150px 24px 90px; }
-.kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
-h1 { margin-top: 14px; font-size: clamp(38px, 6.5vw, 64px); font-weight: 800; letter-spacing: -0.035em; line-height: 1; text-transform: uppercase; }
-.updated { margin-top: 16px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
-h2 { margin: 44px 0 12px; font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
-p, li { color: rgba(255,255,255,0.65); font-size: 15.5px; }
-p { margin: 10px 0; }
-ul { padding-left: 22px; margin: 10px 0; }
-li { margin: 6px 0; }
-strong { color: #fff; font-weight: 600; }
-.card {
-  border: 1px solid rgba(255,255,255,0.12); border-radius: 18px;
-  padding: 26px 28px; margin-top: 26px; background: rgba(255,255,255,0.02);
-}
-.card h2 { margin: 0 0 4px; }
-.vtag {
-  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.2em;
-  text-transform: uppercase; padding: 6px 14px; border-radius: 980px;
-  background: #fff; color: #0a0a0a; margin-bottom: 12px;
-}
-.vsub { font-size: 14px; color: rgba(255,255,255,0.4); margin-bottom: 8px; }
-footer {
-  border-top: 1px solid rgba(255,255,255,0.12); padding: 32px 24px;
-  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  max-width: 1120px; margin: 0 auto;
-  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.4);
-}
-footer a { color: rgba(255,255,255,0.4); text-decoration: none; }
-footer a:hover { color: #fff; }
-@media (max-width: 720px) {
-  .nav-inner { padding: 0 20px; }
-  .nav-links { gap: 16px; }
-  .wrap { padding: 120px 20px 70px; }
+/* ============================================================================
+   doc.css — внутренние страницы: поддержка, идеи, история версий, документы
+   ----------------------------------------------------------------------------
+   Требует core.css. Здесь эффекты СПОКОЙНЕЕ, чем на лендинге: читаемость
+   первым делом. Глубина есть, но амплитуды меньше, WebGL нет.
+
+   ТЕХНИКИ:
+     · 2.5D   — те же .scene/.layer, но амплитуда --par уменьшена
+     · CSS-3D — только лёгкий отклик карточек, без наклона всей страницы
+     · WebGL  — не используется
+   ========================================================================== */
+
+.doc { --par: 60px; }         /* спокойный параллакс на документах */
+
+/* padding-inline, а не шорткат padding — и это не вкусовщина. Шапка страницы
+   несёт оба класса сразу: class="doc-wrap doc-head". Пока .doc-wrap писал
+   `padding: 0 var(--s6)`, он спорил с вертикальными отступами .doc-head при
+   равной специфичности, и побеждал тот, кто ниже в файле. На десктопе ниже
+   был .doc-head, а в мобильном медиазапросе — .doc-wrap, поэтому на 390px
+   отступы шапки схлопывались в ноль: заголовок уезжал под навигацию, а зазор
+   до следующей секции исчезал. Ограничив .doc-wrap одной осью, снимаем спор
+   целиком — порядок правил больше ничего не решает. */
+.doc-wrap { width: 100%; max-width: 880px; margin: 0 auto; padding-inline: var(--s6); }
+.doc-narrow { max-width: 760px; }
+
+/* ===== Наклон карточки по курсору (CSS-3D) ==============================
+   depth.js пишет --rx/--ry на любой [data-tilt]. На лендинге эти переменные
+   читают .win и .dl-card напрямую, а здесь читателя не было вовсе: класс
+   .tilt висел в разметке, но в CSS его не существовало — наклон молча не
+   работал. Второй случай того же промаха, что и с несуществующим btn-solid.
+
+   perspective держим внутри transform, а не на родителе: 3D-контекст на
+   контейнере уже один раз сделал .manifesto блоком-контейнером для потомков
+   и сломал раскладку. Здесь эффект нужен одному элементу — пусть он и несёт.
+
+   Селектор с .is-in обязателен по специфичности: правило появления
+   `html.js [data-animate="up"]` (0,2,1) сильнее одиночного .tilt (0,1,0) и
+   перебивало бы наклон навсегда. До появления пусть выигрывает вход,
+   после — наклон. */
+.tilt { --rx: 0deg; --ry: 0deg; }
+html.js [data-animate].tilt.is-in,
+.tilt:not([data-animate]) {
+  transform: perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform var(--t-mid) var(--e-out);
 }
 
-/* i18n */
-html[data-lang="ru"] .l-en { display: none !important; }
-html:not([data-lang="ru"]) .l-ru { display: none !important; }
-.lang-btn { background: none; border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; color: inherit; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; padding: 5px 12px; cursor: pointer; margin-left: 10px; transition: border-color .2s; }
-.lang-btn:hover { border-color: rgba(255,255,255,0.6); }
+/* ===== Шапка страницы ====================================================
+   padding-block, а не шорткат: горизонтальные поля — забота .doc-wrap (см.
+   комментарий выше). Стоило шапке написать `padding: 150px 0 ...`, и этот
+   ноль стирал боковые отступы обёртки — в окне около 900px заголовок вставал
+   вплотную к краю, а текст под ним оставался с отбивкой. Каждое правило
+   владеет своей осью, и спорить им больше нечем. */
+.doc-head { position: relative; padding-block: 150px var(--s8); }
+.doc-head .kicker { display: block; margin-bottom: var(--s4); }
+.doc-h1 {
+  font-family: var(--f-display);
+  font-size: clamp(40px, 7vw, 84px);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.038em;
+}
+.doc-lede { max-width: var(--measure); margin-top: var(--s5); font-size: clamp(16px, 1.2vw, 18.5px); line-height: 1.68; color: var(--od-2); }
+.doc-updated { margin-top: var(--s4); font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--od-3); }
+
+.doc-glow-a { top: -18%; left: 58%; width: 52vw; height: 52vw; opacity: 0.3; }
+.doc-glow-b { top: 30%; left: -16%; width: 34vw; height: 34vw; opacity: 0.2; }
+
+/* ===== Тело документа =================================================== */
+.doc-body { padding-bottom: var(--s10); }
+
+/* Закрывающая сцена документа. Врезка-финал упиралась верхним краем в
+   предыдущий блок, а нижним — в хайрлайн подвала: .doc-body даёт отступ
+   только снизу, сверху воздуха не было вообще.
+   Здесь только padding-top — нижний остаётся за .doc-body. Одно правило = одна
+   ось: иначе padding-block перебил бы padding-bottom так же, как это уже
+   случилось на паре .doc-wrap + .doc-head. */
+.doc-cta { padding-top: var(--s9); }
+.doc-body h2 {
+  margin: var(--s8) 0 var(--s4);
+  font-family: var(--f-display);
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 500;
+  line-height: 1.14;
+  letter-spacing: -0.024em;
+}
+.doc-body h3 { margin: var(--s6) 0 var(--s3); font-size: var(--z-h3); font-weight: 650; letter-spacing: -0.012em; }
+.doc-body p { max-width: var(--measure); margin-bottom: var(--s4); color: var(--od-2); }
+.doc-body ul { max-width: var(--measure); margin: 0 0 var(--s4); }
+.doc-body li { position: relative; padding-left: var(--s5); margin-bottom: 11px; color: var(--od-2); }
+.doc-body li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0.72em;
+  width: 10px; height: 1px;
+  background: var(--od-4);
+}
+.doc-body strong { color: var(--od-1); font-weight: 650; }
+/* :not(.btn) — обязательно. Селектор `.doc-body a` весит (0,1,1) и перебивает
+   `.btn-w` (0,1,0): белая кнопка внутри текста документа получала белый текст
+   на белом фоне и подчёркивание — то есть исчезала. */
+.doc-body a:not(.btn) { color: var(--od-1); border-bottom: 1px solid var(--od-4); transition: border-color var(--t-fast) var(--e-out); }
+.doc-body a:not(.btn):hover { border-color: var(--paper); }
+
+/* Нумерованный раздел документа: номер — типографический акцент */
+.doc-sec { position: relative; padding-top: var(--s7); border-top: 1px solid var(--hair-2); }
+.doc-sec + .doc-sec { margin-top: var(--s7); }
+.doc-sec > .num {
+  display: block;
+  margin-bottom: var(--s3);
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  color: var(--od-4);
+}
+.doc-sec h2 { margin-top: 0; }
+
+/* Врезка «кратко» */
+.doc-card {
+  padding: var(--s6);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.025);
+}
+.doc-card h2, .doc-card h3 { margin-top: 0; }
+/* Заголовок врезки — не заголовок раздела: врезка стоит внутри документа и не
+   должна конкурировать с ним по весу. Поэтому гротеск вместо антиквы и размер
+   ближе к h3. */
+.doc-card > h2 {
+  font-family: var(--f-sans);
+  font-size: clamp(19px, 1.6vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.014em;
+  line-height: 1.24;
+}
+.doc-card p:last-child { margin-bottom: 0; }
+
+/* Строка кнопок внизу врезки. Живёт на <p>, потому что стоит в потоке текста
+   и наследует его вертикальные отступы; flex нужен только для зазора и
+   переноса на узком экране, где две кнопки в строку уже не встают. */
+.doc-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+
+/* ===== Локальная навигация по разделам (support) ======================== */
+.toc {
+  display: flex; flex-wrap: wrap; gap: var(--s2);
+  margin-bottom: var(--s7);
+  padding-bottom: var(--s6);
+  border-bottom: 1px solid var(--hair);
+}
+.toc a {
+  padding: 8px 15px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  color: var(--od-2);
+  transition: color var(--t-fast) var(--e-out), border-color var(--t-fast) var(--e-out), transform var(--t-fast) var(--e-back);
+}
+.toc a:hover { color: var(--od-1); border-color: var(--od-4); transform: translate3d(0, -2px, 0); }
+
+/* ===== Аккордеон FAQ ==================================================== */
+/* Раскрытие через grid-template-rows: 0fr → 1fr. Это единственное место в
+   моке, где анимируется свойство раскладки: max-height даёт рваный тайминг
+   и требует магических чисел, а grid-переход плавный и не зависит от высоты.
+   Осознанное исключение из правила «только transform/opacity/filter/clip-path»;
+   содержимое внутри при этом двигается только transform/opacity. */
+.acc { border-top: 1px solid var(--hair-2); }
+.acc:last-of-type { border-bottom: 1px solid var(--hair-2); }
+.acc-btn {
+  width: 100%;
+  display: flex; align-items: center; gap: var(--s5);
+  padding: var(--s5) 0;
+  text-align: left;
+  font-size: clamp(15.5px, 1.15vw, 17.5px);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--od-2);
+  transition: color var(--t-fast) var(--e-out);
+}
+.acc-btn:hover, .acc-btn[aria-expanded="true"] { color: var(--od-1); }
+.acc-btn > span:first-child { flex: 1; }
+.acc-sign {
+  position: relative;
+  flex: 0 0 18px;
+  width: 18px; height: 18px;
+}
+.acc-sign::before, .acc-sign::after {
+  content: "";
+  position: absolute; top: 50%; left: 0;
+  width: 100%; height: 1px;
+  background: currentColor;
+  transition: transform var(--t-mid) var(--e-io), opacity var(--t-mid) var(--e-io);
+}
+.acc-sign::after { transform: rotate(90deg); }
+.acc-btn[aria-expanded="true"] .acc-sign::after { transform: rotate(0deg); opacity: 0; }
+
+.acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--t-mid) var(--e-io);
+}
+.acc-panel > div {
+  overflow: hidden;
+  opacity: 0;
+  transform: translate3d(0, -8px, 0);
+  transition: opacity var(--t-mid) var(--e-out), transform var(--t-mid) var(--e-out);
+}
+.acc.is-open .acc-panel { grid-template-rows: 1fr; }
+.acc.is-open .acc-panel > div { opacity: 1; transform: none; }
+.acc-panel p { padding-bottom: var(--s5); margin-bottom: 0; font-size: 15px; color: var(--od-3); }
+.acc-panel p + p { padding-top: 0; }
+/* Без JS панели просто открыты — контент не теряется. */
+html:not(.js) .acc-panel { grid-template-rows: 1fr; }
+html:not(.js) .acc-panel > div { opacity: 1; transform: none; }
+
+/* ===== Форма поддержки ================================================= */
+.sform {
+  padding: var(--s7);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.022);
+}
+.sform h2 { margin-top: 0; }
+/* Своя типографика карточки. Она лежит в .doc-wrap, но НЕ в .doc-body, поэтому
+   отступы абзаца оттуда ей не достались: замер дал ровно 0px между лидом и
+   первой меткой — «ИМЯ» липло к тексту. Правило держим здесь, а не расширяем
+   .doc-body: карточка живёт своей жизнью, и документные отступы ей не нужны.
+   Ширину лида заодно приводим к --measure — во всю карточку строка выходила
+   длиннее удобных 60–75 знаков. */
+.sform > h2 { margin-bottom: 11px; }
+.sform > h2 + p {
+  max-width: var(--measure);
+  margin-bottom: var(--s6);
+  line-height: 1.66;
+  color: var(--od-2);
+}
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+.fgroup { margin-bottom: var(--s4); }
+.fgroup label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--od-3);
+}
+.fgroup input, .fgroup select, .fgroup textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--ink-2);
+  color: var(--od-1);
+  font-size: 14.5px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--e-out), background var(--t-fast) linear;
+}
+.fgroup input::placeholder, .fgroup textarea::placeholder { color: rgba(255, 255, 255, 0.3); }
+.fgroup input:focus, .fgroup select:focus, .fgroup textarea:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: var(--ink-3);
+}
+.fgroup textarea { min-height: 140px; resize: vertical; line-height: 1.6; }
+/* Невалидное поле. Цветом в этом моке пометить нельзя, поэтому берём то, что
+   работает и в монохроме: рамка ярче и толще с левого края — тот же приём,
+   что у блока с ошибкой ниже, так что связь читается без слов.
+   Селектор [aria-invalid] намеренно вместо :invalid: у нас своя валидация с
+   novalidate, и браузерное :invalid зажигалось бы ещё до первой отправки. */
+.fgroup [aria-invalid="true"] {
+  border-color: var(--od-3);
+  border-left-width: 3px;
+  background: var(--ink-3);
+}
+.fgroup select {
+  appearance: none; -webkit-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+}
+/* Ошибка без цвета: рамка, вес и знак «!» вместо красного текста.
+   [hidden] обязателен: авторский display:flex перебивает `[hidden]{display:none}`
+   из стилей браузера — не по специфичности, а потому что авторский слой всегда
+   старше UA. Без этой строки пустая рамка с восклицательным знаком висела на
+   странице всегда, до первой ошибки. Поймано на скриншоте, не глазами. */
+.ferror[hidden] { display: none; }
+.ferror {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: var(--s4);
+  padding: 11px 14px;
+  border: 1px solid var(--od-4);
+  border-left-width: 3px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--od-1);
+}
+.ferror::before { content: "!"; font-family: var(--f-mono); opacity: 0.6; }
+.fhint { margin-top: var(--s4); font-size: 13px; color: var(--od-3); }
+.fhint a { color: var(--od-1); border-bottom: 1px solid var(--od-4); }
+.fsuccess { display: none; padding: var(--s8) var(--s5); text-align: center; }
+.fsuccess.show { display: block; }
+.fs-icon {
+  width: 56px; height: 56px;
+  margin: 0 auto var(--s5);
+  display: grid; place-items: center;
+  border: 1px solid var(--od-4);
+  border-radius: 50%;
+  font-size: 22px;
+  animation: fs-pop 0.7s var(--e-back);
+}
+@keyframes fs-pop { from { transform: scale(0.6); opacity: 0; } }
+.fsuccess h3 { margin-bottom: 10px; font-size: 21px; }
+.fsuccess p { margin: 0 auto; color: var(--od-3); }
+/* Номер обращения — моноширинный, его переписывают в письмо руками.
+   Селектор с двумя классами: иначе `margin` из `.fsuccess p` выше по
+   специфичности и отступ сверху не применится. */
+.fnumber[hidden] { display: none; }
+.fsuccess .fnumber {
+  margin: var(--s4) auto 0;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  color: var(--od-2);
+}
+
+/* ===== История версий: таймлайн ======================================== */
+.tl { position: relative; padding-left: clamp(var(--s6), 7vw, 92px); }
+/* Волосяная вертикаль на всю длину списка */
+.tl::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px; bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--hair), var(--hair-2) 70%, transparent);
+}
+.rel { position: relative; padding-bottom: var(--s9); }
+.rel:last-child { padding-bottom: 0; }
+/* Узел на линии */
+.rel::before {
+  content: "";
+  position: absolute;
+  left: calc(clamp(var(--s6), 7vw, 92px) * -1);
+  top: 12px;
+  width: 9px; height: 9px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--od-4);
+  transition: background var(--t-mid) var(--e-out), transform var(--t-mid) var(--e-back);
+}
+.rel.is-latest::before { background: var(--paper); transform: scale(1.5); box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.08); }
+
+.rel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s4); }
+/* Версия — крупный типографический акцент, как просил бриф */
+.rel-v {
+  font-family: var(--f-display);
+  font-size: clamp(34px, 5.2vw, 66px);
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.rel-badge {
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.rel-title { margin-top: var(--s4); font-size: clamp(17px, 1.5vw, 21px); font-weight: 600; color: var(--od-1); letter-spacing: -0.014em; }
+
+/* Мелкая справка рядом с номером версии. По брифу здесь должна быть дата, но
+   в боевом changelog дат нет ни у одного выпуска, а придумывать их нельзя —
+   это факт о продукте. Пока тут стоит величина, которая честно выводится из
+   самого списка: сколько изменений в выпуске. Слот размечен отдельным классом,
+   поэтому при миграции дата встанет на это же место без правок в CSS. */
+.rel-meta { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--od-3); }
+
+/* Группы изменений: added / fixed / changed — различие ч/б бейджем */
+.rel-group { margin-top: var(--s6); }
+.rel-kind {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-bottom: var(--s4);
+  padding: 4px 10px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--od-2);
+}
+.rel-kind::before { content: ""; width: 5px; height: 5px; background: currentColor; }
+/* added — залитый квадрат; fixed — контур; changed — половина */
+.rel-kind.k-fix::before { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
+.rel-kind.k-chg::before { background: linear-gradient(to right, currentColor 50%, transparent 50%); box-shadow: inset 0 0 0 1px currentColor; }
+
+.rel-list li { position: relative; max-width: var(--measure); padding-left: var(--s5); margin-bottom: var(--s3); font-size: 15px; line-height: 1.66; color: var(--od-2); }
+.rel-list li::before { content: ""; position: absolute; left: 0; top: 0.72em; width: 10px; height: 1px; background: var(--od-4); }
+.rel-list b { color: var(--od-1); font-weight: 650; }
+
+/* ===== Путь идеи + легенда статусов ==================================== */
+.flow-h2 {
+  font-family: var(--f-display);
+  font-size: clamp(26px, 3.4vw, 44px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.flow-lede { max-width: var(--measure); margin-top: var(--s4); font-size: 16px; line-height: 1.68; color: var(--od-2); }
+
+/* Легенда сделана таблицей-спецификацией, а не сеткой плиток: пять статусов
+   на карточки не делятся ровно (2+2+1 оставляет висячий элемент), а строки
+   с волосяными разделителями читаются как техпаспорт — ровно тот тон, что
+   нужен. Три колонки: знак, подпись, объяснение. */
+.legend {
+  margin-top: var(--s7);
+  border-top: 1px solid var(--hair-2);
+  transform-style: preserve-3d;
+}
+.lg {
+  display: grid;
+  grid-template-columns: 16px minmax(120px, 190px) 1fr;
+  gap: var(--s4) var(--s5);
+  align-items: baseline;
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--hair-2);
+}
+.lg > b { font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em; color: var(--od-1); }
+.lg-x { font-size: 14px; line-height: 1.62; color: var(--od-3); }
+
+/* В карточке знак стоит рядом с подписью и работает как метка — 7 пикселей
+   там достаточно. В легенде знак и есть предмет разговора, а на 7 пикселях
+   половина, залитый квадрат и перечёркнутый выглядят одинаковой серой точкой
+   (проверено на снимке). Поэтому здесь он крупнее, и только здесь.
+   Выравнивание по базовой линии у пустого span берёт нижнюю кромку, поэтому
+   поднимаем знак к оптическому центру строки. */
+.lg .state::before {
+  flex-basis: 13px; width: 13px; height: 13px;
+  position: relative; top: 2px;
+}
+.lg .s-done::before { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12); }
+
+/* ===== Каталог идей ==================================================== */
+.catalog { border-top: 1px solid var(--hair); padding-top: var(--s6); }
+.catalog-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s5); margin-bottom: var(--s6); }
+.catalog h2 { margin: 0 0 6px; font-size: clamp(20px, 2vw, 26px); }
+#ideas-count { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--od-3); }
+.controls { display: flex; gap: var(--s2); }
+.search {
+  display: flex; align-items: center; gap: 10px;
+  height: 44px;
+  min-width: min(340px, 48vw);
+  padding: 0 15px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--ink-2);
+  transition: border-color var(--t-fast) var(--e-out);
+}
+.search:focus-within { border-color: rgba(255, 255, 255, 0.45); }
+.search svg { width: 16px; height: 16px; fill: none; stroke: var(--od-3); stroke-width: 2; filter: none; }
+.search input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 14px; }
+.search input::placeholder { color: rgba(255, 255, 255, 0.32); }
+#idea-sort, .pagination button {
+  height: 44px;
+  padding: 0 15px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--ink-2);
+  font-size: 13.5px;
+  transition: border-color var(--t-fast) var(--e-out), transform var(--t-fast) var(--e-back);
+}
+#idea-sort {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 38px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+#idea-sort:hover, .pagination button:hover:not(:disabled) { border-color: var(--od-4); }
+
+.ideas-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.idea {
+  display: flex; flex-direction: column;
+  min-height: 200px;
+  padding: var(--s5);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.022);
+  transition: transform var(--t-mid) var(--e-out), border-color var(--t-mid) var(--e-out), background var(--t-mid) linear;
+}
+.idea:hover { transform: translate3d(0, -4px, 0); border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.045); }
+/* Наклон и подъём — одно свойство, поэтому пишем их одним transform.
+   Порядок важен: перспектива первой, иначе поворот применится к плоскости.
+   Без этой строки `.idea:hover` (0,2,0) перебивал бы .tilt той же весом, но
+   ниже по файлу — и наклон исчезал ровно на hover, когда он единственно
+   и виден. */
+.idea.tilt:hover { transform: perspective(1100px) translate3d(0, -4px, 0) rotateX(var(--rx)) rotateY(var(--ry)); }
+
+/* Появление карточки — «рождение сверху» через clip-path, а не через transform.
+   Причина техническая: transform у карточки уже занят наклоном и подъёмом, и
+   третий претендент на то же свойство неизбежно кого-то перебьёт. clip-path
+   свободен, разрешён к анимации и даёт нужный киношный въезд.
+   IntersectionObserver здесь не нужен: карточки создаются в момент, когда их
+   уже видно, и CSS-анимация стартует сама. --i приходит из community.js. */
+html.js .idea {
+  animation: idea-in 0.72s var(--e-out) both;
+  animation-delay: calc(var(--i, 0) * 0.05s);
+}
+@keyframes idea-in {
+  from { opacity: 0; clip-path: inset(0 0 42% 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+/* Демонстрационные карточки. Появляются ТОЛЬКО на localhost (проверка в
+   community.js) и честно подписаны: без них при недоступном API оценить
+   вид карточки нельзя вообще. Пунктир — тот же язык, что у блока состояния. */
+.idea.is-demo { border-style: dashed; }
+.demo-note {
+  display: flex; align-items: center; gap: 9px;
+  margin-bottom: var(--s3);
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--od-4);
+}
+.demo-note::before { content: ""; width: 14px; height: 1px; background: currentColor; }
+
+.idea-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tag, .state { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--od-3); }
+.tag { padding: 5px 8px; border: 1px solid var(--hair); border-radius: var(--r-sm); }
+
+/* Статус — знаком, а не цветом. Пять фигур из одного квадрата 7×7:
+   контур → половина → залитый → точка → перечёркнутый. Порядок фигур
+   совпадает с порядком статусов, поэтому «дальше по очереди» читается
+   как «плотнее знак». Тот же словарь, что у бейджей истории версий,
+   так что два раздела не спорят между собой.
+   ::before — единственный элемент внутри, поэтому в легенде, где текста
+   нет, остаётся ровно знак. */
+.state { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.state::before {
+  content: "";
+  flex: 0 0 7px;
+  width: 7px; height: 7px;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.s-planned::before { background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+.s-progress::before { background: currentColor; }
+.s-done { color: var(--od-1); font-weight: 600; }
+.s-done::before { border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12); }
+.s-declined { opacity: 0.62; }
+.s-declined::before { background: linear-gradient(to bottom right, transparent 41%, currentColor 41%, currentColor 59%, transparent 59%); }
+
+.idea h3 { margin: var(--s5) 0 9px; font-size: 17.5px; font-weight: 650; letter-spacing: -0.012em; }
+.idea p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--od-2); }
+.idea-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: auto; padding-top: var(--s5);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--od-3);
+}
+/* Положительный рейтинг раньше был зелёным — теперь плотность и рамка. */
+.score { color: var(--od-1); }
+.score.positive { padding: 4px 9px; border: 1px solid var(--od-4); border-radius: var(--r-sm); font-weight: 600; }
+
+/* Три блока ниже переключаются атрибутом hidden из community.js, и у каждого
+   есть свой display. Без парной строки `[hidden]` они остались бы видимыми
+   всегда: авторское правило старше браузерного `[hidden]{display:none}` —
+   не по специфичности, а по порядку слоёв. На поддержке этот же промах уже
+   оставил на экране пустую рамку с восклицательным знаком. */
+.ideas-grid[hidden], .status[hidden], .pagination[hidden] { display: none; }
+
+.status {
+  display: grid; place-items: center;
+  min-height: 220px;
+  padding: var(--s7);
+  border: 1px dashed var(--hair);
+  border-radius: var(--r-md);
+  text-align: center;
+  font-size: 14.5px;
+  color: var(--od-3);
+}
+/* Состояние — не строка текста, а маленький блок: знак, заголовок, пояснение
+   и при ошибке кнопка. Каталог часто застаёт человека именно здесь, поэтому
+   пустое состояние должно выглядеть задуманным, а не сломанным. */
+.status-in { display: grid; justify-items: center; gap: 11px; max-width: 42ch; }
+.status-in b { font-size: 16.5px; font-weight: 650; color: var(--od-1); letter-spacing: -0.012em; }
+.status-in > span:not(.status-mark) { line-height: 1.6; }
+.status-mark {
+  width: 30px; height: 30px;
+  margin-bottom: 3px;
+  border: 1px solid var(--od-4);
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: st-spin 1.15s linear infinite;
+}
+@keyframes st-spin { to { transform: rotate(360deg); } }
+/* Когда крутиться нечему — знак замирает ровным кольцом с точкой в центре. */
+.status.is-idle .status-mark {
+  animation: none;
+  border-top-color: var(--od-4);
+  background: radial-gradient(circle, var(--od-4) 0 2.5px, transparent 2.5px);
+}
+#ideas-retry { margin-top: 9px; }
+
+/* Компактный вариант плашки: применяется, когда под ней УЖЕ что-то нарисовано
+   (образцы вёрстки при недоступном сервере). Полная плашка на 220px высоты
+   рассчитана на пустой экран; над списком карточек она превращалась в большую
+   пунктирную коробку с воздухом посередине — ровно то, что читается как
+   «сломалось». Здесь это одна строка: знак, текст, кнопка. */
+.status.is-note {
+  display: flex; align-items: center; justify-content: flex-start;
+  gap: var(--s4);
+  min-height: 0;
+  padding: var(--s4) var(--s5);
+  border-style: solid;
+  text-align: left;
+}
+.status.is-note .status-in {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-items: start; gap: 4px var(--s4);
+  max-width: none; width: 100%;
+}
+.status.is-note .status-mark { width: 18px; height: 18px; margin-bottom: 0; flex: none; }
+.status.is-note .status-in > span:not(.status-mark) { flex: 1 1 22ch; }
+.status.is-note #ideas-retry { margin-top: 0; margin-left: auto; flex: none; }
+@media (max-width: 620px) {
+  /* На узком экране кнопка уезжает под текст, а не жмётся в строку. */
+  .status.is-note #ideas-retry { margin-left: 0; }
+}
+
+.btn-sm { padding: 10px 20px; font-size: 12.5px; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: var(--s4); margin-top: var(--s6); }
+.pagination button:disabled { opacity: 0.3; cursor: default; }
+#ideas-page { font-family: var(--f-mono); font-size: 12.5px; letter-spacing: 0.12em; color: var(--od-3); }
+
+/* ===== Адаптив документов ============================================== */
+@media (max-width: 780px) {
+  .doc-head { padding-block: 116px var(--s7); }
+  .doc-wrap { padding-inline: var(--s5); }
+  .frow { grid-template-columns: 1fr; }
+  .sform { padding: var(--s5); }
+  .catalog-toolbar { flex-direction: column; align-items: stretch; }
+  .controls { flex-direction: column; }
+  /* Легенда складывается в две строки: знак с подписью, объяснение под ними
+     со второй колонки — отступ сохраняет связь со знаком. */
+  .lg { grid-template-columns: 16px 1fr; gap: 9px var(--s4); }
+  .lg-x { grid-column: 2; }
+  .search { min-width: 0; width: 100%; }
+  .ideas-grid { grid-template-columns: 1fr; }
+  .tl { padding-left: var(--s6); }
+  .rel { padding-bottom: var(--s8); }
+}
+
+@media (max-width: 560px) {
+  /* Нижняя граница clamp у .doc-h1 — 40px, и на 375px она перестаёт зависеть
+     от ширины экрана. «конфиденциальности» — 18 знаков, при 40px слово выходит
+     396px в колонке 327px: хвост уезжал за край и молча срезался overflow: clip
+     у слоя. То есть на телефоне заголовок политики читался как «Политика
+     конфиденциальнос». Опускаем пол до 8.6vw (на 375px это 32px) и добавляем
+     перенос как страховку — break-word не делает ничего, пока текст влезает,
+     и спасает на 320px, где даже 28px не хватает. */
+  .doc-h1 { font-size: clamp(28px, 8.6vw, 40px); overflow-wrap: break-word; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acc-panel { transition: none !important; }
+  .fs-icon { animation: none !important; }
+  /* Крутящийся знак загрузки — бесконечная анимация, её обязательно гасим. */
+  .status-mark { animation: none !important; border-top-color: var(--od-4) !important; }
+}

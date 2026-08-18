@@ -74,33 +74,44 @@ jobs:
           sha256sum love-release.tgz > love-release.tgz.sha256
 
       - name: Configure strict SSH host verification
+        id: ssh
         shell: bash
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
         run: |
           set -Eeuo pipefail
-          test -n "$SSH_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          if [ -z "${SSH_KEY:-}" ] && [ -z "${SSH_KNOWN_HOSTS:-}" ] && [ -z "${SSH_HOST:-}" ] && [ -z "${SSH_USERNAME:-}" ]; then
+            echo "::warning title=Автодеплой выключен::Секреты SSH_KEY / SSH_KNOWN_HOSTS / SSH_HOST / SSH_USERNAME не заданы в окружении production. Код проверен, но на сервер не отправлен — деплой нужно сделать вручную."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -n "${SSH_KEY:-}"
+          test -n "${SSH_KNOWN_HOSTS:-}"
+          test -n "${SSH_HOST:-}"
+          test -n "${SSH_USERNAME:-}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload verified candidate
+        if: steps.ssh.outputs.ready == 'true'
         shell: bash
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
         run: |
           set -Eeuo pipefail
-          test -n "$SSH_HOST"
-          test -n "$SSH_USERNAME"
           scp -P 22 love-release.tgz love-release.tgz.sha256 \
             "$SSH_USERNAME@$SSH_HOST:/var/www/love-staging/"
 
       - name: Backup, smoke test, migrate and switch
+        if: steps.ssh.outputs.ready == 'true'
         shell: bash
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}

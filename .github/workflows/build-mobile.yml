@@ -35,8 +35,44 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # Боевая подпись собирается из секретов репозитория. Если их нет, APK
+      # подписывается отладочным ключом (как все выпуски до 2.1.0) — иначе
+      # сборка упала бы, релиз вышел без APK и скачивание на Android отдавало 404.
+      - name: Restore release signing config
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::warning title=Отладочная подпись::Секреты ANDROID_KEYSTORE_* не заданы — APK будет подписан отладочным ключом. Обновление поверх прошлой версии потребует переустановки."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for value in "${ANDROID_KEYSTORE_PASSWORD:-}" "${ANDROID_KEY_ALIAS:-}" "${ANDROID_KEY_PASSWORD:-}"; do
+            test -n "$value" || { echo "Заданы не все секреты подписи ANDROID_KEY*"; exit 1; }
+          done
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/love-release.jks
+          umask 077
+          {
+            printf 'storeFile=love-release.jks\n'
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/key.properties
+          echo "mode=release" >> "$GITHUB_OUTPUT"
+
       - name: Build APK
+        env:
+          LOVE_ALLOW_DEBUG_RELEASE_SIGNING: ${{ steps.signing.outputs.mode == 'debug' && 'true' || '' }}
         run: flutter build apk --release --split-per-abi --dart-define=LOVE_API_BASE_URL=https://api.loveapp.chat
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/key.properties android/love-release.jks
 
       - name: Rename APKs
         run: |

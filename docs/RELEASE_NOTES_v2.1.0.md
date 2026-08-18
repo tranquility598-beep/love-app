@@ -55,6 +55,10 @@
   `armeabi-v7a`). Проще всего скачать с [loveapp.chat](https://loveapp.chat) —
   сайт сам подберёт файл под ваше устройство.
 
+На Android обновление поверх прежней версии не встанет — Android так устроен, когда
+сборка подписана другим ключом. Удалите старое приложение и поставьте новое:
+переписки, друзья и аккаунт хранятся на сервере, ничего не потеряется.
+
 ---
 
 ## English
@@ -83,3 +87,7 @@ to GitHub; rapid taps no longer re-join a voice channel; no accidental sphere-vo
 join during a DM call; call pill position and avatar on desktop; screen share size on
 desktop and real screens instead of placeholders in rooms; "Open in app" on the
 invite page; live microphone switching; the default channel is now named "Чат".
+
+**Installing on Android** — this build is signed with a different key, so Android
+won't install it over the previous version. Uninstall the old app first, then install
+this one; chats, friends and your account live on the server and stay intact.

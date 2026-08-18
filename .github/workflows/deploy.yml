@@ -83,15 +83,21 @@ jobs:
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
         run: |
           set -Eeuo pipefail
-          if [ -z "${SSH_KEY:-}" ] && [ -z "${SSH_KNOWN_HOSTS:-}" ] && [ -z "${SSH_HOST:-}" ] && [ -z "${SSH_USERNAME:-}" ]; then
-            echo "::warning title=Автодеплой выключен::Секреты SSH_KEY / SSH_KNOWN_HOSTS / SSH_HOST / SSH_USERNAME не заданы в окружении production. Код проверен, но на сервер не отправлен — деплой нужно сделать вручную."
+          missing=""
+          for name in SSH_KEY SSH_KNOWN_HOSTS SSH_HOST SSH_USERNAME; do
+            value="${!name:-}"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=Автодеплой выключен::Не заданы секреты окружения production:$missing. Код проверен и архив собран, но на сервер не отправлен — деплой нужно сделать вручную."
+            {
+              printf '### Автодеплой выключен\n\n'
+              printf 'В окружении `production` не заданы секреты:%s\n\n' "$missing"
+              printf 'Проверки прошли, архив собран, но на сервер он не уехал.\n'
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          test -n "${SSH_KEY:-}"
-          test -n "${SSH_KNOWN_HOSTS:-}"
-          test -n "${SSH_HOST:-}"
-          test -n "${SSH_USERNAME:-}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519

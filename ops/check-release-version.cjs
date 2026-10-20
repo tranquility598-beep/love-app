@@ -61,6 +61,26 @@ const hardcoded = [
     pattern: /_seedUpdates\(String version\)\s*=>\s*\[\s*(?:const\s+)?_HubUpdate\(\s*version:\s*['"]v([^'"]+)['"]/
   },
   {
+    file: path.join('site', 'index.html'),
+    what: 'текущая версия на действующем сайте',
+    pattern: /class="js-ver"[^>]*>\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('site', 'changelog.html'),
+    what: 'текущая версия истории действующего сайта (RU)',
+    pattern: /Текущая версия\s*·\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('site', 'changelog.html'),
+    what: 'текущая версия истории действующего сайта (EN)',
+    pattern: /Current version\s*·\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('site', 'changelog.html'),
+    what: 'последний выпуск на действующем сайте',
+    pattern: /data-release-version="([^"]+)"/
+  },
+  {
     file: path.join('sandbox', 'public', 'index.html'),
     what: 'текущая версия на главной сайта',
     pattern: /id="site-current-version"[^>]*>\s*v\s*([^<\s]+)/

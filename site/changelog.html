@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="LOVE release history: ten versions from the 2.0.0 rebuild to the current 2.1.1, with what was added, fixed and changed in each." />
+<meta name="description" content="LOVE release history: eleven versions from the 2.0.0 rebuild to 2.2.0. Public profiles, refreshed calls and settings, Soft v3 sounds and optional Halloween styling." />
 <title>Changelog — LOVE</title>
 
 <!-- ============================================================
@@ -16,12 +16,8 @@
      · Состояния   — added/fixed/changed различаются знаком, не цветом
      · GSAP        — только усиление; без него страница работает полностью
 
-     ЧЕСТНО ПРО ДАННЫЕ: в боевом changelog.html нет ни одной даты выпуска —
-     ни в разметке, ни в скрипте. Бриф просил «версия + дата крупным
-     акцентом»; дату придумать нельзя, это факт о продукте. Поэтому рядом с
-     номером стоит честная метрика, выводимая из самого списка (число
-     изменений), а слот под дату размечен классом .rel-meta — при миграции
-     туда встанет реальная дата, и CSS править не придётся.
+     Дата указана для выпуска 2.2.0; у старых выпусков сохранены исходные
+     метрики изменений без выдуманных дат.
      ============================================================ -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -91,7 +87,7 @@
   <!-- средний декор -->
   <div class="layer depth-2" data-depth="2" aria-hidden="true">
     <div class="grid-v"></div>
-    <div class="ghost float-y" style="left:50%;top:11%">2.1.1</div>
+    <div class="ghost float-y" style="left:50%;top:11%">2.2.0</div>
   </div>
 
   <!-- содержимое -->
@@ -103,12 +99,12 @@
         <span class="ln"><i><span class="ru">версий</span><span class="en">history</span></i></span>
       </h1>
       <p class="doc-lede" data-animate="up">
-        <span class="ru">Десять выпусков: от 2.0.0, где появились голосовые комнаты, до сегодняшнего 2.1.1. Видно, что добавилось, что починили и что поменяли по ходу. С 2.0.3 обновления приходят сами, с 2.0.6 — и на Android тоже.</span>
-        <span class="en">Ten releases: from 2.0.0, which brought voice rooms, to today’s 2.1.1. You can see what was added, what got fixed and what changed along the way. Updates have arrived on their own since 2.0.3 — and since 2.0.6 on Android too.</span>
+        <span class="ru">Одиннадцать выпусков: от первых голосовых комнат до 2.2.0 — с публичными профилями, обновлёнными звонками, настройками и звуками. Здесь всё, что добавилось и стало лучше.</span>
+        <span class="en">Eleven releases: from the first voice rooms to 2.2.0, with public profiles, refreshed calls, settings and sounds. Here is everything we added and improved.</span>
       </p>
       <p class="doc-updated" data-animate="wipe">
-        <span class="ru">Текущая версия · v 2.1.1</span>
-        <span class="en">Current version · v 2.1.1</span>
+        <span class="ru">Текущая версия · v 2.2.0</span>
+        <span class="en">Current version · v 2.2.0</span>
       </p>
     </div>
   </div>
@@ -148,11 +144,46 @@
     <div class="doc-wrap">
       <div class="tl">
 
-        <!-- ===== v 2.1.1 — текущая ===== -->
-        <article class="rel is-latest" data-animate="up">
+        <!-- ===== v 2.2.0 — текущая ===== -->
+        <article class="rel is-latest" data-release-version="2.2.0" data-animate="up">
+          <div class="rel-head">
+            <h2 class="rel-v">2.2.0</h2>
+            <span class="rel-badge"><span class="ru">Актуальная</span><span class="en">Current</span></span>
+            <span class="rel-meta"><span class="ru">20 октября 2026</span><span class="en">20 October 2026</span></span>
+          </div>
+          <p class="rel-title"><span class="ru">Твоё пространство. Твой стиль.</span><span class="en">Your space. Your style.</span></p>
+          <div class="rel-group">
+            <span class="rel-kind k-add"><span class="ru">Добавлено</span><span class="en">Added</span></span>
+            <ul class="rel-list ru">
+              <li><b>Публичная страница.</b> Собственное оформление, ссылки, музыка, шрифты и эффекты. Редактор с живым превью и переход в приложение по кнопке «Написать в Love».</li>
+              <li><b>Твой звук и настроение.</b> Мягкий звуковой пакет Soft v3 и Halloween-тема с оранжевыми акцентами. Обычную тему можно вернуть в настройках.</li>
+              <li><b>Поддержка рядом.</b> Вопросы, идеи и сообщения о багах с вложениями и ответами команды. Одно активное обращение и пауза 15 минут после закрытия.</li>
+              <li><b>Настройки на ПК и Android.</b> Поиск, список заблокированных, обновлённый раздел «О приложении» и предварительные тарифы подписок без оплаты.</li>
+            </ul>
+            <ul class="rel-list en">
+              <li><b>Your public page.</b> Custom layouts, links, music, fonts and effects. An editor with live preview and a “Message in Love” button that opens the app.</li>
+              <li><b>Your sounds and atmosphere.</b> The Soft v3 sound pack and optional Halloween styling with orange accents. Switch back to the regular theme anytime.</li>
+              <li><b>Support, in one place.</b> Questions, ideas and bug reports with attachments and team replies. One active request and a 15-minute cooldown after closure.</li>
+              <li><b>Settings on desktop and Android.</b> Search, blocked users, a refreshed About page and draft subscription plans with payments disabled.</li>
+            </ul>
+          </div>
+          <div class="rel-group">
+            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
+            <ul class="rel-list ru">
+              <li><b>Звонки и голосовые комнаты.</b> Общий интерфейс, исправления звука, камеры, демонстрации экрана и выхода из канала.</li>
+              <li><b>Повседневные мелочи.</b> Доработаны регистрация, коды подтверждения, сохранение профиля, выход из аккаунта и история уведомлений.</li>
+            </ul>
+            <ul class="rel-list en">
+              <li><b>Calls and voice rooms.</b> A shared interface and fixes for audio, cameras, screen sharing and leaving a channel.</li>
+              <li><b>Everyday details.</b> Refined registration, verification codes, profile saving, signing out and notification history.</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ===== v 2.1.1 ===== -->
+        <article class="rel" data-animate="up">
           <div class="rel-head">
             <h2 class="rel-v">2.1.1</h2>
-            <span class="rel-badge"><span class="ru">Актуальная</span><span class="en">Current</span></span>
             <span class="rel-meta"><span class="ru">3 изменения</span><span class="en">3 changes</span></span>
           </div>
           <p class="rel-title">

@@ -4,6 +4,7 @@ import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
 import '../../widgets/love_surface.dart';
+import '../../widgets/love_nav_icons.dart';
 import '../settings/settings_screen.dart';
 import '../shell/screen_frame.dart';
 import 'love_hub_screen.dart';
@@ -71,6 +72,7 @@ class MoreScreen extends StatelessWidget {
           ),
           _MoreTile(
             icon: Icons.auto_awesome_rounded,
+            glyph: LoveNavGlyph.hub,
             title: 'Love Hub',
             subtitle: 'Центр сообщества, идеи и обновления',
             onTap: () => _open(context, const LoveHubScreen()),
@@ -123,9 +125,12 @@ class _MoreTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.glyph,
   });
 
   final IconData icon;
+  /// Нарисованная иконка вместо Material — для Love Hub, как на ПК.
+  final LoveNavGlyph? glyph;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -156,7 +161,15 @@ class _MoreTile extends StatelessWidget {
                 color: context.palette.inkA(0.07),
                 border: Border.all(color: context.palette.border),
               ),
-              child: Icon(icon, size: 21),
+              child: glyph == null
+                  ? Icon(icon, size: 21)
+                  : Center(
+                      child: LoveNavIcon(
+                        glyph: glyph!,
+                        size: 21,
+                        color: IconTheme.of(context).color ?? context.palette.textPrimary,
+                      ),
+                    ),
             ),
             title: Text(
               title,

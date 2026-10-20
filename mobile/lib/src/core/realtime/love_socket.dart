@@ -38,10 +38,12 @@ class LoveSocket with WidgetsBindingObserver {
   bool _shouldBeConnected = false;
   bool _reconnecting = false;
   bool _observing = false;
+  int _generation = 0;
   void Function()? _onConnect;
   void Function(dynamic error)? _onError;
 
   bool get isConnected => _socket?.connected == true;
+  String get socketId => _socket?.id ?? '';
 
   Future<void> connect({
     void Function()? onConnect,
@@ -61,6 +63,21 @@ class LoveSocket with WidgetsBindingObserver {
     _startObserving();
     if (isConnected) return;
     await _open();
+  }
+
+  /// Поднять соединение и подождать его не дольше [timeout]. Для действий,
+  /// которые человек делает руками (звонок): короткий обрыв не должен
+  /// превращаться в ошибку «сокет не подключен».
+  Future<bool> connectAndWait(Duration timeout) async {
+    if (isConnected) return true;
+    final watch = Stopwatch()..start();
+    try {
+      await ensureConnected().timeout(timeout);
+    } catch (_) {
+      // Ниже просто ждём: сторож и повторы сделают своё.
+    }
+    final remaining = timeout - watch.elapsed;
+    return remaining > Duration.zero ? _waitConnected(remaining) : isConnected;
   }
 
   /// Fire-and-forget reconnection attempt (safe to call from sync code).
@@ -104,16 +121,15 @@ class LoveSocket with WidgetsBindingObserver {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     if (!isConnected) {
-      try {
-        await ensureConnected();
-      } catch (_) {
-        // Fall through to the connectivity check below.
-      }
-      await _waitConnected(const Duration(seconds: 5));
+      await connectAndWait(const Duration(seconds: 8));
     }
     final socket = _socket;
     if (socket == null || !socket.connected) {
-      return {'status': 'error', 'message': 'Сокет еще не подключен'};
+      return {
+        'status': 'error',
+        'message':
+            'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.'
+      };
     }
     final result = await socket.emitWithAckAsync(event, data).timeout(timeout);
     return result is Map
@@ -122,6 +138,7 @@ class LoveSocket with WidgetsBindingObserver {
   }
 
   Future<void> disconnect() async {
+    ++_generation;
     _shouldBeConnected = false;
     _watchdog?.cancel();
     _watchdog = null;
@@ -142,12 +159,16 @@ class LoveSocket with WidgetsBindingObserver {
   Future<void> _open() async {
     if (_reconnecting) return;
     _reconnecting = true;
+    final generation = _generation;
     try {
       await _teardownSocket();
       final token = await authRepository.issueSocketToken();
+      if (!_shouldBeConnected || generation != _generation) return;
       final socket = io.io(
         AppConfig.socketUrl,
         io.OptionBuilder()
+            .enableForceNew()
+            .disableMultiplex()
             .setTransports(['websocket', 'polling'])
             .enableReconnection()
             .setReconnectionDelay(1000)
@@ -170,6 +191,9 @@ class LoveSocket with WidgetsBindingObserver {
           SafeDiagnosticLog.instance
               .socket('connect_error ${error.runtimeType}');
           _onError?.call(error);
+          // Отказ сервера (истёкший токен) socket.io сам не повторяет —
+          // раньше ждали сторожа до 15 с, и человек это время был «не в сети».
+          _scheduleQuickCheck();
         })
         ..onError((error) {
           SafeDiagnosticLog.instance.socket('error ${error.runtimeType}');
@@ -185,7 +209,11 @@ class LoveSocket with WidgetsBindingObserver {
       socket.io.on('reconnect_attempt', (_) async {
         try {
           final freshToken = await authRepository.issueSocketToken();
-          _socket?.auth = {'token': freshToken};
+          if (_shouldBeConnected &&
+              generation == _generation &&
+              identical(_socket, socket)) {
+            socket.auth = {'token': freshToken};
+          }
         } catch (_) {
           // Keep the old token; the watchdog retries with a fresh one.
         }
@@ -226,6 +254,7 @@ class LoveSocket with WidgetsBindingObserver {
   Future<bool> _waitConnected(Duration timeout) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
+      if (!_shouldBeConnected) return false;
       if (isConnected) return true;
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }

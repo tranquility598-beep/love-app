@@ -123,7 +123,7 @@
     const box = document.querySelector(`#call-video-grid .video-stream-box.${side}-video`);
     const video = document.getElementById(side === 'remote' ? 'call-remote-feed' : 'call-local-feed');
     const kind = document.getElementById(side === 'remote' ? 'call-remote-media-kind' : 'call-local-media-kind');
-    const active = !!stream && mode !== 'none';
+    const active = !!stream?.getVideoTracks().some(track => track.readyState === 'live') && mode !== 'none';
     setVideo(video, active ? stream : null, mode);
     if (active && video) {
       // Страховка: на элементе могла остаться анимация скрытия с fill: "both".
@@ -294,7 +294,7 @@
     renderServer();
   }
 
-  function closeTheater() {
+  function closeTheater(render = true) {
     const overlay = theaterEl();
     if (!overlay) return;
     overlay.classList.add('hidden');
@@ -302,7 +302,7 @@
     if (video) video.srcObject = null;
     state.theaterKey = null;
     setTheaterZoom(1, { resetPan: true });
-    renderServer();
+    if (render) renderServer();
   }
 
   function initTheater() {
@@ -421,7 +421,7 @@
     if (Array.isArray(members)) state.members = members.slice();
     const target = serverTarget();
     const channelId = String(window.voiceManager?.channelId || '');
-    if (!target || channelId.startsWith('dm_call:')) return false;
+    if (!target || !channelId || channelId.startsWith('dm_call:')) return false;
     const grid = target.grid;
 
     // Второй контейнер гасим: иначе в нём остаются плитки прошлой сессии с
@@ -527,7 +527,8 @@
     const mode = ['none', 'camera', 'screen'].includes(data?.mode) ? data.mode : 'none';
     if (socketId) state.mediaModes.set(socketId, mode);
     if (userId) state.mediaModes.set(userId, mode);
-    if (mode === 'none' && socketId) state.remoteStreams.delete(socketId);
+    // replaceTrack может снова использовать тот же receiver без ontrack.
+    // Режим none скрывает кадр, но сохраняет ссылку до ухода участника.
     state.members = state.members.map(member => {
       if (asId(member?.socketId) !== socketId && asId(member?.userId) !== userId) return member;
       return { ...member, mediaMode: mode, cameraOn: mode === 'camera', screenSharing: mode === 'screen' };
@@ -562,8 +563,19 @@
     state.localStream = null;
     state.localMode = 'none';
     state.focusedServerKey = null;
-    closeTheater();
+    state.avatarUrls.clear();
+    closeTheater(false);
     document.querySelectorAll('.call-live-video, .love-voice-tile-video, .voice-theater-video').forEach(video => { video.srcObject = null; });
+    ['voice-grid-constellation', 'room-voice-grid-constellation'].forEach(id => {
+      const grid = document.getElementById(id);
+      if (grid) { grid.replaceChildren(); grid.dataset.count = '0'; }
+    });
+    ['voice-member-count-text', 'room-voice-preconnect-count'].forEach(id => {
+      const count = document.getElementById(id);
+      if (count) count.textContent = '0 в канале';
+    });
+    setDmTile('local', null, 'none');
+    setDmTile('remote', null, 'none');
   }
 
   function init() {

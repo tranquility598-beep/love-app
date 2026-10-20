@@ -219,6 +219,31 @@
     const formForgot = $('auth-form-forgot');
     const formReset = $('auth-form-reset');
     const NEW_REG_KEY = 'love_pending_registration_email';
+    let registrationToken = '';
+    const buttonTimers = new Map();
+
+    function isCooling(button) {
+      return Number(button?.dataset.retryAt || 0) > Date.now();
+    }
+
+    function startButtonCooldown(button, seconds, label, onDone) {
+      if (!button || !(Number(seconds) > 0)) return;
+      clearInterval(buttonTimers.get(button));
+      button.dataset.retryAt = Date.now() + Number(seconds) * 1000;
+      const tick = () => {
+        const remaining = Math.max(0, Math.ceil((Number(button.dataset.retryAt) - Date.now()) / 1000));
+        button.disabled = remaining > 0;
+        button.textContent = remaining ? `${label} · ${remaining} с` : label;
+        if (!remaining) {
+          clearInterval(buttonTimers.get(button));
+          buttonTimers.delete(button);
+          delete button.dataset.retryAt;
+          onDone?.();
+        }
+      };
+      tick();
+      buttonTimers.set(button, setInterval(tick, 1000));
+    }
 
     function normEmail(value) {
       return String(value || '').trim().toLowerCase();
@@ -234,6 +259,7 @@
     function clearPendingRegistration() {
       try { sessionStorage.removeItem(NEW_REG_KEY); } catch (e) {}
       window.pendingRegistrationEmail = '';
+      registrationToken = '';
     }
 
     function hasPendingRegistration(email) {
@@ -319,10 +345,11 @@
     const regPassHint = $('reg-password-hint');
     const regStrength = $('reg-strength-fill');
     const regTerms = $('reg-terms');
+    let registerBusy = false;
 
     function refreshRegSubmit() {
       if (regSubmit) {
-        regSubmit.disabled = !(reg.email && reg.username && reg.password && reg.terms);
+        regSubmit.disabled = registerBusy || isCooling(regSubmit) || !(reg.email && reg.username && reg.password && reg.terms);
       }
     }
 
@@ -354,7 +381,11 @@
           try {
             const result = await AuthAPI.checkUsername(checkedUsername);
             if (regUser.value.trim() !== checkedUsername) return;
-            if (!result.available) {
+            if (result.pending) {
+              // Possibly this person's own unfinished registration: the server checks the password.
+              reg.username = true; setStatus(regUserStatus, ''); setWrap(regUser, '');
+              setHint(regUserHint, 'Есть незавершённая регистрация с этим именем. Если она ваша — введите тот же пароль.', '');
+            } else if (!result.available) {
               reg.username = false; setStatus(regUserStatus, 'error'); setWrap(regUser, 'error');
               setHint(regUserHint, 'Это имя уже занято', 'error');
             } else {
@@ -417,6 +448,7 @@
         const password = regPass.value;
 
         try {
+          registerBusy = true;
           regSubmit.disabled = true;
           regSubmit.textContent = 'Создание...';
           setHint(regEmailHint, 'Регистрация на сервере...', 'loading');
@@ -426,10 +458,20 @@
             window.lastAuthEmail = email;
             window.otpType = 'verification';
             setPendingRegistration(email);
-            showOtpForm(email, 'verification');
+            registrationToken = data.registrationToken || '';
+            showOtpForm(data.email || email, 'verification', data.retryAfter);
           }
         } catch (err) {
-          console.error(err);
+          console.warn('Auth request failed:', err.status || 'network');
+          if (err.data?.requireVerification) {
+            setPendingRegistration(err.data.email || email);
+            registrationToken = err.data.registrationToken || '';
+            showOtpForm(err.data.email || email, 'verification', err.data.retryAfter, { sent: err.data.code !== 'EMAIL_SEND_FAILED' });
+            otpError.textContent = err.message;
+            otpError.classList.remove('hidden');
+            return;
+          }
+          if (err.status === 429) startButtonCooldown(regSubmit, err.data?.retryAfter, 'Создать аккаунт', refreshRegSubmit);
           const message = err.message || 'Ошибка регистрации';
           if (/имя пользователя|username/i.test(message)) {
             reg.username = false;
@@ -437,11 +479,12 @@
             setStatus(regUserStatus, 'error');
             setHint(regUserHint, message, 'error');
           } else {
-            setWrap(regEmail, 'error');
+            if (!err.isNetworkError && err.status !== 429) setWrap(regEmail, 'error');
             setHint(regEmailHint, message, 'error');
           }
         } finally {
-          regSubmit.textContent = 'Создать аккаунт';
+          registerBusy = false;
+          if (!isCooling(regSubmit)) regSubmit.textContent = 'Создать аккаунт';
           refreshRegSubmit();
         }
       });
@@ -457,6 +500,7 @@
     if (formLogin) {
       formLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (loginSubmit.disabled) return;
         const email = loginEmail.value.trim();
         const password = loginPass.value;
 
@@ -494,20 +538,28 @@
 
           afterAuth(false, 'С возвращением!');
         } catch (err) {
-          console.error(err);
-          if (err.status === 403 && err.data && err.data.requireVerification) {
+          console.warn('Auth request failed:', err.status || 'network');
+          if (err.data?.requireVerification) {
             window.lastAuthEmail = email;
             window.otpType = 'verification';
             clearPendingRegistration();
-            showOtpForm(email, 'verification');
+            registrationToken = err.data.registrationToken || '';
+            showOtpForm(err.data.email || email, 'verification', err.data.retryAfter, { sent: err.data.code !== 'EMAIL_SEND_FAILED' });
+            if (err.data.code === 'EMAIL_SEND_FAILED') {
+              otpError.textContent = err.message;
+              otpError.classList.remove('hidden');
+            }
           } else {
-            setWrap(loginEmail, 'error');
-            setWrap(loginPass, 'error');
+            if (err.status === 429 || err.data?.code === 'ACCOUNT_LOCKED') startButtonCooldown(loginSubmit, err.data?.retryAfter, 'Войти');
+            if (!err.isNetworkError && err.status !== 429) {
+              setWrap(loginEmail, 'error');
+              setWrap(loginPass, 'error');
+            }
             setHint(loginEmailHint, err.message || 'Неверный email или пароль', 'error');
           }
         } finally {
-          loginSubmit.disabled = false;
-          loginSubmit.textContent = 'Войти';
+          loginSubmit.disabled = isCooling(loginSubmit);
+          if (!isCooling(loginSubmit)) loginSubmit.textContent = 'Войти';
         }
       });
 
@@ -565,22 +617,13 @@
 
     /* ─────── Сброс пароля (Ввод кода + Новый пароль) ─────── */
     const resetOtpDigits = document.querySelectorAll('#auth-form-reset .reset-otp-digit');
+    bindOtpCells(resetOtpDigits, () => {});
     const resetPass = $('reset-password');
     const resetPassHint = $('reset-password-hint');
     const resetError = $('reset-error');
     const resetSubmit = $('reset-submit');
 
-    resetOtpDigits.forEach((input, index) => {
-      input.addEventListener('input', () => {
-        if (input.value.length === 1 && index < 5) {
-          resetOtpDigits[index + 1].focus();
-        }
-      });
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !input.value && index > 0) {
-          resetOtpDigits[index - 1].focus();
-        }
-      });
+    resetOtpDigits.forEach((input) => {
       input.addEventListener('paste', (e) => {
         e.preventDefault();
         const pastedData = (e.clipboardData || window.clipboardData).getData('text');
@@ -644,19 +687,51 @@
     const otpError = $('otp-error');
     const otpSubmit = $('otp-submit');
     const resendLink = $('resend-link');
+    const changeEmailLink = $('otp-change-email');
+    const emailEditor = $('otp-email-editor');
+    const newEmailInput = $('otp-new-email');
+    const saveEmailButton = $('otp-email-save');
+    let otpBusy = false;
+    let resendBusy = false;
+    let emailChangeBusy = false;
 
-    otpDigits.forEach((input, index) => {
-      input.addEventListener('input', () => {
-        if (input.value.length === 1 && index < 5) {
-          otpDigits[index + 1].focus();
-        }
-        checkOtpSubmitEnable();
+    // Ввод кода по клеткам. Раньше цифра бралась из события input, а у клеток
+    // стоит maxlength=1: если при быстром наборе фокус ещё не успел перейти,
+    // браузер молча отбрасывал следующую цифру (T01/PEER-0007). Теперь цифра
+    // с клавиатуры кладётся сразу в нужную клетку на keydown, а несколько цифр
+    // разом (автозаполнение, мобильная клавиатура) раскладываются по клеткам.
+    function bindOtpCells(cells, onChange) {
+      cells.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !input.value && index > 0) {
+            cells[index - 1].focus();
+            return;
+          }
+          if (/^\d$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            input.value = e.key;
+            if (index < cells.length - 1) cells[index + 1].focus();
+            onChange();
+          }
+        });
+        input.addEventListener('input', () => {
+          const digits = input.value.replace(/\D/g, '');
+          if (digits.length <= 1) {
+            input.value = digits;
+            if (digits && index < cells.length - 1) cells[index + 1].focus();
+          } else {
+            for (let i = 0; i < digits.length && index + i < cells.length; i++) {
+              cells[index + i].value = digits[i];
+            }
+            cells[Math.min(index + digits.length, cells.length - 1)].focus();
+          }
+          onChange();
+        });
       });
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !input.value && index > 0) {
-          otpDigits[index - 1].focus();
-        }
-      });
+    }
+
+    bindOtpCells(otpDigits, () => checkOtpSubmitEnable());
+    otpDigits.forEach((input) => {
       input.addEventListener('paste', (e) => {
         e.preventDefault();
         const pastedData = (e.clipboardData || window.clipboardData).getData('text');
@@ -674,18 +749,20 @@
       let code = '';
       otpDigits.forEach(input => code += input.value);
       if (otpSubmit) {
-        otpSubmit.disabled = code.length < 6;
+        otpSubmit.disabled = otpBusy || emailChangeBusy || isCooling(otpSubmit) || !/^\d{6}$/.test(code);
       }
     }
 
     if (formOtp) {
       formOtp.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (otpBusy || emailChangeBusy || isCooling(otpSubmit)) return;
         let code = '';
         otpDigits.forEach(input => code += input.value);
         if (code.length < 6) return;
 
         try {
+          otpBusy = true;
           otpSubmit.disabled = true;
           otpSubmit.textContent = 'Проверка...';
           otpError.classList.add('hidden');
@@ -711,70 +788,148 @@
 
           afterAuth(shouldStartOnboarding, 'Вход выполнен успешно');
         } catch (err) {
-          console.error(err);
+          console.warn('Auth request failed:', err.status || 'network');
+          if (openLoginAfterVerification(err)) return;
           otpError.textContent = err.message || 'Неверный код';
           otpError.classList.remove('hidden');
+          if (err.status === 429) startButtonCooldown(otpSubmit, err.data?.retryAfter, 'Подтвердить', checkOtpSubmitEnable);
 
           const container = document.querySelector('#auth-form-otp .otp-input-container');
-          if (container) {
+          if (container && !err.isNetworkError && err.status !== 429) {
             container.classList.add('shake');
             setTimeout(() => container.classList.remove('shake'), 500);
           }
         } finally {
-          otpSubmit.disabled = false;
-          otpSubmit.textContent = 'Подтвердить';
+          otpBusy = false;
+          checkOtpSubmitEnable();
+          if (!isCooling(otpSubmit)) otpSubmit.textContent = 'Подтвердить';
         }
       });
     }
 
+    // The code was accepted, but its response was lost. The account is ready,
+    // so the only useful next step is an ordinary sign-in.
+    function openLoginAfterVerification(err) {
+      if (err.data?.code !== 'EMAIL_ALREADY_VERIFIED') return false;
+      clearPendingRegistration();
+      showForm('auth-form-login');
+      if (loginEmail) loginEmail.value = err.data.email || window.lastAuthEmail || '';
+      setHint(loginEmailHint, err.message, 'ok');
+      setTimeout(() => loginPass?.focus(), 100);
+      return true;
+    }
+
     let resendTimer = null;
-    function startResendTimer() {
+    function startResendTimer(seconds = 60) {
       clearInterval(resendTimer);
-      let count = 60;
+      const deadline = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
       const counterEl = $('resend-counter');
       const timerText = $('resend-timer-text');
-      if (timerText) timerText.classList.remove('hidden');
-      if (resendLink) resendLink.classList.add('hidden');
-      if (counterEl) counterEl.textContent = count;
-
-      resendTimer = setInterval(() => {
-        count--;
+      const tick = () => {
+        const count = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
         if (counterEl) counterEl.textContent = count;
-        if (count <= 0) {
-          clearInterval(resendTimer);
-          if (timerText) timerText.classList.add('hidden');
-          if (resendLink) resendLink.classList.remove('hidden');
-        }
-      }, 1000);
+        if (timerText) timerText.classList.toggle('hidden', count <= 0);
+        if (resendLink) resendLink.classList.toggle('hidden', count > 0);
+        if (count <= 0) clearInterval(resendTimer);
+      };
+      resendTimer = setInterval(tick, 1000);
+      tick();
     }
 
     if (resendLink) {
       resendLink.addEventListener('click', async () => {
+        if (resendBusy || otpBusy || emailChangeBusy) return;
         try {
           if (window.otpType === 'login') {
             otpError.textContent = 'Для получения нового кода повторите вход';
             otpError.classList.remove('hidden');
             return;
           }
-          await AuthAPI.resendOtp(window.lastAuthEmail);
-          startResendTimer();
+          resendBusy = true;
+          resendLink.disabled = true;
+          const data = await AuthAPI.resendOtp(window.lastAuthEmail);
+          otpError.classList.add('hidden');
+          startResendTimer(data.retryAfter ?? 60);
         } catch (err) {
+          if (openLoginAfterVerification(err)) return;
           otpError.textContent = err.message || 'Ошибка отправки кода';
           otpError.classList.remove('hidden');
+          if (err.status === 429) startResendTimer(err.data?.retryAfter ?? 60);
+        } finally {
+          resendBusy = false;
+          resendLink.disabled = false;
         }
       });
     }
 
-    function showOtpForm(email, type) {
+    changeEmailLink?.addEventListener('click', () => {
+      if (otpBusy || resendBusy) return;
+      emailEditor.classList.remove('hidden');
+      newEmailInput.value = window.lastAuthEmail || '';
+      newEmailInput.focus();
+    });
+    $('otp-email-cancel')?.addEventListener('click', () => {
+      if (!emailChangeBusy) emailEditor.classList.add('hidden');
+    });
+    saveEmailButton?.addEventListener('click', async () => {
+      if (emailChangeBusy || otpBusy || resendBusy || isCooling(saveEmailButton)) return;
+      const email = normEmail(newEmailInput.value);
+      if (!validEmail(email)) {
+        otpError.textContent = 'Введите правильный адрес почты';
+        otpError.classList.remove('hidden');
+        newEmailInput.focus();
+        return;
+      }
+      try {
+        emailChangeBusy = true;
+        saveEmailButton.disabled = true;
+        saveEmailButton.textContent = 'Отправляем код…';
+        checkOtpSubmitEnable();
+        const data = await AuthAPI.changeRegistrationEmail(registrationToken, email);
+        registrationToken = data.registrationToken;
+        if (hasPendingRegistration(window.lastAuthEmail)) setPendingRegistration(data.email);
+        showOtpForm(data.email, 'verification', data.retryAfter);
+        if (regEmail) regEmail.value = data.email;
+        if (loginEmail) loginEmail.value = data.email;
+      } catch (err) {
+        if (err.data?.registrationToken) {
+          registrationToken = err.data.registrationToken;
+          if (hasPendingRegistration(window.lastAuthEmail)) setPendingRegistration(err.data.email);
+          showOtpForm(err.data.email, 'verification', err.data.retryAfter, { sent: err.data.code !== 'EMAIL_SEND_FAILED' });
+        }
+        otpError.textContent = err.message || 'Не удалось изменить почту';
+        otpError.classList.remove('hidden');
+        if (err.status === 429) startButtonCooldown(saveEmailButton, err.data?.retryAfter, 'Изменить и отправить код');
+      } finally {
+        emailChangeBusy = false;
+        saveEmailButton.disabled = isCooling(saveEmailButton);
+        if (!isCooling(saveEmailButton)) saveEmailButton.textContent = 'Изменить и отправить код';
+        checkOtpSubmitEnable();
+      }
+    });
+    newEmailInput?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); saveEmailButton.click(); }
+    });
+
+    function showOtpForm(email, type, retryAfter = 60, { sent = true } = {}) {
+      window.lastAuthEmail = normEmail(email);
+      window.otpType = type;
       showForm('auth-form-otp');
+      otpError.classList.add('hidden');
+      emailEditor?.classList.add('hidden');
+      changeEmailLink?.classList.toggle('hidden', type !== 'verification' || !registrationToken);
       const title = $('otp-title');
       const subtitle = $('otp-subtitle');
       if (title) title.textContent = type === 'login' ? 'Код входа' : 'Подтвердите почту';
-      if (subtitle) subtitle.textContent = `Мы отправили код на почту ${email}`;
+      if (subtitle) {
+        subtitle.textContent = sent
+          ? `Мы отправили код на почту ${email}`
+          : `Письмо на ${email} не отправилось. Запросите код ещё раз, когда станет доступна кнопка ниже.`;
+      }
       otpDigits.forEach(input => input.value = '');
       checkOtpSubmitEnable();
       setTimeout(() => { if (otpDigits[0]) otpDigits[0].focus(); }, 100);
-      startResendTimer();
+      startResendTimer(retryAfter);
     }
 
     function showResetForm(email) {
@@ -880,7 +1035,7 @@
           
           afterAuth(Boolean(data.user && data.user.onboardingPending), 'Добро пожаловать в Love!');
         } catch (err) {
-          console.error(err);
+          console.warn('Auth request failed:', err.status || 'network');
           setHint(oauthHint, err.message || 'Ошибка сохранения имени', 'error');
         } finally {
           oauthContinue.disabled = false;

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
+import '../audio/love_sounds.dart';
 import '../calls/call_center.dart';
 
 /// Tracks which DM conversation is currently open, so we don't show an in-app
@@ -23,6 +24,8 @@ class InAppNotifications {
   static GlobalKey<NavigatorState> get navigatorKey => CallCenter.navigatorKey;
 
   static OverlayEntry? _entry;
+
+  static void dismiss() => _dismiss();
 
   static void show({
     required String title,
@@ -56,6 +59,7 @@ class InAppNotifications {
     );
     _entry = entry;
     overlay.insert(entry);
+    unawaited(LoveSounds.instance.play('notification'));
   }
 
   static void _dismiss() {
@@ -117,7 +121,8 @@ class _BannerHostState extends State<_BannerHost>
 
   @override
   Widget build(BuildContext context) {
-    final slide = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    final slide =
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
     return Positioned(
       top: 0,
       left: 0,
@@ -146,7 +151,7 @@ class _BannerHostState extends State<_BannerHost>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
-                        color:  context.palette.glassStrong,
+                        color: context.palette.glassStrong,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: context.palette.borderActive),
                         boxShadow: [
@@ -167,7 +172,8 @@ class _BannerHostState extends State<_BannerHost>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: context.palette.inkA(0.06),
-                                border: Border.all(color: context.palette.border),
+                                border:
+                                    Border.all(color: context.palette.border),
                               ),
                               child: Icon(widget.icon,
                                   size: 20, color: context.palette.textPrimary),
@@ -188,7 +194,7 @@ class _BannerHostState extends State<_BannerHost>
                                   widget.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style:  TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
                                     color: context.palette.textPrimary,
@@ -200,7 +206,7 @@ class _BannerHostState extends State<_BannerHost>
                                     widget.body!,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style:  TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       color: context.palette.textSecondary,
                                     ),

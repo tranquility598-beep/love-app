@@ -8,7 +8,7 @@
  *   # или передать строку подключения вторым аргументом
  *   node server/scripts/unlock-user.js you@example.com "mongodb+srv://..."
  *
- * Если MONGODB_URI не задан — используется локальная база mongodb://localhost:27017/love-app.
+ * Если MONGODB_URI не задан — используется локальная база mongodb://127.0.0.1:27017/love-app.
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
@@ -18,7 +18,7 @@ const User = require('../models/User');
 
 async function main() {
   const email = (process.argv[2] || '').trim().toLowerCase();
-  const uri = process.argv[3] || process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+  const uri = process.argv[3] || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 
   if (!email) {
     console.error('Usage: node server/scripts/unlock-user.js <email> [mongodb-uri]');

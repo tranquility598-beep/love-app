@@ -24,6 +24,12 @@ const CommunityVote = require('../models/CommunityVote');
 const Announcement = require('../models/Announcement');
 const RiskSignal = require('../models/RiskSignal');
 const AdminSession = require('../models/AdminSession');
+const AdminAuthChallenge = require('../models/AdminAuthChallenge');
+const AnalyticsEvent = require('../models/AnalyticsEvent');
+const DirectMessage = require('../models/DirectMessage');
+const Notification = require('../models/Notification');
+const ProfilePage = require('../models/ProfilePage');
+const { purgeUser, purgeFootprint } = require('../services/userPurge');
 
 // Middleware
 const { adminSessionAuth: authMiddleware } = require('../middleware/adminSessionAuth');
@@ -44,7 +50,9 @@ const {
   canonicalRole,
   roleLevel,
   canActOn,
-  isStaffRole
+  isStaffRole,
+  canDeleteUsers,
+  canReceiveDeleteRight
 } = require('../config/adminRoles');
 const {
   applyModerationAction,
@@ -58,6 +66,7 @@ const { requestIp } = require('../utils/security');
 const { decryptSecret } = require('../utils/security');
 const { publishAdminUpdate, subscribeAdminUpdates } = require('../services/adminRealtime');
 const { ADMIN_POLICY_VERSION } = require('../config/adminPolicy');
+const { prepareCaseStatus, sendSubmissionError } = require('../services/caseSubmissions');
 const {
   canWorkCase,
   canAssignCases,
@@ -261,6 +270,176 @@ router.get('/users/:id', authMiddleware, isSupport, async (req, res) => {
     res.json({ user: value, loginHistory, ownedServersCount, warningCount });
   } catch (error) {
     console.error('[Admin API] Get user details error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+// ==================== УДАЛЕНИЕ АККАУНТОВ И ПОДПИСКИ ====================
+
+const PURGE_MODELS = {
+  User, Message, Channel, DirectMessage, Server, Notification, LoginLog, AdminSession,
+  AdminAuthChallenge, AnalyticsEvent, CommunityVote, ProfilePage, RiskSignal
+};
+
+// Код Authenticator проверяется ВСЕГДА, в любой среде: удаление аккаунта и
+// выдача права на удаление необратимы, тут нет «облегчённого» режима.
+async function verifyActorTotp(actorId, rawCode) {
+  const actor = await User.findById(actorId).select('+adminTotpSecret role username canDeleteUsers adminTotpEnabled');
+  if (!actor) return { actor: null, ok: false };
+  const code = String(rawCode || '').replace(/\s/g, '');
+  const ok = Boolean(actor.adminTotpEnabled && actor.adminTotpSecret && code
+    && authenticator.check(code, decryptSecret(actor.adminTotpSecret)));
+  return { actor, ok };
+}
+
+function totpRequired(res, message) {
+  return res.status(403).json({ code: 'TOTP_REQUIRED', message });
+}
+
+/**
+ * GET /api/admin/users/:id/purge-preview
+ * Что удалится вместе с аккаунтом — для окна подтверждения.
+ */
+router.get('/users/:id/purge-preview', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    const actor = await User.findById(req.user._id).select('role canDeleteUsers');
+    if (!canDeleteUsers(actor)) return res.status(403).json({ message: 'Нет права на удаление аккаунтов' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Некорректный ID пользователя' });
+    const target = await User.findById(req.params.id).select('_id');
+    if (!target) return res.status(404).json({ message: 'Пользователь не найден' });
+    res.json({ footprint: await purgeFootprint(PURGE_MODELS, target._id) });
+  } catch (error) {
+    console.error('[Admin API] Purge preview error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * DELETE /api/admin/users/:id
+ * Полное удаление аккаунта. Разработчик или администратор с выданным правом,
+ * свежий код Authenticator, ник цели введён вручную, причина обязательна.
+ */
+router.delete('/users/:id', authMiddleware, isAdmin, otpLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Некорректный ID пользователя' });
+
+    const { actor, ok } = await verifyActorTotp(req.user._id, req.body?.totpCode);
+    if (!actor || !canDeleteUsers(actor)) return res.status(403).json({ message: 'Нет права на удаление аккаунтов' });
+    if (!actor.adminTotpEnabled) return totpRequired(res, 'Сначала подключите Authenticator в разделе «Команда»');
+    if (!ok) return totpRequired(res, 'Подтвердите удаление свежим кодом Authenticator');
+
+    const target = await User.findById(id).select('username email role createdAt');
+    if (!target) return res.status(404).json({ message: 'Пользователь не найден' });
+    if (String(target._id) === String(actor._id)) return res.status(400).json({ message: 'Нельзя удалить собственный аккаунт' });
+    if (canonicalRole(target.role) === 'developer') return res.status(403).json({ message: 'Аккаунт Разработчика удалить нельзя' });
+    if (!canActOn(actor, target)) return res.status(403).json({ message: 'Нельзя удалить равного или более высокого сотрудника' });
+
+    const confirmUsername = String(req.body?.confirmUsername || '').trim().toLowerCase();
+    if (confirmUsername !== String(target.username).toLowerCase()) {
+      return res.status(400).json({ code: 'CONFIRM_MISMATCH', message: 'Ник для подтверждения введён неверно' });
+    }
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < 5) return res.status(400).json({ message: 'Укажите причину удаления (минимум 5 символов)' });
+
+    const snapshot = { username: target.username, email: target.email, role: target.role, createdAt: target.createdAt };
+    const io = req.app.get('io');
+    io?.in(`user:${target._id}`).disconnectSockets(true);
+
+    const counts = await purgeUser(PURGE_MODELS, target._id);
+    await logAudit(actor._id, 'PURGE_USER', 'user', target._id, { ...snapshot, reason, counts }, req);
+    publishAdminUpdate?.('users', { action: 'purged', userId: String(target._id) });
+
+    res.json({ message: `Аккаунт @${snapshot.username} удалён полностью`, counts });
+  } catch (error) {
+    console.error('[Admin API] Purge user error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+/**
+ * PUT /api/admin/users/:id/delete-permission
+ * Разработчик выдаёт или забирает право удаления у администратора.
+ * Роль не меняется. Только с кодом Authenticator.
+ */
+router.put('/users/:id/delete-permission', authMiddleware, isFounder, otpLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Некорректный ID пользователя' });
+    const enabled = req.body?.enabled === true;
+
+    const { actor, ok } = await verifyActorTotp(req.user._id, req.body?.totpCode);
+    if (!actor || canonicalRole(actor.role) !== 'developer') return res.status(403).json({ message: 'Только Разработчик выдаёт это право' });
+    if (!actor.adminTotpEnabled) return totpRequired(res, 'Сначала подключите Authenticator в разделе «Команда»');
+    if (!ok) return totpRequired(res, 'Подтвердите изменение права свежим кодом Authenticator');
+
+    const target = await User.findById(id).select('username role canDeleteUsers');
+    if (!target) return res.status(404).json({ message: 'Пользователь не найден' });
+    if (String(target._id) === String(actor._id)) return res.status(400).json({ message: 'У Разработчика это право есть всегда' });
+    if (enabled && !canReceiveDeleteRight(target)) {
+      return res.status(403).json({ message: 'Право удаления можно выдать только администратору (младший администратор и выше)' });
+    }
+
+    target.canDeleteUsers = enabled;
+    target.canDeleteUsersGrantedBy = enabled ? actor._id : null;
+    target.canDeleteUsersGrantedAt = enabled ? new Date() : null;
+    await target.save();
+
+    await logAudit(actor._id, enabled ? 'GRANT_DELETE_USERS' : 'REVOKE_DELETE_USERS', 'user', target._id, { username: target.username }, req);
+    req.app.get('io')?.to(`user:${target._id}`).emit('admin:role_updated', { role: canonicalRole(target.role), at: new Date().toISOString() });
+    publishAdminUpdate?.('team', { action: 'delete-permission', userId: String(target._id) });
+
+    res.json({
+      message: enabled ? `@${target.username} может удалять аккаунты` : `У @${target.username} больше нет права удаления`,
+      canDeleteUsers: enabled
+    });
+  } catch (error) {
+    console.error('[Admin API] Delete permission error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+const PLAN_IDS = ['free', 'pro', 'premium', 'duo'];
+const PLAN_DURATIONS_DAYS = [7, 30, 90, 365];
+
+/**
+ * PUT /api/admin/users/:id/plan
+ * Выдать или снять подписку. Разработчик и Зам. разработчика.
+ * days: 7 | 30 | 90 | 365 или null — бессрочно.
+ */
+router.put('/users/:id/plan', authMiddleware, isDeputyDeveloper, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Некорректный ID пользователя' });
+    const plan = String(req.body?.plan || '');
+    if (!PLAN_IDS.includes(plan)) return res.status(400).json({ message: 'Неизвестный тариф' });
+    const days = req.body?.days == null ? null : Number(req.body.days);
+    if (plan !== 'free' && days !== null && !PLAN_DURATIONS_DAYS.includes(days)) {
+      return res.status(400).json({ message: 'Срок: 7, 30, 90, 365 дней или бессрочно' });
+    }
+
+    const target = await User.findById(id).select('username plan planExpiresAt planSource planPaidBy');
+    if (!target) return res.status(404).json({ message: 'Пользователь не найден' });
+
+    const before = { plan: target.plan, planExpiresAt: target.planExpiresAt };
+    target.plan = plan;
+    target.planExpiresAt = plan === 'free' || days === null ? null : new Date(Date.now() + days * 86400000);
+    target.planSource = 'manual';
+    target.planPaidBy = null;
+    await target.save();
+
+    await logAudit(req.user._id, 'SET_PLAN', 'user', target._id, {
+      username: target.username, before, plan, days, planExpiresAt: target.planExpiresAt
+    }, req);
+    req.app.get('io')?.to(`user:${target._id}`).emit('user:plan_updated', { plan, planExpiresAt: target.planExpiresAt });
+    publishAdminUpdate?.('users', { action: 'plan', userId: String(target._id) });
+
+    res.json({
+      message: plan === 'free' ? `Подписка @${target.username} снята` : `@${target.username} получил Love ${plan[0].toUpperCase()}${plan.slice(1)}`,
+      plan, planExpiresAt: target.planExpiresAt
+    });
+  } catch (error) {
+    console.error('[Admin API] Set plan error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });
@@ -784,23 +963,23 @@ router.put('/reports/:id/status', authMiddleware, isModerator, async (req, res) 
       return res.status(404).json({ message: 'Жалоба не найдена' });
     }
 
+    const caseStatus = { pending: 'new', reviewed: 'in_progress', resolved: 'resolved', dismissed: 'rejected' }[status];
+    const linkedCase = await Case.findOne({ sourceReport: report._id });
+    if (linkedCase) {
+      await prepareCaseStatus(linkedCase, caseStatus);
+      linkedCase.activity.push({ actor: req.user._id, action: 'updated_via_legacy_api', details: { status, moderatorAction } });
+      await linkedCase.save();
+      emitSupportUpdated(req, linkedCase.reporter, linkedCase._id);
+    }
     report.status = status;
     if (moderatorAction) {
       report.moderatorAction = moderatorAction;
     }
     await report.save();
 
-    const caseStatus = { pending: 'new', reviewed: 'in_progress', resolved: 'resolved', dismissed: 'rejected' }[status];
-    await Case.updateOne(
-      { sourceReport: report._id },
-      {
-        $set: { status: caseStatus, ...(caseStatus === 'resolved' || caseStatus === 'rejected' ? { resolvedAt: new Date() } : {}) },
-        $push: { activity: { actor: req.user._id, action: 'updated_via_legacy_api', details: { status, moderatorAction } } }
-      }
-    );
-
     res.json({ message: 'Статус жалобы успешно обновлен', report });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[Admin API] Update report status error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
@@ -1220,7 +1399,7 @@ router.patch('/cases/:id', authMiddleware, isSupport, async (req, res) => {
         }
       }
       const previousStatus = item.status;
-      item.status = req.body.status;
+      await prepareCaseStatus(item, req.body.status);
       changes.status = req.body.status;
       if (req.body.status === 'archived') {
         changes.previousStatus = previousStatus;
@@ -1231,7 +1410,6 @@ router.patch('/cases/:id', authMiddleware, isSupport, async (req, res) => {
           changes.publicPublished = false;
         }
       }
-      if (['resolved', 'rejected'].includes(req.body.status)) item.resolvedAt = new Date();
     }
     if (req.body.priority && allowedPriorities.includes(req.body.priority)) {
       if (!canChangeCasePriority(req.user.role, item.kind)) {
@@ -1294,6 +1472,7 @@ router.patch('/cases/:id', authMiddleware, isSupport, async (req, res) => {
     await logAudit(req.user._id, auditAction, 'case', item._id, changes, req);
     res.json({ case: item });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[Admin API] Update case:', error);
     res.status(500).json({ message: 'Не удалось обновить обращение' });
   }
@@ -1347,9 +1526,9 @@ router.post('/cases/:id/appeal-decision', authMiddleware, isSupport, async (req,
         reason,
         io: req.app.get('io')
       });
-      item.status = 'resolved';
+      await prepareCaseStatus(item, 'resolved');
     } else {
-      item.status = 'rejected';
+      await prepareCaseStatus(item, 'rejected');
       await createNotification(req.app.get('io'), {
         user: item.reporter._id,
         type: 'system',
@@ -1358,7 +1537,6 @@ router.post('/cases/:id/appeal-decision', authMiddleware, isSupport, async (req,
         caseId: item._id
       });
     }
-    item.resolvedAt = new Date();
     item.activity.push({
       actor: req.user._id,
       action: decision === 'accepted' ? 'appeal_accepted' : 'appeal_rejected',
@@ -1374,6 +1552,7 @@ router.post('/cases/:id/appeal-decision', authMiddleware, isSupport, async (req,
     }, req);
     res.json({ case: item, message: decision === 'accepted' ? 'Апелляция принята, наказание снято' : 'Апелляция отклонена' });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[Admin API] Appeal decision:', error);
     res.status(error.status || 500).json({ message: error.message || 'Не удалось сохранить решение' });
   }

@@ -138,6 +138,38 @@ class AppUpdater {
     return apks.values.first;
   }
 
+  /// Заметки релиза на GitHub — Markdown с переносами строк по ширине
+  /// редактора. В диалоге показываем простым текстом: без `#`, `**`,
+  /// заголовка-дубля «LOVE vX» и с абзацами, склеенными в строку.
+  @visibleForTesting
+  static String plainReleaseNotes(String markdown) {
+    final paragraphs = <String>[];
+    for (final block in markdown.replaceAll('\r\n', '\n').split(RegExp(r'\n\s*\n'))) {
+      final lines = <String>[];
+      var afterHeading = false;
+      for (var line in block.split('\n')) {
+        line = line.trim();
+        if (line.isEmpty) continue;
+        final heading = line.startsWith('#');
+        line = line
+            .replaceFirst(RegExp(r'^#+\s*'), '')
+            .replaceFirst(RegExp(r'^[-*]\s+'), '• ')
+            .replaceAll(RegExp(r'\*\*|__|`'), '')
+            .replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]+\)'), (m) => m[1]!);
+        if (heading && RegExp(r'^LOVE\s+v?\d', caseSensitive: false).hasMatch(line)) continue;
+        // Пункт списка или заголовок — с новой строки, остальное склеиваем.
+        if (lines.isEmpty || heading || afterHeading || line.startsWith('• ')) {
+          lines.add(line);
+        } else {
+          lines[lines.length - 1] = '${lines.last} $line';
+        }
+        afterHeading = heading;
+      }
+      if (lines.isNotEmpty) paragraphs.add(lines.join('\n'));
+    }
+    return paragraphs.join('\n\n');
+  }
+
   static void _snack(BuildContext context, String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
@@ -149,8 +181,9 @@ class AppUpdater {
     String apkUrl,
     SharedPreferences prefs,
   ) {
+    final plain = plainReleaseNotes(notes);
     final shortNotes =
-        notes.length > 600 ? '${notes.substring(0, 600)}…' : notes;
+        plain.length > 600 ? '${plain.substring(0, 600)}…' : plain;
     return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -27,6 +27,7 @@ const { isBlockedBetween } = require('../utils/blocking');
 const { parseDeliverAt } = require('../services/capsuleService');
 const { normalizeMessageAttachments } = require('../utils/messageAttachments');
 const { buildMessagePreview } = require('../utils/messagePreview');
+const { createRingRegistry, recordMissedCall } = require('../services/callRings');
 const registerAdminStaffSocket = require('./adminStaffSocket');
 const {
   applyVoiceMediaMode,
@@ -66,6 +67,22 @@ function socketIsInVoiceChannel(channelId, socketId) {
 const voiceChannels = new Map();
 
 module.exports = (io) => {
+
+  // Звонки, на которые ещё не ответили (services/callRings.js). Общие для
+  // всех сокетов, поэтому живут вне io.on('connection').
+  const callRings = createRingRegistry({
+    onTimeout: (ring) => {
+      io.to(`user:${ring.callerId}`).emit('call:error', {
+        code: 'NO_ANSWER',
+        message: 'Нет ответа',
+        targetUserId: ring.targetId
+      });
+      io.to(`user:${ring.targetId}`).emit('call:terminated', { by: ring.callerId, reason: 'no_answer' });
+      recordMissedCall({ io, ring, Message, DirectMessage, createNotification })
+        .catch(error => console.error('[calls] missed call record failed:', error));
+    }
+  });
+
   
   // Middleware для аутентификации Socket.io соединений.
   //
@@ -209,47 +226,65 @@ module.exports = (io) => {
     // Сохраняем соединение
     addConnectedSocket(userId, socket.id);
     socket.join(`user:${userId}`);
+
+    // Человеку звонили, пока он был не в сети, и звонок ещё ждёт ответа —
+    // показываем вызов. С паузой: клиенту нужно успеть повесить обработчики
+    // звонков после подключения.
+    if (callRings.forTarget(userId).length) {
+      setTimeout(() => {
+        if (!socket.connected) return;
+        for (const ring of callRings.forTarget(userId)) {
+          socket.emit('call:incoming', ring.incoming);
+        }
+      }, 1200);
+    }
     console.log(`🔍 CONNECTION SET: userId=${userId}, new socket=${socket.id}`);
     
-    // Получаем предпочтительный статус пользователя
-    const userDb = await User.findById(userId);
-    let prefStatus = userDb?.statusPreference || 'online';
-    
-    // Fallback: 'offline' (invisible) is deprecated, treat as 'online'
-    if (prefStatus === 'offline') {
-      prefStatus = 'online';
-    }
-    
-    // Fallback: 'idle' is treated as 'online' on connection
-    if (prefStatus === 'idle') {
-      prefStatus = 'online';
-    }
-    
-    // Обновляем статус в БД на предпочтительный
-    await User.findByIdAndUpdate(userId, { status: prefStatus, lastSeen: new Date() });
-    
-    // Уведомляем всех о новом статусе пользователя
-    socket.broadcast.emit('user:status', {
-      userId,
-      status: prefStatus
-    });
-    
-    // Отправляем статус самому пользователю после подключения
-    socket.emit('user:status', {
-      userId,
-      status: prefStatus
-    });
-    
-    // Присоединяемся к комнатам серверов пользователя
-    const user = await User.findById(userId).populate('servers');
-    if (user && user.servers) {
-      user.servers.forEach(server => {
-        socket.join(`server:${server._id}`);
+    // Статус «в сети» и комнаты серверов — в фоне. Раньше здесь стояли три
+    // await к базе ПЕРЕД регистрацией обработчиков ниже: всё, что клиент
+    // отправлял сразу после подключения (сообщение, звонок, вход в войс),
+    // приходило, когда слушателей ещё не было, и молча терялось — отсюда
+    // «только зашёл, а написать/позвонить — ошибка». А сбой базы в этом
+    // месте оставлял сокет вообще без обработчиков.
+    (async () => {
+      const userDb = await User.findById(userId).populate('servers');
+      let prefStatus = userDb?.statusPreference || 'online';
+
+      // Fallback: 'offline' (invisible) is deprecated, treat as 'online'.
+      // 'idle' is treated as 'online' on connection.
+      if (prefStatus === 'offline' || prefStatus === 'idle') {
+        prefStatus = 'online';
+      }
+
+      // Присоединяемся к комнатам серверов пользователя
+      if (userDb && userDb.servers) {
+        userDb.servers.forEach(server => {
+          socket.join(`server:${server._id}`);
+        });
+      }
+
+      // Сокет мог отключиться, пока ждали базу: тогда «в сети» не ставим,
+      // иначе это перезапишет офлайн, выставленный в disconnect.
+      if (!socket.connected) return;
+
+      // Обновляем статус в БД на предпочтительный
+      await User.findByIdAndUpdate(userId, { status: prefStatus, lastSeen: new Date() });
+      if (!socket.connected && !connectedUsers.get(userId)?.size) return;
+
+      // Уведомляем всех о новом статусе пользователя
+      socket.broadcast.emit('user:status', {
+        userId,
+        status: prefStatus
       });
-    }
-    
-    // Присоединяемся к личной комнате
-    socket.join(`user:${userId}`);
+
+      // Отправляем статус самому пользователю после подключения
+      socket.emit('user:status', {
+        userId,
+        status: prefStatus
+      });
+    })().catch(error => {
+      console.error('[presence] connect status update failed:', error);
+    });
 
     // ==================== СТАТУС ====================
     socket.on('status:set', async ({ status }) => {
@@ -1281,45 +1316,55 @@ module.exports = (io) => {
 
       console.log(`📡 Call request attempt: from ${socket.user.username} to ${targetIdStr}. Found sockets: ${targetIsOnline ? 'YES' : 'NO'}`);
 
+      // Проверка дружбы перед звонком — и для онлайн, и для офлайн.
+      const recipientUser = await User.findById(targetIdStr).select('friends').lean();
+      if (!recipientUser) {
+        socket.emit('call:error', { message: 'Пользователь не найден' });
+        return;
+      }
+      const isFriend = (recipientUser.friends || []).some(f => f.toString() === userId);
+      if (!isFriend) {
+        socket.emit('call:error', { message: 'Вы не можете звонить пользователю, который удалил вас из друзей' });
+        return;
+      }
+
+      const conversation = await DirectMessage.findOne({
+        participants: { $all: [userId, targetIdStr] }
+      }).select('_id channel participants');
+
+      if (!conversation) {
+        socket.emit('call:error', { message: 'Диалог не найден. Откройте личные сообщения перед звонком.' });
+        return;
+      }
+
+      const incoming = {
+        conversationId: conversation._id.toString(),
+        channelId: conversation.channel.toString(),
+        kind,
+        from: {
+          _id: userId,
+          username: socket.user.username,
+          avatar: socket.user.avatar
+        }
+      };
+
+      // Звонок ждёт ответа RING_TIMEOUT_MS. Собеседник не в сети — раньше тут
+      // была мгновенная ошибка; теперь вызов дойдёт, если он откроет
+      // приложение, а нет — «Нет ответа» и пропущенный звонок в чате.
+      callRings.start({
+        callerId: userId,
+        targetId: targetIdStr,
+        conversationId: incoming.conversationId,
+        channelId: incoming.channelId,
+        kind,
+        from: incoming.from,
+        incoming
+      });
+
       if (targetIsOnline) {
-        // Проверка дружбы перед звонком
-        const recipientUser = await User.findById(targetIdStr).lean();
-        const isFriend = recipientUser ? recipientUser.friends.some(f => f.toString() === userId) : false;
-        if (!isFriend) {
-          socket.emit('call:error', { message: 'Вы не можете звонить пользователю, который удалил вас из друзей' });
-          return;
-        }
-
-        const conversation = await DirectMessage.findOne({
-          participants: { $all: [userId, targetIdStr] }
-        }).select('_id channel participants');
-
-        if (!conversation) {
-          socket.emit('call:error', { message: 'Диалог не найден. Откройте личные сообщения перед звонком.' });
-          return;
-        }
-
-        io.to(`user:${targetIdStr}`).emit('call:incoming', {
-          conversationId: conversation._id.toString(),
-          channelId: conversation.channel.toString(),
-          kind,
-          from: {
-            _id: userId,
-            username: socket.user.username,
-            avatar: socket.user.avatar
-          }
-        });
+        io.to(`user:${targetIdStr}`).emit('call:incoming', incoming);
       } else {
-        socket.emit('call:error', { message: 'Пользователь не в сети (Socket connection not found)' });
-        // Получатель офлайн — фиксируем пропущенный звонок
-        createNotification(io, {
-          user: targetIdStr,
-          type: 'missed_call',
-          actor: userId,
-          actorName: socket.user.username,
-          actorAvatar: socket.user.avatar,
-          preview: `Пропущенный звонок от ${socket.user.username}`
-        });
+        socket.emit('call:ringing', { targetUserId: targetIdStr, online: false });
       }
     });
 
@@ -1338,6 +1383,20 @@ module.exports = (io) => {
       if (!conversation) return;
       const ids = (conversation.participants || []).map(p => p.toString());
       if (!ids.includes(userId.toString()) || !ids.includes(callerIdStr)) return;
+
+      // Ответ засчитывается ровно один раз и только на звонок, который сейчас
+      // ждёт ЭТОГО человека в ЭТОМ диалоге. Иначе — устаревший или чужой ответ
+      // (звонок уже снят по таймауту или сброшен, второе устройство ответило
+      // повторно, «принято» без вызова) — его не пересылаем: раньше такой
+      // ответ запускал у звонящего подключение к звуку без звонка (CODEX-0019).
+      const ring = callRings.get(callerIdStr, userId);
+      if (!ring || String(ring.conversationId) !== String(conversationId)) {
+        socket.emit('call:terminated', { by: callerIdStr, reason: 'stale' });
+        return;
+      }
+      callRings.clear(callerIdStr, userId);
+      // Другие устройства того, кому звонили, перестают звонить.
+      socket.to(`user:${userId}`).emit('call:terminated', { by: callerIdStr, reason: 'answered_elsewhere' });
 
       const callerIsOnline = !!connectedUsers.get(callerIdStr)?.size;
 
@@ -1377,6 +1436,15 @@ module.exports = (io) => {
       }).select('_id').lean();
       if (!conversation) return;
 
+      // Сбросил звонящий, пока звонок ещё не приняли, — у собеседника это
+      // пропущенный. Сбросил тот, кому звонят, — просто снимаем ожидание.
+      const unanswered = callRings.clear(userId, targetIdStr);
+      callRings.clear(targetIdStr, userId);
+      if (unanswered) {
+        recordMissedCall({ io, ring: unanswered, Message, DirectMessage, createNotification })
+          .catch(error => console.error('[calls] missed call record failed:', error));
+      }
+
       const targetIsOnline = !!connectedUsers.get(targetIdStr)?.size;
 
       if (targetIsOnline) {
@@ -1392,6 +1460,15 @@ module.exports = (io) => {
       console.log(`❌ User disconnected: ${socket.user.username} (${socket.id})`);
       
       const becameOffline = removeConnectedSocket(userId, socket.id);
+
+      if (becameOffline) {
+        for (const ring of callRings.forCaller(userId)) {
+          callRings.clear(ring.callerId, ring.targetId);
+          io.to(`user:${ring.targetId}`).emit('call:terminated', { by: userId, reason: 'caller_left' });
+          recordMissedCall({ io, ring, Message, DirectMessage, createNotification })
+            .catch(error => console.error('[calls] missed call record failed:', error));
+        }
+      }
       
       // Выходим из всех голосовых каналов (копируем entries чтобы избежать мутации при итерации)
       const voiceEntries = Array.from(voiceChannels.entries());

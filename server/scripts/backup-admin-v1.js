@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const { EJSON } = require('bson');
 require('dotenv').config();
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outputRoot = process.argv[2]
   ? path.resolve(process.argv[2])

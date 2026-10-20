@@ -357,94 +357,18 @@ ipcMain.handle('clear-token', async () => {
   }
 });
 
-// Реестр активных контроллеров для отмены устаревших запросов (Deduplication)
-const activeRequests = new Map();
-
-// ====== БЕЗОПАСНЫЙ ПРОКСИ API ======
-ipcMain.handle('api-request', async (event, { path, method = 'GET', body = null, headers = {} }) => {
-  try {
-    // 1. Получаем токен
-    let token = null;
-    if (fs.existsSync(TOKEN_FILE_PATH)) {
-      const tokenData = fs.readFileSync(TOKEN_FILE_PATH);
-      token = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(tokenData) : Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
-    }
-
-    // 2. Строгие проверки Path
-    if (!path || typeof path !== 'string' || !path.startsWith('/')) {
-      throw new Error('Уязвимость: Некорректный путь API ' + path);
-    }
-    
-    // Формируем URL в Main Process (надежно)
-    // FIX (Windows + Node 18+): используем 127.0.0.1 вместо localhost, иначе undici
-    // fetch резолвит localhost в ::1 (IPv6), а сервер слушает только 0.0.0.0 (IPv4) →
-    // ECONNREFUSED. Это даёт "transport error" на всех запросах в dev-режиме.
-    const url = `${backendOrigin}/api${path}`;
-
-    // 3. Формируем заголовки
-    const fetchHeaders = { ...headers };
-    if (token) {
-      fetchHeaders['Authorization'] = `Bearer ${token}`;
-    }
-
-    // 4. Выполняем запрос через встроенный fetch
-    const fetchOptions = {
-      method,
-      headers: fetchHeaders
-    };
-    
-    // Поддерживаем отправку JSON
-    if (body) {
-      if (typeof body === 'string') {
-         fetchOptions.body = body;
-         if (!fetchHeaders['Content-Type']) fetchHeaders['Content-Type'] = 'application/json';
-      }
-    }
-
-    // Легковесная отмена только для Auth Namespace (Deduplication)
-    const isAuthRoute = path.startsWith('/auth/');
-    if (isAuthRoute) {
-      if (activeRequests.has(path)) {
-        activeRequests.get(path).abort();
-      }
-      const controller = new AbortController();
-      activeRequests.set(path, controller);
-      fetchOptions.signal = controller.signal;
-    }
-
-    let response;
-    try {
-      response = await fetch(url, fetchOptions);
-    } finally {
-      if (isAuthRoute) {
-        activeRequests.delete(path);
-      }
-    }
-    
-    // Читаем ответ как текст (иногда сервер может вернуть не JSON)
-    const responseText = await response.text();
-    let responseData;
-    try {
-      responseData = responseText ? JSON.parse(responseText) : {};
-    } catch (e) {
-      responseData = { message: responseText }; // fallback если не JSON
-    }
-
-    return {
-      ok: response.ok,
-      status: response.status,
-      data: responseData
-    };
-
-  } catch (error) {
-    // Если это была принудительная отмена (AbortController)
-    if (error.name === 'AbortError') {
-      return { ok: false, aborted: true, data: null };
-    }
-    console.error('API proxy error:', error.message);
-    return { ok: false, status: 500, data: { message: error.message }, error: error.message };
+// Auth writes must finish: aborting a previous POST does not undo server work.
+const apiProxy = require('./api-proxy').createApiProxy({
+  origin: backendOrigin,
+  getToken() {
+    if (!fs.existsSync(TOKEN_FILE_PATH)) return null;
+    const tokenData = fs.readFileSync(TOKEN_FILE_PATH);
+    return safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(tokenData)
+      : Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
   }
 });
+ipcMain.handle('api-request', (event, options) => apiProxy(options));
 
 // ====== БЕЗОПАСНЫЙ ПРОКСИ ЗАГРУЗКИ ФАЙЛОВ ======
 ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fileName, mimeType, additionalFields = {} }) => {
@@ -455,8 +379,8 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
       token = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(tokenData) : Buffer.from(tokenData.toString(), 'base64').toString('utf-8');
     }
 
-    if (!path || typeof path !== 'string' || !path.startsWith('/')) {
-      throw new Error('Уязвимость: Некорректный путь API ' + path);
+    if (!path || typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) {
+      return { ok: false, status: 400, data: { message: 'Некорректный путь API' } };
     }
     
     // Тот же fix IPv4 для api-upload (см. комментарий выше).
@@ -494,7 +418,8 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
     const response = await fetch(url, {
       method,
       headers: fetchHeaders,
-      body: formData
+      body: formData,
+      signal: AbortSignal.timeout(60000)
     });
 
     const responseText = await response.text();
@@ -502,7 +427,10 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
     try {
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (e) {
-      responseData = { message: responseText };
+      // Proxy pages (for example nginx 413) are HTML, never a message to show.
+      responseData = { message: response.status === 413
+        ? 'Файл слишком большой для загрузки.'
+        : 'Сервер вернул некорректный ответ. Попробуйте позже.' };
     }
 
     return {
@@ -511,8 +439,15 @@ ipcMain.handle('api-upload', async (event, { path, method = 'POST', fileData, fi
       data: responseData
     };
   } catch (error) {
-    console.error('API upload error:', error);
-    return { ok: false, status: 500, data: { message: error.message }, error: error.message };
+    // Same contract as api-proxy: a transport failure has no HTTP status.
+    console.error('API upload error:', error.name);
+    const timedOut = error.name === 'TimeoutError';
+    return {
+      ok: false, status: 0, networkError: true, timedOut,
+      data: { message: timedOut
+        ? 'Сервер долго не отвечает. Проверьте подключение и попробуйте ещё раз.'
+        : 'Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз.' }
+    };
   }
 });
 
@@ -769,7 +704,7 @@ if (!gotTheLock) {
     }
     
     // Обработка ссылки для Windows
-    const url = commandLine.pop();
+    const url = commandLine.find(argument => /^love-app:\/\//i.test(argument));
     if (url && url.includes('love-app://')) {
       handleDeepLink(url);
     }
@@ -893,6 +828,13 @@ function handleDeepLink(url) {
     const inviteMatch = raw.match(/^love-app:\/\/invite\/([A-Za-z0-9-]{4,32})/i);
     if (inviteMatch) {
       send('deep-link-invite', inviteMatch[1]);
+      return;
+    }
+
+    // love-app://user/НИК — «Написать в Love» с публичной страницы профиля.
+    const userMatch = raw.match(/^love-app:\/\/user\/([A-Za-z0-9_.-]{2,32})/i);
+    if (userMatch) {
+      send('deep-link-user', userMatch[1]);
       return;
     }
 

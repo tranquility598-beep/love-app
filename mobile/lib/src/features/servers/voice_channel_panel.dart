@@ -23,7 +23,8 @@ class ActiveChannelVoiceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voice = ChannelVoiceController.instance;
-    final title = voice.channelTitle.isEmpty ? 'Голосовой канал' : voice.channelTitle;
+    final title =
+        voice.channelTitle.isEmpty ? 'Голосовой канал' : voice.channelTitle;
     return Scaffold(
       body: LoveBackground(
         child: SafeArea(
@@ -145,7 +146,9 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
     String two(int v) => v.toString().padLeft(2, '0');
     final m = d.inMinutes % 60;
     final s = d.inSeconds % 60;
-    return d.inHours > 0 ? '${d.inHours}:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+    return d.inHours > 0
+        ? '${d.inHours}:${two(m)}:${two(s)}'
+        : '${two(m)}:${two(s)}';
   }
 
   String get _statusText {
@@ -155,10 +158,13 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
     return time.isEmpty ? 'Вы в войсе' : 'Вы в войсе • $time';
   }
 
-  List<Map<String, dynamic>> get _members =>
-      _joinedHere && _voice.members.isNotEmpty
-          ? _voice.members
-          : _passiveMembers;
+  List<Map<String, dynamic>> get _members => _joinedHere &&
+          _voice.members.isNotEmpty
+      ? _voice.members
+      : _passiveMembers
+          .where(
+              (member) => asText(member['socketId']) != widget.socket.socketId)
+          .toList();
 
   Future<void> _join() async {
     final ok = await _voice.join(id: _channelId, title: widget.title);
@@ -212,14 +218,14 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
               Text(
                 _statusText,
                 textAlign: TextAlign.center,
-                style:  TextStyle(color: context.palette.textMuted),
+                style: TextStyle(color: context.palette.textMuted),
               ),
               if (_voice.errorMessage != null) ...[
                 const SizedBox(height: 10),
                 Text(
                   _voice.errorMessage!,
                   textAlign: TextAlign.center,
-                  style:  TextStyle(color: context.palette.textPrimary),
+                  style: TextStyle(color: context.palette.textPrimary),
                 ),
               ],
               if (!_joinedHere && _voice.isActive) ...[
@@ -227,7 +233,7 @@ class _ChannelVoicePanelState extends State<ChannelVoicePanel> {
                 Text(
                   'Вы сейчас в «${_voice.channelTitle}» — при входе сюда переключитесь автоматически.',
                   textAlign: TextAlign.center,
-                  style:  TextStyle(
+                  style: TextStyle(
                     color: context.palette.textMuted,
                     fontSize: 12.5,
                   ),
@@ -333,9 +339,8 @@ class _RoundVoiceButton extends StatelessWidget {
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: filled
-                  ? context.palette.accent
-                  : context.palette.inkA(0.06),
+              color:
+                  filled ? context.palette.accent : context.palette.inkA(0.06),
               border: Border.all(
                 color: filled
                     ? context.palette.accent
@@ -352,7 +357,7 @@ class _RoundVoiceButton extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           caption,
-          style:  TextStyle(
+          style: TextStyle(
             fontSize: 11,
             color: context.palette.textMuted,
             fontWeight: FontWeight.w600,
@@ -398,7 +403,7 @@ class VoiceMemberTile extends StatelessWidget {
             ),
           ),
           if (deafened) ...[
-             Icon(
+            Icon(
               Icons.volume_off_rounded,
               color: context.palette.textMuted,
               size: 18,

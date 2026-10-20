@@ -1,5 +1,56 @@
 import '../chat/chat_models.dart';
 
+class CaseSubmissionState {
+  CaseSubmissionState.fromJson(Map<String, dynamic> json)
+      : policyVersion = (json['policyVersion'] as num?)?.toInt() ?? 0,
+        allowed = json['allowed'] == true,
+        code = asText(json['code']),
+        message = asText(json['message']),
+        activeCaseId = asId(_map(json['activeCase'])['_id']),
+        activeCaseNumber = asText(_map(json['activeCase'])['number']),
+        retryAt = DateTime.now().add(Duration(
+            seconds:
+                ((json['retryAfter'] as num?)?.toInt() ?? 0).clamp(0, 86400)));
+
+  final int policyVersion;
+  final bool allowed;
+  final String code;
+  final String message;
+  final String activeCaseId;
+  final String activeCaseNumber;
+  final DateTime retryAt;
+
+  bool get supported => policyVersion >= 1;
+  int get remainingSeconds =>
+      ((retryAt.difference(DateTime.now()).inMilliseconds / 1000).ceil())
+          .clamp(0, 86400);
+  bool get canSubmit =>
+      supported &&
+      (allowed || (code == 'CASE_COOLDOWN' && remainingSeconds == 0));
+
+  String get explanation {
+    if (!supported) {
+      return 'Отправка новых обращений временно недоступна: требуется обновление сервера.';
+    }
+    if (code == 'CASE_COOLDOWN' && remainingSeconds > 0) {
+      final seconds = remainingSeconds;
+      return 'После закрытия обращения действует пауза 15 минут. Новое можно отправить через ${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}.';
+    }
+    if (canSubmit) {
+      return 'Можно открыть одно обращение: вопрос, баг, идею или жалобу. После закрытия — пауза 15 минут.';
+    }
+    return message.isNotEmpty
+        ? message
+        : 'У вас уже есть открытое обращение. Добавьте подробности в существующую переписку.';
+  }
+}
+
+class CaseInbox {
+  const CaseInbox({required this.cases, required this.submission});
+  final List<SupportCase> cases;
+  final CaseSubmissionState submission;
+}
+
 class SupportCase {
   const SupportCase({
     required this.id,
@@ -300,4 +351,17 @@ DateTime _date(Object? value, {DateTime? fallback}) {
 DateTime? _nullableDate(Object? value) {
   final text = asText(value);
   return text.isEmpty ? null : DateTime.tryParse(text);
+}
+
+/// Часть профиля для жалобы (GET /cases/profile-report-options).
+class ProfileReportPart {
+  const ProfileReportPart({required this.id, required this.label});
+  final String id;
+  final String label;
+}
+
+class ProfileReportOptions {
+  const ProfileReportOptions({required this.parts, required this.categories});
+  final List<ProfileReportPart> parts;
+  final List<ReportReason> categories;
 }

@@ -21,6 +21,12 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
         }
+        // Сезонное оформление (ключ app-season) — тоже до первой отрисовки.
+        try {
+          if (localStorage.getItem('app-season') === 'halloween') {
+            document.documentElement.setAttribute('data-season', 'halloween');
+          }
+        } catch (e) {}
       })();
     </script>
     <link rel="stylesheet" href="styles/fonts.css">
@@ -33,6 +39,7 @@
     <link rel="stylesheet" href="styles/media.css">
     <link rel="stylesheet" href="styles/perf-android.css">
     <link rel="stylesheet" href="styles/appearance.css">
+    <link rel="stylesheet" href="styles/halloween.css">
     <!-- Android WebView заметно слабее iOS: помечаем html.perf-lite, чтобы
          perf-android.css отключил дорогие эффекты (blur/backdrop/фоновые анимации). -->
     <script>(function(){try{if(/Android/i.test(navigator.userAgent||''))document.documentElement.classList.add('perf-lite');}catch(e){}})();</script>
@@ -211,6 +218,13 @@
               <span id="resend-timer-text">Новый код через <b id="resend-counter">60</b> сек.</span>
               <button type="button" class="auth-link hidden" id="resend-link">Отправить ещё раз</button>
             </div>
+            <button type="button" class="auth-link hidden" id="otp-change-email">Ошиблись в почте? Изменить адрес</button>
+            <div id="otp-email-editor" class="auth-email-editor hidden" role="group" aria-labelledby="otp-email-label">
+              <label class="auth-label" id="otp-email-label" for="otp-new-email">Правильный адрес почты</label>
+              <input type="email" id="otp-new-email" class="auth-input" autocomplete="email" placeholder="you@example.com">
+              <button type="button" class="auth-submit" id="otp-email-save">Изменить и отправить код</button>
+              <button type="button" class="auth-link" id="otp-email-cancel">Отмена</button>
+            </div>
             <button type="button" class="auth-link auth-back-link go-to-login">Назад ко входу</button>
           </form>
 
@@ -334,9 +348,12 @@
             <nav class="global-nav">
                 <button class="nav-btn" title="Серверы и Комнаты" data-target="view-servers" id="nav-servers">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                        <polyline points="2 17 12 22 22 17"></polyline>
-                        <polyline points="2 12 12 17 22 12"></polyline>
+                        <!-- «Сферы»: орбита — центр и вращающиеся вокруг круги -->
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <circle cx="19" cy="5" r="2"></circle>
+                        <circle cx="5" cy="19" r="2"></circle>
+                        <path d="M10.4 21.9a10 10 0 0 0 9.941-15.416"></path>
+                        <path d="M13.5 2.1a10 10 0 0 0-9.841 15.416"></path>
                     </svg>
                 </button>
                 <button class="nav-btn" title="Друзья" data-target="view-friends" id="nav-friends">
@@ -349,10 +366,9 @@
                 </button>
                 <button class="nav-btn" title="Love Hub (Сообщество)" data-target="view-hub" id="nav-hub">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
+                        <!-- Love Hub: сердце в облачке — сообщество Love -->
+                        <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>
+                        <path d="M15.8 9.2a2.5 2.5 0 0 0-3.5 0l-.3.4-.35-.3a2.42 2.42 0 1 0-3.2 3.6l3.6 3.5 3.6-3.5c1.2-1.2 1.1-2.7.2-3.7"></path>
                     </svg>
                 </button>
                 <button class="nav-btn" title="Уведомления" data-target="view-notifications" id="nav-notifications">
@@ -1171,8 +1187,8 @@
                             </div>
                         </div>
                         <div class="notif-actions-top">
-                            <button class="notif-action-text-btn" id="mark-all-read-notifs">Прочитать<br>все</button>
-                            <button class="notif-action-text-btn" id="clear-all-notifs">Очистить<br>все</button>
+                            <button class="notif-action-text-btn" id="mark-all-read-notifs">Прочитать все</button>
+                            <button class="notif-action-text-btn" id="clear-all-notifs">Очистить все</button>
                         </div>
                     </header>
                     <div class="notifications-feed-list" id="notif-feed-container">
@@ -1197,7 +1213,12 @@
         <aside class="settings-sidebar">
           <div class="settings-sidebar-header">
             <h2 class="settings-sidebar-title">Настройки</h2>
+            <label class="settings-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="search" id="settings-search-input" placeholder="Поиск настроек" autocomplete="off" spellcheck="false" aria-label="Поиск настроек">
+            </label>
           </div>
+          <div class="settings-search-results" id="settings-search-results" hidden></div>
           <nav class="settings-nav">
 
             <div class="settings-nav-group">Пользователь</div>
@@ -1208,6 +1229,10 @@
             <button class="settings-nav-item" data-settings-section="settings-account">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               <span>Аккаунт</span>
+            </button>
+            <button class="settings-nav-item" data-settings-section="settings-subscriptions">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg>
+              <span>Подписки</span>
             </button>
             <button class="settings-nav-item" data-settings-section="settings-privacy">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -1253,6 +1278,15 @@
             </button>
 
           </nav>
+
+          <!-- Выход — внизу боковой панели, всегда на виду (раньше прятался
+               в конце раздела «Аккаунт»). Не .settings-nav-item: это не раздел. -->
+          <div class="settings-sidebar-footer">
+            <button class="settings-logout-btn" id="lvs-logout-btn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span>Выйти из аккаунта</span>
+            </button>
+          </div>
         </aside>
 
         <!-- Рабочая область -->
@@ -1378,6 +1412,27 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Публичная страница. Спрятана до ответа сервера: если функция
+                   выключена флагом, карточки просто нет — лучше, чем кнопка,
+                   которая ломается при нажатии. -->
+              <div class="lvs-card lvs-pp" id="lvs-pp-card" hidden>
+                <div class="lvs-pp-head">
+                  <span class="lvs-pp-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
+                  <div class="lvs-pp-text">
+                    <div class="lvs-pp-title"><span class="lvs-row-label">Публичная страница</span> <span class="lvs-badge" id="lvs-pp-badge" hidden></span></div>
+                    <div class="lvs-pp-desc">Ваша визитка по ссылке: аватар, ссылки, музыка и оформление.</div>
+                  </div>
+                  <button class="lvs-btn lvs-pp-main" id="lvs-pp-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span id="lvs-pp-open-label">Настроить</span></button>
+                </div>
+                <div class="lvs-pp-link">
+                  <svg class="lvs-pp-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  <span class="lvs-pp-url" id="lvs-pp-state">—</span>
+                  <button type="button" class="lvs-pp-icon-btn" id="lvs-pp-copy" title="Скопировать ссылку" aria-label="Скопировать ссылку" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  <button type="button" class="lvs-pp-icon-btn" id="lvs-pp-visit" title="Открыть страницу" aria-label="Открыть страницу" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+                </div>
+                <p class="lvs-hint lvs-pp-note" id="lvs-pp-note" hidden></p>
+              </div>
             </section>
 
             <!-- ━━━━━━━━━ СЕКЦИЯ 2: АККАУНТ ━━━━━━━━━ -->
@@ -1411,10 +1466,6 @@
                   <div class="lvs-row-text"><div class="lvs-row-label">Двухфакторная аутентификация</div><div class="lvs-row-sub">Дополнительная защита при входе</div></div>
                   <label class="lvs-toggle"><input type="checkbox" id="lvs-2fa-toggle"><span class="lvs-toggle-track"></span></label>
                 </div>
-                <div class="lvs-row">
-                  <div class="lvs-row-text"><div class="lvs-row-label">Выйти из аккаунта</div><div class="lvs-row-sub">Завершить текущую сессию</div></div>
-                  <button class="lvs-btn" id="lvs-logout-btn">Выйти</button>
-                </div>
               </div>
 
               <div class="lvs-card lvs-card--danger">
@@ -1424,6 +1475,59 @@
                   <button class="lvs-btn lvs-btn--danger" id="lvs-delete-account">Удалить аккаунт</button>
                 </div>
               </div>
+            </section>
+
+            <section class="settings-section" id="settings-subscriptions" aria-labelledby="lvs-subscriptions-title">
+              <header class="lvs-section-head">
+                <h1 class="lvs-section-title" id="lvs-subscriptions-title">Подписки</h1>
+                <p class="lvs-section-desc">Больше возможностей для вашего пространства в Love.</p>
+              </header>
+
+              <div class="lvs-plan-summary" aria-live="polite">
+                <div><span class="lvs-plan-eyebrow">Ваш тариф</span><strong id="lvs-current-plan">Загружаем…</strong><p id="lvs-current-plan-detail">Информация появится после входа в аккаунт.</p></div>
+                <span class="lvs-plan-tag">Love</span>
+              </div>
+
+              <div class="lvs-plan-notice" id="lvs-plan-preview-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v2"/></svg>
+                <p><strong>Предварительные тарифы</strong>Цены и состав могут измениться к запуску. Оформление подписок пока недоступно.</p>
+              </div>
+
+              <div class="lvs-plan-grid" aria-describedby="lvs-plan-preview-note">
+                <article class="lvs-plan-card" data-love-plan="free">
+                  <div class="lvs-plan-card-head"><h2>Free</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
+                  <p class="lvs-plan-description">Всё, чтобы начать общаться.</p>
+                  <p class="lvs-plan-price">0 ₽<span> / месяц</span></p>
+                  <ul><li>Основные возможности общения</li><li>Публичная страница профиля</li><li>До 3 ссылок на странице</li><li>Базовые темы оформления</li></ul>
+                  <button type="button" class="lvs-plan-button" disabled>Бесплатно</button>
+                </article>
+
+                <article class="lvs-plan-card" data-love-plan="pro">
+                  <div class="lvs-plan-card-head"><h2>Pro</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
+                  <p class="lvs-plan-description">Больше свободы в оформлении.</p>
+                  <p class="lvs-plan-price">299 ₽<span> / месяц</span></p>
+                  <ul><li>Все возможности Free</li><li>До 12 ссылок и короткий адрес</li><li>Свой фон и цвет акцента</li><li>Анимированные аватар и баннер</li><li>Статистика за 7 дней</li></ul>
+                  <button type="button" class="lvs-plan-button" disabled>Покупка пока недоступна</button>
+                </article>
+
+                <article class="lvs-plan-card lvs-plan-card--featured" data-love-plan="premium">
+                  <div class="lvs-plan-card-head"><h2>Premium</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
+                  <p class="lvs-plan-description">Профиль с вашим характером.</p>
+                  <p class="lvs-plan-price">499 ₽<span> / месяц</span></p>
+                  <ul><li>Все возможности Pro</li><li>До 20 ссылок на странице</li><li>Музыка, эффекты и видеофон</li><li>Шрифты и рамки аватара</li><li>Статистика за 30 дней</li></ul>
+                  <button type="button" class="lvs-plan-button" disabled>Покупка пока недоступна</button>
+                </article>
+
+                <article class="lvs-plan-card" data-love-plan="duo">
+                  <div class="lvs-plan-card-head"><h2>Duo</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
+                  <p class="lvs-plan-description">Один тариф для вас двоих.</p>
+                  <p class="lvs-plan-price">799 ₽<span> / месяц</span></p>
+                  <ul><li>Premium для двух аккаунтов</li><li>Отдельный профиль у каждого</li><li>Музыка и эффекты на страницах</li><li>Оформление без общих настроек</li></ul>
+                  <button type="button" class="lvs-plan-button" disabled>Покупка пока недоступна</button>
+                </article>
+              </div>
+
+              <p class="lvs-plan-footnote">Общение в Love остаётся бесплатным. Платные тарифы расширяют возможности оформления профиля.</p>
             </section>
 
             <!-- ━━━━━━━━━ СЕКЦИЯ 3: КОНФИДЕНЦИАЛЬНОСТЬ ━━━━━━━━━ -->
@@ -1462,6 +1566,16 @@
                   <div class="lvs-select" data-value="friends"><button class="lvs-select-btn"><span>Друзья</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
                     <ul class="lvs-select-menu"><li data-value="all">Все</li><li data-value="friends">Друзья</li><li data-value="none">Никто</li></ul></div>
                 </div>
+              </div>
+              <div class="lvs-card lvs-blocked-card" aria-labelledby="lvs-blocked-title">
+                <div class="lvs-blocked-head">
+                  <h2 class="lvs-section-subtitle" id="lvs-blocked-title">Заблокированные <span id="lvs-blocked-count" hidden></span></h2>
+                  <button type="button" class="lvs-btn lvs-btn--ghost" id="lvs-blocked-refresh">Обновить</button>
+                </div>
+                <p class="lvs-blocked-description">Люди, которых вы заблокировали. Вы не можете писать и звонить друг другу или отправлять заявки в друзья.</p>
+                <p class="lvs-blocked-status" id="lvs-blocked-status" role="status" aria-live="polite">Откройте раздел, чтобы загрузить список.</p>
+                <ul class="lvs-blocked-list" id="lvs-blocked-list" aria-label="Заблокированные пользователи"></ul>
+                <p class="lvs-blocked-note">Разблокировка не возвращает человека в друзья — понадобится новая заявка.</p>
               </div>
               <div class="lvs-card">
                 <div class="lvs-section-subtitle">Ссылки</div>
@@ -1531,6 +1645,41 @@
                     <span class="lvs-theme-name">Системная</span>
                   </button>
                 </div>
+              </div>
+
+              <div class="lvs-card">
+                <div class="lvs-section-subtitle">Сезонная тема</div>
+                <div class="lvs-theme-grid lvs-season-grid">
+                  <button type="button" class="lvs-theme-option lvs-season-option" data-season-option="none" aria-pressed="true">
+                    <span class="lvs-theme-swatch" aria-hidden="true">
+                      <span class="lvs-theme-mock is-dark">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                      </span>
+                    </span>
+                    <span class="lvs-theme-name">Обычная</span>
+                  </button>
+                  <button type="button" class="lvs-theme-option lvs-season-option" data-season-option="halloween" aria-pressed="false">
+                    <span class="lvs-theme-swatch" aria-hidden="true">
+                      <span class="lvs-theme-mock is-dark is-halloween">
+                        <span class="lvs-theme-mock-rail"></span>
+                        <span class="lvs-theme-mock-body">
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                          <span class="lvs-theme-mock-line"></span>
+                        </span>
+                        <span class="lvs-season-mock-web"></span>
+                        <img class="lvs-season-mock-pumpkin" src="assets/season/pumpkin.svg" alt="">
+                      </span>
+                    </span>
+                    <span class="lvs-theme-name">Halloween</span>
+                  </button>
+                </div>
+                <p class="lvs-season-note">Тыквы, паутина и мягкие оранжевые акценты поверх выбранной темы. Обычный вид возвращается одним нажатием.</p>
               </div>
 
               <div class="lvs-card">
@@ -1720,16 +1869,37 @@
               </div>
 
               <div class="support-pane active" data-support-pane="cases">
-                <div class="support-pane-head"><div><h2>Ваши обращения</h2><p>Переписка с командой остаётся доступна даже при ограничении аккаунта.</p></div><button type="button" class="lvs-btn" id="support-new-case-btn">Новое обращение</button></div>
+                <div class="support-pane-head"><div><h2>Ваши обращения</h2><p>Здесь можно задать вопрос или сообщить об ошибке в Love.</p></div><div class="support-case-actions"><button type="button" class="lvs-btn" id="support-report-bug-btn">Сообщить о баге</button><button type="button" class="lvs-btn support-secondary-btn" id="support-new-case-btn">Задать вопрос</button></div></div>
+                <div class="support-submission-notice" id="support-submission-notice" hidden>
+                  <p id="support-submission-message" role="status" aria-live="polite"></p>
+                  <button type="button" class="lvs-btn support-secondary-btn" id="support-open-active-case" hidden>Открыть обращение</button>
+                </div>
                 <form class="support-new-case hidden" id="support-new-case-form">
-                  <label><span>Тема</span><input id="support-case-title" name="support-case-title" maxlength="160" required placeholder="Кратко опишите вопрос"></label>
-                  <label><span>Описание</span><textarea id="support-case-description" name="support-case-description" maxlength="10000" rows="5" required placeholder="Расскажите, что произошло и чем команда может помочь"></textarea></label>
-                  <label><span>Приоритет</span><select id="support-case-priority" name="support-case-priority">
-                    <option value="low">Низкий — вопрос не мешает работе</option>
-                    <option value="normal" selected>Обычный — нужна помощь</option>
-                    <option value="high">Высокий — важная функция недоступна</option>
-                    <option value="critical">Критический — безопасность или потеря доступа</option>
-                  </select></label>
+                  <h3 id="support-new-case-heading">Новое обращение</h3>
+                  <input type="hidden" id="support-case-kind" name="support-case-kind" value="support">
+                  <p class="support-bug-hint" id="support-bug-hint" hidden>Опишите шаги, после которых возникла ошибка, что ожидали и что произошло. Ответ команды появится здесь.</p>
+                  <label><span>Тема</span><input id="support-case-title" name="support-case-title" minlength="3" maxlength="160" required placeholder="Кратко опишите вопрос"></label>
+                  <label><span>Описание</span><textarea id="support-case-description" name="support-case-description" minlength="10" maxlength="10000" rows="5" required placeholder="Расскажите, что произошло и чем команда может помочь"></textarea></label>
+                  <div class="support-file-picker">
+                    <button type="button" class="lvs-btn support-secondary-btn" id="support-attach-files">Прикрепить файлы</button>
+                    <input type="file" id="support-case-files" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.avi,.txt,.log,.pdf" hidden>
+                    <span>До 5 файлов: изображения до 10 МБ, видео до 50 МБ, TXT / LOG / PDF до 5 МБ.</span>
+                  </div>
+                  <ul class="support-pending-files" id="support-pending-files" aria-label="Прикреплённые файлы"></ul>
+                  <p class="support-file-status" id="support-file-status" role="status" aria-live="polite"></p>
+                  <div class="support-priority-field">
+                    <span id="support-priority-label">Приоритет</span>
+                    <input type="hidden" id="support-case-priority" name="support-case-priority" value="normal">
+                    <div class="lvs-select" id="support-priority-select" data-value="normal">
+                      <button type="button" class="lvs-select-btn" aria-labelledby="support-priority-label support-priority-value"><span id="support-priority-value">Обычный — нужна помощь</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                      <ul class="lvs-select-menu support-priority-menu">
+                        <li data-value="low">Низкий — вопрос не мешает работе</li>
+                        <li data-value="normal" class="selected">Обычный — нужна помощь</li>
+                        <li data-value="high">Высокий — важная функция недоступна</li>
+                        <li data-value="critical">Критический — безопасность или потеря доступа</li>
+                      </ul>
+                    </div>
+                  </div>
                   <p class="support-priority-note">Выбирайте срочность честно. Заведомо ложный высокий приоритет сотрудник может расценить как злоупотребление и выдать предупреждение.</p>
                   <div><button type="button" class="lvs-btn support-secondary-btn" id="support-new-case-cancel">Отмена</button><button type="submit" class="lvs-btn">Отправить</button></div>
                 </form>
@@ -1766,7 +1936,7 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Текущая версия</div></div>
-                  <span class="lvs-badge" id="settings-updates-version">2.1.1</span>
+                  <span class="lvs-badge" id="settings-updates-version">2.2.0</span>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Статус</div></div>
@@ -1839,41 +2009,61 @@
                 <p class="lvs-section-desc">Информация о Love</p>
               </header>
 
-              <div class="lvs-card lvs-about-card">
+              <div class="lvs-card lvs-about-hero">
                 <div class="lvs-about-logo">
                   <svg viewBox="0 0 24 24" fill="currentColor" aria-label="Love"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 </div>
                 <div class="lvs-about-name">L O V E</div>
+                <p class="lvs-about-tagline">Мессенджер, сделанный с любовью.</p>
                 <div class="lvs-about-version">
-                  <span class="lvs-badge" id="settings-about-version">v2.1.1</span>
+                  <span class="lvs-badge" id="settings-about-version">v2.2.0</span>
                   <span class="lvs-badge" id="settings-about-build">build</span>
                 </div>
-                <p class="lvs-about-tagline">Мессенджер, сделанный с любовью.</p>
-
-                <div class="lvs-divider"></div>
-
-                <div class="lvs-about-credits">
-                  <div class="lvs-section-subtitle">Команда</div>
-                  <div class="lvs-credit-row"><span class="lvs-credit-name">Александр</span><span class="lvs-credit-role">Основатель</span></div>
-                </div>
-
-                <div class="lvs-about-links">
-                  <a class="lvs-btn lvs-btn--ghost" href="https://loveapp.chat" target="_blank" rel="noopener">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    Сайт
-                  </a>
-                  <a class="lvs-btn lvs-btn--ghost" href="#" data-stub="docs">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                    Документация
-                  </a>
-                  <a class="lvs-btn lvs-btn--ghost" href="#" data-stub="support" id="lvs-support-link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    Поддержка
-                  </a>
-                </div>
-                <p class="lvs-about-mail">support@loveapp.chat</p>
-                <p class="lvs-about-made">Сделано с <svg class="lvs-inline-heart" viewBox="0 0 24 24" fill="currentColor" aria-label="любовью"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></p>
               </div>
+
+              <div class="lvs-section-subtitle lvs-about-subtitle">Ссылки</div>
+              <div class="lvs-about-tiles">
+                  <a class="lvs-about-tile" href="https://loveapp.chat" target="_blank" rel="noopener">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Сайт</span><span class="lvs-about-tile-sub">loveapp.chat</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>
+                  </a>
+                  <a class="lvs-about-tile" href="https://loveapp.chat/changelog.html" target="_blank" rel="noopener">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/><path d="M19 17l.6 1.9L21.5 19.5l-1.9.6L19 22l-.6-1.9-1.9-.6 1.9-.6z"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Что нового</span><span class="lvs-about-tile-sub">История обновлений</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>
+                  </a>
+                  <button type="button" class="lvs-about-tile" data-about-open="settings-support">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Поддержка</span><span class="lvs-about-tile-sub">Вопросы и нарушения</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                  <a class="lvs-about-tile" href="mailto:support@loveapp.chat">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Написать нам</span><span class="lvs-about-tile-sub">support@loveapp.chat</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>
+                  </a>
+                  <a class="lvs-about-tile" href="https://loveapp.chat/privacy.html" target="_blank" rel="noopener">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Конфиденциальность</span><span class="lvs-about-tile-sub">Как мы храним данные</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>
+                  </a>
+                  <a class="lvs-about-tile" href="https://loveapp.chat/terms.html" target="_blank" rel="noopener">
+                    <span class="lvs-about-tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+                    <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Условия</span><span class="lvs-about-tile-sub">Правила использования</span></span>
+                    <svg class="lvs-about-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>
+                  </a>
+              </div>
+
+              <div class="lvs-section-subtitle lvs-about-subtitle">Команда</div>
+              <div class="lvs-card lvs-about-team">
+                <div class="lvs-about-member">
+                  <span class="lvs-about-member-avatar">А</span>
+                  <span class="lvs-about-tile-text"><span class="lvs-about-tile-title">Александр</span><span class="lvs-about-tile-sub">Основатель</span></span>
+                </div>
+              </div>
+
+              <p class="lvs-about-made">Сделано с <svg class="lvs-inline-heart" viewBox="0 0 24 24" fill="currentColor" aria-label="любовью"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></p>
             </section>
 
           </div><!-- .settings-content-scroll -->
@@ -1912,6 +2102,10 @@
             
             <!-- Encrypted badge (top bar) -->
             <div class="call-top-bar">
+                <div class="call-peer-heading">
+                    <h2 id="call-title-name"></h2>
+                    <span id="call-duration-text">Соединение…</span>
+                </div>
                 <div class="call-encrypted-badge">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lock-icon" style="width: 12px; height: 12px; margin-right: 6px; display: inline-block; vertical-align: middle;">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -1946,6 +2140,7 @@
                         </div>
                         <video class="call-live-video remote-feed hidden" id="call-remote-feed" autoplay playsinline muted></video>
                         <span class="call-media-kind" id="call-remote-media-kind"></span>
+                        <span class="call-participant-name" id="call-remote-name"></span>
                     </div>
                     <!-- Local Video Stream -->
                     <div class="video-stream-box local-video">
@@ -1963,6 +2158,7 @@
                         </div>
                         <video class="call-live-video local-feed hidden" id="call-local-feed" autoplay playsinline muted></video>
                         <span class="call-media-kind" id="call-local-media-kind"></span>
+                        <span class="call-participant-name" id="call-local-name">Вы</span>
                     </div>
                 </div>
 
@@ -1975,10 +2171,8 @@
                         <div class="avatar-pulse-ring ring-3"></div>
                         <div class="call-avatar-glow" id="call-center-avatar"></div>
                     </div>
-                    <h2 class="call-user-name" id="call-title-name"></h2>
                     <div class="call-status-wrapper">
                         <span class="call-status-indicator pulsing-dot"></span>
-                        <span class="call-duration" id="call-duration-text">Соединение...</span>
                     </div>
                 </div>
             </div>
@@ -1986,7 +2180,7 @@
             <!-- Floating Controls Dock (Bottom Bar) -->
             <div class="call-controls-dock">
                 <!-- Toggle Mute Microphone -->
-                <button class="call-dock-btn" id="call-btn-mute" title="Выключить микрофон">
+                <button type="button" class="call-dock-btn voice-control-btn" id="call-btn-mute" title="Выключить микрофон" aria-label="Микрофон">
                     <svg class="icon-mic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
                         <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
@@ -2001,7 +2195,7 @@
                 </button>
                 
                 <!-- Toggle Video Camera -->
-                <button class="call-dock-btn video-inactive" id="call-btn-video" title="Включить видео">
+                <button type="button" class="call-dock-btn voice-control-btn video-inactive" id="call-btn-video" title="Включить видео" aria-label="Камера">
                     <svg class="icon-video-on hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M23 7l-7 5 7 5V7z"/>
                         <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
@@ -2014,7 +2208,7 @@
                 </button>
 
                 <!-- Screen Share (Toggle) -->
-                <button class="call-dock-btn" id="call-btn-screenshare" title="Демонстрация экрана">
+                <button type="button" class="call-dock-btn voice-control-btn" id="call-btn-screenshare" title="Демонстрация экрана" aria-label="Демонстрация экрана">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
                         <line x1="8" y1="21" x2="16" y2="21"/>
@@ -2023,10 +2217,11 @@
                 </button>
 
                 <!-- End/Decline Call -->
-                <button class="call-dock-btn end-call" id="btn-end-call" title="Завершить звонок">
+                <button type="button" class="call-dock-btn end-call voice-disconnect-btn" id="btn-end-call" title="Завершить звонок">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                        <path d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M14 8l4 4-4 4M8 12h10"/>
                     </svg>
+                    <span>Выйти</span>
                 </button>
             </div>
         </div>
@@ -2214,6 +2409,7 @@
                     <h2 class="profile-name" id="profile-name-display"></h2>
                 </div>
                 <span class="profile-username" id="profile-username-display"></span>
+                <span class="profile-plan-badge" id="profile-plan-badge" hidden></span>
                 <span class="profile-staff-rank hidden" id="profile-staff-rank"></span>
                 
                 <div class="profile-divider">
@@ -2291,36 +2487,29 @@
         </div>
     </div>
 
-    <!-- Модалка создания группы (Create Group Chat Modal) -->
-    <div class="modal-backdrop hidden" id="create-group-modal">
-        <div class="profile-card" style="width: 500px; padding: 32px; box-sizing: border-box; text-align: left; align-items: stretch;">
-            <button class="profile-close-btn" id="create-group-close" title="Закрыть">
+    <!-- Модалка «Новая беседа»: поиск людей в Love по нику, как в мобильном.
+         Раньше здесь была заглушка «Создать группу» — группа жила только в
+         памяти окна и на сервер не попадала. -->
+    <div class="modal-backdrop hidden" id="new-chat-modal">
+        <div class="profile-card new-chat-card" role="dialog" aria-labelledby="new-chat-title">
+            <button class="profile-close-btn" id="new-chat-close" title="Закрыть">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
             </button>
-            
-            <header style="margin-bottom: 24px;">
-                <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 500; margin: 0; color: var(--text-primary);">Создать группу</h3>
+            <header class="new-chat-header">
+                <h3 id="new-chat-title">Новая беседа</h3>
+                <p>Найдите человека в Love по нику и начните переписку.</p>
             </header>
-            
-            <div style="margin-bottom: 20px;">
-                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: block; margin-bottom: 8px;">Название группы</label>
-                <input type="text" id="create-group-name-input" placeholder="Например: Обсуждение макета" style="width: 100%; height: 38px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; padding: 0 12px; outline: none; font-size: 14px; box-sizing: border-box; font-family: var(--font-sans);">
-            </div>
-            
-            <div style="margin-bottom: 28px;">
-                <label style="font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: block; margin-bottom: 8px;">Выберите участников</label>
-                <div id="create-group-friends-list" style="max-height: 280px; overflow-y: auto; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;">
-                    <!-- Сюда вставятся друзья с чекбоксами -->
-                </div>
-            </div>
-            
-            <div style="display: flex; gap: 8px;">
-                <button class="submit-action-btn" id="create-group-cancel" style="background: rgba(255,255,255,0.04); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.08); flex: 1; height: 38px; font-size: 13.5px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: var(--font-sans);">Отмена</button>
-                <button class="submit-action-btn" id="create-group-submit" style="background: #ffffff; color: #000; border: 1px solid #ffffff; flex: 1; height: 38px; font-size: 13.5px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s; font-family: var(--font-sans);">Создать</button>
-            </div>
+            <label class="new-chat-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="new-chat-input" placeholder="username" autocomplete="off" spellcheck="false" maxlength="40">
+            </label>
+            <div class="new-chat-results" id="new-chat-results" aria-live="polite"></div>
         </div>
     </div>
 
@@ -2491,8 +2680,8 @@
                 <svg class="vmb-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 <svg class="vmb-icon-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             </button>
-            <button class="vmb-btn vmb-btn-leave" id="vmb-leave" type="button" title="Отключиться" aria-label="Отключиться">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+            <button class="vmb-btn vmb-btn-leave" id="vmb-leave" type="button" title="Выйти из войса" aria-label="Выйти из войса">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
         </div>
     </div>
@@ -2504,6 +2693,9 @@
     <script src="js/sanitize.js"></script>
     <script src="js/external-link-guard.js"></script>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <!-- CDN недоступен (блокировка, нет сети при запуске) — без socket.io нет
+         ни статуса «в сети», ни сообщений, ни войса. Берём копию из сборки. -->
+    <script>window.io || document.write('<script src="js/vendor/socket.io.min.js"><\/script>');</script>
     <script src="js/socket.js"></script>
     <script src="js/voice.js"></script>
     <script src="js/call-stage.js"></script>

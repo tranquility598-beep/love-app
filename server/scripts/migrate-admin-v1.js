@@ -5,7 +5,7 @@ const Report = require('../models/Report');
 const Case = require('../models/Case');
 const { canonicalRole } = require('../config/adminRoles');
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 const apply = process.argv.includes('--apply');
 const STATUS_MAP = {
   pending: 'new',

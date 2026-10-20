@@ -952,3 +952,222 @@ select option { color: #eee; background: #111; }
   .rank-matrix { grid-template-columns: 1fr; }
   .recovery-codes { grid-template-columns: 1fr; }
 }
+
+/* Карточка пользователя: подписка, право удаления, удаление аккаунта (UserAdminTools.jsx) */
+.admin-tools { display: grid; gap: 8px; margin: 14px 0; }
+.admin-tool-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border, rgba(255,255,255,0.08)); border-radius: 12px; }
+.admin-tool-row > div { display: grid; gap: 2px; min-width: 0; }
+.admin-tool-row small { color: var(--muted, rgba(255,255,255,0.55)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-tool-danger { border-color: rgba(239, 68, 68, 0.28); }
+.admin-tool-danger > svg { color: #f87171; }
+.purge-warning { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.06); }
+.purge-warning ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.purge-warning small { color: var(--muted, rgba(255,255,255,0.55)); }
+.form-error { margin: 0; color: #f87171; font-size: 13px; }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   Оформление Love (по просьбе владельца: «админка в стиле приложения»).
+   ТОЛЬКО внешний вид: цвета, шрифты, скругления, рамки и тени. Разметка,
+   классы, размеры раскладки и адаптивные правила выше не меняются — вся
+   механика админки остаётся прежней. Образец — строки «Подписка» / «Удалить
+   аккаунт» в карточке пользователя: тихие рамки, скругления, белые кнопки.
+   Шрифты те же, что в приложении: Outfit (кириллица — системным шрифтом,
+   как в Love), Lora для заголовков, Fira Mono для мелких подписей.
+   ═════════════════════════════════════════════════════════════════════════ */
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-10.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-11.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-15.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-16.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-17.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-18.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-22.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Fira Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-23.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-24.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-25.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-29.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-30.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-31.woff2') format('woff2'); unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-32.woff2') format('woff2'); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-36.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('./assets/fonts/love-37.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap; src: url('./assets/fonts/love-44.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap; src: url('./assets/fonts/love-45.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-44.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap; src: url('./assets/fonts/love-45.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-44.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap; src: url('./assets/fonts/love-45.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 600; font-display: swap; src: url('./assets/fonts/love-44.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 600; font-display: swap; src: url('./assets/fonts/love-45.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root {
+  font-family: 'Outfit', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #f5f5f5;
+  background: #050505;
+  --bg: #050505;
+  --surface: #0c0c0c;
+  --surface-raised: #121212;
+  --surface-hover: rgba(255, 255, 255, .05);
+  --border: rgba(255, 255, 255, .08);
+  --border-strong: rgba(255, 255, 255, .14);
+  --text: #f5f5f5;
+  --text-muted: rgba(255, 255, 255, .58);
+  --muted: rgba(255, 255, 255, .58);
+  --subtle: rgba(255, 255, 255, .38);
+  --love: #ffffff;
+  --love-dark: rgba(255, 255, 255, .07);
+  --danger: #f87171;
+  --danger-dark: rgba(239, 68, 68, .10);
+  --green-dark: rgba(114, 199, 135, .10);
+  --cyan-dark: rgba(98, 182, 203, .10);
+  --amber-dark: rgba(229, 184, 102, .10);
+  --love-serif: 'Lora', Georgia, 'Times New Roman', serif;
+  --love-mono: 'Fira Mono', ui-monospace, Consolas, monospace;
+}
+html, body { background: #050505; }
+body { color: var(--text); }
+::selection { background: rgba(255, 255, 255, .18); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .12); border: 2px solid #050505; }
+p { color: var(--muted); }
+
+/* Заголовки — Lora, как «Друзья» / «О приложении» в Love */
+h1, h2, .page-heading h2, .modal > header h3, .login-panel > h2, .security-setup-panel h1, .login-brand h1 {
+  font-family: var(--love-serif);
+  font-weight: 600;
+}
+.page-heading h2 { font-size: 26px; }
+.topbar h1 { font-size: 22px; }
+/* Мелкие подписи — как группы в настройках Love: Fira Mono, капс, разрядка */
+.eyebrow, .data-table th, .metric-label, .realtime-state, .docs-section-heading > span, .rank-row > span,
+.announcement-card small, .brand-copy small, .security-setup-header > span {
+  font-family: var(--love-mono);
+  letter-spacing: 1.4px;
+}
+.metric-label { text-transform: uppercase; font-size: 10px; color: var(--subtle); }
+
+/* Боковая панель */
+.sidebar { background: #080808; border-right-color: var(--border); }
+.brand-row { border-bottom-color: var(--border); }
+.brand-mark { background: #fff; color: #000; border-radius: 50%; }
+.brand-copy strong { font-family: var(--love-serif); letter-spacing: .32em; }
+.primary-nav a { border-radius: 10px; color: rgba(255, 255, 255, .55); }
+.primary-nav a:hover { color: #fff; background: rgba(255, 255, 255, .05); }
+.primary-nav a.active { color: #fff; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.sidebar-footer { border-top-color: var(--border); }
+.collapse-button { background: #0e0e0e; border-color: var(--border-strong); }
+.collapse-button:hover { background: #181818; }
+
+/* Шапка */
+.topbar { background: rgba(5, 5, 5, .86); border-bottom-color: var(--border); }
+.realtime-state { border-radius: 999px; border-color: var(--border); }
+
+/* Карточки и панели — как строки «Подписка» / «Удалить аккаунт» */
+.panel, .metric, .modal, .login-panel, .security-setup-panel, .announcement-card, .devlog-card {
+  border-radius: 16px;
+}
+.panel { background: var(--surface); border-color: var(--border); }
+.panel-header { border-bottom-color: var(--border); }
+.metric { background: var(--surface); border-color: var(--border); box-shadow: none; }
+.metric-success .metric-label svg { color: var(--green); }
+.metric-info .metric-label svg { color: var(--cyan); }
+.metric-warning .metric-label svg { color: var(--amber); }
+.metric-danger .metric-label svg { color: var(--danger); }
+.metric strong { font-family: var(--love-serif); font-weight: 600; }
+
+/* Кнопки */
+.button { border-radius: 10px; background: rgba(255, 255, 255, .04); border-color: rgba(255, 255, 255, .12); font-weight: 600; transition: background .15s, border-color .15s, opacity .15s; }
+.button:hover:not(:disabled) { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); }
+.button-primary { color: #000; background: #fff; border-color: #fff; }
+.button-primary:hover:not(:disabled) { background: #fff; opacity: .88; }
+.button-secondary { background: rgba(255, 255, 255, .04); }
+.button-danger { color: #f87171; background: rgba(239, 68, 68, .10); border-color: rgba(239, 68, 68, .35); }
+.button-danger:hover:not(:disabled) { background: rgba(239, 68, 68, .18); border-color: rgba(239, 68, 68, .5); }
+.button-ghost { background: transparent; border-color: transparent; }
+.icon-button { border-radius: 10px; color: rgba(255, 255, 255, .6); }
+.icon-button:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, .06); border-color: var(--border); }
+
+/* Поля */
+input, textarea, select { border-radius: 10px; background-color: rgba(255, 255, 255, .03); border-color: var(--border); }
+input:focus, textarea:focus, select:focus { border-color: rgba(255, 255, 255, .32); box-shadow: 0 0 0 3px rgba(255, 255, 255, .06); }
+select { background-color: rgba(255, 255, 255, .03); }
+select:hover { border-color: rgba(255, 255, 255, .2); background-color: rgba(255, 255, 255, .05); }
+select option { background: #0e0e0e; }
+.field { color: rgba(255, 255, 255, .7); font-weight: 600; }
+.search-field, .field-inline { border-radius: 12px; background: rgba(255, 255, 255, .03); border-color: var(--border); }
+.search-field:focus-within { border-color: rgba(255, 255, 255, .3); }
+.check-field input { accent-color: #fff; }
+.filterbar { border-bottom-color: var(--border); }
+
+/* Переключатели вкладок */
+.segmented { border-radius: 12px; background: rgba(255, 255, 255, .03); border-color: var(--border); }
+.segmented button { border-radius: 9px; }
+.segmented button.active { color: #000; background: #fff; }
+
+/* Значки */
+.badge { border-radius: 999px; padding: 2px 9px; font-family: var(--love-mono); font-weight: 500; letter-spacing: .06em; color: rgba(255, 255, 255, .78); background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .12); }
+.badge-success { color: #9be3ae; background: rgba(114, 199, 135, .10); border-color: rgba(114, 199, 135, .28); }
+.badge-info { color: #a3dbe8; background: rgba(98, 182, 203, .10); border-color: rgba(98, 182, 203, .28); }
+.badge-warning { color: #f0d39a; background: rgba(229, 184, 102, .10); border-color: rgba(229, 184, 102, .28); }
+.badge-danger { color: #fca5a5; background: rgba(239, 68, 68, .10); border-color: rgba(239, 68, 68, .3); }
+
+/* Таблицы */
+.data-table th { background: transparent; color: var(--subtle); border-bottom-color: var(--border); font-weight: 500; }
+.data-table td { color: rgba(255, 255, 255, .82); border-bottom-color: rgba(255, 255, 255, .05); }
+.data-table tbody tr:hover { background: rgba(255, 255, 255, .03); }
+.pagination { border-top-color: var(--border); }
+.definition-list > div { border-bottom-color: rgba(255, 255, 255, .06); }
+
+/* Окна */
+.modal-backdrop { background: rgba(0, 0, 0, .72); backdrop-filter: blur(6px); }
+.modal { background: #0e0e0e; border-color: rgba(255, 255, 255, .1); border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, .55); }
+.modal > header, .modal > footer { border-color: var(--border); }
+.modal > header h3 { font-size: 18px; }
+
+/* Уведомления и пустые состояния */
+.inline-state, .notice { border-radius: 12px; border-color: var(--border); background: rgba(255, 255, 255, .03); }
+.state-error, .notice-error { color: #fca5a5; background: rgba(239, 68, 68, .08); border-color: rgba(239, 68, 68, .3); }
+.notice-success { color: #9be3ae; background: rgba(114, 199, 135, .08); border-color: rgba(114, 199, 135, .28); }
+.empty-state > span { background: rgba(255, 255, 255, .04); border-color: var(--border); color: rgba(255, 255, 255, .6); }
+.empty-state h3 { font-family: var(--love-serif); font-size: 16px; font-weight: 600; }
+
+/* Аватары и мелочи */
+.avatar { background: #151515; border-color: rgba(255, 255, 255, .12); font-family: var(--love-serif); font-style: italic; }
+.staff-conversation-meta i { color: #000; background: #fff; }
+.staff-conversation-row.is-active, .case-row.active { background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.announcement-card > span, .announcement-history-icon { border-radius: 10px; }
+
+/* Вход и настройка защиты */
+.login-page { background: #050505; }
+.login-brand { background: #080808; border-right-color: var(--border); }
+.login-wordmark { color: #fff; font-family: var(--love-serif); font-weight: 600; letter-spacing: .32em; }
+.login-panel { background: #0e0e0e; border-color: rgba(255, 255, 255, .1); box-shadow: none; }
+.auth-icon { color: #000; background: #fff; border-radius: 50%; }
+.security-setup-page { background: #050505; }
+.security-setup-header { border-bottom-color: var(--border); }
+.security-setup-header > span { color: #fff; }
+.security-setup-panel { border-color: var(--border); }
+
+/* Строки инструментов в карточке пользователя — образец стиля */
+.admin-tool-row { border-radius: 14px; background: rgba(255, 255, 255, .02); border-color: var(--border); }
+.admin-tool-row.admin-tool-danger { border-color: rgba(239, 68, 68, .28); background: rgba(239, 68, 68, .04); }
+/* Подсказка графика онлайна: стиль задан прямо в разметке, поэтому !important */
+.chart-frame .recharts-default-tooltip { background: #0e0e0e !important; border: 1px solid rgba(255, 255, 255, .12) !important; border-radius: 12px !important; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
+.chart-frame .recharts-tooltip-label { color: rgba(255, 255, 255, .6); font-family: var(--love-mono); font-size: 12px; }
+
+/* Переключатели — как в настройках Love: включено = белая дорожка, тёмный кружок */
+.admin-toggle span { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .1); border-radius: 999px; transition: background .2s ease, border-color .2s ease; }
+.admin-toggle span::after { background: rgba(255, 255, 255, .62); }
+.admin-toggle input:checked + span { background: #fff; border-color: #fff; }
+.admin-toggle input:checked + span::after { background: #050505; }
+.admin-toggle input:focus-visible + span { outline-color: rgba(255, 255, 255, .6); }
+
+/* Остатки красного акцента старой темы */
+.docs-navigation nav a.active { background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); border-radius: 10px; }
+.announcement-history-icon { border-color: var(--border); }
+.docs-navigation nav h2 { font-family: var(--love-mono); font-weight: 500; letter-spacing: 1.4px; }
+.staff-message.is-own { background: rgba(255, 255, 255, .025); }
+.staff-message.is-own:hover { background: rgba(255, 255, 255, .05); }
+
+/* Нижняя панель на телефоне: пунктов три, а сетка была на два — третий
+   уезжал на вторую строку за край панели. Теперь колонок столько, сколько пунктов. */
+.mobile-nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(8, 8, 8, .96); backdrop-filter: blur(12px); }
+.mobile-nav a.active { color: #fff; }

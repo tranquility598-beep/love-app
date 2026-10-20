@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/love_tokens.dart';
+import '../theme/season.dart';
 
 /// Centered empty state, matching web `.empty-state-panel`: a bordered circle
 /// mark, a Lora serif title and a muted body — sitting flat on the background
@@ -29,14 +30,18 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color:  context.palette.inkA(0.16)), // 0.16
-                ),
-                child: Icon(icon, color: context.palette.accent, size: 30),
+              SeasonBuilder(
+                builder: (context, halloween) => halloween
+                    ? const HalloweenEmptyMark()
+                    : Container(
+                        width: 88,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: context.palette.inkA(0.16)), // 0.16
+                        ),
+                        child: Icon(icon, color: context.palette.accent, size: 30),
+                      ),
               ),
               const SizedBox(height: 20),
               Text(

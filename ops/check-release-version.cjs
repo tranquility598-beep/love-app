@@ -48,7 +48,7 @@ const hardcoded = [
   {
     file: path.join('mobile', 'lib', 'src', 'config', 'app_config.dart'),
     what: 'AppConfig.productVersion',
-    pattern: /productVersion\s*=\s*['"]([^'"]+)['"]/
+    pattern: /productVersion\s*=\s*(?:String\.fromEnvironment\([\s\S]*?defaultValue:\s*)?['"]([^'"]+)['"]/
   }
 ];
 

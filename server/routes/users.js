@@ -14,8 +14,9 @@ const fs = require('fs');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const { escapeRegex } = require('../utils/security');
-const { blockedIdsFor } = require('../utils/blocking');
+const { blockedIdsFor, isBlockedBetween } = require('../utils/blocking');
 const { validateFile } = require('../utils/fileValidator');
+const { createSubmittedCase, sendSubmissionError } = require('../services/caseSubmissions');
 
 const USERNAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -26,6 +27,40 @@ function buildPublicUser(user) {
     hasGoogle: Boolean(user.googleId)
   };
 }
+
+/** Список блокировок доступен только владельцу текущей сессии. */
+router.get('/me/blocked', authMiddleware, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const user = await User.findById(req.user._id)
+      .select('blockedUsers')
+      .populate('blockedUsers', 'username nickname avatar')
+      .lean();
+    if (!user) return res.status(404).json({ message: 'Аккаунт не найден' });
+    res.json({ blockedUsers: (user.blockedUsers || []).filter(Boolean) });
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    res.status(500).json({ message: 'Не удалось загрузить заблокированных пользователей' });
+  }
+});
+
+/** Идемпотентно снимает только собственную блокировку, не восстанавливает дружбу. */
+router.delete('/me/blocked/:userId', authMiddleware, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const { userId } = req.params;
+  if (!/^[a-f\d]{24}$/i.test(userId)) {
+    return res.status(400).json({ message: 'Некорректный пользователь' });
+  }
+  try {
+    const user = await User.findByIdAndUpdate(req.user._id,
+      { $pull: { blockedUsers: userId } }, { new: true }).select('_id');
+    if (!user) return res.status(404).json({ message: 'Аккаунт не найден' });
+    res.json({ userId, message: 'Пользователь разблокирован' });
+  } catch (error) {
+    console.error('Unblock user error:', error);
+    res.status(500).json({ message: 'Не удалось разблокировать пользователя' });
+  }
+});
 
 /**
  * GET /api/users/search
@@ -61,6 +96,25 @@ router.get('/search', authMiddleware, async (req, res) => {
   }
 });
 
+/** Точное открытие профиля по ссылке, включая собственный профиль. */
+router.get('/by-username/:username', authMiddleware, async (req, res) => {
+  const username = String(req.params.username || '').trim().replace(/^@/, '');
+  if (!/^[\p{L}\p{N}_.-]{2,32}$/u.test(username)) {
+    return res.status(400).json({ message: 'Некорректное имя пользователя' });
+  }
+  try {
+    const user = await findUserByUsername(User, username);
+    if (!user || await isBlockedBetween(req.user._id, user._id)) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ user: user.toPublicJSON() });
+  } catch (error) {
+    console.error('Resolve profile username error:', error.name);
+    res.status(500).json({ message: 'Не удалось открыть профиль' });
+  }
+});
+
 /**
  * GET /api/users/:id
  * Получить профиль пользователя
@@ -86,14 +140,17 @@ router.get('/:id', authMiddleware, async (req, res) => {
  * PUT /api/users/profile
  * Обновить профиль пользователя (публичная часть, без пароля)
  */
-router.put('/profile', authMiddleware, sanitizeBody, async (req, res) => {
+router.put('/profile', authMiddleware, sanitizeBody, validateBio, validateCustomStatus, async (req, res) => {
   try {
-    const { nickname, bio, customStatus, mood, hobbies, listening, music } = req.body;
+    const { nickname, bio, customStatus, mood, hobbies, listening, music, avatar } = req.body;
 
     const updateData = {};
+    if (avatar === null) updateData.avatar = null;
+    else if (avatar !== undefined) return res.status(400).json({ message: 'Загрузите аватар через выбор файла' });
 
     if (nickname !== undefined) {
       const nextNickname = String(nickname).trim();
+      if (!nextNickname) return res.status(400).json({ message: 'Введите отображаемое имя' });
       if (nextNickname.length > 32) {
         return res.status(400).json({ message: 'Отображаемое имя должно быть не более 32 символов' });
       }
@@ -145,12 +202,14 @@ router.put('/profile', authMiddleware, sanitizeBody, async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       updateData,
-      { new: true }
+      { new: true, runValidators: true }
     ).select('+password');
+    if (!user) return res.status(404).json({ message: 'Аккаунт не найден' });
     
     res.json({ user: buildPublicUser(user), message: 'Профиль обновлен' });
     
   } catch (error) {
+    if (error.name === 'ValidationError') return res.status(400).json({ message: 'Проверьте длину и формат полей профиля' });
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
@@ -355,26 +414,21 @@ router.post('/report', authMiddleware, async (req, res) => {
       description: targetUsername ? `[Жалоба на ${targetUsername}]: ${description}` : description
     });
     
+    // Reserve the single case slot before writing the legacy report, so a
+    // blocked POST cannot leave extra Report records behind.
+    await newReport.validate();
+    await createSubmittedCase({
+      kind: 'report',
+      reporter: req.user._id,
+      subjectUser: offenderId || undefined,
+      title: `Жалоба: ${reason}`,
+      description: newReport.description,
+      priority: 'high',
+      sourceReport: newReport._id,
+      tags: [reason, 'legacy-api'],
+      activity: [{ actor: req.user._id, action: 'created_via_legacy_api' }]
+    });
     await newReport.save();
-
-    const Case = require('../models/Case');
-    await Case.findOneAndUpdate(
-      { sourceReport: newReport._id },
-      {
-        $setOnInsert: {
-          kind: 'report',
-          reporter: req.user._id,
-          subjectUser: offenderId || undefined,
-          title: `Жалоба: ${reason}`,
-          description: newReport.description,
-          priority: 'high',
-          sourceReport: newReport._id,
-          tags: [reason, 'legacy-api'],
-          activity: [{ actor: req.user._id, action: 'created_via_legacy_api' }]
-        }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
     
     const io = req.app.get('io');
     if (io) {
@@ -391,6 +445,7 @@ router.post('/report', authMiddleware, async (req, res) => {
     
     res.status(201).json({ message: 'Жалоба успешно отправлена и будет рассмотрена модераторами' });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('Create report error:', error);
     res.status(500).json({ message: 'Ошибка сервера при отправке жалобы' });
   }

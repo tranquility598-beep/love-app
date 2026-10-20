@@ -6,7 +6,7 @@
 const mongoose = require('mongoose');
 const Server = require('./models/Server');
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 
 async function migrateRoles() {
   try {

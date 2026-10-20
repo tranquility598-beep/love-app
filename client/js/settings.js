@@ -42,6 +42,9 @@ class SettingsManager {
       
       // Внешний вид
       'app-theme': 'dark', // dark | light | system
+      // Сезонное оформление поверх темы: none | halloween. Только выбор
+      // пользователя — по календарю само не включается и не возвращается.
+      'app-season': 'none',
       'font-size': 'medium',
       'ui-scale': 100,
       'compact-mode': false,
@@ -138,7 +141,10 @@ class SettingsManager {
       case 'app-theme':
         this.applyTheme(value);
         break;
-        
+      case 'app-season':
+        this.applySeason(value);
+        break;
+
       // Голос
       case 'output-volume':
         this.applyOutputVolume(value);
@@ -205,19 +211,66 @@ class SettingsManager {
   applyUIScale(scale) {
     const factor = Math.min(1.25, Math.max(0.75, (Number(scale) || 100) / 100));
 
-    // Раньше здесь менялся корневой font-size — и это не работало: вёрстка
-    // почти целиком в px (≈3670 значений против 8 в rem), так что размер
-    // корня на неё не влияет. Масштабируем страницу целиком.
-    if (window.electronAPI && typeof window.electronAPI.setZoomFactor === 'function') {
-      window.electronAPI.setZoomFactor(factor);
-    } else {
-      // Вне Electron (дев-превью в браузере) — тот же эффект через CSS.
-      document.documentElement.style.zoom = factor === 1 ? '' : String(factor);
-    }
-
     // Подчищаем инлайновый font-size от прежней версии, иначе он останется
     // в разметке у тех, кто уже двигал ползунок.
     document.documentElement.style.fontSize = '';
+
+    // Раньше здесь менялся корневой font-size — и это не работало: вёрстка
+    // почти целиком в px (≈3670 значений против 8 в rem), так что размер
+    // корня на неё не влияет. Масштабируем страницу целиком.
+    const setZoom = (value) => {
+      if (window.electronAPI && typeof window.electronAPI.setZoomFactor === 'function') {
+        window.electronAPI.setZoomFactor(value);
+      } else {
+        // Вне Electron (дев-превью в браузере) — тот же эффект через CSS.
+        document.documentElement.style.zoom = value === 1 ? '' : String(value);
+      }
+    };
+
+    // Смена масштаба — мягким переходом, а не скачком. Покадровая анимация
+    // zoom тормозила: каждый кадр Electron заново раскладывал всё окно.
+    // Теперь окно на долю секунды прикрывается вуалью цвета фона (это делает
+    // видеокарта, раскладка не трогается), масштаб меняется ОДИН раз, и окно
+    // плавно проявляется. На старте и при выключенных анимациях — сразу.
+    const from = this._uiZoom;
+    this._uiZoom = factor;
+    const token = (this._uiZoomToken || 0) + 1;
+    this._uiZoomToken = token;
+    const reduceMotion = this.settings['animations'] === false
+      || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (from == null || Math.abs(from - factor) < 0.001 || reduceMotion || !document.body) {
+      setZoom(factor);
+      return;
+    }
+
+    let veil = document.getElementById('ui-zoom-veil');
+    if (!veil) {
+      veil = document.createElement('div');
+      veil.id = 'ui-zoom-veil';
+      veil.setAttribute('aria-hidden', 'true');
+      Object.assign(veil.style, {
+        position: 'fixed', inset: '0', zIndex: '2147483647', pointerEvents: 'none',
+        background: getComputedStyle(document.body).backgroundColor || '#000',
+        opacity: '0', transition: 'opacity 120ms ease-out', willChange: 'opacity'
+      });
+      document.body.appendChild(veil);
+    }
+    veil.style.background = getComputedStyle(document.body).backgroundColor || '#000';
+    veil.style.transition = 'opacity 120ms ease-out';
+    void veil.offsetWidth;
+    veil.style.opacity = '0.92';
+    setTimeout(() => {
+      if (this._uiZoomToken !== token) return;   // уже идёт более новая смена
+      setZoom(factor);
+      // Небольшая пауза, чтобы окно разложилось в новом масштабе, потом
+      // проявляем. Таймер, а не requestAnimationFrame: кадры не рисуются,
+      // пока окно свёрнуто, и вуаль могла бы остаться висеть.
+      setTimeout(() => {
+        if (this._uiZoomToken !== token) return;
+        veil.style.transition = 'opacity 200ms ease-in';
+        veil.style.opacity = '0';
+      }, 40);
+    }, 130);
   }
 
   // Компактный режим
@@ -254,6 +307,17 @@ class SettingsManager {
     } else {
       document.body.classList.remove('hide-avatars');
     }
+  }
+
+  // Сезонное оформление: атрибут data-season на <html>. Весь декор живёт в
+  // styles/halloween.css под html[data-season="halloween"], поэтому снятие
+  // атрибута целиком возвращает обычный вид. Инлайновый скрипт в index.html
+  // ставит его до первой отрисовки.
+  applySeason(value) {
+    const season = value === 'halloween' ? 'halloween' : 'none';
+    if (season === 'none') document.documentElement.removeAttribute('data-season');
+    else document.documentElement.setAttribute('data-season', season);
+    document.dispatchEvent(new CustomEvent('love:season-change', { detail: { season } }));
   }
 
   // Тема: атрибут на <html> (не body) — так раньше срабатывает, а инлайновый
@@ -460,9 +524,13 @@ async function applyAudioOutputDevice(audio) {
   const outputDevice = window.settingsManager?.get('voice-output-device') || 'default';
   audio.dataset.voiceOutput = 'true';
   audio.volume = (Number(window.settingsManager?.get('output-volume')) || 100) / 100;
-  if (typeof audio.setSinkId === 'function' && outputDevice && outputDevice !== 'default') {
+  // «По умолчанию» — это пустой sinkId. Раньше при возврате на «Динамики по
+  // умолчанию» setSinkId не вызывался вовсе, и звук до перезапуска оставался
+  // на прежнем устройстве.
+  const sinkId = outputDevice && outputDevice !== 'default' ? outputDevice : '';
+  if (typeof audio.setSinkId === 'function' && audio.sinkId !== sinkId) {
     try {
-      await audio.setSinkId(outputDevice);
+      await audio.setSinkId(sinkId);
     } catch (error) {
       console.warn('Failed to set audio output device:', error);
     }

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 const LOGIN_RETENTION_SECONDS = 180 * 24 * 60 * 60;
 
 async function ensureTtlIndex(collectionName, key, name, expireAfterSeconds) {

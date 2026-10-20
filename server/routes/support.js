@@ -12,8 +12,8 @@
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const Case = require('../models/Case');
 const { publishAdminUpdate } = require('../services/adminRealtime');
+const { createSubmittedCase, sendSubmissionError } = require('../services/caseSubmissions');
 
 const router = express.Router();
 
@@ -70,7 +70,7 @@ router.post('/', supportLimiter, async (req, res) => {
       return res.status(400).json({ message: 'Укажите корректный email' });
     }
 
-    const item = await Case.create({
+    const item = await createSubmittedCase({
       kind: KIND_BY_CATEGORY[category],
       title: subject,
       // Подпись автора — в описании: в кейсе нет колонки «кто написал» для
@@ -86,6 +86,7 @@ router.post('/', supportLimiter, async (req, res) => {
     // Номер отдаём: по нему человек может сослаться на обращение в переписке.
     res.status(201).json({ ok: true, number: item.number });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[Support] Не удалось создать обращение:', error);
     res.status(500).json({ message: 'Не удалось отправить обращение. Попробуйте позже.' });
   }

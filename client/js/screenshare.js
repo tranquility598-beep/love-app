@@ -23,6 +23,7 @@ function _resetShareUI(origin) {
   }
   if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
   else if (typeof renderVoiceChannel === 'function') renderVoiceChannel();
+  window.syncDirectCallControls?.();
 }
 
 async function openScreenshareModal(origin) {
@@ -112,6 +113,29 @@ async function openScreenshareModal(origin) {
 }
 
 async function startScreenShareWithSource(sourceId, quality = 'ultra') {
+  const manager = window.voiceManager;
+  if (!manager?.localStream || !manager.channelId || manager._mediaBusy) {
+    _resetShareUI(_shareOrigin);
+    return;
+  }
+  const session = manager._session;
+  manager._mediaBusy = true;
+  window.syncDirectCallControls?.();
+  try {
+    await captureScreenShareWithSource(sourceId, quality, manager, session);
+  } catch (error) {
+    if (window.voiceManager === manager && manager._session === session) {
+      if (manager.isScreenSharing) await manager.stopScreenShare();
+      if (typeof showToast === 'function') showToast('Демонстрация экрана', error.message || 'Не удалось начать трансляцию.');
+    }
+  } finally {
+    manager._mediaBusy = false;
+    window.syncDirectCallControls?.();
+  }
+}
+
+async function captureScreenShareWithSource(sourceId, quality, manager, session) {
+  const active = () => window.voiceManager === manager && manager._session === session;
   const settings = {
     low:    { width: 854,  height: 480,  frameRate: 10 },
     medium: { width: 1280, height: 720,  frameRate: 15 },
@@ -137,6 +161,7 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
     });
     console.log('[ScreenShare] Attempt 1 succeeded');
   } catch (err1) {
+    if (!active()) return;
     console.warn('[ScreenShare] Attempt 1 failed:', err1);
     
     // Attempt 2: Without minWidth/minHeight in mandatory
@@ -153,6 +178,7 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
       });
       console.log('[ScreenShare] Attempt 2 succeeded');
     } catch (err2) {
+      if (!active()) return;
       console.warn('[ScreenShare] Attempt 2 failed:', err2);
       
       // Attempt 3: Modern standard constraints style (no mandatory wrapper)
@@ -170,6 +196,7 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
         });
         console.log('[ScreenShare] Attempt 3 succeeded');
       } catch (err3) {
+        if (!active()) return;
         console.warn('[ScreenShare] Attempt 3 failed:', err3);
         
         // Attempt 4: Fallback to getDisplayMedia if all getUserMedia attempts fail
@@ -185,6 +212,7 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
           });
           console.log('[ScreenShare] Attempt 4 succeeded');
         } catch (err4) {
+          if (!active()) return;
           console.error('[ScreenShare] All screen capture attempts failed:', err4);
           // Отмена в системном окне (NotAllowed/Abort) — не ошибка: тихо
           // сбрасываем кнопку и НЕ шлём в сеть событие начала стрима.
@@ -200,32 +228,47 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
   }
 
   const videoTrack = stream ? stream.getVideoTracks()[0] : null;
+  if (window.voiceManager !== manager || manager._session !== session) {
+    stream?.getTracks().forEach(track => track.stop());
+    return;
+  }
   if (!videoTrack) {
+    stream?.getTracks().forEach(track => track.stop());
     console.error('[ScreenShare] No video track found in stream');
     _resetShareUI(_shareOrigin);
     return;
   }
   console.log('[ScreenShare] Video track readyState:', videoTrack.readyState, 'enabled:', videoTrack.enabled);
 
-  if (window.voiceManager) {
-    if (window.voiceManager.isCameraOn && typeof window.voiceManager.stopCamera === 'function') {
-      await window.voiceManager.stopCamera();
+  if (manager) {
+    if (manager.isCameraOn) {
+      await manager.stopCamera();
     }
-    window.voiceManager.screenStream = stream;
-    window.voiceManager.isScreenSharing = true;
+    if (window.voiceManager !== manager || manager._session !== session) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    manager.screenStream = stream;
+    manager.isScreenSharing = true;
+    manager._screenBitrate = ({ low: 1000000, medium: 2500000, high: 4000000, ultra: 6000000 })[quality] || 6000000;
     if (typeof socketSetVoiceMediaState === 'function') {
-      socketSetVoiceMediaState(window.voiceManager.channelId, 'screen');
+      socketSetVoiceMediaState(manager.channelId, 'screen');
     }
-    for (const [socketId, pc] of window.voiceManager.peerConnections) {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) {
-        await sender.replaceTrack(videoTrack);
-      } else {
-        pc.addTrack(videoTrack, stream);
+    for (const [socketId, pc] of manager.peerConnections) {
+      try {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(videoTrack);
+        } else {
+          pc.addTrack(videoTrack, stream);
+        }
+        await manager.renegotiate(socketId);
+        await manager._optimizeVideoBitrate(pc);
+      } catch (error) {
+        console.warn('[ScreenShare] Peer media update failed:', error.name);
       }
-      // Renegotiate WebRTC to let peers know about the new track
-      await window.voiceManager.renegotiate(socketId);
     }
+    if (window.voiceManager !== manager || manager._session !== session) return;
 
     // Show local preview of the screen share
     if (typeof showScreenShareVideo === 'function') {
@@ -243,7 +286,7 @@ async function startScreenShareWithSource(sourceId, quality = 'ultra') {
 
     videoTrack.onended = () => {
       console.warn('[ScreenShare] videoTrack.onended fired in screenshare.js! readyState:', videoTrack.readyState);
-      window.voiceManager.stopScreenShare();
+      if (manager.screenStream === stream) manager.stopScreenShare();
     };
     
     // Update UI buttons

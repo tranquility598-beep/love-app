@@ -535,6 +535,9 @@ body {
     flex-shrink: 0;
 }
 
+/* Кнопка войса на левой панели — тот же язык, что у управления войсом:
+   микрофон слышно — светлая кнопка, без звука — тёмная с контуром.
+   Точка в углу — признак живого соединения, монохромная. */
 .voice-dock-trigger {
     position: relative;
     width: 40px;
@@ -542,20 +545,34 @@ body {
     display: grid;
     place-items: center;
     flex: 0 0 auto;
-    border: 1px solid var(--tint-a-85);
-    border-radius: 14px;
+    border: 1px solid var(--text-primary);
+    border-radius: 50%;
     background: var(--text-primary);
-    color: var(--bg-tertiary);
+    color: var(--bg-primary);
     cursor: pointer;
-    box-shadow: 0 10px 24px var(--shade-a-40), inset 0 1px 0 var(--text-bright);
-    transition: transform 160ms ease, border-radius 160ms ease, background 160ms ease;
+    box-shadow: 0 8px 20px var(--shade-a-40);
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
 .voice-dock-trigger:hover,
 .voice-dock-trigger[aria-expanded="true"] {
-    transform: translateY(-2px);
-    border-radius: 11px;
-    background: var(--text-bright);
+    transform: translateY(-1px);
+    background: var(--tint-a-85);
+    border-color: var(--tint-a-85);
+}
+
+.voice-dock-trigger.is-muted {
+    background: transparent;
+    border-color: var(--tint-a-15);
+    color: var(--text-secondary);
+    box-shadow: none;
+}
+
+.voice-dock-trigger.is-muted:hover,
+.voice-dock-trigger.is-muted[aria-expanded="true"] {
+    background: var(--tint-a-6);
+    border-color: var(--tint-a-20);
+    color: var(--text-primary);
 }
 
 .voice-dock-trigger svg {
@@ -565,19 +582,31 @@ body {
 
 .voice-dock-trigger-pulse {
     position: absolute;
-    top: -3px;
-    right: -3px;
+    top: -1px;
+    right: -1px;
     width: 10px;
     height: 10px;
     border: 2px solid var(--bg-primary);
     border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 0 3px var(--success-bg);
+    background: var(--text-primary);
+    animation: vcLivePulse 2s ease-out infinite;
 }
 
 .voice-dock-trigger.is-muted .voice-dock-trigger-pulse {
-    background: var(--danger-text);
-    box-shadow: 0 0 0 3px var(--danger-border);
+    background: var(--text-muted);
+    animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .voice-dock-trigger-pulse,
+    .vmb-pulse-dot {
+        animation: none;
+    }
+}
+
+body.no-animations .voice-dock-trigger-pulse,
+body.no-animations .vmb-pulse-dot {
+    animation: none;
 }
 
 .user-avatar-btn {
@@ -1346,6 +1375,30 @@ body {
     text-decoration: none;
     border-left: 2px solid transparent;
 }
+
+/* Вход в голосовой канал: от клика до ответа сервера (см. setVoiceJoining в voice.js). */
+.channel-connecting {
+    display: none;
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.channel-item.is-connecting { cursor: progress; }
+.channel-item.is-connecting .channel-connecting { display: inline; }
+.channel-item.is-connecting svg { animation: channelConnectPulse 1s ease-in-out infinite; }
+
+@keyframes channelConnectPulse {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .channel-item.is-connecting svg { animation: none; }
+}
+
+body.no-animations .channel-item.is-connecting svg { animation: none; }
 
 .channel-item.active {
     background-color: var(--tint-a-4);
@@ -7722,30 +7775,39 @@ textarea.s-input {
     height: 8px;
 }
 
-/* Footer Control Bar Styles */
+/* ───────── Управление войсом: одна система для сервера, комнаты и свёрнутой плашки ─────────
+   Один язык во всех трёх местах. Включено (микрофон слышно, камера или экран
+   в эфире) — светлая залитая кнопка. Выключено — тёмная с контуром и
+   перечёркнутой иконкой. «Выйти» — контурная пилюля, при наведении сплошная.
+   Только оттенки темы, без зелёного и красного: в светлой теме всё
+   инвертируется само через токены. */
+.voice-footer-bar,
+.voice-mini-bar {
+    --vc-size: 44px;
+}
+
 .voice-footer-bar {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    background: var(--shade-a-50);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--tint-a-6);
-    border-radius: 12px;
-    padding: 6px 10px;
+    gap: 8px;
+    width: max-content;
+    max-width: 100%;
+    align-self: center;
     margin-top: auto;
+    padding: 6px;
+    border-radius: 999px;
+    background: var(--glass-strong);
+    border: 1px solid var(--tint-a-10);
+    box-shadow: 0 18px 46px var(--shade-a-50), inset 0 1px 0 var(--tint-a-6);
+    backdrop-filter: blur(22px) saturate(130%);
+    -webkit-backdrop-filter: blur(22px) saturate(130%);
     z-index: 5;
     flex-wrap: nowrap;
 }
 
-.voice-footer-left {
-    display: none;
-}
-
-.voice-footer-status-dot {
-    display: none;
-}
-
+.voice-footer-left,
+.voice-footer-status-dot,
 .voice-footer-status-text {
     display: none;
 }
@@ -7760,101 +7822,117 @@ textarea.s-input {
 .voice-footer-right {
     display: flex;
     align-items: center;
-    margin-left: 8px;
+    margin-left: 2px;
     padding-left: 8px;
-    border-left: 1px solid var(--tint-a-8);
+    border-left: 1px solid var(--tint-a-10);
 }
 
-/* Control Buttons styling */
-.voice-control-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 14px;
-    background: var(--tint-a-4);
-    border: 1px solid var(--tint-a-8);
-    color: var(--tint-a-45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s ease;
+.voice-control-btn,
+.vmb-btn {
     position: relative;
     flex-shrink: 0;
+    width: var(--vc-size, 44px);
+    height: var(--vc-size, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--tint-a-10);
+    background: var(--tint-a-6);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
-.voice-control-btn svg {
-    width: 16px;
-    height: 16px;
+.voice-control-btn svg,
+.vmb-btn svg {
+    width: 19px;
+    height: 19px;
+    transition: transform 160ms ease;
 }
 
-.voice-control-btn:hover {
-    background: var(--tint-a-10);
-    border-color: var(--tint-a-18);
-    color: var(--text-bright);
+.voice-control-btn:hover,
+.vmb-btn:hover {
+    background: var(--tint-a-12);
+    border-color: var(--tint-a-20);
+    color: var(--text-primary);
 }
 
-/* Active State */
-.voice-control-btn.active-state {
-    background: var(--text-bright);
-    border-color: var(--text-bright);
-    color: var(--on-accent);
+.voice-control-btn:active svg,
+.vmb-btn:active svg,
+.voice-disconnect-btn:active svg {
+    transform: scale(0.88);
 }
 
-.voice-control-btn.active-state:hover {
+/* Включено. У мини-плашки мик без класса — значит слышно. */
+.voice-control-btn.active-state,
+#vmb-mic:not(.muted-state) {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg-primary);
+    box-shadow: 0 6px 18px var(--shade-a-30);
+}
+
+.voice-control-btn.active-state:hover,
+#vmb-mic:not(.muted-state):hover {
     background: var(--tint-a-85);
     border-color: var(--tint-a-85);
-    color: var(--on-accent);
+    color: var(--bg-primary);
 }
 
-/* Muted State */
-.voice-control-btn.muted-state {
+/* Выключено: тише по тону, но контур остаётся — кнопку видно и в неё легко попасть. */
+.voice-control-btn.muted-state,
+.vmb-btn.muted-state {
     background: transparent;
-    border: 1px solid var(--tint-a-6);
-    color: var(--tint-a-18);
+    border-color: var(--tint-a-14);
+    color: var(--text-muted);
 }
 
-.voice-control-btn.muted-state:hover {
+.voice-control-btn.muted-state:hover,
+.vmb-btn.muted-state:hover {
     background: var(--tint-a-6);
-    border-color: var(--tint-a-25);
-    color: var(--tint-a-50);
+    border-color: var(--tint-a-20);
+    color: var(--text-primary);
 }
 
-.voice-control-btn svg {
-    width: 16px;
-    height: 16px;
-    transition: transform 0.2s ease;
-}
-
-.voice-control-btn:active svg {
-    transform: scale(0.85);
-}
-
-/* Disconnect Button (Unique Pill Shape & Animation) */
 .voice-disconnect-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border-radius: 14px;
+    gap: 8px;
+    flex-shrink: 0;
+    height: var(--vc-size, 44px);
+    padding: 0 18px 0 15px;
+    border-radius: 999px;
+    border: 1px solid var(--tint-a-15);
     background: transparent;
-    border: 1px solid var(--tint-a-10);
-    color: var(--tint-a-50);
-    font-size: 11px;
+    color: var(--text-primary);
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
-    flex-shrink: 0;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .voice-disconnect-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 17px;
+    height: 17px;
+    transition: transform 160ms ease;
 }
 
-.voice-disconnect-btn:hover {
-    background: var(--tint-a-10);
-    color: var(--text-bright);
-    border-color: var(--tint-a-20);
+.voice-disconnect-btn:hover,
+.vmb-btn-leave:hover {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--bg-primary);
+}
+
+.voice-control-btn:focus-visible,
+.vmb-btn:focus-visible,
+.vmb-body:focus-visible,
+.voice-disconnect-btn:focus-visible,
+.voice-dock-trigger:focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
 }
 
 @keyframes voicePulse {
@@ -7921,7 +7999,9 @@ textarea.s-input {
     width: 44px !important;
     height: 44px !important;
     border-radius: 50% !important;
-    background: var(--surface-raised) !important;
+    /* Только цвет: шорткат background с !important затирал инлайновую
+       картинку из avatarStyle(), и на ПК у друзей не было аватарок. */
+    background-color: var(--surface-raised) !important;
     border: 1px solid var(--tint-a-8) !important;
     font-size: 17px !important;
     font-family: var(--font-serif) !important;
@@ -8109,7 +8189,7 @@ textarea.s-input {
     right: 0 !important;
     font-size: 8px !important;
     border: 1.5px solid var(--bg-secondary) !important;
-    background: var(--tint-a-15) !important;
+    background-color: var(--tint-a-15) !important;
     box-shadow: 0 2px 6px var(--shade-a-40) !important;
 }
 
@@ -14743,9 +14823,9 @@ a.mv-btn { text-decoration: none; }
 
     /* 4. Voice Footer Control Bar */
     .voice-footer-bar {
-        padding: var(--spacing-sm) 12px !important;
-        gap: 8px !important;
-        border-radius: 12px !important;
+        padding: 6px !important;
+        gap: 6px !important;
+        border-radius: 999px !important;
     }
     .voice-footer-left {
         width: auto !important;
@@ -15442,14 +15522,13 @@ a.mv-btn { text-decoration: none; }
     z-index: 11000;
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 62px;
-    padding: 8px;
-    border-radius: 20px;
-    background:
-        linear-gradient(140deg, var(--glass-strong), var(--glass-strong));
-    border: 1px solid var(--tint-a-12);
-    box-shadow: 0 20px 55px var(--shade-a-50), inset 0 1px 0 var(--tint-a-6);
+    gap: 6px;
+    min-height: 56px;
+    padding: 6px;
+    border-radius: 999px;
+    background: var(--glass-strong);
+    border: 1px solid var(--tint-a-10);
+    box-shadow: 0 18px 46px var(--shade-a-50), inset 0 1px 0 var(--tint-a-6);
     backdrop-filter: blur(24px) saturate(135%);
     -webkit-backdrop-filter: blur(24px) saturate(135%);
     color: var(--text-bright);
@@ -15514,14 +15593,14 @@ a.mv-btn { text-decoration: none; }
 .vmb-body {
     display: flex;
     align-items: center;
-    gap: 11px;
-    min-width: 164px;
-    padding: 5px 10px 5px 6px;
+    gap: 10px;
+    min-width: 150px;
+    padding: 4px 14px 4px 4px;
     border: none;
     background: transparent;
     color: inherit;
     cursor: pointer;
-    border-radius: 14px;
+    border-radius: 999px;
     transition: background 0.18s ease;
 }
 
@@ -15529,33 +15608,33 @@ a.mv-btn { text-decoration: none; }
     background: var(--tint-a-6);
 }
 
-/* Пульсирующий индикатор связи */
+/* Индикатор связи: монохромная точка с мягким «дыханием» вместо зелёной плашки. */
 .vmb-pulse {
     position: relative;
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 13px;
-    background: var(--success-bg);
-    border: 1px solid var(--success-bg);
+    border-radius: 50%;
+    background: var(--tint-a-6);
+    border: 1px solid var(--tint-a-10);
 }
 
 .vmb-pulse-dot {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 0 0 var(--success-glow);
-    animation: vmbPulse 1.8s ease-out infinite;
+    background: var(--text-primary);
+    box-shadow: 0 0 0 0 var(--tint-a-30);
+    animation: vcLivePulse 2s ease-out infinite;
 }
 
-@keyframes vmbPulse {
-    0% { box-shadow: 0 0 0 0 var(--success-glow); }
-    70% { box-shadow: 0 0 0 10px var(--success-bg); }
-    100% { box-shadow: 0 0 0 0 var(--success-bg); }
+@keyframes vcLivePulse {
+    0% { box-shadow: 0 0 0 0 var(--tint-a-30); }
+    70% { box-shadow: 0 0 0 9px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .vmb-info {
@@ -15567,17 +15646,17 @@ a.mv-btn { text-decoration: none; }
 }
 
 .vmb-status {
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.9px;
-    color: var(--success-text);
-    font-weight: 750;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    font-weight: 600;
 }
 
 .vmb-channel {
     margin-top: 2px;
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     color: var(--text-primary);
     max-width: 160px;
     white-space: nowrap;
@@ -15589,52 +15668,19 @@ a.mv-btn { text-decoration: none; }
     display: flex;
     align-items: center;
     gap: 6px;
-    padding-left: 8px;
-    border-left: 1px solid var(--tint-a-8);
+    padding-left: 6px;
+    border-left: 1px solid var(--tint-a-10);
 }
 
-.vmb-btn {
-    width: 42px;
-    height: 42px;
-    flex-shrink: 0;
-    border: 1px solid var(--tint-a-9);
-    border-radius: 14px;
-    background: var(--tint-a-6);
-    color: var(--tint-a-85);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.18s ease, transform 0.12s ease, color 0.18s ease;
+.voice-mini-bar {
+    --vc-size: 40px;
 }
 
-.vmb-btn:hover {
-    background: var(--tint-a-12);
-    border-color: var(--tint-a-18);
-    transform: translateY(-2px);
-}
-
-.vmb-btn svg {
-    width: 18px;
-    height: 18px;
-}
-
-/* Активное "выключенное" состояние мика/звука */
-.vmb-btn.muted-state {
-    background: var(--danger-bg);
-    border-color: var(--danger-border-strong);
-    color: var(--danger-text);
-}
-
+/* «Выйти» в плашке — та же контурная кнопка, только без подписи. */
 .vmb-btn-leave {
-    background: var(--danger-bg);
-    border-color: var(--danger-border);
-    color: var(--danger-text);
-}
-
-.vmb-btn-leave:hover {
-    background: var(--danger-glow);
-    color: var(--text-bright);
+    background: transparent;
+    border-color: var(--tint-a-15);
+    color: var(--text-primary);
 }
 
 /* Мобила: полоса под шапкой во всю ширину (снизу занято вводом и навигацией).
@@ -15689,3 +15735,358 @@ a.mv-btn { text-decoration: none; }
 .love-voice-media-fullscreen video.is-mirrored { transform:scaleX(-1); }
 .love-voice-media-close { position:absolute; top:20px; right:20px; width:42px; height:42px; border:1px solid var(--tint-a-20); border-radius:50%; background:var(--shade-a-70); color:var(--text-bright); font-size:28px; cursor:pointer; }
 .love-voice-media-caption { position:absolute; left:50%; bottom:22px; transform:translateX(-50%); max-width:80vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:7px 11px; border-radius:10px; background:var(--shade-a-70); color:var(--text-bright); font:600 13px var(--font-sans); }
+
+/* ── «Новая беседа»: поиск людей (script.js → openNewChatModal) ── */
+.new-chat-card { width: 460px; max-width: calc(100vw - 32px); padding: 28px; box-sizing: border-box; text-align: left; align-items: stretch; }
+.new-chat-header { margin-bottom: 18px; }
+.new-chat-header h3 { font-family: var(--font-sans); font-size: 20px; font-weight: 500; margin: 0; color: var(--text-primary); }
+.new-chat-header p { font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); margin: 6px 0 0; }
+.new-chat-search { display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); cursor: text; transition: border-color 0.2s; }
+.new-chat-search:focus-within { border-color: rgba(255,255,255,0.22); }
+.new-chat-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+.new-chat-search input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: none; color: var(--text-primary); font-size: 14px; font-family: var(--font-sans); }
+.new-chat-results { margin-top: 14px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.new-chat-note { padding: 26px 8px; text-align: center; font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); }
+.new-chat-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); color: var(--text-primary); cursor: pointer; text-align: left; font-family: var(--font-sans); transition: background 0.18s, border-color 0.18s; }
+.new-chat-item:hover, .new-chat-item:focus-visible { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); outline: none; }
+.new-chat-avatar { position: relative; width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: #1a1a1a; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-family: var(--font-serif); font-style: italic; }
+.new-chat-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #0b0b0b; }
+.new-chat-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.new-chat-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-chat-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-chat-go { width: 16px; height: 16px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ── Друзья: крупнее и аккуратнее (карточки списка) ───────────────────────
+   Раньше строка была 38–44 px, кнопки липли к имени. Теперь аватар 52 px,
+   имя крупнее, действия справа, у строки мягкая подложка при наведении. */
+#friends-list-container .friend-card {
+    padding: 14px 18px !important;
+    margin-bottom: 6px;
+    border: 1px solid transparent !important;
+    border-radius: 16px !important;
+}
+#friends-list-container .friend-card:hover {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+#friends-list-container .friend-info-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+}
+#friends-list-container .friend-avatar-wrap {
+    width: 52px !important;
+    height: 52px !important;
+    margin: 0 !important;
+}
+#friends-list-container .friend-avatar {
+    width: 52px !important;
+    height: 52px !important;
+    margin: 0 !important;
+    font-size: 19px !important;
+    background-size: cover !important;
+    background-position: center !important;
+}
+#friends-list-container .friend-status-dot {
+    width: 13px !important;
+    height: 13px !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    border-width: 2.5px !important;
+}
+#friends-list-container .friend-name-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+#friends-list-container .friend-name {
+    font-size: 15.5px !important;
+    font-weight: 600 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#friends-list-container .friend-status-text {
+    font-size: 13px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#friends-list-container .friend-actions-inline,
+#friends-list-container .friend-actions-right {
+    margin-left: auto !important;
+    display: flex !important;
+    gap: 8px !important;
+    flex-shrink: 0;
+}
+#friends-list-container .friend-card .action-btn {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+}
+#friends-list-container .friend-card .action-btn svg {
+    width: 17px !important;
+    height: 17px !important;
+}
+
+/* Вкладка «Добавить» прятала поиск через display:none — строка с вкладками
+   перестраивалась, и окно заметно дёргалось. На ПК место поиска сохраняем. */
+@media (min-width: 769px) {
+    .friends-inline-search-bar.hidden {
+        display: block !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        height: auto !important;
+        opacity: 0 !important;
+        margin-top: 0 !important;
+    }
+    /* Заголовок слева меняется («Все друзья — 1» ↔ «Поиск пользователей») —
+       постоянная ширина, чтобы поиск и вкладки не съезжали. */
+    .friends-count-title {
+        min-width: 170px !important;
+        white-space: nowrap !important;
+    }
+}
+
+/* Активная вкладка «Добавить»: общее правило .filter-tab.active снимало
+   рамку (border: none) — кнопка становилась на 2 px меньше и вкладки дёргались.
+   Рамку той же толщины оставляем, меняем только стиль. */
+.filter-tab.add-friend-tab.active {
+    border: 1px solid var(--tint-a-30);
+}
+
+/* ── Окно подтверждения (window.loveConfirm в script.js) ── */
+.love-confirm-backdrop { position: fixed; inset: 0; z-index: 12000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); opacity: 0; transition: opacity 0.18s ease; }
+.love-confirm-backdrop.is-open { opacity: 1; }
+.love-confirm-card { width: 400px; max-width: 100%; padding: 26px 24px 20px; border-radius: 18px; background: var(--bg-secondary, #111); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); box-shadow: 0 24px 60px rgba(0,0,0,0.5); text-align: center; transform: translateY(8px) scale(0.98); transition: transform 0.2s cubic-bezier(0.16,1,0.3,1); }
+.love-confirm-backdrop.is-open .love-confirm-card { transform: none; }
+.love-confirm-icon { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: var(--tint-a-6, rgba(255,255,255,0.06)); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); color: var(--text-primary); }
+.love-confirm-icon.is-danger { color: var(--danger, #f87171); background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.22); }
+.love-confirm-icon svg { width: 22px; height: 22px; }
+.love-confirm-title { margin: 0; font-family: var(--font-sans); font-size: 17px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.love-confirm-text { margin: 8px 0 0; font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.love-confirm-actions { display: flex; gap: 10px; margin-top: 22px; }
+.love-confirm-btn { flex: 1; height: 40px; border-radius: 10px; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); background: transparent; color: var(--text-primary); font-family: var(--font-sans); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background 0.15s, border-color 0.15s, opacity 0.15s; }
+.love-confirm-btn:hover { background: var(--tint-a-6, rgba(255,255,255,0.06)); }
+.love-confirm-btn:focus-visible { outline: 2px solid var(--text-muted); outline-offset: 2px; }
+.love-confirm-btn.is-primary { background: var(--text-primary); color: var(--bg-primary, #000); border-color: var(--text-primary); }
+.love-confirm-btn.is-danger { background: var(--danger, #ef4444); border-color: var(--danger, #ef4444); color: #fff; }
+.love-confirm-btn.is-primary:hover, .love-confirm-btn.is-danger:hover { opacity: 0.88; }
+
+/* Кнопка «Удалить из друзей»: иконка «человек с минусом», краснеет при наведении. */
+#friends-list-container .friend-card .remove-friend-action:hover {
+    color: var(--danger, #f87171) !important;
+    border-color: rgba(248,113,113,0.35) !important;
+    background: rgba(248,113,113,0.08) !important;
+}
+
+/* Аватар с картинкой в окне профиля: под картинкой была белая подложка
+   (--text-bright) и светлая рамка — по краю круга просвечивали белые полосы.
+   Для картинок подложка тёмная, рамка едва заметная, фон обрезан по рамке. */
+.profile-avatar[style*="background-image: url"],
+.profile-avatar[style*="background-image:url"] {
+    background-color: var(--bg-secondary, #111) !important;
+    border-color: var(--tint-a-8, rgba(255,255,255,0.08)) !important;
+    background-clip: padding-box;
+}
+
+/* ══ Вкладка «Уведомления»: новый вид карточек ═══════════════════════════════
+   Раньше каждая карточка занимала пол-экрана: поле ответа под каждым
+   сообщением, время мелко под именем, точка «непрочитано» далеко справа.
+   Теперь — компактная строка: аватар слева, имя и время в одной строке,
+   текст ниже, действия — небольшими кнопками; непрочитанное — полоска слева.
+   Шапка карточки (display: contents) раскладывается в общую сетку. */
+.notif-actions-top .notif-action-text-btn { white-space: nowrap !important; }
+
+#notif-feed-container .notification-item {
+    display: grid !important;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto !important;
+    grid-template-areas:
+        "av meta badge close"
+        "av body body body"
+        "av actions actions actions" !important;
+    column-gap: 14px !important;
+    row-gap: 4px !important;
+    align-items: start !important;
+    padding: 14px 16px !important;
+    margin: 0 0 8px !important;
+    border-radius: 14px !important;
+    border: 1px solid var(--border-color) !important;
+    background: var(--bg-secondary) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    transition: background 0.18s, border-color 0.18s !important;
+}
+#notif-feed-container .notification-item:hover {
+    border-color: var(--tint-a-15, rgba(255,255,255,0.15)) !important;
+    background: var(--tint-a-4, rgba(255,255,255,0.04)) !important;
+}
+#notif-feed-container .notification-item.unread {
+    background: var(--tint-a-5, rgba(255,255,255,0.05)) !important;
+}
+#notif-feed-container .notification-item.unread::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px !important;
+    border-radius: 0 3px 3px 0 !important;
+    background: var(--text-bright, #fff) !important;
+}
+#notif-feed-container .notif-card-header { display: contents !important; }
+#notif-feed-container .notif-unread-dot { display: none !important; }
+
+#notif-feed-container .notif-card-header > .notif-avatar,
+#notif-feed-container .notif-avatar-combo {
+    grid-area: av !important;
+    width: 42px !important;
+    height: 42px !important;
+    margin: 0 !important;
+}
+#notif-feed-container .notif-card-header > .notif-avatar {
+    font-size: 15px !important;
+    background-size: cover !important;
+    background-position: center !important;
+}
+#notif-feed-container .notif-meta-info {
+    grid-area: meta !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    padding-top: 2px !important;
+}
+#notif-feed-container .notif-user-name {
+    font-size: 14.5px !important;
+    font-weight: 600 !important;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#notif-feed-container .notif-time {
+    margin-left: auto !important;
+    font-family: var(--font-sans) !important;
+    font-size: 12px !important;
+    color: var(--text-muted) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+}
+#notif-feed-container .notif-count-badge { grid-area: badge !important; align-self: center !important; }
+#notif-feed-container .notif-close-btn {
+    grid-area: close !important;
+    position: static !important;
+    width: 26px !important;
+    height: 26px !important;
+    opacity: 0 !important;
+    transition: opacity 0.15s !important;
+}
+#notif-feed-container .notification-item:hover .notif-close-btn,
+#notif-feed-container .notif-close-btn:focus-visible { opacity: 1 !important; }
+
+#notif-feed-container .notif-card-body {
+    grid-area: body !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+#notif-feed-container .notif-message-text,
+#notif-feed-container .notif-preview-text {
+    font-size: 13.5px !important;
+    line-height: 1.5 !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+    overflow-wrap: anywhere !important;
+}
+#notif-feed-container .notification-item.unread .notif-message-text,
+#notif-feed-container .notification-item.unread .notif-preview-text { color: var(--text-primary) !important; }
+
+#notif-feed-container .notif-card-actions {
+    grid-area: actions !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 6px 0 0 !important;
+    margin: 0 !important;
+}
+#notif-feed-container .notif-card-actions:empty { display: none !important; }
+#notif-feed-container .notif-action-btn {
+    height: 30px !important;
+    padding: 0 12px !important;
+    border-radius: 8px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    width: auto !important;
+}
+
+/* Ответ: по умолчанию только кнопки, поле раскрывается по «Ответить». */
+#notif-feed-container .notif-reply-form {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+#notif-feed-container .notification-item:not(.is-replying) .notif-reply-input { display: none !important; }
+#notif-feed-container .notification-item.is-replying .notif-reply-input {
+    display: block !important;
+    flex: 1 1 220px !important;
+    width: auto !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+}
+@media (max-width: 768px) {
+    #notif-feed-container .notif-reply-form .notif-action-btn { width: auto !important; }
+}
+
+/* Упоминание: значок группы + маленький аватар отправителя в углу. */
+#notif-feed-container .notif-avatar-combo .group-avatar { width: 36px !important; height: 36px !important; border-radius: 10px !important; }
+#notif-feed-container .notif-avatar-combo .sender-avatar-mini {
+    width: 20px !important; height: 20px !important;
+    background-color: var(--tint-a-15) !important;
+    background-size: cover !important; background-position: center !important;
+    border: 2px solid var(--bg-secondary) !important;
+}
+
+/* Окно профиля: значок подписки под ником и кнопка «Пожаловаться». */
+.profile-plan-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--tint-a-15, rgba(255,255,255,0.15));
+    background: var(--tint-a-6, rgba(255,255,255,0.06));
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+.profile-plan-badge[hidden] { display: none; }
+.profile-plan-badge > span { font-size: 11px; opacity: 0.85; }
+#profile-friend-actions .profile-report-btn {
+    order: 99;
+    flex: 0 0 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    border: 1px solid var(--tint-a-10, rgba(255,255,255,0.1));
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+#profile-friend-actions .profile-report-btn svg { width: 17px; height: 17px; }
+#profile-friend-actions .profile-report-btn:hover {
+    color: #f87171;
+    border-color: rgba(248,113,113,0.35);
+    background: rgba(248,113,113,0.08);
+}

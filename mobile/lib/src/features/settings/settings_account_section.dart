@@ -8,7 +8,7 @@ import '../more/detail_rows.dart';
 import 'settings_widgets.dart';
 
 /// Settings → Аккаунт. Credentials (change email / username / password),
-/// security (2FA toggle, logout), and the danger zone.
+/// security (2FA toggle), and the danger zone.
 class AccountSettingsSection extends StatefulWidget {
   const AccountSettingsSection({required this.api, super.key});
 
@@ -80,19 +80,13 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: session.isBusy ? null : session.logout,
-          icon: const Icon(Icons.logout_rounded),
-          label: const Text('Выйти из аккаунта'),
-        ),
         const SizedBox(height: 20),
         // Danger zone
         LoveSurfaceDanger(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-               Text(
+              Text(
                 'Опасная зона',
                 style: TextStyle(
                   fontFamily: LoveFonts.mono,
@@ -103,10 +97,11 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
                 ),
               ),
               const SizedBox(height: 8),
-               Text(
+              Text(
                 'Удаление аккаунта необратимо. Все сообщения, серверы и данные '
                 'будут стёрты навсегда.',
-                style: TextStyle(color: context.palette.textSecondary, height: 1.4),
+                style: TextStyle(
+                    color: context.palette.textSecondary, height: 1.4),
               ),
               const SizedBox(height: 14),
               DangerButton(
@@ -229,7 +224,7 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor:  context.palette.bgTertiary,
+        backgroundColor: context.palette.bgTertiary,
         title: const Text('Удалить аккаунт?'),
         content: const Text(
           'Это действие необратимо. Все данные будут стёрты навсегда.',
@@ -241,7 +236,8 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.danger),
+            style:
+                TextButton.styleFrom(foregroundColor: context.palette.danger),
             child: const Text('Удалить'),
           ),
         ],
@@ -354,13 +350,13 @@ class _AccountFormState extends State<_AccountForm> {
           const SizedBox(height: 4),
         ],
         if (_error != null) ...[
-          Text(_error!, style:  TextStyle(color: context.palette.danger)),
+          Text(_error!, style: TextStyle(color: context.palette.danger)),
           const SizedBox(height: 10),
         ],
         FilledButton(
           onPressed: _busy ? null : _submit,
           child: _busy
-              ?  SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(

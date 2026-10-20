@@ -334,14 +334,107 @@ if (mobileMoreTrigger) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // МЕТОД СОЗДАНИЯ TOAST УВЕДОМЛЕНИЙ (Премиум стекло)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Тост показывает текст целиком. В «Уведомления → Системные» копия уходит
+// только если сообщение в тосте толком не прочитать:
+//  • текст очень длинный — за несколько секунд его не дочитать;
+//  • человек тост не видел — окно свёрнуто или в фоне.
+// Обычные ошибки и подсказки, которые нормально видны, историю не засоряют.
+const TOAST_LONG_TEXT = 220;
+
+function toastIsUnseen() {
+    return document.hidden || !document.hasFocus();
+}
+
+function shouldKeepToast(title, body) {
+    return String(body || "").length > TOAST_LONG_TEXT || toastIsUnseen();
+}
+
+// ── Подтверждение опасных действий ─────────────────────────────────────────
+// window.loveConfirm({ title, text, confirmText, danger }) → Promise<boolean>.
+// Окно в стиле приложения вместо системного confirm(). Esc и клик мимо —
+// «Отмена», Enter — подтвердить. Фокус по умолчанию на «Отмена», чтобы
+// случайный Enter ничего не удалял.
+window.loveConfirm = function (opts) {
+    opts = opts || {};
+    return new Promise(resolve => {
+        const prevFocus = document.activeElement;
+        const backdrop = document.createElement("div");
+        backdrop.className = "love-confirm-backdrop";
+        backdrop.innerHTML = `
+            <div class="love-confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="love-confirm-title">
+                ${opts.icon ? `<div class="love-confirm-icon${opts.danger ? " is-danger" : ""}">${opts.icon}</div>` : ""}
+                <h3 class="love-confirm-title" id="love-confirm-title">${escHTML(opts.title || "Вы уверены?")}</h3>
+                ${opts.text ? `<p class="love-confirm-text">${escHTML(opts.text)}</p>` : ""}
+                <div class="love-confirm-actions">
+                    <button type="button" class="love-confirm-btn" data-confirm="no">${escHTML(opts.cancelText || "Отмена")}</button>
+                    <button type="button" class="love-confirm-btn ${opts.danger ? "is-danger" : "is-primary"}" data-confirm="yes">${escHTML(opts.confirmText || "Подтвердить")}</button>
+                </div>
+            </div>`;
+
+        let done = false;
+        function finish(value) {
+            if (done) return;
+            done = true;
+            document.removeEventListener("keydown", onKey, true);
+            backdrop.classList.remove("is-open");
+            setTimeout(() => backdrop.remove(), 180);
+            if (prevFocus && typeof prevFocus.focus === "function") prevFocus.focus();
+            resolve(value);
+        }
+        function onKey(e) {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+            else if (e.key === "Enter") {
+                e.preventDefault(); e.stopPropagation();
+                finish(document.activeElement && document.activeElement.dataset.confirm === "yes");
+            }
+        }
+
+        backdrop.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-confirm]");
+            if (btn) finish(btn.dataset.confirm === "yes");
+            else if (e.target === backdrop) finish(false);
+        });
+        document.addEventListener("keydown", onKey, true);
+        document.body.appendChild(backdrop);
+        // Принудительная раскладка вместо requestAnimationFrame: анимация
+        // появления срабатывает, и окно не зависит от того, рисуется ли кадр.
+        void backdrop.offsetWidth;
+        backdrop.classList.add("is-open");
+        backdrop.querySelector('[data-confirm="no"]')?.focus();
+    });
+};
+
+function openSystemNotifications() {
+    const nav = document.getElementById("nav-notifications");
+    if (nav) nav.click();
+    const tab = document.querySelector('[data-notif-tab="system"]');
+    if (tab) tab.click();
+}
+
 function showToast(title, body) {
     if (!body && !title) return;
+    let keep = false;
+    function saveNotice() {
+        if (!keep && typeof window.saveSystemNotice === "function") {
+            window.saveSystemNotice(title || "Love", String(body || ""));
+            keep = true;
+        }
+        return keep;
+    }
+    if (shouldKeepToast(title, body)) saveNotice();
     // Направляем в существующую карточную систему уведомлений
     if (typeof window.showAppNotification === 'function') {
-        window.showAppNotification({ title: title || 'Love', text: body || '', useHeart: true });
+        window.showAppNotification({
+            title: title || 'Love',
+            text: body || '',
+            useHeart: true,
+            saved: keep,
+            onClick: () => { if (keep) openSystemNotifications(); }
+        });
         return;
     }
     // Фолбэк (если init-app.js ещё не загрузился)
+    if (String(body || "").length > 180) saveNotice();
     let container = document.getElementById("toast-container");
     if (!container) {
         container = document.createElement("div");
@@ -1241,6 +1334,9 @@ function animateMiniToCallModal() {
 
 // Полный сброс при завершении звонка
 function endCallFull() {
+    clearTimeout(window._directCallEndTimer);
+    window._directCallEndTimer = null;
+    window.outgoingDMCall = null;
     if (callTimerInterval) {
         clearInterval(callTimerInterval);
         callTimerInterval = null;
@@ -1255,7 +1351,7 @@ function endCallFull() {
     // Останавливаем WebRTC сессию
     if (window.voiceManager) {
         if (typeof handleDMCallEnd === 'function') {
-            handleDMCallEnd();
+            handleDMCallEnd({ notifyUI: false });
         }
     }
 
@@ -1296,6 +1392,7 @@ function endCallFull() {
     isCallMinimized = false;
     const ssBtn = document.getElementById("call-btn-screenshare");
     if (ssBtn) ssBtn.classList.remove("screenshare-active");
+    window.syncDirectCallControls?.();
 }
 
 // Синхронизация таймера с мини-баром
@@ -1334,6 +1431,13 @@ function applyCallAvatar(el, imgUrl, fallbackLetter) {
 }
 
 function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUserId = null, isIncoming = false, partnerAvatarUrl) {
+    const activeVoice = window.voiceManager?.channelId || window.currentVoiceChannel;
+    if (activeVoice && !String(activeVoice).startsWith('dm_call:')) {
+        showToast('Звонок', 'Сначала выйдите из голосового канала, чтобы начать личный звонок.');
+        return;
+    }
+    clearTimeout(window._directCallEndTimer);
+    window._directCallEndTimer = null;
     // 1. Сброс состояний
     window._callDisconnectSoundPlayed = false;
     isCallMuted = false;
@@ -1356,6 +1460,10 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUse
     const callDurationText = document.getElementById("call-duration-text");
     
     if (callTitleName) callTitleName.textContent = partnerName;
+    const remoteName = document.getElementById('call-remote-name');
+    const localName = document.getElementById('call-local-name');
+    if (remoteName) remoteName.textContent = partnerName;
+    if (localName) localName.textContent = (window.currentUser?.nickname || window.currentUser?.username || 'Вы') + ' · вы';
     if (callCenterAvatar) applyCallAvatar(callCenterAvatar, partnerAvatarUrl, partnerAvatar);
     if (callBgAvatar) applyCallAvatar(callBgAvatar, partnerAvatarUrl, partnerAvatar);
     if (callVideoAvatarRemote) applyCallAvatar(callVideoAvatarRemote, partnerAvatarUrl, partnerAvatar);
@@ -1426,6 +1534,7 @@ function startDirectCall(partnerName, partnerAvatar, isVideo = false, partnerUse
         name: partnerName,
         avatar: partnerAvatarUrl || partnerAvatar
     });
+    window.syncDirectCallControls?.();
 
     // 6. Инициализация соединения
     if (isIncoming) {
@@ -1651,90 +1760,78 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// Обработчики кнопок внутри док-панели управления звонком
-document.addEventListener("click", (e) => {
-    const btnMute = e.target.closest("#call-btn-mute");
-    if (btnMute) {
-        isCallMuted = !isCallMuted;
-        btnMute.classList.toggle("muted-active", isCallMuted);
-        
-        setIconSwap(btnMute, ".icon-mic-on", ".icon-mic-off", !isCallMuted);
-        // Синхронизация мини-бара
-        const miniMuteBtn = document.getElementById("call-mini-btn-mute");
-        if (miniMuteBtn) {
-            miniMuteBtn.classList.toggle("muted-mini", isCallMuted);
-            setIconSwap(miniMuteBtn, ".icon-mic-on", ".icon-mic-off", !isCallMuted);
-        }
+// Единственный источник состояния ЛС — VoiceManager, включая системный stop.
+window.syncDirectCallControls = function () {
+    const manager = window.voiceManager;
+    const ready = !!manager?.localStream && String(manager.channelId || '').startsWith('dm_call:');
+    isCallMuted = ready && manager.isMuted;
+    isCallVideoActive = ready && manager.isCameraOn;
+    isCallScreenSharing = ready && manager.isScreenSharing;
+    const states = [
+        ['call-btn-mute', !isCallMuted, 'Выключить микрофон', 'Включить микрофон'],
+        ['call-btn-video', isCallVideoActive, 'Выключить камеру', 'Включить камеру'],
+        ['call-btn-screenshare', isCallScreenSharing, 'Остановить демонстрацию', 'Показать экран']
+    ];
+    for (const [id, active, onTitle, offTitle] of states) {
+        const button = document.getElementById(id);
+        if (!button) continue;
+        button.disabled = !ready || !!manager?._mediaBusy || !!manager?._cameraStarting;
+        button.classList.toggle('active-state', active);
+        button.classList.toggle('muted-state', !active);
+        button.setAttribute('aria-pressed', String(active));
+        button.title = ready ? (active ? onTitle : offTitle) : 'Дождитесь подключения звонка';
     }
-});
-
-// Камера — взаимоисключающая с демкой
-document.addEventListener("click", (e) => {
-    const btnVideo = e.target.closest("#call-btn-video");
-    if (btnVideo) {
-        isCallVideoActive = !isCallVideoActive;
-        
-        // Если включаем камеру — выключить демку
-        if (isCallVideoActive && isCallScreenSharing) {
-            isCallScreenSharing = false;
-            const ssBtn = document.getElementById("call-btn-screenshare");
-            if (ssBtn) ssBtn.classList.remove("screenshare-active");
-            const localFeed = document.getElementById("call-local-feed");
-            if (localFeed) localFeed.style.filter = "none";
-        }
-        
-        btnVideo.classList.toggle("video-inactive", !isCallVideoActive);
-        
-        const iconOn = btnVideo.querySelector(".icon-video-on");
-        const iconOff = btnVideo.querySelector(".icon-video-off");
-        
-        const callRemoteFeed = document.getElementById("call-remote-feed");
-        const callLocalFeed = document.getElementById("call-local-feed");
-
-        if (isCallVideoActive) {
-            setIconSwap(btnVideo, ".icon-video-on", ".icon-video-off", true);
-            showVideoGrid();
-            setCallFeedVisible(callRemoteFeed, true);
-            setCallFeedVisible(callLocalFeed, true);
-        } else {
-            setIconSwap(btnVideo, ".icon-video-on", ".icon-video-off", false);
-            hideVideoGrid();
-            setCallFeedVisible(callRemoteFeed, false);
-            setCallFeedVisible(callLocalFeed, false);
-        }
+    const mute = document.getElementById('call-btn-mute');
+    const video = document.getElementById('call-btn-video');
+    const share = document.getElementById('call-btn-screenshare');
+    mute?.classList.toggle('muted-active', isCallMuted);
+    video?.classList.toggle('video-inactive', !isCallVideoActive);
+    share?.classList.toggle('screenshare-active', isCallScreenSharing);
+    for (const [button, on, off, active] of [
+        [mute, '.icon-mic-on', '.icon-mic-off', !isCallMuted],
+        [video, '.icon-video-on', '.icon-video-off', isCallVideoActive]
+    ]) {
+        button?.querySelector(on)?.classList.toggle('hidden', !active);
+        button?.querySelector(off)?.classList.toggle('hidden', active);
     }
-});
+    const miniMute = document.getElementById('call-mini-btn-mute');
+    if (miniMute) {
+        miniMute.disabled = !ready;
+        miniMute.classList.toggle('muted-mini', isCallMuted);
+        miniMute.querySelector('.icon-mic-on')?.classList.toggle('hidden', isCallMuted);
+        miniMute.querySelector('.icon-mic-off')?.classList.toggle('hidden', !isCallMuted);
+    }
+    window.CallStageController?.renderDm();
+};
 
-// Демонстрация экрана — взаимоисключающая с камерой
-document.addEventListener("click", (e) => {
-    const btnScreenshare = e.target.closest("#call-btn-screenshare");
-    if (btnScreenshare) {
-        isCallScreenSharing = !isCallScreenSharing;
-        btnScreenshare.classList.toggle("screenshare-active", isCallScreenSharing);
-        
-        const callLocalFeed = document.getElementById("call-local-feed");
-        
-        if (isCallScreenSharing) {
-            // Если включаем демку — выключить камеру
-            if (isCallVideoActive) {
-                isCallVideoActive = false;
-                const vidBtn = document.getElementById("call-btn-video");
-                if (vidBtn) {
-                    vidBtn.classList.add("video-inactive");
-                    vidBtn.querySelector(".icon-video-on")?.classList.add("hidden");
-                    vidBtn.querySelector(".icon-video-off")?.classList.remove("hidden");
-                }
-            }
-            
-            showVideoGrid();
-            setCallFeedVisible(callLocalFeed, true, { screenshare: true });
+document.addEventListener('click', async event => {
+    const button = event.target.closest('#call-btn-mute, #call-btn-video, #call-btn-screenshare');
+    if (!button || button.disabled || window.voiceManager?._mediaBusy) return;
+    const manager = window.voiceManager;
+    if (!manager?.localStream || !String(manager.channelId || '').startsWith('dm_call:')) return;
+    if (button.id === 'call-btn-mute') {
+        manager.toggleMute();
+        window.syncDirectCallControls();
+        return;
+    }
+    if (button.id === 'call-btn-screenshare' && !manager.isScreenSharing) {
+        if (typeof openScreenshareModal === 'function') openScreenshareModal(button.id);
+        return;
+    }
+    manager._mediaBusy = true;
+    window.syncDirectCallControls();
+    try {
+        if (button.id === 'call-btn-video') {
+            if (manager.isCameraOn) await manager.stopCamera();
+            else if (!await manager.startCamera()) showToast('Камера', 'Не удалось включить камеру. Проверьте доступ к ней.');
         } else {
-            // Если камера выключена — скрыть сетку
-            if (!isCallVideoActive) {
-                hideVideoGrid();
-                setCallFeedVisible(callLocalFeed, false);
-            }
+            await manager.stopScreenShare();
         }
+    } catch (error) {
+        showToast('Не удалось изменить медиа', error.message || 'Попробуйте ещё раз.');
+    } finally {
+        manager._mediaBusy = false;
+        window.syncDirectCallControls();
     }
 });
 
@@ -1884,6 +1981,14 @@ function renderUnifiedSidebar() {
                         ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:0.5;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
                         : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;opacity:0.5;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
                     item.innerHTML = `${chIcon}<span>${escHTML(ch.name)}</span>`;
+                    if (ch.type === 'voice' && ch._realId) {
+                        // Индикатор входа: пока voice.js подключает, канал помечен.
+                        // Список перерисовывается сразу после клика, поэтому
+                        // состояние берётся из window, а не из старого элемента.
+                        item.dataset.voiceChannel = ch._realId;
+                        item.insertAdjacentHTML('beforeend', '<span class="channel-connecting" role="status">подключение…</span>');
+                        if (window.voiceJoiningChannelId === ch._realId) item.classList.add('is-connecting');
+                    }
                     
                     item.addEventListener("click", (e) => {
                         e.stopPropagation();
@@ -2347,13 +2452,28 @@ function initVoiceControls() {
         });
     }
 
-    let _streamAnimating = false;
+    // Флаг анимации — общий модульный _streamAnimating (выше). Раньше здесь
+    // был свой `let _streamAnimating`, а страховочный _streamAnimTimer
+    // сбрасывал внешний: если колбэк анимации падал, кнопки камеры и
+    // демонстрации залипали навсегда (клик «остановить» снова открывал
+    // выбор экрана).
+
+    // Состояние плавающих превью раньше создавала только старая отрисовка
+    // (_doRenderVoiceChannel). Новая сцена CallStageController до неё не
+    // доходит, объект оставался пустым, и `ps.collapsed['own']` бросал
+    // TypeError раньше вызова voiceManager.startCamera(): в войсе сервера и
+    // комнаты кнопка камеры загоралась, а камера не включалась.
+    const _ensurePreviewState = () => {
+        const ps = window._voicePreviewState || (window._voicePreviewState = { openUserId: null, collapsed: {}, positions: {}, _miniPos: {} });
+        if (!ps.collapsed) ps.collapsed = {};
+        return ps;
+    };
 
     if (camBtn) {
         camBtn.addEventListener("click", () => {
             if (_streamAnimating) return;
             const ownMember = getOwnVoiceMember();
-            const ps = window._voicePreviewState || {};
+            const ps = _ensurePreviewState();
             if (voiceState.camActive) {
                 _streamAnimating = true; _streamAnimTimer();
                 voiceState.camActive = false;
@@ -2413,7 +2533,7 @@ function initVoiceControls() {
         shareBtn.addEventListener("click", () => {
             if (_streamAnimating) return;
             const ownMember = getOwnVoiceMember();
-            const ps = window._voicePreviewState || {};
+            const ps = _ensurePreviewState();
             if (voiceState.shareActive) {
                 _streamAnimating = true; _streamAnimTimer();
                 voiceState.shareActive = false;
@@ -3139,6 +3259,13 @@ function makeDraggable(el) {
     }, { passive: false });
 }
 
+document.addEventListener('love:voice-joining', (event) => {
+    const joiningId = event.detail?.channelId || null;
+    document.querySelectorAll('.channel-item[data-voice-channel]').forEach(el => {
+        el.classList.toggle('is-connecting', Boolean(joiningId) && el.dataset.voiceChannel === joiningId);
+    });
+});
+
 function showServerVoice(channelName) {
     if (channelName) window.voiceChannelName = channelName;
     const chatPanel = document.getElementById("server-chat-panel");
@@ -3231,133 +3358,136 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// Кнопка "Новая беседа" (открытие модалки создания группы)
-document.addEventListener("click", (e) => {
-    const composeBtn = e.target.closest(".compose-btn");
-    if (composeBtn) {
-        e.stopPropagation();
-        openCreateGroupModal();
-    }
-});
+// ── Кнопка «Новая беседа» ─────────────────────────────────────────────────
+// Поиск людей в Love по нику → личный чат (window.openDMWithUser создаёт его
+// на сервере). Так же работает карандаш в мобильном. Раньше здесь была
+// заглушка «Создать группу»: группа жила только в памяти окна, сервер о ней
+// не знал, а «ответы» участников были заготовленными фразами.
+const NEW_CHAT_MIN_QUERY = 2;
+const NEW_CHAT_STATUS = { online: "в сети", idle: "отошёл", dnd: "не беспокоить" };
+let newChatDebounce = null;
+let newChatSeq = 0;
+let newChatUsers = [];
 
-// Открытие модального окна создания группы
-function openCreateGroupModal() {
-    const modal = document.getElementById("create-group-modal");
-    const listContainer = document.getElementById("create-group-friends-list");
-    const nameInput = document.getElementById("create-group-name-input");
-    
-    if (!modal || !listContainer) return;
-    
-    // Сброс названия группы
-    nameInput.value = "";
-    
-    // Получаем список друзей из mockFriends (только с типом 'friend')
-    const friends = mockFriends.filter(f => f.type === "friend");
-    
-    if (friends.length === 0) {
-        listContainer.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 16px 0; font-family: var(--font-sans);">У вас пока нет друзей для добавления.</div>`;
-    } else {
-        listContainer.innerHTML = "";
-        friends.forEach(friend => {
-            const item = document.createElement("label");
-            item.style.display = "flex";
-            item.style.alignItems = "center";
-            item.style.justifyContent = "space-between";
-            item.style.padding = "8px 12px";
-            item.style.borderRadius = "6px";
-            item.style.cursor = "pointer";
-            item.style.background = "rgba(255, 255, 255, 0.01)";
-            item.style.border = "1px solid rgba(255, 255, 255, 0.02)";
-            item.style.transition = "background 0.2s";
-            
-            item.addEventListener("mouseenter", () => item.style.background = "rgba(255, 255, 255, 0.04)");
-            item.addEventListener("mouseleave", () => item.style.background = "rgba(255, 255, 255, 0.01)");
-            
-            item.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 28px; height: 28px; border-radius: 50%; background: #1a1a1a; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; font-family: var(--font-serif); font-style: italic;">
-                        ${friend.avatar}
-                    </div>
-                    <span style="font-size: 14px; color: var(--text-primary); font-family: var(--font-sans);">${escHTML(friend.name)}</span>
-                </div>
-                <input type="checkbox" class="group-friend-checkbox" value="${escHTML(friend.name)}" data-avatar="${escHTML(friend.avatar)}">
-                <span class="custom-checkbox"></span>
-            `;
-            listContainer.appendChild(item);
-        });
-    }
-    
-    modal.classList.remove("hidden");
+function newChatEls() {
+    return {
+        modal: document.getElementById("new-chat-modal"),
+        input: document.getElementById("new-chat-input"),
+        results: document.getElementById("new-chat-results")
+    };
 }
 
-// Закрытие модалки по клику
+function renderNewChatNote(text) {
+    const { results } = newChatEls();
+    if (results) results.innerHTML = `<div class="new-chat-note">${escHTML(text)}</div>`;
+}
+
+function openNewChatModal() {
+    const { modal, input } = newChatEls();
+    if (!modal || !input) return;
+    input.value = "";
+    newChatUsers = [];
+    renderNewChatNote("Введите минимум 2 символа ника");
+    modal.classList.remove("hidden");
+    setTimeout(() => input.focus(), 30);
+}
+
+function closeNewChatModal() {
+    const { modal } = newChatEls();
+    clearTimeout(newChatDebounce);
+    newChatSeq++;
+    if (modal) modal.classList.add("hidden");
+}
+
+function renderNewChatResults(users) {
+    const { results } = newChatEls();
+    if (!results) return;
+    results.innerHTML = users.map((user, index) => {
+        const name = user.nickname || user.username || "Пользователь";
+        const status = NEW_CHAT_STATUS[user.status] || "не в сети";
+        const online = user.status === "online" || user.status === "idle" || user.status === "dnd";
+        return `
+            <button type="button" class="new-chat-item" data-new-chat-index="${index}">
+                <span class="new-chat-avatar" style="${avatarStyle(user.avatar)}">${avatarInner(user.avatar, name.charAt(0).toUpperCase())}
+                    ${online ? '<span class="new-chat-dot"></span>' : ''}
+                </span>
+                <span class="new-chat-meta">
+                    <span class="new-chat-name">${escHTML(name)}</span>
+                    <span class="new-chat-sub">@${escHTML(user.username || "")} · ${escHTML(status)}</span>
+                </span>
+                <svg class="new-chat-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>`;
+    }).join("");
+}
+
+async function searchNewChat(raw) {
+    const query = String(raw || "").trim();
+    const seq = ++newChatSeq;
+    if (query.length < NEW_CHAT_MIN_QUERY) {
+        newChatUsers = [];
+        renderNewChatNote("Введите минимум 2 символа ника");
+        return;
+    }
+    renderNewChatNote("Ищем…");
+    try {
+        const data = await UsersAPI.search(query);
+        if (seq !== newChatSeq) return;
+        const me = String(window.currentUser?._id || "");
+        newChatUsers = (data && data.users ? data.users : []).filter(u => String(u._id) !== me);
+        if (!newChatUsers.length) {
+            renderNewChatNote("Никого не нашли. Проверьте ник.");
+            return;
+        }
+        renderNewChatResults(newChatUsers);
+    } catch (err) {
+        if (seq !== newChatSeq) return;
+        newChatUsers = [];
+        renderNewChatNote((err && err.message) || "Не удалось выполнить поиск. Попробуйте ещё раз.");
+    }
+}
+
+function startNewChat(user) {
+    if (!user || !user._id) return;
+    closeNewChatModal();
+    if (typeof window.openDMWithUser === "function") {
+        window.openDMWithUser(user._id, user.nickname || user.username, user.avatar || "");
+    }
+}
+
 document.addEventListener("click", (e) => {
-    const modal = document.getElementById("create-group-modal");
+    if (e.target.closest(".compose-btn")) {
+        e.stopPropagation();
+        openNewChatModal();
+        return;
+    }
+    const { modal } = newChatEls();
     if (!modal || modal.classList.contains("hidden")) return;
-    
-    if (e.target.closest("#create-group-close") || e.target.closest("#create-group-cancel")) {
-        modal.classList.add("hidden");
-    } else if (e.target === modal) {
-        modal.classList.add("hidden");
+    if (e.target.closest("#new-chat-close") || e.target === modal) {
+        closeNewChatModal();
+        return;
+    }
+    const item = e.target.closest(".new-chat-item");
+    if (item && modal.contains(item)) {
+        startNewChat(newChatUsers[Number(item.dataset.newChatIndex)]);
     }
 });
 
-// Клик по кнопке "Создать"
-document.addEventListener("click", (e) => {
-    const submitBtn = e.target.closest("#create-group-submit");
-    if (submitBtn) {
-        const modal = document.getElementById("create-group-modal");
-        const nameInput = document.getElementById("create-group-name-input");
-        const listContainer = document.getElementById("create-group-friends-list");
-        
-        if (!modal || !nameInput || !listContainer) return;
-        
-        const groupName = nameInput.value.trim() || "Новая группа";
-        
-        // Получаем всех выбранных друзей
-        const checkedBoxes = listContainer.querySelectorAll("input[type='checkbox']:checked");
-        const selectedFriends = Array.from(checkedBoxes).map(cb => cb.value);
-        
-        const initial = groupName.charAt(0).toUpperCase();
-        const groupId = "group-" + Date.now();
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        
-        const addedNames = selectedFriends.join(", ");
-        const systemText = selectedFriends.length > 0 
-            ? `Группа создана. Вы добавили: ${addedNames}`
-            : "Группа создана. Вы не добавили участников.";
-            
-        const newGroupConv = {
-            id: groupId,
-            name: groupName,
-            avatar: initial,
-            status: "группа",
-            online: false,
-            unread: false,
-            members: ["Вы", ...selectedFriends],
-            messages: [
-                { sender: "system", text: systemText, time: timeStr }
-            ],
-            replies: [
-                "Всем привет! Рад всех здесь видеть.",
-                "Как дела? Обсудим последние новости?",
-                "Отличный чат, поддерживаю!",
-                "Давайте запланируем звонок на завтра."
-            ]
-        };
-        
-        mockConversations.unshift(newGroupConv);
-        
-        // Сбрасываем фильтр поиска
-        const searchInput = document.getElementById("conv-search");
-        if (searchInput) searchInput.value = "";
-        
-        renderConversationsList();
-        selectConversation(groupId);
-        modal.classList.add("hidden");
-        
-        showToast("Новое сообщение", `Группа "${groupName}" успешно создана!`);
+document.addEventListener("input", (e) => {
+    if (e.target.id !== "new-chat-input") return;
+    clearTimeout(newChatDebounce);
+    const value = e.target.value;
+    newChatDebounce = setTimeout(() => searchNewChat(value), 320);
+});
+
+document.addEventListener("keydown", (e) => {
+    const { modal } = newChatEls();
+    if (!modal || modal.classList.contains("hidden")) return;
+    if (e.key === "Escape") {
+        e.preventDefault();
+        closeNewChatModal();
+    } else if (e.key === "Enter" && e.target.id === "new-chat-input" && newChatUsers.length) {
+        e.preventDefault();
+        startNewChat(newChatUsers[0]);
     }
 });
 
@@ -4962,7 +5092,8 @@ window.sendFriendRequest = async function (username, opts = {}) {
             else if (window.socket) window.socket.emit('friend:request', { targetUserId: user._id });
         } catch (err) {
             console.error('[friends] Failed to send friend request:', err);
-            return fail('error', 'Ошибка', 'Не удалось отправить запрос.');
+            // Причину говорит сервер («уже в друзьях», «запрос уже отправлен»…).
+            return fail('error', 'Запрос не отправлен', (err && err.message) || 'Не удалось отправить запрос.');
         }
     }
     mockFriends.push({
@@ -5168,6 +5299,7 @@ function createRequestCard(friend, isIncoming) {
             friend.statusText = "в сети";
             friend.online = true;
             delete friend.direction;
+            window.dropFriendRequestNotifications?.(friend._realId);
             showToast("Запрос принят", `Вы теперь друзья с ${friend.name}`);
             loadFriends("pending");
         });
@@ -5181,6 +5313,7 @@ function createRequestCard(friend, isIncoming) {
                 }
             }
             mockFriends = mockFriends.filter(f => f.name !== friend.name);
+            window.dropFriendRequestNotifications?.(friend._realId);
             showToast("Запрос отклонен", `Запрос от ${friend.name} отклонен`);
             loadFriends("pending");
         });
@@ -5422,11 +5555,8 @@ function loadFriends(type) {
                             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
                         </svg>
                     </button>
-                    <button class="action-btn remove-friend-action" title="Удалить из друзей">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
+                    <button class="action-btn remove-friend-action" title="Удалить из друзей" aria-label="Удалить из друзей">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" y1="11" x2="16" y2="11"></line></svg>
                     </button>
                 </div>
             </div>
@@ -5458,6 +5588,15 @@ function loadFriends(type) {
         });
 
         card.querySelector(".remove-friend-action").addEventListener("click", async () => {
+            // Раньше удаляло с первого клика по крестику — без вопроса.
+            const ok = await window.loveConfirm({
+                title: `Удалить ${friend.name} из друзей?`,
+                text: "Переписка останется, но звонить друг другу и видеть статус «в сети» вы больше не сможете. Чтобы снова дружить, нужно будет отправить заявку.",
+                confirmText: "Удалить",
+                danger: true,
+                icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" y1="11" x2="16" y2="11"></line></svg>'
+            });
+            if (!ok) return;
             if (friend._realId && typeof FriendsAPI !== 'undefined') {
                 try {
                     await FriendsAPI.remove(friend._realId);
@@ -5487,7 +5626,7 @@ function loadFriends(type) {
 // Зашитый номер здесь один на весь интерфейс — на него падаем, только если
 // Electron не ответил (например, страница открыта в браузере). Строку сверяет
 // ops/check-release-version.cjs с package.json, чтобы она не отстала от релиза.
-const APP_VERSION_FALLBACK = '2.1.1';
+const APP_VERSION_FALLBACK = '2.2.0';
 const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion === 'function')
     ? (window.electronAPI.getVersion() || APP_VERSION_FALLBACK)
     : APP_VERSION_FALLBACK;
@@ -6627,6 +6766,9 @@ if (theaterClose && theaterModal) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function checkUnreadNotifications() {
+    // Вызывается после любого изменения ленты — заодно сохраняем локальные
+    // записи (прочитано / удалено).
+    storeLocalNotices();
     const unreadCount = mockNotifications.filter(n => n.unread).length;
     if (unreadCount > 0) {
         notifBadge.textContent = unreadCount;
@@ -6642,8 +6784,123 @@ function notificationsViewIsOpen() {
     return Boolean(view && !view.classList.contains("panel-hidden"));
 }
 
+// ── Локальные системные записи (длинные тосты и ошибки) ───────────────────
+// Живут только на этом устройстве (localStorage), сервер о них не знает.
+// Список с сервера целиком заменяет mockNotifications, поэтому локальные
+// записи при каждой загрузке подмешиваем обратно и сортируем по времени.
+//
+// Записи свои у каждого аккаунта (ключ с id пользователя): в длинных тостах
+// бывают имена и тексты, и после смены аккаунта на этом ПК второй человек не
+// должен их видеть (CODEX-0019). Старый общий ключ без владельца не читаем —
+// приписать его кому-то нельзя, — а просто удаляем.
+const LOCAL_NOTICES_LEGACY_KEY = "love-local-notices";
+const LOCAL_NOTICES_PREFIX = "love-local-notices:";
+const LOCAL_NOTICES_LIMIT = 30;
+let localNoticeSeq = 1000000;
+
+function localNoticeTime(at) {
+    const d = new Date(at);
+    if (Number.isNaN(d.getTime())) return "";
+    if (d.toDateString() === new Date().toDateString()) {
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+}
+
+function makeLocalNotice(entry) {
+    const at = Number(entry.at) || Date.now();
+    return {
+        id: localNoticeSeq++,
+        _local: true,
+        _at: at,
+        type: "system_joined",
+        category: "system",
+        name: entry.title || "Love",
+        avatar: "!",
+        avatarUrl: "",
+        text: entry.text || "",
+        time: localNoticeTime(at),
+        unread: entry.unread !== false
+    };
+}
+
+let localNoticesOwner = null;
+
+function localNoticesKey() {
+    return localNoticesOwner ? LOCAL_NOTICES_PREFIX + localNoticesOwner : null;
+}
+
+function readLocalNotices() {
+    const key = localNoticesKey();
+    if (!key) return [];
+    try {
+        const raw = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(raw) ? raw.filter(entry => !(entry.title === 'Профиль'
+            && /^Войдите в аккаунт\s*[—-]\s*профиль @.+откроется сразу после входа\.?$/.test(entry.text || '')))
+            .slice(0, LOCAL_NOTICES_LIMIT).map(makeLocalNotice) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function storeLocalNotices() {
+    const key = localNoticesKey();
+    if (!key) return;   // аккаунт ещё не известен — ничего не пишем
+    try {
+        const list = mockNotifications
+            .filter(n => n._local)
+            .slice(0, LOCAL_NOTICES_LIMIT)
+            .map(n => ({ title: n.name, text: n.text, at: n._at, unread: !!n.unread }));
+        localStorage.setItem(key, JSON.stringify(list));
+    } catch (_) { /* приватный режим / переполнение — не критично */ }
+}
+
+function sortNotifications(list) {
+    return list.sort((a, b) => (b._at || 0) - (a._at || 0));
+}
+
+try { localStorage.removeItem(LOCAL_NOTICES_LEGACY_KEY); } catch (_) { /* ok */ }
+
+// Владелец записей — текущий аккаунт. Если он сменился (выход и вход под
+// другим), чужие локальные записи выбрасываем из памяти и читаем свои.
+function syncLocalNoticesOwner() {
+    const id = window.currentUser && window.currentUser._id ? String(window.currentUser._id) : null;
+    if (id === localNoticesOwner) return;
+    localNoticesOwner = id;
+    mockNotifications = mockNotifications.filter(n => !n._local).concat(readLocalNotices());
+    storeLocalNotices();
+    sortNotifications(mockNotifications);
+}
+
+// Выход из аккаунта: лента (и серверная, и локальная) уходит из памяти.
+window.resetNotificationsForLogout = function () {
+    localNoticesOwner = null;
+    mockNotifications = [];
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+};
+
+window.saveSystemNotice = function(title, text) {
+    syncLocalNoticesOwner();
+    const now = Date.now();
+    // Одна и та же ошибка подряд (повторные попытки) — одна запись.
+    const same = mockNotifications.find(n => n._local && n.name === title && n.text === text && now - n._at < 60000);
+    if (same) {
+        same._at = now;
+        same.time = localNoticeTime(now);
+        same.unread = true;
+    } else {
+        mockNotifications.unshift(makeLocalNotice({ title, text, at: now }));
+    }
+    sortNotifications(mockNotifications);
+    checkUnreadNotifications();
+    if (notificationsViewIsOpen()) loadNotifications();
+};
+
 window._applyServerNotifications = function(list) {
-    mockNotifications = Array.isArray(list) ? list : [];
+    syncLocalNoticesOwner();
+    const locals = mockNotifications.filter(n => n._local);
+    mockNotifications = sortNotifications((Array.isArray(list) ? list : []).concat(locals));
     checkUnreadNotifications();
     if (notificationsViewIsOpen()) loadNotifications();
 };
@@ -6691,6 +6948,19 @@ if (notifFeedContainer) {
             case "callback":       handleCallbackCall(name, actorId); break;
         }
     });
+
+    // «Ответить» сначала раскрывает поле ответа; второе нажатие (или Enter)
+    // уже отправляет. Раньше поле висело под каждым личным сообщением.
+    notifFeedContainer.addEventListener("click", (e) => {
+        const submit = e.target.closest('form[data-notif-action="reply-submit"] button[type="submit"]');
+        if (!submit) return;
+        const card = submit.closest(".notification-item");
+        if (!card || card.classList.contains("is-replying")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.add("is-replying");
+        card.querySelector(".notif-reply-input")?.focus();
+    }, true);
 
     notifFeedContainer.addEventListener("submit", (e) => {
         const form = e.target.closest('form[data-notif-action="reply-submit"]');
@@ -7055,6 +7325,19 @@ window.openNotificationDM = function(e, ids, convId) {
 };
 
 // Принять заявку в друзья прямо из панели уведомлений.
+// Заявку приняли или отклонили — неважно где (уведомления или «Друзья»):
+// все её уведомления от этого человека убираем сразу, и здесь, и на сервере.
+window.dropFriendRequestNotifications = function (actorId) {
+    if (!actorId) return;
+    const stale = mockNotifications.filter(n => n.type === "request" && String(n.actorId || "") === String(actorId));
+    if (!stale.length) return;
+    stale.forEach(n => _removeNotifServerSide(n.id));
+    const ids = new Set(stale.map(n => n.id));
+    mockNotifications = mockNotifications.filter(n => !ids.has(n.id));
+    if (notificationsViewIsOpen()) loadNotifications();
+    checkUnreadNotifications();
+};
+
 async function handleFriendAccept(notifId, actorId, name) {
     if (!actorId) { showToast("Ошибка", "Не удалось определить пользователя."); return; }
     try {
@@ -7069,6 +7352,7 @@ async function handleFriendAccept(notifId, actorId, name) {
     }
     _removeNotifServerSide(notifId);
     mockNotifications = mockNotifications.filter(n => n.id !== notifId);
+    window.dropFriendRequestNotifications(actorId);
     loadNotifications();
     checkUnreadNotifications();
     if (typeof window.loadFriendsFromAPI === 'function') window.loadFriendsFromAPI();
@@ -7087,6 +7371,7 @@ async function handleFriendDecline(notifId, actorId, name) {
     }
     _removeNotifServerSide(notifId);
     mockNotifications = mockNotifications.filter(n => n.id !== notifId);
+    window.dropFriendRequestNotifications(actorId);
     loadNotifications();
     checkUnreadNotifications();
     showToast("Заявка отклонена", `Заявка от ${name || 'пользователя'} отклонена.`);
@@ -7361,8 +7646,27 @@ window.refreshProfileVitrine = refreshProfileVitrine;
 window.parseListening = parseListening;
 window.escapeHTML = escapeHTML;
 
+// Значок подписки под ником в окне профиля. Для чужих профилей сервер
+// отдаёт planBadge (только действующий тариф), для своего — берём из
+// currentUser с проверкой срока.
+const PROFILE_PLAN_NAMES = { pro: "Love Pro", premium: "Love Premium", duo: "Love Duo" };
+function setProfilePlanBadge(plan) {
+    const badge = document.getElementById("profile-plan-badge");
+    if (!badge) return;
+    const name = PROFILE_PLAN_NAMES[plan];
+    badge.hidden = !name;
+    badge.innerHTML = name ? `<span aria-hidden="true">✦</span>${escHTML(name)}` : "";
+}
+function ownActivePlan() {
+    const u = window.currentUser || {};
+    if (!u.plan || u.plan === "free") return null;
+    if (u.planExpiresAt && new Date(u.planExpiresAt) <= new Date()) return null;
+    return u.plan;
+}
+
 function showProfileModal(profileName = "own", realId = null) {
     currentViewingProfileName = profileName;
+    setProfilePlanBadge(profileName === "own" ? ownActivePlan() : null);
     const pModal = document.getElementById("profile-modal");
     if (!pModal) return;
 
@@ -7416,6 +7720,7 @@ function showProfileModal(profileName = "own", realId = null) {
 
                 if (nameDisplay) nameDisplay.textContent = user.nickname || user.username || profileName;
                 if (usernameDisplay) usernameDisplay.textContent = "@" + (user.username || "");
+                setProfilePlanBadge(user.planBadge);
 
                 if (avatarDisplay) {
                     // Поле на сервере называется avatar (не avatarUrl).
@@ -7559,6 +7864,24 @@ function showProfileModal(profileName = "own", realId = null) {
             const targetId = realId || (friend ? friend._realId : null);
             const targetName = displayName;
 
+            // «Пожаловаться» на чужой профиль — с выбором, что именно не так.
+            if (targetId && (!window.currentUser || String(targetId) !== String(window.currentUser._id))) {
+                const btnReport = document.createElement("button");
+                btnReport.type = "button";
+                btnReport.className = "profile-report-btn";
+                btnReport.title = "Пожаловаться на профиль";
+                btnReport.setAttribute("aria-label", "Пожаловаться на профиль");
+                btnReport.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>';
+                btnReport.addEventListener("click", () => {
+                    window.openProfileReport?.({
+                        userId: targetId,
+                        name: targetName,
+                        username: (usernameDisplay?.textContent || "").replace(/^@/, "")
+                    });
+                });
+                friendActionsContainer.appendChild(btnReport);
+            }
+
             if (targetId && (!window.currentUser || String(targetId) !== String(window.currentUser._id))) {
                 if (friend && friend.type === "friend") {
                     // Уже друзья — кнопка «Написать сообщение» (открывает/создаёт ЛС)
@@ -7694,7 +8017,18 @@ function showProfileModal(profileName = "own", realId = null) {
                                 showProfileModal(targetName, targetId);
                             }
                         } catch (e) {
-                            showToast("Ошибка", "Не удалось отправить запрос.");
+                            // Раньше любая ошибка превращалась в «Не удалось отправить
+                            // запрос», а самая частая причина — окно не узнало, что вы
+                            // уже друзья (список друзей не успел загрузиться) или заявка
+                            // уже висит. Показываем ответ сервера и перерисовываем окно
+                            // по свежему списку друзей.
+                            const message = (e && e.message) || "Не удалось отправить запрос.";
+                            const stale = e && e.status === 400 && /уже в вашем списке|уже отправлен/i.test(message);
+                            showToast(stale ? "Друзья" : "Запрос не отправлен", message);
+                            if (stale) {
+                                if (window.loadFriendsFromAPI) await window.loadFriendsFromAPI();
+                                showProfileModal(targetName, targetId);
+                            }
                         }
                     });
                     friendActionsContainer.appendChild(btnAdd);
@@ -9875,7 +10209,10 @@ function syncVoiceMiniBarButtons() {
             return;
         }
         const bar = document.getElementById('voice-mini-bar');
-        if (bar && bar.classList.contains('voice-dock-open') && !e.target.closest('#voice-mini-bar')) {
+        // Закрываем только по настоящему клику мимо плашки. Кнопка мика внутри
+        // неё нажимает серверную #voice-btn-mic программно, и этот клик тоже
+        // всплывал сюда «снаружи» — плашка закрывалась от нажатия на свой же мик.
+        if (bar && bar.classList.contains('voice-dock-open') && e.isTrusted && !e.target.closest('#voice-mini-bar')) {
             closeVoiceDockPanel(bar);
         }
         // Плашка свёрнута за край — любой клик по язычку вытаскивает её обратно,
@@ -10072,6 +10409,7 @@ window.onDirectCallAccepted = function(meta) {
 };
 
 window.onDirectCallEnded = function(reason) {
+    if (window._directCallEndTimer) return;
     if (callTimerInterval) {
         clearInterval(callTimerInterval);
         callTimerInterval = null;
@@ -10086,7 +10424,8 @@ window.onDirectCallEnded = function(reason) {
         callDurationText.textContent = reason === 'rejected' ? 'ОТКЛОНЕНО' : 'ЗВОНОК ЗАВЕРШЕН';
     }
     
-    setTimeout(() => {
+    window._directCallEndTimer = setTimeout(() => {
+        window._directCallEndTimer = null;
         endCallFull();
     }, 2000);
 };

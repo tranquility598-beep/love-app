@@ -60,6 +60,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Local builds coexist with the signed production app and its data.
+            applicationIdSuffix = ".preview"
+        }
         release {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")

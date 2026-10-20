@@ -172,7 +172,7 @@
       Object.assign(container.style, {
         position: 'fixed', bottom: '24px', right: '24px',
         display: 'flex', flexDirection: 'column', gap: '10px',
-        zIndex: '11000', pointerEvents: 'none', width: '320px', maxWidth: '90vw'
+        zIndex: '11000', pointerEvents: 'none', width: '340px', maxWidth: 'calc(100vw - 32px)'
       });
       document.body.appendChild(container);
     }
@@ -194,15 +194,26 @@
       pointerEvents: 'auto', cursor: 'pointer',
       boxShadow: '0 10px 30px rgba(0,0,0,0.35)'
     });
+    // Текст показываем целиком (без «…»). Очень длинный прокручивается внутри
+    // тоста; такие showToast ещё и кладёт во вкладку «Системные» (opts.saved).
+    const savedHint = opts.saved
+      ? '<div class="app-toast-saved">Сохранено в «Уведомления → Системные»</div>'
+      : '';
     toast.innerHTML = `
       <div class="lvs-notif-icon">${iconInner}</div>
       <div class="lvs-notif-text" style="flex:1;min-width:0;">
         <div class="lvs-notif-title">${_esc(title)}</div>
-        <div class="lvs-notif-body" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(text)}</div>
+        <div class="lvs-notif-body app-toast-body">${_esc(text)}</div>
+        ${savedHint}
       </div>
     `;
 
     let timer;
+    // Висит столько, сколько нужно, чтобы прочитать: 4 с плюс ~55 мс на
+    // символ, но не дольше 20 с. Пока курсор на тосте, он не исчезает.
+    const lifetime = Math.min(20000, 4000 + text.length * 55);
+    toast.addEventListener('mouseenter', () => clearTimeout(timer));
+    toast.addEventListener('mouseleave', () => { clearTimeout(timer); timer = setTimeout(dismiss, 2500); });
     function dismiss() {
       clearTimeout(timer);
       toast.style.opacity = '0';
@@ -218,7 +229,7 @@
       toast.style.opacity = '1';
       toast.style.transform = 'translateY(0) scale(1)';
     });
-    timer = setTimeout(dismiss, 5000);
+    timer = setTimeout(dismiss, lifetime);
   };
 
   // ── showMessageNotification: переопределяем на новый стиль ──────────────
@@ -815,6 +826,13 @@
         window.__fillAccountSettings();
       }
 
+      // Карточка публичной страницы спрашивает сервер один раз на старте, а
+      // тогда токена ещё нет — после входа спрашиваем заново, иначе раздел
+      // просто не появится до перезапуска приложения.
+      if (typeof window.__reloadProfilePageCard === 'function') {
+        window.__reloadProfilePageCard();
+      }
+
       // Проверяем локальный файл музыки владельца: если он пропал с ПК —
       // убираем музыку из профиля и просим указать заново.
       if (window.ProfileMusic && typeof window.ProfileMusic.ensureOwnMusicValid === 'function') {
@@ -1348,6 +1366,8 @@
       previewKind: n.previewKind || 'text',
       previewImage: n.previewImage || '',
       time: _formatTime(n.createdAt),
+      // Для общей сортировки с локальными системными записями (script.js).
+      _at: new Date(n.createdAt).getTime() || 0,
       unread: !n.read
     };
     switch (n.type) {
@@ -1370,7 +1390,8 @@
           channelId: n.channelId || ''
         });
       case 'friend_request':
-        return Object.assign(base, { type: 'request', category: 'normal', isFriend: false, convId: '' });
+        // Заявки — во вкладке «Системные»: это действие, а не переписка.
+        return Object.assign(base, { type: 'request', category: 'system', isFriend: false, convId: '' });
       case 'missed_call':
         return Object.assign(base, { type: 'system_call', category: 'normal' });
       case 'friend_accepted':
@@ -1452,6 +1473,7 @@
   // ══════════════════════════════════════════════════════════════════════
 
   function _emitMessagePayload(payload, replyTarget) {
+    if (typeof window.playMessageSound === 'function') window.playMessageSound('message_send');
     if (!replyTarget) {
       window.socket.emit('message:send', payload);
       return;
@@ -1673,6 +1695,7 @@
     // 6. Приглашение из ссылки (?invite=КОД) — уже после загрузки сфер,
     // иначе новая сфера не встанет в отрисованный сайдбар.
     await consumePendingInvite();
+    window.consumePendingProfileLink?.();
 
     console.log('[init-app] ═══ Bootstrap complete ═══');
   };
@@ -1737,6 +1760,12 @@
     if (typeof roomVoiceConnected !== 'undefined') {
       roomVoiceConnected = false;
     }
+    if (typeof voiceMembers !== 'undefined') voiceMembers = [];
+    window.voiceMembers = [];
+    if (window.voiceState) {
+      Object.assign(window.voiceState, { micActive: true, camActive: false, shareActive: false });
+    }
+    window.CallStageController?.reset();
   };
 
   // ── Voice Members State mapping ───────────────────────────────────────
@@ -1745,7 +1774,10 @@
     if (typeof originalUpdateVoiceChannelMembersUI === 'function') {
       originalUpdateVoiceChannelMembersUI(channelId, members);
     }
-    
+    // Фоновые апдейты канала не должны возвращать ушедшего участника на сцену
+    // или подменять список текущего ЛС-звонка.
+    if (!window.voiceManager || window.voiceManager.channelId !== channelId) return;
+
     // Map backend WebRTC members into window.voiceMembers
     const mapped = (members || []).map(m => {
       const name = m.nickname || m.username || 'User';
@@ -1933,48 +1965,8 @@
     }
   });
 
-  // ── ЛС-звонок: Mic ─────────────────────────────────────────────
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('#call-btn-mute');
-    if (!btn || !window.voiceManager) return;
-    const nowMuted = btn.classList.contains('muted-active'); // после toggle script.js
-    if (typeof window.voiceManager.toggleMute === 'function') {
-      window.voiceManager.toggleMute(nowMuted);
-    }
-  });
-
-  // ── ЛС-звонок: Screenshare ─────────────────────────────────────
-  // bubbling — после script.js, проверяем итоговый класс
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('#call-btn-screenshare');
-    if (!btn) return;
-    // script.js уже переключил screenshare-active
-    const nowActive = btn.classList.contains('screenshare-active');
-    if (nowActive && typeof openScreenshareModal === 'function') {
-      openScreenshareModal('call-btn-screenshare');
-    } else if (!nowActive && window.voiceManager && typeof window.voiceManager.stopScreenShare === 'function') {
-      window.voiceManager.stopScreenShare();
-    }
-  });
-
-  // ── ЛС-звонок: Камера ──────────────────────────────────────────
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('#call-btn-video');
-    if (!btn || !window.voiceManager) return;
-    const vm = window.voiceManager;
-    const nowActive = !btn.classList.contains('video-inactive'); // script.js уже переключил
-    if (nowActive) {
-      const started = await vm.startCamera();
-      if (!started) {
-        if (typeof showToast === 'function') showToast('Камера', 'Камера недоступна или доступ отклонён');
-        btn.classList.add('video-inactive');
-        btn.querySelector('.icon-video-on')?.classList.add('hidden');
-        btn.querySelector('.icon-video-off')?.classList.remove('hidden');
-      }
-    } else {
-      await vm.stopCamera();
-    }
-  });
+  // ЛС-медиа обрабатывает script.js непосредственно через VoiceManager.
+  // Второго обработчика по оптимистично переключённому CSS-классу больше нет.
 
   // Когда звонок завершается — освобождаем камеру
   const _origEndCallFull = window.endCallFull;
@@ -2265,7 +2257,7 @@
     if (!code) return;
 
     // Ещё не вошли — придержим код до логина, его подхватит consumePendingInvite.
-    if (!localStorage.getItem('token')) {
+    if (!window.currentUser) {
       try { localStorage.setItem(PENDING_INVITE_KEY, code); } catch (err) { /* приватный режим */ }
       if (typeof showToast === 'function') {
         showToast('Приглашение', 'Войдите в аккаунт — приглашение откроется сразу после входа.');
@@ -2296,6 +2288,58 @@
   if (window.electronAPI && typeof window.electronAPI.onDeepLinkInvite === 'function') {
     window.electronAPI.onDeepLinkInvite((code) => {
       window.openInviteFromDeepLink(code);
+    });
+  }
+
+  // ── Профиль из ссылки love-app://user/НИК ──
+  // «Написать в Love» на публичной странице. Открываем профиль человека —
+  // там кнопки «Написать сообщение» / «Добавить в друзья».
+  const PENDING_USER_KEY = 'love-pending-profile';
+  let openingProfileLink = null;
+  window.openUserFromDeepLink = async function (rawUsername) {
+    const username = String(rawUsername || '').trim().replace(/^@/, '');
+    if (!/^[A-Za-z0-9_.-]{2,32}$/.test(username)) return;
+    const authScreen = document.getElementById('auth-screen');
+    if (!window.currentUser || (authScreen && !authScreen.classList.contains('auth-hidden'))) {
+      try { localStorage.setItem(PENDING_USER_KEY, username); } catch (err) { /* приватный режим */ }
+      return;
+    }
+    if (openingProfileLink === username.toLowerCase()) return;
+    openingProfileLink = username.toLowerCase();
+    try { localStorage.removeItem(PENDING_USER_KEY); } catch (_) { /* ok */ }
+    try {
+      if (String(window.currentUser.username).toLowerCase() === username.toLowerCase()) {
+        if (typeof showProfileModal === 'function') showProfileModal('own');
+        return;
+      }
+      let user;
+      try {
+        user = (await UsersAPI.getByUsername(username)).user;
+      } catch (error) {
+        if (error.status !== 404) throw error;
+        // Совместимость с сервером до появления точного lookup.
+        const data = await UsersAPI.search(username);
+        user = (data?.users || []).find(item => String(item.username).toLowerCase() === username.toLowerCase());
+      }
+      if (!user) {
+        if (typeof showToast === 'function') showToast('Профиль', `Пользователь @${username} не найден.`);
+        return;
+      }
+      if (typeof showProfileModal === 'function') showProfileModal(user.nickname || user.username, user._id);
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('Профиль', (err && err.message) || 'Не удалось открыть профиль.');
+    } finally {
+      openingProfileLink = null;
+    }
+  };
+  window.consumePendingProfileLink = function () {
+    let username = null;
+    try { username = localStorage.getItem(PENDING_USER_KEY); localStorage.removeItem(PENDING_USER_KEY); } catch (err) { /* ok */ }
+    if (username) window.openUserFromDeepLink(username);
+  };
+  if (window.electronAPI && typeof window.electronAPI.onDeepLinkUser === 'function') {
+    window.electronAPI.onDeepLinkUser((username) => {
+      window.openUserFromDeepLink(username);
     });
   }
 

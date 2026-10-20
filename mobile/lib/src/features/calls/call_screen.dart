@@ -132,7 +132,7 @@ class _CallScreenState extends State<CallScreen> {
                   IconButton(
                     tooltip: 'Скрыть',
                     onPressed: _hide,
-                    icon:  Icon(
+                    icon: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       color: context.palette.accent,
                       size: 30,
@@ -146,7 +146,7 @@ class _CallScreenState extends State<CallScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style:  TextStyle(
+                          style: TextStyle(
                             fontFamily: LoveFonts.serif,
                             fontSize: 19,
                             fontWeight: FontWeight.w900,
@@ -159,7 +159,7 @@ class _CallScreenState extends State<CallScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style:  TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             color: context.palette.textMuted,
                           ),
@@ -183,7 +183,7 @@ class _CallScreenState extends State<CallScreen> {
                 child: Text(
                   session.errorMessage!,
                   textAlign: TextAlign.center,
-                  style:  TextStyle(color: context.palette.textMuted),
+                  style: TextStyle(color: context.palette.textMuted),
                 ),
               ),
             Padding(
@@ -213,7 +213,7 @@ class _CallScreenState extends State<CallScreen> {
           const SizedBox(height: 20),
           Text(
             peer?.name ?? session.title,
-            style:  TextStyle(
+            style: TextStyle(
               fontFamily: LoveFonts.serif,
               fontSize: 26,
               fontWeight: FontWeight.w900,
@@ -221,7 +221,7 @@ class _CallScreenState extends State<CallScreen> {
             ),
           ),
           const SizedBox(height: 8),
-           Text(
+          Text(
             'Входящий звонок',
             style: TextStyle(color: context.palette.textMuted, fontSize: 14),
           ),
@@ -263,7 +263,7 @@ class _CallScreenState extends State<CallScreen> {
 
     Widget grid;
     if (participants.isEmpty) {
-      grid =  Center(
+      grid = Center(
         child: Text(
           'Никого нет',
           style: TextStyle(color: context.palette.textMuted),
@@ -338,8 +338,10 @@ class _CallScreenState extends State<CallScreen> {
         _RoundCallButton(
           icon: session.muted ? Icons.mic_off_rounded : Icons.mic_rounded,
           caption: session.muted ? 'Мик выкл' : 'Мик',
-          filled: session.muted,
-          onTap: () => session.toggleMute(),
+          filled: !session.muted,
+          onTap: !session.isConnected || session.mediaBusy
+              ? null
+              : () => session.toggleMute(),
         ),
         _RoundCallButton(
           icon: session.cameraOn
@@ -347,14 +349,18 @@ class _CallScreenState extends State<CallScreen> {
               : Icons.videocam_off_rounded,
           caption: 'Камера',
           filled: session.cameraOn,
-          onTap: () => session.toggleCamera(),
+          onTap: !session.isConnected || session.mediaBusy
+              ? null
+              : () => session.toggleCamera(),
         ),
         if (session.cameraOn)
           _RoundCallButton(
             icon: Icons.cameraswitch_rounded,
             caption: 'Сменить',
             filled: false,
-            onTap: () => session.switchCamera(),
+            onTap: !session.isConnected || session.mediaBusy
+                ? null
+                : () => session.switchCamera(),
           ),
         _RoundCallButton(
           icon: session.screenSharing
@@ -362,7 +368,9 @@ class _CallScreenState extends State<CallScreen> {
               : Icons.screen_share_rounded,
           caption: 'Экран',
           filled: session.screenSharing,
-          onTap: () => session.toggleScreenShare(),
+          onTap: !session.isConnected || session.mediaBusy
+              ? null
+              : () => session.toggleScreenShare(),
         ),
         _RoundCallButton(
           icon: Icons.call_end_rounded,
@@ -413,7 +421,9 @@ class _ParticipantTile extends StatelessWidget {
               RTCVideoView(
                 renderer,
                 mirror: participant.mirror,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                objectFit: participant.screenSharing
+                    ? RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
+                    : RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
               )
             else
               Center(
@@ -434,7 +444,7 @@ class _ParticipantTile extends StatelessWidget {
                             : participant.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style:  TextStyle(
+                        style: TextStyle(
                           color: context.palette.accent,
                           fontWeight: FontWeight.w800,
                         ),
@@ -458,7 +468,7 @@ class _ParticipantTile extends StatelessWidget {
                     participant.isSelf
                         ? '${participant.name} (вы)'
                         : participant.name,
-                    style:  TextStyle(
+                    style: TextStyle(
                       color: context.palette.onShade,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -476,7 +486,7 @@ class _ParticipantTile extends StatelessWidget {
                     color: context.palette.shadeA(0.55),
                     shape: BoxShape.circle,
                   ),
-                  child:  Icon(
+                  child: Icon(
                     Icons.mic_off_rounded,
                     color: context.palette.onShade,
                     size: 15,
@@ -502,7 +512,7 @@ class _RoundCallButton extends StatelessWidget {
 
   final IconData icon;
   final String caption;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   /// filled = белая кнопка с чёрной иконкой (активное состояние / «Выйти»).
   final bool filled;
@@ -534,14 +544,18 @@ class _RoundCallButton extends StatelessWidget {
             child: Icon(
               icon,
               size: size * 0.42,
-              color: filled ? context.palette.onAccent : context.palette.accent,
+              color: onTap == null
+                  ? context.palette.textMuted
+                  : filled
+                      ? context.palette.onAccent
+                      : context.palette.accent,
             ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           caption,
-          style:  TextStyle(
+          style: TextStyle(
             fontSize: 11,
             color: context.palette.textMuted,
             fontWeight: FontWeight.w600,
@@ -656,7 +670,7 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                           IconButton(
                             tooltip: 'Закрыть',
                             onPressed: () => Navigator.of(context).pop(),
-                            icon:  Icon(Icons.close_rounded,
+                            icon: Icon(Icons.close_rounded,
                                 color: context.palette.accent),
                           ),
                           Expanded(
@@ -667,7 +681,7 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                                 textAlign: TextAlign.center,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style:  TextStyle(
+                                style: TextStyle(
                                   color: context.palette.accent,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 15,
@@ -679,7 +693,7 @@ class _CallVideoFullscreenState extends State<CallVideoFullscreen>
                             IconButton(
                               tooltip: 'Сбросить зум',
                               onPressed: _resetZoom,
-                              icon:  Icon(
+                              icon: Icon(
                                 Icons.zoom_out_map_rounded,
                                 color: context.palette.accent,
                               ),

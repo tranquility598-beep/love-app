@@ -15,7 +15,7 @@ if (!identifier) {
   process.exit(1);
 }
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 
 async function run() {
   try {

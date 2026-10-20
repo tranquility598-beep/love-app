@@ -10,6 +10,7 @@
          ходит по http://127.0.0.1:5555, поэтому в debug-сборке разрешаем
          его точечно. В release этого файла нет — там только HTTPS. -->
     <application
+        android:label="Love Preview"
         android:networkSecurityConfig="@xml/network_security_config"
-        tools:replace="android:networkSecurityConfig" />
+        tools:replace="android:networkSecurityConfig,android:label" />
 </manifest>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'profile_report_sheet.dart';
 
 import '../../core/network/love_api.dart';
 import '../../core/realtime/love_socket.dart';
@@ -150,6 +151,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       body: LoveBackground(
         child: ScreenFrame(
           title: 'профиль',
+          // Жалоба на профиль — только на чужой и только когда он загрузился.
+          trailing: _user == null
+              ? null
+              : IconButton(
+                  tooltip: 'Пожаловаться на профиль',
+                  onPressed: _report,
+                  color: context.palette.textSecondary,
+                  icon: const Icon(Icons.flag_outlined, size: 21),
+                ),
           leading: IconButton(
             tooltip: 'Назад',
             onPressed: () => Navigator.of(context).pop(),
@@ -160,6 +170,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _report() async {
+    final user = _user;
+    if (user == null) return;
+    final sent = await ProfileReportFlow.open(
+      context,
+      api: _api,
+      userId: widget.userId,
+      name: asText(user['nickname'], asText(user['username'])),
+    );
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Жалоба отправлена. Модератор проверит профиль.')),
+      );
+    }
   }
 
   Widget _body() {
@@ -248,6 +274,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             color: context.palette.textMuted,
           ),
         ),
+        // Значок подписки: сервер отдаёт planBadge только для действующего тарифа.
+        if (_planName(asText(user['planBadge'])) != null) ...[
+          const SizedBox(height: 10),
+          Center(child: _PlanBadge(name: _planName(asText(user['planBadge']))!)),
+        ],
         if (staffRoleLabel(asText(user['role'], asText(user['staffRank'])))
             .isNotEmpty) ...[
           const SizedBox(height: 10),
@@ -407,3 +438,40 @@ class _Section extends StatelessWidget {
     );
   }
 }
+String? _planName(String plan) {
+  switch (plan) {
+    case 'pro':
+      return 'Love Pro';
+    case 'premium':
+      return 'Love Premium';
+    case 'duo':
+      return 'Love Duo';
+  }
+  return null;
+}
+
+class _PlanBadge extends StatelessWidget {
+  const _PlanBadge({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+      decoration: BoxDecoration(
+        color: context.palette.inkA(0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.palette.inkA(0.15)),
+      ),
+      child: Text(
+        '✦ $name',
+        style: TextStyle(
+          color: context.palette.textPrimary,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+

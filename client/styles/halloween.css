@@ -1,0 +1,403 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LOVE — сезонная тема «Halloween».
+
+   Включается атрибутом data-season="halloween" на <html> (ключ настроек
+   app-season, см. SettingsManager.applySeason). Каждое правило ниже
+   начинается с этого атрибута: без него файл ничего не меняет, поэтому
+   «Обычная» тема возвращает стандартный вид полностью.
+
+   Основа остаётся чёрно-белой. Тыквенный оранжевый — только акцент:
+   декор, активные элементы и мягкое свечение, без сплошных заливок.
+   Однотонный декор (паутина, паук, призрак) — CSS-маски, цвет берётся из
+   токенов ниже и подстраивается под тёмную и светлую тему. Тыква —
+   двухцветный SVG с нейтральной серой линией, читается на обеих.
+   Весь декор — псевдоэлементы с pointer-events: none: он не перехватывает
+   клики и не попадает в дерево доступности.
+   ═══════════════════════════════════════════════════════════════════ */
+
+html[data-season="halloween"] {
+  --hw-accent: #f28c28;
+  --hw-accent-soft: rgba(242, 140, 40, 0.12);
+  --hw-accent-line: rgba(242, 140, 40, 0.45);
+  --hw-glow: rgba(242, 140, 40, 0.24);
+  --hw-glow-faint: rgba(242, 140, 40, 0.06);
+  --hw-web: rgba(255, 255, 255, 0.13);
+  --hw-web-strong: rgba(255, 255, 255, 0.32);
+  --hw-ghost: rgba(245, 245, 245, 0.8);
+  --hw-selection: rgba(242, 140, 40, 0.32);
+}
+
+/* На светлом фоне оранжевый темнее, чтобы иконки держали контраст 3:1. */
+html[data-season="halloween"][data-theme="light"] {
+  --hw-accent: #c4610f;
+  --hw-accent-soft: rgba(196, 97, 15, 0.09);
+  --hw-accent-line: rgba(196, 97, 15, 0.45);
+  --hw-glow: rgba(242, 140, 40, 0.2);
+  --hw-glow-faint: rgba(242, 140, 40, 0.07);
+  --hw-web: rgba(0, 0, 0, 0.12);
+  --hw-web-strong: rgba(0, 0, 0, 0.3);
+  --hw-ghost: rgba(28, 28, 28, 0.5);
+  --hw-selection: rgba(242, 140, 40, 0.26);
+}
+
+/* ─────────────  Общая атмосфера  ───────────── */
+
+/* Тёплый отсвет «фонаря» в нижнем углу окна поверх привычного градиента. */
+html[data-season="halloween"] body {
+  background-image:
+    radial-gradient(55% 40% at 8% 104%, var(--hw-glow-faint), transparent 72%),
+    radial-gradient(circle at 50% 50%, var(--bg-page-core) 0%, var(--bg-deep) 100%);
+}
+
+html[data-season="halloween"] ::selection {
+  background: var(--hw-selection);
+}
+
+html[data-season="halloween"] :focus-visible {
+  outline-color: var(--hw-accent);
+}
+
+html[data-season="halloween"] input[type="range"],
+html[data-season="halloween"] input[type="checkbox"],
+html[data-season="halloween"] input[type="radio"] {
+  accent-color: var(--hw-accent);
+}
+
+/* ─────────────  Левая панель  ───────────── */
+
+/* Активный раздел: оранжевая иконка и мягкое свечение вместо белой рамки. */
+html[data-season="halloween"] .nav-btn.active {
+  color: var(--hw-accent);
+  border-color: var(--hw-accent-line);
+  box-shadow: 0 0 18px var(--hw-glow), inset 0 0 10px var(--hw-accent-soft);
+}
+
+html[data-season="halloween"] .nav-btn:hover svg {
+  filter: drop-shadow(0 0 6px var(--hw-glow));
+}
+
+html[data-season="halloween"] .logo-nav-area.active {
+  border-color: var(--hw-accent-line);
+  box-shadow: 0 0 20px var(--hw-glow);
+}
+
+html[data-season="halloween"] .logo-nav-area.active #logo-icon-heart {
+  filter: drop-shadow(0 0 10px var(--hw-glow));
+}
+
+/* Декор в углах панелей позиционируется от самих панелей. На широком окне
+   style.css держит их static !important; relative без смещений вёрстку не
+   меняет, только делает панель опорой для псевдоэлемента. На 769–1024px
+   панели и так absolute/fixed, на телефоне — fixed. */
+@media (min-width: 1025px) {
+  html[data-season="halloween"] .global-sidebar,
+  html[data-season="halloween"] .conversations-sidebar {
+    position: relative !important;
+  }
+}
+
+/* Паутина в верхнем углу вертикальной панели. На телефоне панель становится
+   нижней полосой с вкладками — там декор не нужен. */
+@media (min-width: 769px) {
+  html[data-season="halloween"] .global-sidebar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 40px;
+    z-index: -1; /* панель — свой контекст наложения (backdrop-filter) */
+    border-top-right-radius: inherit;
+    background: var(--hw-web);
+    -webkit-mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+    mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+    transform: scaleX(-1);
+    pointer-events: none;
+  }
+}
+
+/* Список бесед: паутина в нижнем углу, под содержимым. */
+html[data-season="halloween"] .conversations-sidebar {
+  isolation: isolate;
+}
+
+html[data-season="halloween"] .conversations-sidebar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 72px;
+  height: 72px;
+  z-index: -1;
+  border-bottom-left-radius: inherit;
+  background: var(--hw-web);
+  -webkit-mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  transform: scaleY(-1);
+  pointer-events: none;
+}
+
+/* ─────────────  Пустые состояния  ───────────── */
+
+/* Плюс в кружке становится фонарём-тыквой: сам знак скрыт цветом, размеры
+   кружка прежние, поэтому вёрстка пустого состояния не сдвигается. */
+html[data-season="halloween"] .empty-state-panel .empty-state-mark {
+  position: relative;
+  color: transparent;
+  border-color: var(--hw-accent-line);
+  background: url("../assets/season/pumpkin.svg") center 54% / 80% no-repeat;
+  box-shadow: 0 0 22px var(--hw-glow), inset 0 0 12px var(--hw-accent-soft);
+  animation: hw-lantern 5.2s ease-in-out infinite;
+}
+
+html[data-season="halloween"] .empty-state-main .empty-state-mark {
+  background:
+    url("../assets/season/pumpkin.svg") center 54% / 76% no-repeat,
+    var(--tint-a-4);
+}
+
+/* Призрак выглядывает справа от фонаря и медленно парит. */
+html[data-season="halloween"] .empty-state-panel .empty-state-mark::after {
+  content: "";
+  position: absolute;
+  top: -16px;
+  right: -30px;
+  width: 22px;
+  height: 26px;
+  background: var(--hw-ghost);
+  -webkit-mask: url("../assets/season/ghost.svg") no-repeat center / contain;
+  mask: url("../assets/season/ghost.svg") no-repeat center / contain;
+  opacity: 0.85;
+  pointer-events: none;
+  animation: hw-float 6.4s ease-in-out infinite;
+}
+
+html[data-season="halloween"] .empty-state-main .empty-state-mark::after {
+  top: -22px;
+  right: -38px;
+  width: 28px;
+  height: 33px;
+}
+
+/* Главная область без переписки: паутина в углу и паук на нити. Только когда
+   в ней пустое состояние — над перепиской декор не появляется. */
+html[data-season="halloween"] .chat-area:has(> .empty-state-main)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: clamp(84px, 14vw, 132px);
+  aspect-ratio: 1;
+  background: var(--hw-web);
+  -webkit-mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
+html[data-season="halloween"] .chat-area:has(> .empty-state-main)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: clamp(30px, 5vw, 48px);
+  width: 18px;
+  height: clamp(96px, 16vh, 150px);
+  background: var(--hw-web-strong);
+  /* Паук внизу и нить отдельным слоем маски: высота нити меняется с окном,
+     а сам паук не растягивается. */
+  -webkit-mask:
+    url("../assets/season/spider.svg") center bottom / 18px auto no-repeat,
+    linear-gradient(#000, #000) center top / 1px calc(100% - 14px) no-repeat;
+  mask:
+    url("../assets/season/spider.svg") center bottom / 18px auto no-repeat,
+    linear-gradient(#000, #000) center top / 1px calc(100% - 14px) no-repeat;
+  transform-origin: 50% 0;
+  pointer-events: none;
+  animation: hw-dangle 7s ease-in-out infinite;
+}
+
+/* ─────────────  Настройки  ───────────── */
+
+/* Selection is shown by the background, text and icon without an edge marker. */
+html[data-season="halloween"] .settings-nav-item {
+  box-shadow: none;
+}
+
+html[data-season="halloween"] .settings-nav-item.active svg {
+  color: var(--hw-accent);
+  opacity: 1;
+}
+
+/* Две тыквы внизу меню настроек. Это обычный элемент потока с margin-top:
+   auto: при длинном меню он уходит вниз под пункты и не перекрывает их. */
+html[data-season="halloween"] .settings-sidebar::after {
+  content: "";
+  display: block;
+  flex: 0 0 auto;
+  height: 46px;
+  margin: auto 20px 18px;
+  background:
+    url("../assets/season/pumpkin.svg") 0 100% / 44px no-repeat,
+    url("../assets/season/pumpkin.svg") 38px 100% / 30px no-repeat;
+  filter: drop-shadow(0 0 10px var(--hw-glow));
+  pointer-events: none;
+}
+
+/* Выбранные карточки тем и переключатели — с оранжевым контуром. */
+html[data-season="halloween"] .lvs-theme-option.active {
+  border-color: var(--hw-accent);
+  box-shadow: 0 0 0 1px var(--hw-accent-line), 0 0 24px var(--hw-glow);
+}
+
+html[data-season="halloween"] .lvs-toggle input:checked + .lvs-toggle-track {
+  background: var(--hw-accent-soft);
+  border-color: var(--hw-accent-line);
+}
+
+html[data-season="halloween"] .lvs-toggle input:checked + .lvs-toggle-track::after {
+  background: var(--hw-accent);
+  box-shadow: 0 0 8px var(--hw-glow);
+}
+
+/* ─────────────  Управление войсом  ───────────── */
+
+/* Включённые кнопки остаются светлыми, добавляется только тёплое свечение;
+   точка живого соединения становится оранжевой. */
+html[data-season="halloween"] .voice-control-btn.active-state,
+html[data-season="halloween"] #vmb-mic:not(.muted-state),
+html[data-season="halloween"] .voice-dock-trigger:not(.is-muted) {
+  box-shadow: 0 0 0 1px var(--hw-accent-line), 0 0 18px var(--hw-glow);
+}
+
+html[data-season="halloween"] .voice-dock-trigger:not(.is-muted) .voice-dock-trigger-pulse,
+html[data-season="halloween"] .vmb-pulse-dot {
+  background: var(--hw-accent);
+}
+
+/* ─────────────  Экран загрузки  ───────────── */
+
+/* data-season ставится в <head> до первой отрисовки, поэтому обычный экран
+   не мелькает. Сердце-логотип заменяет тыква с вырезанным сердцем — тот же
+   бренд в сезонном виде; над ней паутина и паук, который спускается на нити,
+   пока приложение грузится. */
+html[data-season="halloween"] .app-splash {
+  background:
+    radial-gradient(38% 32% at 50% 56%, var(--hw-glow-faint), transparent 72%),
+    var(--bg-primary);
+}
+
+html[data-season="halloween"] .app-splash-logo {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  background: url("../assets/season/pumpkin-heart.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0 14px var(--hw-glow));
+  animation: hw-lantern-beat 2.2s ease-in-out infinite;
+}
+
+html[data-season="halloween"] .app-splash-logo svg {
+  visibility: hidden;
+}
+
+html[data-season="halloween"] .app-splash-logo::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  right: -34px;
+  width: 24px;
+  height: 28px;
+  background: var(--hw-ghost);
+  -webkit-mask: url("../assets/season/ghost.svg") no-repeat center / contain;
+  mask: url("../assets/season/ghost.svg") no-repeat center / contain;
+  opacity: 0.8;
+  animation: hw-float 6.4s ease-in-out infinite;
+}
+
+html[data-season="halloween"] .app-splash-spinner {
+  border-color: var(--hw-accent-soft);
+  border-top-color: var(--hw-accent);
+  box-shadow: 0 0 14px var(--hw-glow);
+}
+
+html[data-season="halloween"] .app-splash::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: clamp(110px, 18vw, 180px);
+  aspect-ratio: 1;
+  background: var(--hw-web);
+  -webkit-mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
+html[data-season="halloween"] .app-splash::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: clamp(40px, 7vw, 66px);
+  width: 18px;
+  height: clamp(110px, 22vh, 190px);
+  background: var(--hw-web-strong);
+  -webkit-mask:
+    url("../assets/season/spider.svg") center bottom / 18px auto no-repeat,
+    linear-gradient(#000, #000) center top / 1px calc(100% - 14px) no-repeat;
+  mask:
+    url("../assets/season/spider.svg") center bottom / 18px auto no-repeat,
+    linear-gradient(#000, #000) center top / 1px calc(100% - 14px) no-repeat;
+  transform-origin: 50% 0;
+  pointer-events: none;
+  animation: hw-descend 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both, hw-dangle 7s ease-in-out 1.4s infinite;
+}
+
+/* ─────────────  Движение  ───────────── */
+
+@keyframes hw-lantern {
+  0%, 100% { box-shadow: 0 0 22px var(--hw-glow), inset 0 0 12px var(--hw-accent-soft); }
+  45% { box-shadow: 0 0 28px var(--hw-glow), inset 0 0 14px var(--hw-accent-soft); }
+  52% { box-shadow: 0 0 18px var(--hw-glow), inset 0 0 10px var(--hw-accent-soft); }
+}
+
+@keyframes hw-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes hw-dangle {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(2.5deg) translateY(6px); }
+}
+
+@keyframes hw-descend {
+  from { clip-path: inset(0 0 100% 0); transform: translateY(-40px); }
+  to { clip-path: inset(0 0 0 0); transform: translateY(0); }
+}
+
+@keyframes hw-lantern-beat {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px var(--hw-glow)); }
+  50% { transform: scale(1.06); filter: drop-shadow(0 0 22px var(--hw-glow)); }
+}
+
+/* Системная настройка «меньше движения» и переключатель «Анимации» в
+   настройках оставляют декор неподвижным. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-season="halloween"] .empty-state-panel .empty-state-mark,
+  html[data-season="halloween"] .empty-state-panel .empty-state-mark::after,
+  html[data-season="halloween"] .chat-area:has(> .empty-state-main)::after,
+  html[data-season="halloween"] .app-splash-logo,
+  html[data-season="halloween"] .app-splash-logo::after,
+  html[data-season="halloween"] .app-splash::after {
+    animation: none;
+  }
+}
+
+html[data-season="halloween"] body.no-animations .empty-state-panel .empty-state-mark,
+html[data-season="halloween"] body.no-animations .empty-state-panel .empty-state-mark::after,
+html[data-season="halloween"] body.no-animations .chat-area:has(> .empty-state-main)::after,
+html[data-season="halloween"] body.no-animations .app-splash-logo,
+html[data-season="halloween"] body.no-animations .app-splash-logo::after,
+html[data-season="halloween"] body.no-animations .app-splash::after {
+  animation: none;
+}

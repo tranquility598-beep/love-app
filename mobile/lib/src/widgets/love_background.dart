@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/love_tokens.dart';
+import '../theme/season.dart';
 
 /// The real mobile/Android background: flat `#0a0a0a`.
 ///
@@ -17,7 +18,16 @@ class LoveBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: context.palette.bgAndroid,
-      child: child,
+      // Halloween-декор — отдельным слоем под содержимым; без сезона это
+      // тот же плоский фон, что и раньше.
+      child: SeasonBuilder(
+        builder: (context, halloween) => halloween
+            ? Stack(children: [
+                const Positioned.fill(child: HalloweenBackdrop()),
+                child,
+              ])
+            : child,
+      ),
     );
   }
 }

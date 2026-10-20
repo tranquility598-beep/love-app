@@ -149,6 +149,8 @@ function getListenerStats() {
 
 function handleConnect() {
   console.log('✅ Socket connected:', socket.id);
+  _deniedRetryDelay = 0;
+  clearTimeout(_deniedRetryTimer);
   if (typeof window.initRoleSocketHandlers === 'function') {
     window.initRoleSocketHandlers();
   }
@@ -158,8 +160,24 @@ function handleDisconnect(reason) {
   console.log('❌ Socket disconnected:', reason);
 }
 
+// Сервер отклонил подключение в middleware (токен истёк, не успел выдаться
+// при первом входе и т.п.). В этом случае socket.io v4 САМ НЕ переподключается
+// (socket.active === false) — раньше мы только писали в лог, и приложение
+// оставалось открытым без реального времени: человека не видно в сети,
+// сообщения и звонки падают, пока не перезапустишь. Пробуем снова сами,
+// с нарастающей паузой; свежий токен выдаёт auth-функция в initSocket.
+let _deniedRetryDelay = 0;
+let _deniedRetryTimer = null;
+
 function handleConnectError(error) {
   console.error('Socket connection error:', error.message);
+  if (!socket || socket.active) return; // обычный обрыв — менеджер повторит сам
+  clearTimeout(_deniedRetryTimer);
+  _deniedRetryDelay = Math.min(_deniedRetryDelay ? _deniedRetryDelay * 2 : 1500, 30000);
+  console.warn(`[socket-auth] connection denied, retry in ${_deniedRetryDelay} ms`);
+  _deniedRetryTimer = setTimeout(() => {
+    if (socket && !socket.connected) socket.connect();
+  }, _deniedRetryDelay);
 }
 
 function handleReconnect(attemptNumber) {
@@ -553,7 +571,11 @@ function handleDMNewMessage(data) {
   // Своё уже обработано handleMessageNew (мёрж pending→real), чтобы не задвоить.
   if (!isOwn) {
     appendMessage(message);
-    if (isCurrentChannel) scrollToBottom();
+    if (isCurrentChannel) {
+      scrollToBottom();
+      // Уведомление в открытом диалоге не показывается — тихий звук вместо него.
+      if (typeof window.playMessageSound === 'function') window.playMessageSound('message_receive');
+    }
     else showMessageNotification(message.author?.username, message.content, conversationId);
   }
 
@@ -576,7 +598,7 @@ function handleNotificationMention(data) {
 
 function handleVoiceExistingMembers(data) {
   const { channelId, members } = data;
-  if (window.voiceManager) {
+  if (window.voiceManager?.channelId === channelId) {
     members.forEach(member => {
       window.voiceManager.initiateConnection(member.socketId, member.userId);
     });
@@ -592,8 +614,12 @@ function handleVoiceUserJoined(data) {
 
 function handleVoiceUserLeft(data) {
   const { channelId, userId, socketId } = data;
-  if (window.voiceManager) {
+  if (window.voiceManager?.channelId === channelId) {
     window.voiceManager.removeConnection(socketId);
+    const members = window.voiceManager.channelMembers.filter(member => member.socketId !== socketId);
+    window.voiceManager.channelMembers = members;
+    window.CallStageController?.syncMembers(members);
+    updateVoiceChannelMembersUI(channelId, members);
   }
   updateVoiceChannelUI(channelId);
 }
@@ -634,6 +660,13 @@ function handleVoiceMediaState(data) {
   }
   if (manager && manager.channelId === channelId) {
     window.CallStageController?.updateMediaState(data);
+    if (mode !== 'none') {
+      const track = manager.peerConnections.get(socketId)?.getReceivers()
+        .find(receiver => receiver.track?.kind === 'video')?.track;
+      const stream = manager.remoteVideoStreams.get(socketId)
+        || (track?.readyState === 'live' ? new MediaStream([track]) : null);
+      if (stream) window.CallStageController?.setRemoteMedia(socketId, stream, mode);
+    }
   }
   if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
@@ -665,7 +698,8 @@ function handleVoiceUserDeafened(data) {
 
 function handleVoiceLeft(data) {
   const { channelId } = data;
-  if (window.currentVoiceChannel && window.currentVoiceChannel !== channelId) {
+  const activeChannel = window.voiceManager?.channelId || window.currentVoiceChannel;
+  if (!activeChannel || activeChannel !== channelId) {
     console.warn('Ignored stale voice:left for inactive channel:', channelId);
     return;
   }
@@ -682,6 +716,7 @@ function handleVoiceLeft(data) {
 
 function handleScreenStarted(data) {
   const { channelId, userId, username } = data;
+  if (window.voiceManager?.channelId !== channelId) return;
   if (window.currentVoiceChannel === channelId) {
     const container = document.getElementById('screen-share-container');
     if (container) container.classList.remove('hidden');
@@ -700,6 +735,7 @@ function handleScreenStarted(data) {
 
 function handleScreenStopped(data) {
   const { channelId, userId } = data;
+  if (window.voiceManager?.channelId !== channelId) return;
   if (window.voiceManager && typeof hideScreenShareVideoForUser === 'function') {
     if (userId === window.currentUser?._id) {
       hideScreenShareVideoForUser('local');
@@ -707,6 +743,7 @@ function handleScreenStopped(data) {
     if (window.voiceManager.channelMembers) {
       const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
       if (member) {
+        if (member.mediaMode === 'camera') return;
         hideScreenShareVideoForUser(member.socketId);
         // Снимаем пометку демонстрации, чтобы следующий video-трек
         // от этого участника распознавался как камера.
@@ -726,34 +763,29 @@ function handleCameraStarted(data) {
 }
 
 function handleCameraStopped(data) {
-  const { userId } = data || {};
-  if (window.voiceManager && window.voiceManager.channelMembers) {
-    const member = window.voiceManager.channelMembers.find(m => m.userId === userId);
-    if (member && member.socketId && window.voiceManager.remoteVideoStreams) {
-      // Камера выключена — чистим превью её потока.
-      window.voiceManager.remoteVideoStreams.delete(member.socketId);
-    }
-  }
+  if (window.voiceManager?.channelId !== data?.channelId) return;
+  // authoritative voice:media_state уже скрыл камеру. Receiver оставляем:
+  // он может использоваться повторно при следующем replaceTrack.
   if (typeof _triggerVoiceRerender === 'function') _triggerVoiceRerender();
 }
 
 function handleWebRTCOffer(data) {
   const { offer, fromSocketId, fromUserId, channelId } = data;
-  if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
+  if (window.voiceManager?.channelId === channelId) {
     window.voiceManager.handleOffer(offer, fromSocketId, fromUserId);
   }
 }
 
 function handleWebRTCAnswer(data) {
   const { answer, fromSocketId, channelId } = data;
-  if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
+  if (window.voiceManager?.channelId === channelId) {
     window.voiceManager.handleAnswer(answer, fromSocketId);
   }
 }
 
 function handleWebRTCIceCandidate(data) {
   const { candidate, fromSocketId, channelId } = data;
-  if (window.voiceManager && (!window.currentVoiceChannel || window.currentVoiceChannel === channelId)) {
+  if (window.voiceManager?.channelId === channelId) {
     window.voiceManager.handleIceCandidate(candidate, fromSocketId);
   }
 }
@@ -777,14 +809,26 @@ function handleCallResponse(data) {
 }
 
 function handleCallTerminated(data) {
+  window.outgoingDMCall = null;
   if (window.handleDMCallEnd) {
     window.handleDMCallEnd();
   }
 }
 
 function handleCallError(data) {
-  showNotification('error', data.message);
+  // Заголовок «Звонок», а не «Ошибка»: сюда приходит и обычное «Нет ответа»
+  // (сервер снимает неотвеченный вызов через 45 с, services/callRings.js).
+  window.outgoingDMCall = null;
+  showNotification('error', (data && data.message) || 'Звонок не удался', 'Звонок');
   if (window.handleDMCallEnd) window.handleDMCallEnd();
+}
+
+// Собеседник не в сети: сервер не роняет звонок сразу, а ждёт — вдруг
+// он откроет приложение. Показываем это в окне вызова.
+function handleCallRinging(data) {
+  if (!data || data.online !== false) return;
+  const status = document.getElementById('call-overlay-status');
+  if (status) status.textContent = 'НЕ В СЕТИ · ЖДЁМ ОТВЕТА...';
 }
 
 // ===== PROFILE SCOPE HANDLERS =====
@@ -1152,6 +1196,7 @@ function attachAllSocketListeners() {
   attachListener('call', 'call:response', handleCallResponse);
   attachListener('call', 'call:terminated', handleCallTerminated);
   attachListener('call', 'call:error', handleCallError);
+  attachListener('call', 'call:ringing', handleCallRinging);
   
   // ROLES SCOPE (CONTEXT - server-specific)
   attachListener('context', 'role:created', handleRoleCreated);
@@ -1221,9 +1266,19 @@ async function initSocket() {
     console.warn('[socket-auth] no socket token; socket will fail to authenticate');
   }
 
-  // Подключаемся к серверу с socket-token'ом
+  // Подключаемся к серверу с socket-token'ом. auth — функция: socket.io
+  // вызывает её перед КАЖДОЙ попыткой (первая, реконнект, ручной connect()),
+  // поэтому сервер всегда получает свежий токен. Раньше токен подменялся в
+  // асинхронном reconnect_attempt — уже после того, как попытка ушла со старым
+  // (TTL 5 мин) токеном, и после сна/обрыва вход в сеть срывался.
+  let pendingToken = token;
   socket = io(SOCKET_URL, {
-    auth: { token },
+    auth: (cb) => {
+      const ready = pendingToken;
+      pendingToken = null;
+      if (ready) { cb({ token: ready }); return; }
+      fetchSocketToken().then(fresh => cb({ token: fresh }));
+    },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -1234,11 +1289,9 @@ async function initSocket() {
   // Перед каждой попыткой реконнекта обновляем socket-token: исходный мог
   // истечь (TTL 5 мин) или быть отозван. socket.io v4 поддерживает
   // динамическое обновление socket.auth перед reconnect.
-  socket.io.on('reconnect_attempt', async () => {
+  socket.io.on('reconnect_attempt', () => {
     detachScope('context');
-    const fresh = await fetchSocketToken();
-    socket.auth = { token: fresh };
-    console.log('[socket-auth] refreshed token and detached context scope for reconnect_attempt');
+    console.log('[socket-auth] detached context scope for reconnect_attempt');
   });
 
   // socket.io v4: событие 'reconnect' приходит на МЕНЕДЖЕР (socket.io), а не на сокет.
@@ -1394,7 +1447,11 @@ function socketStopTyping(channelId) {
  * Голосовой канал
  */
 function socketJoinVoice(channelId) {
-  if (!socket) return Promise.resolve({ status: 'error', message: 'Сокет не подключен' });
+  // Без живого соединения emit уходит в буфер, и вход просто ждал 10 с до
+  // таймаута. Отвечаем сразу и честно — причину покажет describeVoiceJoinError.
+  if (!socket || !socket.connected) {
+    return Promise.resolve({ status: 'error', offline: true, message: 'Нет соединения с сервером' });
+  }
   return new Promise(resolve => {
     let settled = false;
     const finish = value => {
@@ -1532,6 +1589,10 @@ function socketRequestCall(targetUserId, kind = 'audio') {
       }
       return;
     }
+    // Запоминаем, кому звоним: ответ принимаем только от него (см.
+    // handleDMCallResponse) — случайное или устаревшее «принято» не должно
+    // включать звук без нашего звонка.
+    window.outgoingDMCall = { targetId: targetUserId.toString(), at: Date.now() };
     socket.emit('call:request', {
       targetUserId: targetUserId.toString(),
       kind: kind === 'video' ? 'video' : 'audio'

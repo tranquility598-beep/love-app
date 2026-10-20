@@ -8,6 +8,7 @@ import 'core/network/love_api.dart';
 import 'core/calls/call_center.dart';
 import 'core/prefs/love_prefs.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/profile/user_profile_screen.dart';
 import 'features/servers/invite_prompt.dart';
 import 'features/shell/main_shell.dart';
 import 'features/support/restricted_access_screen.dart';
@@ -31,7 +32,12 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
   /// Код из ссылки, пришедшей до входа: вступать некуда, пока нет аккаунта,
   /// поэтому держим его до логина, а не выбрасываем.
   String? _pendingInvite;
+  String? _pendingProfile;
   bool _invitePromptOpen = false;
+  bool _wasAuthenticated = false;
+  String? _openingProfile;
+  String? _lastProfile;
+  DateTime? _lastProfileAt;
 
   @override
   void initState() {
@@ -119,6 +125,12 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
       await _handleInviteLink(uri);
       return;
     }
+    if (uri.host == 'user') {
+      final username =
+          uri.pathSegments.isEmpty ? '' : uri.pathSegments.first.trim();
+      if (username.isNotEmpty) await _openProfileLink(username);
+      return;
+    }
     if (uri.host != 'login-success') return;
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) {
@@ -157,11 +169,13 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
     // Холодный старт: ссылка приходит раньше, чем восстановлена сессия.
     // Придержим код и добьём его из _onSessionChanged.
     final navigatorContext = CallCenter.navigatorKey.currentContext;
-    if (session.isBooting || !session.isAuthenticated ||
+    if (session.isBooting ||
+        !session.isAuthenticated ||
         navigatorContext == null) {
       _pendingInvite = code;
       if (!session.isBooting && !session.isAuthenticated) {
-        _showSnack('Войдите в аккаунт — приглашение откроется сразу после входа');
+        _showSnack(
+            'Войдите в аккаунт — приглашение откроется сразу после входа');
       }
       return;
     }
@@ -182,7 +196,88 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
     }
   }
 
+  /// love-app://user/НИК — «Написать в Love» с публичной страницы профиля:
+  /// открываем профиль человека, оттуда «Написать» ведёт в личный чат.
+  Future<void> _openProfileLink(String username) async {
+    if (!mounted) return;
+    if (session.isRestricted) {
+      _pendingProfile = null;
+      return;
+    }
+    if (_openingProfile == username ||
+        (_lastProfile == username &&
+            DateTime.now()
+                    .difference(_lastProfileAt ?? DateTime(2000))
+                    .inSeconds <
+                2)) {
+      return;
+    }
+    final navigatorContext = CallCenter.navigatorKey.currentContext;
+    if (session.isBooting ||
+        !session.isAuthenticated ||
+        navigatorContext == null) {
+      _pendingProfile = username;
+      if (session.isAuthenticated &&
+          !session.isBooting &&
+          navigatorContext == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && CallCenter.navigatorKey.currentContext != null) {
+            _onSessionChanged();
+          }
+        });
+      }
+      return;
+    }
+    final owner = session.user?.id;
+    _openingProfile = username;
+    _pendingProfile = null;
+    try {
+      final api = LoveApi();
+      final user = await api.userByUsername(username);
+      if (!mounted || !session.isAuthenticated || owner != session.user?.id) {
+        return;
+      }
+      _lastProfile = username;
+      _lastProfileAt = DateTime.now();
+      final navigator = CallCenter.navigatorKey.currentState;
+      if (navigator == null) return;
+      await navigator.push(MaterialPageRoute<void>(
+        builder: (_) => UserProfileScreen(
+          userId: user['_id'].toString(),
+          api: api,
+          socket: CallCenter.instance.socket,
+          initialName: (user['nickname'] ?? user['username'])?.toString(),
+          initialAvatar: user['avatar']?.toString(),
+        ),
+      ));
+    } catch (error) {
+      if (mounted && owner == session.user?.id) _showSnack(error.toString());
+    } finally {
+      if (_openingProfile == username) _openingProfile = null;
+    }
+  }
+
   void _onSessionChanged() {
+    final signedOut = _wasAuthenticated && !session.isAuthenticated;
+    _wasAuthenticated = session.isAuthenticated;
+    if (signedOut) {
+      _pendingProfile = null;
+      _pendingInvite = null;
+      _lastProfile = null;
+      _messengerKey.currentState?.clearSnackBars();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || session.isAuthenticated) return;
+        CallCenter.navigatorKey.currentState
+            ?.popUntil((route) => route.isFirst);
+      });
+      return;
+    }
+    final profile = _pendingProfile;
+    if (profile != null && !session.isBooting && session.isAuthenticated) {
+      _pendingProfile = null;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _openProfileLink(profile));
+    }
     final code = _pendingInvite;
     if (code == null) return;
     if (session.isBooting || !session.isAuthenticated) return;
@@ -260,7 +355,7 @@ class _BootScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return  Scaffold(
+    return Scaffold(
       body: DecoratedBox(
         decoration: BoxDecoration(
           // Виньетка: в центре поверхность на ступень выше, к краям — самая

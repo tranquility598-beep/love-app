@@ -8,6 +8,81 @@ class LoveApi {
   LoveApi({ApiClient? api}) : api = api ?? ApiClient();
 
   final ApiClient api;
+  static bool _submittingCase = false;
+
+  Future<Map<String, dynamic>> _submitCase(
+      String path, Map<String, dynamic> body) async {
+    if (_submittingCase) {
+      throw const ApiException(
+          'Обращение уже отправляется. Дождитесь результата.',
+          statusCode: 409);
+    }
+    _submittingCase = true;
+    try {
+      final owner = await api.tokenStore.readToken();
+      await ensureCaseSubmissionAllowed();
+      if (owner == null || owner != await api.tokenStore.readToken()) {
+        throw const ApiException('Аккаунт изменился. Откройте форму заново.');
+      }
+      return await api.post(path, body: body);
+    } finally {
+      _submittingCase = false;
+    }
+  }
+
+  Future<CaseSubmissionState> ensureCaseSubmissionAllowed() async {
+    final state = (await caseInbox()).submission;
+    if (!state.supported || !state.allowed) {
+      throw ApiException(state.explanation,
+          statusCode: !state.supported
+              ? 503
+              : state.code == 'CASE_COOLDOWN'
+                  ? 429
+                  : 409);
+    }
+    return state;
+  }
+
+  Future<List<Map<String, dynamic>>> blockedUsers() async {
+    final response = await api.get('/users/me/blocked');
+    if (response['blockedUsers'] is! List) {
+      throw const ApiException(
+          'Сервер не вернул список заблокированных. Попробуйте позже.');
+    }
+    return _list(response['blockedUsers']);
+  }
+
+  Future<void> unblockUser(String userId) async {
+    final response =
+        await api.delete('/users/me/blocked/${Uri.encodeComponent(userId)}');
+    if (response['userId'] != userId) {
+      throw const ApiException(
+          'Сервер не подтвердил разблокировку. Обновите список.');
+    }
+  }
+
+  Future<Map<String, dynamic>> profilePageSummary() =>
+      api.get('/profile-page/summary');
+  Future<Map<String, dynamic>> profileEditorSession() =>
+      api.post('/profile-page/editor-session');
+
+  Future<Map<String, dynamic>> userByUsername(String username) async {
+    try {
+      final response =
+          await api.get('/users/by-username/${Uri.encodeComponent(username)}');
+      return (response['user'] as Map).cast<String, dynamic>();
+    } on ApiException catch (error) {
+      if (error.statusCode != 404) rethrow;
+      final users = await searchUsers(username);
+      for (final user in users) {
+        if (user['username']?.toString().toLowerCase() ==
+            username.toLowerCase()) {
+          return user;
+        }
+      }
+      rethrow;
+    }
+  }
 
   Future<List<Map<String, dynamic>>> conversations() async {
     final response = await api.get('/dm');
@@ -401,7 +476,7 @@ class LoveApi {
     String safeLog = '',
     List<Map<String, dynamic>> attachments = const [],
   }) {
-    return api.post('/cases', body: {
+    return _submitCase('/cases', {
       'kind': kind,
       'title': title.trim(),
       'description': description.trim(),
@@ -420,8 +495,17 @@ class LoveApi {
   }
 
   Future<List<SupportCase>> myCases() async {
+    return (await caseInbox()).cases;
+  }
+
+  Future<CaseInbox> caseInbox() async {
     final response = await api.get('/cases/mine');
-    return _list(response['cases']).map(SupportCase.fromJson).toList();
+    final raw = response['submission'];
+    return CaseInbox(
+      cases: _list(response['cases']).map(SupportCase.fromJson).toList(),
+      submission: CaseSubmissionState.fromJson(
+          raw is Map ? raw.cast<String, dynamic>() : {}),
+    );
   }
 
   Future<SupportCase> caseDetails(String caseId) async {
@@ -441,7 +525,7 @@ class LoveApi {
     String priority = 'normal',
     List<Map<String, dynamic>> attachments = const [],
   }) async {
-    final response = await api.post('/cases', body: {
+    final response = await _submitCase('/cases', {
       'kind': 'support',
       'title': title.trim(),
       'description': description.trim(),
@@ -467,7 +551,7 @@ class LoveApi {
     required String moderationActionId,
     required String description,
   }) async {
-    final response = await api.post('/cases/appeals', body: {
+    final response = await _submitCase('/cases/appeals', {
       'moderationAction': moderationActionId,
       'description': description.trim(),
     });
@@ -481,12 +565,43 @@ class LoveApi {
     return _list(response['categories']).map(ReportReason.fromJson).toList();
   }
 
+  Future<ProfileReportOptions> profileReportOptions() async {
+    final response = await api.get('/cases/profile-report-options');
+    return ProfileReportOptions(
+      parts: _list(response['parts'])
+          .map((part) => ProfileReportPart(
+              id: part['id']?.toString() ?? '',
+              label: part['label']?.toString() ?? ''))
+          .where((part) => part.id.isNotEmpty)
+          .toList(),
+      categories:
+          _list(response['categories']).map(ReportReason.fromJson).toList(),
+    );
+  }
+
+  Future<SupportCase> reportProfile({
+    required String userId,
+    required String part,
+    required List<String> path,
+    String description = '',
+  }) async {
+    final response = await _submitCase('/cases/profile-reports', {
+      'userId': userId,
+      'part': part,
+      'path': path,
+      'description': description.trim(),
+    });
+    return SupportCase.fromJson(
+      (response['case'] as Map).cast<String, dynamic>(),
+    );
+  }
+
   Future<SupportCase> reportMessage({
     required String messageId,
     required List<String> path,
     String description = '',
   }) async {
-    final response = await api.post('/cases/message-reports', body: {
+    final response = await _submitCase('/cases/message-reports', {
       'messageId': messageId,
       'path': path,
       'description': description.trim(),

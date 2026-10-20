@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,8 +31,16 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _error;
   bool _googleBusy = false;
 
+  // Экран кода: смена почты, повторная отправка и спокойные подсказки.
+  String? _registrationToken;
+  String? _notice;
+  int _resendLeft = 0;
+  Timer? _resendTimer;
+  bool _resendBusy = false;
+
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _email.dispose();
     _password.dispose();
     _username.dispose();
@@ -97,6 +107,10 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         ],
+                        if (_notice != null) ...[
+                          const SizedBox(height: 12),
+                          _NoticeBox(message: _notice!),
+                        ],
                         if (_error != null) ...[
                           const SizedBox(height: 12),
                           _ErrorBox(message: _error!),
@@ -125,9 +139,33 @@ class _AuthScreenState extends State<AuthScreen> {
                             onPressed: session.isBusy ? null : _startGoogleAuth,
                           ),
                         ],
+                        if (_mode == _AuthMode.otp) ...[
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: session.isBusy ||
+                                    _resendBusy ||
+                                    _resendLeft > 0
+                                ? null
+                                : _resendCode,
+                            child: Text(
+                              _resendBusy
+                                  ? 'Отправляем код…'
+                                  : _resendLeft > 0
+                                      ? 'Новый код через $_resendLeft с'
+                                      : 'Отправить код ещё раз',
+                            ),
+                          ),
+                          if (_registrationToken != null)
+                            TextButton(
+                              onPressed: session.isBusy || _resendBusy
+                                  ? null
+                                  : _changeEmail,
+                              child: const Text('Ошиблись в почте? Изменить адрес'),
+                            ),
+                        ],
                         if (_mode == _AuthMode.otp ||
                             _mode == _AuthMode.twoFactor) ...[
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 4),
                           TextButton(
                             onPressed: session.isBusy
                                 ? null
@@ -136,8 +174,11 @@ class _AuthScreenState extends State<AuthScreen> {
                                       _mode = _AuthMode.login;
                                       _code.clear();
                                       _pendingToken = null;
+                                      _registrationToken = null;
+                                      _notice = null;
                                       _error = null;
                                     });
+                                    _startResendCountdown(0);
                                   },
                             child: const Text('Вернуться ко входу'),
                           ),
@@ -241,7 +282,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _notice = null;
+    });
     final session = AppSessionScope.of(context);
     try {
       final result = await switch (_mode) {
@@ -266,11 +310,7 @@ class _AuthScreenState extends State<AuthScreen> {
           );
           break;
         case AuthResultType.needsOtp:
-          setState(() {
-            _mode = _AuthMode.otp;
-            _pendingEmail = result.email;
-            _code.clear();
-          });
+          _showCodeScreen(result);
           break;
         case AuthResultType.needsTwoFactor:
           setState(() {
@@ -281,10 +321,198 @@ class _AuthScreenState extends State<AuthScreen> {
           });
           break;
       }
+    } on EmailAlreadyVerified catch (verified) {
+      if (!mounted) return;
+      _openLoginAfterVerification(verified);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     }
+  }
+
+  /// Экран кода по ответу сервера: и после регистрации, и при входе в
+  /// неподтверждённый аккаунт, и когда письмо не ушло.
+  void _showCodeScreen(AuthResult result) {
+    setState(() {
+      _mode = _AuthMode.otp;
+      _pendingEmail = result.email;
+      _registrationToken = result.registrationToken;
+      _code.clear();
+      if (result.deliveryFailed) {
+        _error = result.message ?? 'Письмо не отправлено. Запросите код ещё раз.';
+        _notice = null;
+      } else {
+        _notice = result.message;
+      }
+    });
+    _startResendCountdown(result.retryAfter);
+  }
+
+  /// Код уже был принят — например, ответ на первую попытку потерялся.
+  /// Аккаунт готов, остаётся обычный вход паролем.
+  void _openLoginAfterVerification(EmailAlreadyVerified verified) {
+    setState(() {
+      _mode = _AuthMode.login;
+      _email.text = verified.email;
+      _password.clear();
+      _code.clear();
+      _registrationToken = null;
+      _error = null;
+      _notice = verified.message;
+    });
+    _startResendCountdown(0);
+  }
+
+  void _startResendCountdown(int seconds) {
+    _resendTimer?.cancel();
+    setState(() => _resendLeft = seconds);
+    if (seconds <= 0) return;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _resendLeft = _resendLeft > 0 ? _resendLeft - 1 : 0);
+      if (_resendLeft == 0) timer.cancel();
+    });
+  }
+
+  Future<void> _resendCode() async {
+    final email = _pendingEmail ?? _email.text;
+    setState(() {
+      _resendBusy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final repo = AppSessionScope.of(context).authRepository;
+      final delivery = await repo.resendOtp(email);
+      if (!mounted) return;
+      setState(() => _notice = delivery.message ?? 'Новый код отправлен');
+      _startResendCountdown(delivery.retryAfter);
+    } on EmailAlreadyVerified catch (verified) {
+      if (mounted) _openLoginAfterVerification(verified);
+    } on RetryLater catch (later) {
+      if (!mounted) return;
+      setState(() => _error = later.message);
+      _startResendCountdown(later.retryAfter);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _resendBusy = false);
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final token = _registrationToken;
+    if (token == null) return;
+    final controller = TextEditingController(text: _pendingEmail ?? '');
+    final result = await showDialog<AuthResult>(
+      context: context,
+      builder: (dialogContext) {
+        var submitting = false;
+        String? localError;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submit() async {
+              final email = controller.text.trim();
+              if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(email)) {
+                setDialogState(() => localError = 'Введите правильный адрес почты');
+                return;
+              }
+              setDialogState(() {
+                submitting = true;
+                localError = null;
+              });
+              try {
+                final repo = AppSessionScope.of(context).authRepository;
+                final changed = await repo.changeRegistrationEmail(token, email);
+                if (context.mounted) Navigator.of(context).pop(changed);
+              } on RetryLater catch (later) {
+                setDialogState(() {
+                  submitting = false;
+                  localError = later.retryAfter > 0
+                      ? '${later.message} (ещё ${later.retryAfter} с)'
+                      : later.message;
+                });
+              } catch (error) {
+                setDialogState(() {
+                  submitting = false;
+                  localError = error.toString();
+                });
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: context.palette.surfaceStrong,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: context.palette.border),
+              ),
+              title: const Text('Изменить почту'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Аккаунт останется тем же — код придёт на новый адрес.',
+                    style: TextStyle(
+                      color: context.palette.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    enabled: !submitting,
+                    autofocus: true,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'Правильный адрес почты',
+                      hintText: 'you@example.com',
+                      prefixIcon: Icon(Icons.alternate_email_rounded),
+                    ),
+                    onSubmitted: (_) => submitting ? null : submit(),
+                  ),
+                  if (localError != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      localError!,
+                      style: TextStyle(color: context.palette.danger),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      submitting ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: submitting ? null : submit,
+                  child: submitting
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.palette.onAccent,
+                          ),
+                        )
+                      : const Text('Изменить и отправить код'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    if (!mounted || result == null) return;
+    _email.text = result.email ?? _email.text;
+    _showCodeScreen(result);
   }
 
   Future<void> _startGoogleAuth() async {
@@ -647,6 +875,30 @@ class _LoveField extends StatelessWidget {
         labelText: label,
         hintText: hint,
         prefixIcon: Icon(icon),
+      ),
+    );
+  }
+}
+
+class _NoticeBox extends StatelessWidget {
+  const _NoticeBox({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.palette.inkA(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.palette.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          message,
+          style: TextStyle(color: context.palette.textSecondary, height: 1.35),
+        ),
       ),
     );
   }

@@ -12,7 +12,7 @@
   max-height: none;
   padding: 18px;
   border: 1px solid var(--tint-a-10);
-  border-radius: 8px;
+  border-radius: 22px;
   background: var(--bg-primary);
   box-shadow: 0 24px 70px var(--shade-a-60);
 }
@@ -25,8 +25,16 @@
 
 #call-modal .call-top-bar {
   min-height: 42px;
+  gap: 16px;
+  /* справа место под .call-minimize-btn (absolute, 36px) — иначе она
+     налезала на «Защищено WebRTC» */
+  padding: 2px 52px 2px 4px;
   justify-content: space-between !important;
 }
+
+.call-peer-heading { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.call-peer-heading h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-family: var(--font-sans); font-size: 17px; font-weight: 600; }
+.call-peer-heading > span { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 #call-modal .call-encrypted-badge {
   margin: 0;
@@ -70,8 +78,8 @@
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--tint-a-9) !important;
-  border-radius: 8px !important;
-  background: var(--bg-tertiary) !important;
+  border-radius: 18px !important;
+  background: var(--bg-primary) !important;
   overflow: hidden;
   box-shadow: none !important;
 }
@@ -116,7 +124,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
 }
 
 #call-modal .video-stream-box.has-media .video-placeholder {
@@ -135,6 +143,8 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+.call-participant-name { position: absolute; left: 14px; bottom: 14px; z-index: 5; max-width: calc(100% - 28px); padding: 5px 9px; border: 1px solid var(--tint-a-10); border-radius: 7px; background: var(--surface-overlay); color: var(--text-primary); font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .call-media-kind {
   position: absolute;
@@ -156,18 +166,34 @@
 
 #call-modal .call-controls-dock {
   bottom: 18px;
-  min-height: 58px;
-  padding: 8px 10px;
-  gap: 8px;
-  border-radius: 8px;
+  min-height: 56px;
+  padding: 6px;
+  gap: 6px;
+  border-radius: 999px;
   background: var(--glass-strong) !important;
 }
 
 #call-modal .call-dock-btn {
-  width: 46px;
-  height: 46px;
-  border-radius: 7px !important;
+  width: 44px;
+  height: 44px;
+  border-radius: 50% !important;
+  border: 1px solid var(--tint-a-14) !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
+
+#call-modal .call-dock-btn.active-state { background: var(--text-primary) !important; border-color: var(--text-primary) !important; color: var(--bg-primary) !important; }
+#call-modal .call-dock-btn:hover { border-color: var(--tint-a-25) !important; background: var(--tint-a-10) !important; color: var(--text-primary) !important; transform: none !important; }
+#call-modal .call-dock-btn.active-state:hover { background: var(--text-secondary) !important; color: var(--bg-primary) !important; }
+#call-modal #call-btn-screenshare:hover { transform: none !important; }
+#call-modal .call-dock-btn:disabled { opacity: .4; cursor: default; }
+#call-modal .call-dock-btn:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
+#call-modal .call-dock-btn.end-call { width: auto; gap: 8px; margin-left: 5px; padding: 0 16px; border-radius: 999px !important; color: var(--text-primary) !important; }
+#call-modal .call-dock-btn.end-call svg { width: 17px; height: 17px; transform: none !important; }
+#call-modal .call-dock-btn.end-call span { font-size: 13px; font-weight: 600; }
+#call-modal .call-dock-btn.end-call:hover { background: var(--text-primary) !important; color: var(--bg-primary) !important; }
 
 #server-voice-panel .room-header {
   min-height: 64px;
@@ -369,90 +395,9 @@
   line-height: 1;
 }
 
-#server-voice-panel .voice-footer-bar {
-  width: max-content;
-  min-height: 62px;
-  align-self: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--tint-a-10);
-  background: linear-gradient(180deg, var(--glass-strong), var(--glass-strong));
-  box-shadow: 0 18px 46px var(--shade-a-50), inset 0 1px 0 var(--tint-a-6);
-  backdrop-filter: blur(22px) saturate(130%);
-}
-
-#server-voice-panel .voice-footer-center {
-  gap: 8px;
-}
-
-#server-voice-panel .voice-footer-right {
-  margin-left: 2px;
-  padding-left: 10px;
-}
-
-#server-voice-panel .voice-control-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 15px;
-  border-color: var(--tint-a-10);
-  background: var(--tint-a-6);
-  color: var(--tint-a-80);
-  box-shadow: inset 0 1px 0 var(--tint-a-4);
-  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-
-#server-voice-panel .voice-control-btn svg {
-  width: 19px;
-  height: 19px;
-}
-
-#server-voice-panel .voice-control-btn:hover {
-  transform: translateY(-2px);
-  background: var(--tint-a-12);
-  border-color: var(--tint-a-20);
-}
-
-#server-voice-panel .voice-control-btn.active-state {
-  background: var(--text-primary);
-  border-color: var(--text-bright);
-  color: var(--bg-tertiary);
-}
-
-#server-voice-panel .voice-control-btn.muted-state {
-  background: var(--tint-a-4);
-  border-color: var(--tint-a-8);
-  color: var(--tint-a-35);
-}
-
-#server-voice-panel #voice-btn-mic.muted-state {
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
-  color: var(--danger-text);
-}
-
-#server-voice-panel .voice-disconnect-btn {
-  min-height: 44px;
-  gap: 7px;
-  padding: 0 15px;
-  border-radius: 15px;
-  border-color: var(--danger-border);
-  background: var(--danger-bg);
-  color: var(--danger-text);
-  font-size: 12px;
-}
-
-#server-voice-panel .voice-disconnect-btn svg {
-  width: 17px;
-  height: 17px;
-}
-
-#server-voice-panel .voice-disconnect-btn:hover {
-  transform: translateY(-2px);
-  background: var(--danger);
-  border-color: var(--danger-text);
-  color: var(--text-bright);
-}
+/* Кнопки управления войсом сервера больше не переопределяются здесь:
+   общая система — в style.css («Управление войсом»), одна для сервера,
+   комнаты и свёрнутой плашки. */
 
 .love-voice-tile-mode:empty {
   display: none;

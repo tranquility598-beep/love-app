@@ -6,10 +6,11 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const axios = require('axios');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
-const { authLimiter, registerLimiter, otpLimiter, passwordResetLimiter } = require('../middleware/rateLimiter');
+const { authLimiter, registerLimiter, otpLimiter, otpSendLimiter, passwordResetLimiter } = require('../middleware/rateLimiter');
+const { createAuthReplay } = require('../middleware/authReplay');
+const { getLoginNetworkInfo } = require('../utils/loginNetwork');
 const {
   validateEmail,
   validateUsername,
@@ -28,6 +29,40 @@ const { getJwtSecret } = require('../utils/jwtSecret');
 const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 const TWO_FACTOR_TOKEN_EXPIRES = '10m';
+
+router.use(createAuthReplay());
+router.get('/capabilities', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ authReplay: true, registrationEmailChange: true });
+});
+
+function registrationDetails(user, extra = {}) {
+  return {
+    requireVerification: true,
+    email: user.email,
+    ...(!user.googleId ? { registrationToken: jwt.sign(
+      { userId: String(user._id), email: user.email, purpose: 'registration-email' },
+      JWT_SECRET,
+      { expiresIn: '20m' }
+    ) } : {}),
+    retryAfter: Math.max(0, Math.ceil(((user.otpLastSentAt?.getTime() || 0) + 60000 - Date.now()) / 1000)),
+    ...extra
+  };
+}
+
+// Only a fresh confirmation is reported, so this cannot be used to probe
+// which addresses were verified long ago.
+const RECENT_VERIFICATION_MS = 15 * 60 * 1000;
+function findRecentlyVerified(email) {
+  return User.findOne({
+    email: String(email || '').trim().toLowerCase(),
+    isVerified: true,
+    verifiedAt: { $gt: new Date(Date.now() - RECENT_VERIFICATION_MS) }
+  });
+}
+function alreadyVerified(user) {
+  return { code: 'EMAIL_ALREADY_VERIFIED', email: user.email, message: 'Почта уже подтверждена. Войдите с паролем.' };
+}
 
 const { generateOTP, sendOTPEmail, sendPasswordResetEmail } = require('../utils/emailService');
 const LoginLog = require('../models/LoginLog');
@@ -51,31 +86,6 @@ function buildResetPasswordUrl(req, email, code) {
   return `${base}/reset-password?${params.toString()}`;
 }
 
-function normalizeIp(ip) {
-  if (!ip || typeof ip !== 'string') return 'unknown';
-  const value = ip.split(',')[0].trim().replace(/^::ffff:/, '');
-  if (value.includes(':') && value.lastIndexOf(':') > value.indexOf(':') && !value.includes('::')) {
-    return value.slice(0, value.lastIndexOf(':'));
-  }
-  return value;
-}
-
-function isLocalIp(ip) {
-  return ['::1', '127.0.0.1', 'localhost', 'unknown'].includes(ip) || ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
-}
-
-function getClientIp(req) {
-  const forwarded = [
-    req.headers['cf-connecting-ip'],
-    req.headers['x-real-ip'],
-    req.headers['x-forwarded-for'],
-    req.ip,
-    req.socket?.remoteAddress
-  ].filter(Boolean).flatMap(value => String(value).split(',').map(normalizeIp));
-
-  return forwarded.find(ip => ip && !isLocalIp(ip)) || forwarded[0] || 'unknown';
-}
-
 function buildAuthUser(user, extra = {}) {
   return {
     ...user.toPublicJSON(),
@@ -83,47 +93,12 @@ function buildAuthUser(user, extra = {}) {
     email: user.email,
     hasPassword: Boolean(user.password),
     hasGoogle: Boolean(user.googleId),
-    isFounder: isFounderUser(user)
+    isFounder: isFounderUser(user),
+    // Тариф — только в данных своего аккаунта, не в публичном профиле:
+    // экраны «Подписки» на ПК и в телефоне без него всегда показывали Free.
+    plan: user.plan || 'free',
+    planExpiresAt: user.planExpiresAt || null
   };
-}
-
-async function getPublicNetworkInfo() {
-  try {
-    const response = await axios.get('http://ip-api.com/json/?fields=status,query,country,city');
-    if (response.data.status === 'success') {
-      return {
-        ip: response.data.query || 'unknown',
-        location: [response.data.city, response.data.country].filter(Boolean).join(', ') || 'Неизвестно'
-      };
-    }
-  } catch (error) {
-    console.error('Public IP Error:', error.message);
-  }
-  return { ip: 'unknown', location: 'Неизвестно' };
-}
-
-/**
- * Получение местоположения по IP
- */
-async function getGeoLocation(ip) {
-  try {
-    if (isLocalIp(normalizeIp(ip))) return 'Локальная сеть (Local)';
-    
-    const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,message,country,city`);
-    if (response.data.status === 'success') {
-      return `${response.data.city}, ${response.data.country}`;
-    }
-    return 'Неизвестно';
-  } catch (error) {
-    console.error('GeoIP Error:', error.message);
-    return 'Неизвестно';
-  }
-}
-
-async function getLoginNetworkInfo(req) {
-  const ip = getClientIp(req);
-  if (isLocalIp(ip)) return getPublicNetworkInfo();
-  return { ip, location: await getGeoLocation(ip) };
 }
 
 /**
@@ -137,7 +112,10 @@ router.get('/username-availability', async (req, res) => {
     if (validationError) return res.status(400).json({ available: false, message: validationError });
 
     const existingUser = await findUserByUsername(User, username);
-    return res.json({ available: !existingUser });
+    // An unconfirmed registration can be resumed or moved to another address by
+    // its creator; /register decides that by the password.
+    const pending = Boolean(existingUser && !existingUser.isVerified && !existingUser.googleId);
+    return res.json({ available: !existingUser, ...(pending ? { pending: true } : {}) });
   } catch (error) {
     console.error('Username availability error:', error);
     return res.status(500).json({ message: 'Не удалось проверить имя пользователя' });
@@ -175,21 +153,32 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     const COOLDOWN_MS = 60 * 1000;
     
     if (usernameOwner && usernameOwner.email.toLowerCase() !== nextEmail) {
-      return res.status(400).json({ message: 'Имя пользователя уже занято' });
+      // The creator of an unconfirmed registration may have mistyped the address
+      // and lost the code screen. The same username and password move it to the
+      // new address; anyone else still sees an occupied name.
+      const canMove = !usernameOwner.isVerified && !usernameOwner.googleId && !emailOwner &&
+        await usernameOwner.comparePassword(password);
+      if (!canMove) return res.status(400).json({ message: 'Имя пользователя уже занято' });
+      const { retryAfter } = registrationDetails(usernameOwner);
+      if (retryAfter > 0) {
+        return res.status(429).json({ code: 'OTP_COOLDOWN', retryAfter, message: 'Подождите перед отправкой нового письма' });
+      }
+      usernameOwner.email = nextEmail;
     }
 
-    if (emailOwner?.isVerified || usernameOwner?.isVerified) {
+    if (emailOwner?.isVerified || usernameOwner?.isVerified || emailOwner?.googleId || usernameOwner?.googleId) {
       return res.status(400).json({ message: 'Email уже используется' });
     }
 
     const pendingUser = emailOwner || usernameOwner;
-    if (pendingUser) {
-      // A pending registration reserves its username. The same email can retry after cooldown.
-      if (pendingUser.otpLastSentAt && (Date.now() - pendingUser.otpLastSentAt.getTime() < COOLDOWN_MS)) {
-        const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - pendingUser.otpLastSentAt.getTime())) / 1000);
-        return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
-      }
-      await User.deleteOne({ _id: pendingUser._id });
+    if (pendingUser && !await pendingUser.comparePassword(password)) {
+      return res.status(409).json({ message: 'Регистрация с этой почтой уже начата. Войдите с прежним паролем или восстановите его.' });
+    }
+    if (pendingUser && pendingUser.username.toLowerCase() !== nextUsername.toLowerCase()) {
+      return res.status(409).json({ message: 'Регистрация с этой почтой уже начата под другим именем. Перейдите ко входу.' });
+    }
+    if (pendingUser?.otpLastSentAt && Date.now() - pendingUser.otpLastSentAt.getTime() < COOLDOWN_MS) {
+      return res.status(200).json(registrationDetails(pendingUser, { message: 'Код уже отправлен. Введите его из последнего письма.' }));
     }
     
     // Генерация OTP
@@ -201,7 +190,7 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     const role = userCount === 0 ? 'owner' : 'user';
     
     // Создаем пользователя (пока не верифицирован)
-    const user = new User({
+    const user = pendingUser || new User({
       username: nextUsername,
       email: nextEmail,
       password,
@@ -211,6 +200,8 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
       isVerified: false,
       onboardingPending: true
     });
+    user.otpCode = otp;
+    user.otpExpires = otpExpires;
     
     await user.save();
     
@@ -218,17 +209,16 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
     const emailSent = await sendOTPEmail(user.email, otp, 'verification');
     
     if (!emailSent) {
-      return res.status(500).json({ message: 'Ошибка отправки письма. Проверьте настройки Gmail.' });
+      return res.status(503).json(registrationDetails(user, {
+        code: 'EMAIL_SEND_FAILED', retryAfter: 0,
+        message: 'Аккаунт создан, но письмо не отправлено. Проверьте адрес и запросите код ещё раз.'
+      }));
     }
     
     user.otpLastSentAt = new Date();
     await user.save();
     
-    res.status(201).json({
-      message: 'OTP отправлен на вашу почту',
-      requireVerification: true,
-      email: user.email
-    });
+    res.status(pendingUser ? 200 : 201).json(registrationDetails(user, { message: 'Код отправлен на вашу почту' }));
     
   } catch (error) {
     console.error('Register error:', error);
@@ -247,24 +237,35 @@ router.post('/register', registerLimiter, sanitizeBody, validateEmail, validateU
  * POST /api/auth/verify-otp
  * Верификация по коду
  */
-router.post('/verify-otp', otpLimiter, async (req, res) => {
+router.post('/verify-otp', otpLimiter, sanitizeBody, validateEmail, async (req, res) => {
   try {
     const { email, code } = req.body;
-    
-    const user = await User.findOne({ 
-      email: email.toLowerCase(),
-      otpCode: code,
-      otpExpires: { $gt: Date.now() }
-    });
-    
-    if (!user) {
-      return res.status(400).json({ message: 'Неверный или истекший код' });
+    if (typeof email !== 'string' || !/^\d{6}$/.test(String(code || ''))) {
+      return res.status(400).json({ message: 'Введите почту и шестизначный код' });
     }
     
+    const verifiedAt = new Date();
+    const user = await User.findOneAndUpdate({
+      email: email.trim().toLowerCase(),
+      isVerified: false,
+      otpCode: String(code),
+      otpExpires: { $gt: Date.now() }
+    }, { $set: { isVerified: true, verifiedAt, otpCode: null, otpExpires: null } }, { new: false });
+    
+    if (!user) {
+      // The first response may have been lost after the code was accepted.
+      // Re-entering that code must lead to sign-in, not to "wrong code".
+      const recent = await findRecentlyVerified(email);
+      if (recent) return res.status(409).json(alreadyVerified(recent));
+      return res.status(400).json({ message: 'Неверный или истекший код' });
+    }
+
     // Верифицируем пользователя
     user.isVerified = true;
+    user.verifiedAt = verifiedAt;
     user.status = 'online';
     user.statusPreference = 'online';
+    user.lastSeen = new Date();
     user.otpCode = null;
     user.otpExpires = null;
     const shouldStartOnboarding = Boolean(user.onboardingPending);
@@ -307,12 +308,15 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
  * POST /api/auth/resend-otp
  * Повторная отправка кода
  */
-router.post('/resend-otp', otpLimiter, async (req, res) => {
+router.post('/resend-otp', otpSendLimiter, sanitizeBody, validateEmail, async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
-    
+    if (typeof email !== 'string' || !email.trim()) return res.status(400).json({ message: 'Укажите почту' });
+    const user = await User.findOne({ email: email.trim().toLowerCase(), isVerified: false });
+
     if (!user) {
+      const recent = await findRecentlyVerified(email);
+      if (recent) return res.status(409).json(alreadyVerified(recent));
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
     
@@ -329,16 +333,62 @@ router.post('/resend-otp', otpLimiter, async (req, res) => {
     
     const emailSent = await sendOTPEmail(user.email, otp, 'verification');
     if (!emailSent) {
-      return res.status(500).json({ message: 'Ошибка отправки письма. Проверьте настройки SMTP.' });
+      return res.status(503).json({ code: 'EMAIL_SEND_FAILED', message: 'Не удалось отправить письмо. Проверьте адрес и запросите код ещё раз.' });
     }
     
     user.otpLastSentAt = new Date();
     await user.save();
     
-    res.json({ message: 'Новый код отправлен' });
+    res.json({ message: 'Новый код отправлен', retryAfter: 60 });
     
   } catch (error) {
     res.status(500).json({ message: 'Ошибка отправки кода' });
+  }
+});
+
+// A scoped token is issued only after registration or a correct password.
+// It cannot sign in, change verified accounts, or change anyone else's email.
+router.post('/registration-email', otpSendLimiter, sanitizeBody, validateEmail, async (req, res) => {
+  try {
+    const { registrationToken, email } = req.body;
+    if (typeof registrationToken !== 'string' || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ message: 'Укажите новый адрес почты' });
+    }
+    const decoded = jwt.verify(registrationToken, JWT_SECRET);
+    if (decoded.purpose !== 'registration-email') return res.status(401).json({ message: 'Войдите ещё раз, чтобы изменить почту' });
+    const filter = { _id: decoded.userId, email: decoded.email, isVerified: false, googleId: null };
+    const user = await User.findOne(filter);
+    if (!user) return res.status(409).json({ message: 'Регистрация уже изменена или подтверждена. Перейдите ко входу.' });
+    const nextEmail = email.trim().toLowerCase();
+    if (nextEmail === user.email) return res.status(400).json({ message: 'Введите другой адрес почты' });
+    if (await User.findOne({ email: nextEmail })) return res.status(409).json({ message: 'Эта почта уже используется' });
+    const details = registrationDetails(user);
+    if (details.retryAfter > 0) {
+      return res.status(429).json({ code: 'OTP_COOLDOWN', retryAfter: details.retryAfter, message: 'Подождите перед отправкой нового письма' });
+    }
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    const changed = await User.findOneAndUpdate(filter, { $set: {
+      email: nextEmail, otpCode: otp, otpExpires, otpLastSentAt: new Date()
+    } }, { new: true });
+    if (!changed) return res.status(409).json({ message: 'Регистрация изменилась. Перейдите ко входу.' });
+    const sent = await sendOTPEmail(changed.email, otp, 'verification');
+    if (!sent) {
+      // Nothing was delivered, so no cooldown should block the next attempt.
+      changed.otpLastSentAt = user.otpLastSentAt || null;
+      await changed.save();
+    }
+    if (!sent) return res.status(503).json(registrationDetails(changed, {
+      code: 'EMAIL_SEND_FAILED', message: 'Адрес изменён, но письмо не отправлено. Запросите код ещё раз.'
+    }));
+    return res.json(registrationDetails(changed, { message: 'Код отправлен на новую почту' }));
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.name === 'CastError') {
+      return res.status(401).json({ message: 'Время изменения почты истекло. Войдите ещё раз.' });
+    }
+    if (getDuplicateField(error) === 'email') return res.status(409).json({ message: 'Эта почта уже используется' });
+    console.error('Registration email change failed:', error.name);
+    return res.status(500).json({ message: 'Не удалось изменить почту. Попробуйте позже.' });
   }
 });
 
@@ -365,6 +415,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     if (user.lockUntil && user.lockUntil > Date.now()) {
       const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
       return res.status(403).json({ 
+        code: 'ACCOUNT_LOCKED', retryAfter: Math.ceil((user.lockUntil.getTime() - Date.now()) / 1000),
         message: `Аккаунт временно заблокирован из-за множества ошибок входа. Попробуйте через ${remainingMinutes} мин.` 
       });
     }
@@ -404,26 +455,27 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
     }
     
     // Сбрасываем попытки при успешном входе
+    res.locals.authCredentialsValid = true;
     user.loginAttempts = 0;
     user.lockUntil = null;
     await refreshModerationState(user);
     
     // Проверяем верификацию
     if (!user.isVerified) {
-      const COOLDOWN_MS = 60 * 1000;
-      if (user.otpLastSentAt && (Date.now() - user.otpLastSentAt.getTime() < COOLDOWN_MS)) {
-        const retryAfter = Math.ceil((COOLDOWN_MS - (Date.now() - user.otpLastSentAt.getTime())) / 1000);
-        return res.status(429).json({ code: 'OTP_COOLDOWN', message: 'Слишком частые запросы', retryAfter });
+      if (user.otpLastSentAt && user.otpCode && user.otpExpires > new Date()) {
+        await user.save();
+        return res.status(403).json(registrationDetails(user, { message: 'Введите код из последнего письма или исправьте адрес почты.' }));
       }
 
       const otp = generateOTP();
       user.otpCode = otp;
       user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-      user.onboardingPending = false;
       await user.save();
       const emailSent = await sendOTPEmail(user.email, otp, 'verification');
       if (!emailSent) {
-        return res.status(500).json({ message: 'Ошибка отправки письма с кодом подтверждения.' });
+        return res.status(503).json(registrationDetails(user, {
+          code: 'EMAIL_SEND_FAILED', message: 'Не удалось отправить письмо. Проверьте адрес и запросите код ещё раз.'
+        }));
       }
       
       user.otpLastSentAt = new Date();
@@ -432,11 +484,7 @@ router.post('/login', authLimiter, sanitizeBody, validateEmail, async (req, res)
       // Логируем попытку входа (но еще не полноценный вход)
       await LoginLog.create({ userId: user._id, email: user.email, ip, userAgent, location, loginMethod: 'password', status: 'success' });
 
-      return res.status(403).json({ 
-        message: 'Почта не подтверждена. Новый код отправлен.',
-        requireVerification: true,
-        email: user.email
-      });
+      return res.status(403).json(registrationDetails(user, { message: 'Почта не подтверждена. Код отправлен.' }));
     }
     
     if (user.twoFactorEnabled) {
@@ -633,7 +681,7 @@ router.post('/forgot-password', passwordResetLimiter, sanitizeBody, validateEmai
 
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
     if (!user) {
       return res.json(genericResponse);

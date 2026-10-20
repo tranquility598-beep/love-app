@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'settings_search.dart';
 
 import '../../core/prefs/love_prefs.dart';
 import '../../theme/love_tokens.dart';
@@ -119,9 +120,12 @@ class SettingsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (title != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-              child: SettingsSubtitle(title!, padding: EdgeInsets.zero),
+            SearchHit(
+              title: title!,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                child: SettingsSubtitle(title!, padding: EdgeInsets.zero),
+              ),
             ),
           Padding(
             padding: padding,
@@ -146,7 +150,10 @@ class _RowLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    // Поиск по настройкам привёл к этой строке — прокрутка и подсветка.
+    return SearchHit(
+      title: title,
+      child: Row(
       children: [
         if (icon != null) ...[
           Icon(icon, size: 19, color: context.palette.textSecondary),
@@ -180,6 +187,7 @@ class _RowLabel extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -604,12 +612,28 @@ class SettingsActionRow extends StatelessWidget {
             );
           }
 
+          // Кнопки темы по умолчанию тянутся на всю ширину (Size.fromHeight) —
+          // в строке это ошибка разметки и пустое место вместо кнопки.
+          final theme = Theme.of(context);
+          const compact = WidgetStatePropertyAll(Size(0, 40));
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(child: label),
               const SizedBox(width: 12),
-              action,
+              Theme(
+                data: theme.copyWith(
+                  outlinedButtonTheme: OutlinedButtonThemeData(
+                    style: theme.outlinedButtonTheme.style
+                        ?.copyWith(minimumSize: compact),
+                  ),
+                  filledButtonTheme: FilledButtonThemeData(
+                    style: theme.filledButtonTheme.style
+                        ?.copyWith(minimumSize: compact),
+                  ),
+                ),
+                child: action,
+              ),
             ],
           );
         },

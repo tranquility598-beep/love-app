@@ -7,18 +7,25 @@ import '../../core/updates/current_version.dart';
 import '../../core/network/love_api.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/realtime/app_events.dart';
+import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
+import '../../theme/season.dart';
 import '../../widgets/love_background.dart';
 import '../shell/screen_frame.dart';
 import '../support/support_center_screen.dart';
 import 'settings_account_section.dart';
+import 'settings_about_section.dart';
+import 'settings_blocked_users.dart';
 import 'settings_profile_section.dart';
+import 'settings_search.dart';
+import 'settings_subscriptions_section.dart';
 import 'settings_widgets.dart';
 import 'sound_check.dart';
 
 enum SettingsSection {
   profile,
   account,
+  subscriptions,
   privacy,
   support,
   appearance,
@@ -44,6 +51,11 @@ const _sectionGroups = <String, List<_SectionMeta>>{
         'Профиль', 'Имя, аватар, статус и увлечения'),
     _SectionMeta(SettingsSection.account, Icons.lock_outline_rounded, 'Аккаунт',
         'Почта, пароль и безопасность'),
+    _SectionMeta(
+        SettingsSection.subscriptions,
+        Icons.workspace_premium_outlined,
+        'Подписки',
+        'Тарифы Love и ваш текущий план'),
     _SectionMeta(SettingsSection.privacy, Icons.shield_outlined,
         'Конфиденциальность', 'Кто и что видит о вас'),
     _SectionMeta(
@@ -76,11 +88,103 @@ const _sectionGroups = <String, List<_SectionMeta>>{
   ],
 };
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({this.showBack = false, this.api, super.key});
 
   final bool showBack;
   final LoveApi? api;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late final LoveApi _api = widget.api ?? LoveApi();
+  String _query = '';
+  bool _loggingOut = false;
+
+  /// Строки внутри разделов, подходящие под запрос (как поиск на ПК).
+  List<(_SectionMeta, SettingsSearchEntry)> _itemHits() {
+    if (normalizeSettingsQuery(_query).length < 2) return const [];
+    final metas = {
+      for (final meta in _sectionGroups.values.expand((items) => items)) meta.section.name: meta
+    };
+    final hits = <(_SectionMeta, SettingsSearchEntry)>[];
+    for (final entry in settingsSearchIndex) {
+      final meta = metas[entry.section];
+      if (meta == null) continue;
+      if (settingsEntryMatches(entry, meta.title, _query)) hits.add((meta, entry));
+    }
+    return hits.take(30).toList();
+  }
+
+  void _openSection(_SectionMeta meta, {String? highlight}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => meta.section == SettingsSection.support
+            ? SupportCenterScreen(api: _api, events: AppEvents.instance)
+            : SettingsDetailPage(
+                section: meta.section,
+                title: meta.title,
+                api: _api,
+                highlight: highlight,
+              ),
+      ),
+    );
+  }
+
+  bool _matches(_SectionMeta meta) {
+    const keywords = {
+      SettingsSection.privacy:
+          'блокировка заблокированные разблокировать ссылки личные сообщения заявки',
+      SettingsSection.profile:
+          'публичная страница билдер редактор музыка настроение увлечения статус',
+      SettingsSection.support:
+          'баг ошибка жалоба помощь обращение ограничения идея пауза',
+      SettingsSection.account:
+          'пароль почта username имя безопасность двухфакторная',
+      SettingsSection.voice: 'камера микрофон шум звук громкость',
+      SettingsSection.appearance:
+          'Halloween хэллоуин хеллоуин оранжевый обычная светлая темная',
+    };
+    final text = normalizeSettingsQuery(
+        '${meta.title} ${meta.subtitle} ${keywords[meta.section] ?? ''}');
+    final query = normalizeSettingsQuery(_query);
+    if (query.isEmpty) return true;
+    return query.split(' ').every(text.contains);
+  }
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    final session = AppSessionScope.of(context);
+    setState(() => _loggingOut = true);
+    try {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('Выйти из аккаунта?'),
+                content: const Text(
+                    'Чтобы вернуться, потребуется снова войти в Love.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Отмена')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Выйти')),
+                ],
+              ));
+      if (confirmed == true) await session.logout();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Не удалось завершить сеанс на устройстве. Попробуйте ещё раз.')));
+      }
+    } finally {
+      if (mounted) setState(() => _loggingOut = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,30 +200,97 @@ class SettingsScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             children: [
-              for (final entry in _sectionGroups.entries) ...[
-                SettingsSubtitle(entry.key,
-                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 10)),
-                for (final meta in entry.value)
-                  _NavItem(
+              TextField(
+                decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'Поиск настроек'),
+                onChanged: (value) =>
+                    setState(() => _query = value.trim().toLowerCase()),
+              ),
+              const SizedBox(height: 16),
+              // Найденные строки внутри разделов — сверху, как на ПК.
+              if (_itemHits().isNotEmpty) ...[
+                SettingsSubtitle('Настройки',
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 10)),
+                for (final (meta, entry) in _itemHits())
+                  _SearchResultItem(
                     meta: meta,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => meta.section == SettingsSection.support
-                            ? SupportCenterScreen(
-                                api: api ?? LoveApi(),
-                                events: AppEvents.instance,
-                              )
-                            : SettingsDetailPage(
-                                section: meta.section,
-                                title: meta.title,
-                                api: api ?? LoveApi(),
-                              ),
-                      ),
-                    ),
+                    entry: entry,
+                    onTap: () => _openSection(meta, highlight: entry.label),
                   ),
                 const SizedBox(height: 8),
               ],
+              if (!_sectionGroups.values.expand((items) => items).any(_matches) &&
+                  _itemHits().isEmpty)
+                const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('Настройки не найдены')),
+              for (final entry in _sectionGroups.entries
+                  .where((entry) => entry.value.any(_matches))) ...[
+                SettingsSubtitle(entry.key,
+                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 10)),
+                for (final meta in entry.value.where(_matches))
+                  _NavItem(
+                    meta: meta,
+                    onTap: () => _openSection(meta),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                  onPressed:
+                      AppSessionScope.of(context).isBusy ? null : _logout,
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Выйти из аккаунта')),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Найденная строка: её подпись и путь «Раздел» под ней.
+class _SearchResultItem extends StatelessWidget {
+  const _SearchResultItem({required this.meta, required this.entry, required this.onTap});
+  final _SectionMeta meta;
+  final SettingsSearchEntry entry;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: context.palette.surfaceStrong,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Icon(meta.icon, size: 19, color: context.palette.textSecondary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entry.label,
+                          style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: context.palette.textPrimary)),
+                      const SizedBox(height: 2),
+                      Text(meta.title,
+                          style: TextStyle(fontSize: 12, color: context.palette.textMuted)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: context.palette.textMuted),
+              ],
+            ),
           ),
         ),
       ),
@@ -145,7 +316,7 @@ class _NavItem extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color:  context.palette.inkA(0.05)),
+              border: Border.all(color: context.palette.inkA(0.05)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -175,13 +346,13 @@ class _NavItem extends StatelessWidget {
                         meta.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style:  TextStyle(
+                        style: TextStyle(
                             color: context.palette.textMuted, fontSize: 12.5),
                       ),
                     ],
                   ),
                 ),
-                 Icon(Icons.chevron_right_rounded,
+                Icon(Icons.chevron_right_rounded,
                     color: context.palette.textMuted),
               ],
             ),
@@ -197,12 +368,17 @@ class SettingsDetailPage extends StatelessWidget {
     required this.section,
     required this.title,
     required this.api,
+    this.highlight,
     super.key,
   });
 
   final SettingsSection section;
   final String title;
   final LoveApi api;
+
+  /// Подпись строки, к которой привёл поиск: страница прокрутит к ней и
+  /// подсветит (SearchHit в settings_widgets.dart).
+  final String? highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -215,9 +391,12 @@ class SettingsDetailPage extends StatelessWidget {
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back_rounded),
           ),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
-            children: [_body(context)],
+          child: SettingsSearchTarget(
+            label: highlight,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+              children: [_body(context)],
+            ),
           ),
         ),
       ),
@@ -230,8 +409,10 @@ class SettingsDetailPage extends StatelessWidget {
         return ProfileSettingsSection(api: api);
       case SettingsSection.account:
         return AccountSettingsSection(api: api);
+      case SettingsSection.subscriptions:
+        return const SubscriptionsSettingsSection();
       case SettingsSection.privacy:
-        return const _PrivacySection();
+        return _PrivacySection(api: api);
       case SettingsSection.support:
         return const SizedBox.shrink();
       case SettingsSection.appearance:
@@ -247,7 +428,7 @@ class SettingsDetailPage extends StatelessWidget {
       case SettingsSection.advanced:
         return const _AdvancedSection();
       case SettingsSection.about:
-        return const _AboutSection();
+        return AboutSettingsSection(api: api);
     }
   }
 }
@@ -255,7 +436,8 @@ class SettingsDetailPage extends StatelessWidget {
 // ── Privacy ──────────────────────────────────────────────────────────────────
 
 class _PrivacySection extends StatelessWidget {
-  const _PrivacySection();
+  const _PrivacySection({required this.api});
+  final LoveApi api;
 
   @override
   Widget build(BuildContext context) {
@@ -320,6 +502,8 @@ class _PrivacySection extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        BlockedUsersSettings(api: api),
         const SizedBox(height: 14),
         SettingsCard(
           title: 'Ссылки',
@@ -400,6 +584,11 @@ class _AppearanceSectionState extends State<_AppearanceSection> {
           ],
         ),
         const SizedBox(height: 14),
+        const SettingsCard(
+          title: 'Сезонная тема',
+          children: [SeasonPicker()],
+        ),
+        const SizedBox(height: 14),
         SettingsCard(
           title: 'Масштаб и режимы',
           children: [
@@ -439,7 +628,6 @@ class _AppearanceSectionState extends State<_AppearanceSection> {
       ],
     );
   }
-
 }
 
 class _ThemeOption extends StatelessWidget {
@@ -477,16 +665,14 @@ class _ThemeOption extends StatelessWidget {
               children: [
                 Icon(icon,
                     size: 20,
-                    color:
-                        active ? palette.accent : palette.textSecondary),
+                    color: active ? palette.accent : palette.textSecondary),
                 const SizedBox(height: 6),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color:
-                        active ? palette.accent : palette.textSecondary,
+                    color: active ? palette.accent : palette.textSecondary,
                   ),
                 ),
               ],
@@ -534,7 +720,7 @@ class _NotificationsSection extends StatelessWidget {
                 child: const Icon(Icons.favorite_rounded, size: 18),
               ),
               const SizedBox(width: 12),
-               Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -577,6 +763,12 @@ class _NotificationsSection extends StatelessWidget {
               title: 'Love Hub',
               subtitle: 'Анонсы и ответы сообщества',
               prefKey: K.notifHub,
+              defaultValue: true,
+            ),
+            PrefToggleRow(
+              title: 'Звуки в приложении',
+              subtitle: 'Сообщения, войс и звонки',
+              prefKey: K.uiSounds,
               defaultValue: true,
             ),
           ],
@@ -1019,7 +1211,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
             width: 96,
             child: Text(label,
                 style:
-                     TextStyle(color: context.palette.textMuted, fontSize: 13)),
+                    TextStyle(color: context.palette.textMuted, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,
@@ -1035,7 +1227,7 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor:  context.palette.bgTertiary,
+        backgroundColor: context.palette.bgTertiary,
         title: const Text('Сбросить настройки?'),
         content: const Text(
             'Все настройки приложения вернутся к значениям по умолчанию.'),
@@ -1046,7 +1238,8 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.danger),
+            style:
+                TextButton.styleFrom(foregroundColor: context.palette.danger),
             child: const Text('Сбросить'),
           ),
         ],
@@ -1059,163 +1252,5 @@ class _AdvancedSectionState extends State<_AdvancedSection> {
       const SnackBar(content: Text('Настройки сброшены')),
     );
     Navigator.of(context).maybePop();
-  }
-}
-
-// ── About ────────────────────────────────────────────────────────────────────
-
-class _AboutSection extends StatelessWidget {
-  const _AboutSection();
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final build =
-        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SettingsSectionHead(
-          title: 'О приложении',
-          desc: 'Информация о Love',
-        ),
-        const SizedBox(height: 16),
-        LoveSurfaceCard(
-          child: Column(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: context.palette.inkA(0.06),
-                  border: Border.all(color: context.palette.borderActive),
-                ),
-                child: const Icon(Icons.favorite_rounded, size: 30),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'L O V E',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 6,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                children: [
-                  LoveBadge('v${AppConfig.productVersion}'),
-                  LoveBadge('build $build'),
-                ],
-              ),
-              const SizedBox(height: 12),
-               Text(
-                'Мессенджер, сделанный с любовью.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.palette.textSecondary),
-              ),
-               Padding(
-                padding: EdgeInsets.symmetric(vertical: 18),
-                child: Divider(height: 1, color: context.palette.border),
-              ),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: SettingsSubtitle('Команда', padding: EdgeInsets.zero),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: context.palette.inkA(0.08),
-                      border: Border.all(color: context.palette.border),
-                    ),
-                    child: const Text('А',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 12),
-                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Александр',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      SizedBox(height: 2),
-                      Text('Основатель',
-                          style: TextStyle(
-                              color: context.palette.textMuted, fontSize: 12.5)),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse(AppConfig.website),
-                  mode: LaunchMode.externalApplication,
-                ),
-                icon: const Icon(Icons.public_rounded, size: 18),
-                label: const Text('Сайт'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse('mailto:${AppConfig.supportEmail}'),
-                ),
-                icon: const Icon(Icons.mail_outline_rounded, size: 18),
-                label: const Text('Поддержка'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Center(
-          child: Text(
-            AppConfig.supportEmail,
-            style:  TextStyle(
-                fontFamily: LoveFonts.mono,
-                fontSize: 12,
-                color: context.palette.textMuted),
-          ),
-        ),
-        const SizedBox(height: 6),
-         Center(
-          child: Text('Сделано с ♥',
-              style: TextStyle(color: context.palette.textMuted, fontSize: 12.5)),
-        ),
-      ],
-    );
-  }
-}
-
-/// A plain padded card wrapper for centred content (About).
-class LoveSurfaceCard extends StatelessWidget {
-  const LoveSurfaceCard({required this.child, super.key});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: context.palette.surfaceStrong,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color:  context.palette.inkA(0.05)),
-      ),
-      child: child,
-    );
   }
 }

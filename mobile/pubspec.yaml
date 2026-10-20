@@ -1,7 +1,7 @@
 name: love_mobile
 description: Flutter mobile client for Love.
 publish_to: "none"
-version: 2.1.1+4
+version: 2.2.0+5
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -54,6 +54,8 @@ flutter:
     - assets/icons/more.svg
     - assets/icons/auth_mark.svg
     - assets/sounds/test_tone.wav
+    - assets/sounds/ui/
+    - assets/season/
   fonts:
     - family: Outfit
       fonts:

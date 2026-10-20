@@ -56,7 +56,7 @@ const generalLimiter = rateLimit({
     if (req.rateLimitUserId) return `u:${req.rateLimitUserId}`;
     if (req.user && req.user._id) return `u:${req.user._id}`;
     // Используем хелпер библиотеки для корректной нормализации IPv6 (/64 префикс).
-    return ipKeyGenerator(req, res);
+    return ipKeyGenerator(req.ip);
   },
   // Не считаем поллинговые/служебные endpoint'ы.
   //
@@ -77,7 +77,7 @@ const generalLimiter = rateLimit({
     console.warn(`⚠️  Rate limit exceeded for IP: ${req.ip} on ${req.method} ${req.originalUrl}`);
     res.status(429).json({
       message: 'Слишком много запросов с этого IP, попробуйте позже',
-      retryAfter: Math.ceil(req.rateLimit.resetTime / 1000)
+      retryAfter: retryAfterSeconds(req)
     });
   }
 });
@@ -86,24 +86,32 @@ const generalLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 10, // 10 попыток
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (req, res) => res.locals.authCredentialsValid === true || res.statusCode < 400 || res.statusCode >= 500,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { message: 'Слишком много попыток входа, попробуйте через 15 минут' },
   handler: (req, res) => {
     console.warn(`⚠️  Auth rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({ 
-      message: 'Слишком много попыток входа, попробуйте через 15 минут' 
+      code: 'AUTH_RATE_LIMIT', retryAfter: retryAfterSeconds(req),
+      message: 'Слишком много попыток входа. Подождите перед следующей попыткой.'
     });
   }
 });
 
 // Лимит для регистрации
 const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 час
-  max: 5, // 5 попыток
-  message: { message: 'Слишком много попыток регистрации, попробуйте через час' },
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Слишком много попыток регистрации, попробуйте через 15 минут' },
   handler: (req, res) => {
     console.warn(`⚠️  Register rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({ 
-      message: 'Слишком много попыток регистрации, попробуйте через час' 
+      code: 'REGISTER_RATE_LIMIT', retryAfter: retryAfterSeconds(req),
+      message: 'Слишком много попыток регистрации. Подождите перед следующей попыткой.'
     });
   }
 });
@@ -138,13 +146,33 @@ const uploadLimiter = rateLimit({
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 10, // 10 попыток
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (req, res) => res.statusCode < 400 || res.statusCode >= 500,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { message: 'Слишком много попыток ввода кода, попробуйте позже' },
   handler: (req, res) => {
     console.warn(`⚠️  OTP rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({ 
-      message: 'Слишком много попыток ввода кода, попробуйте позже' 
+      code: 'OTP_RATE_LIMIT', retryAfter: retryAfterSeconds(req),
+      message: 'Слишком много неверных кодов. Подождите перед следующей попыткой.'
     });
   }
+});
+
+function retryAfterSeconds(req) {
+  return Math.max(1, Math.ceil((new Date(req.rateLimit?.resetTime).getTime() - Date.now()) / 1000) || 60);
+}
+
+const otpSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => res.status(429).json({
+    code: 'OTP_SEND_RATE_LIMIT', retryAfter: retryAfterSeconds(req),
+    message: 'Слишком много запросов писем. Подождите перед отправкой нового кода.'
+  })
 });
 
 // Лимит для сброса пароля
@@ -175,6 +203,32 @@ const publicPageLimiter = rateLimit({
   }
 });
 
+/**
+ * Лимит для публичных страниц профиля (me.loveapp.chat/u/ник).
+ *
+ * Отдельный от publicPageLimiter и намеренно щедрее. Причина в том же NAT, о
+ * котором сказано выше: страницу профиля разошлют по чатам, и посетители
+ * мобильного оператора придут с ОДНОГО адреса. 60 в минуту там кончатся на
+ * ровном месте, и 429 увидит человек, который просто открыл ссылку, — то есть
+ * лимит ударит по тому, кого защищает.
+ *
+ * Смысл счётчика здесь не в защите от перебора (ники и так публичны в
+ * мессенджере), а в цене показа: два запроса в базу на страницу. 300 в минуту
+ * это допускает и всё равно ограничивает того, кто решит выкачать сайт.
+ * Статика (иконка, картинка превью, файлы редактора) под лимит не попадает
+ * специально — она отдаётся с диска и кэшируется в nginx.
+ */
+const profilePageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`⚠️  Profile page rate limit exceeded for IP: ${req.ip} on ${req.originalUrl}`);
+    res.status(429).type('text/plain; charset=utf-8').send('Слишком много запросов, попробуйте через минуту');
+  }
+});
+
 module.exports = {
   attachRateLimitIdentity,
   generalLimiter,
@@ -183,6 +237,8 @@ module.exports = {
   messageLimiter,
   uploadLimiter,
   otpLimiter,
+  otpSendLimiter,
   passwordResetLimiter,
-  publicPageLimiter
+  publicPageLimiter,
+  profilePageLimiter
 };

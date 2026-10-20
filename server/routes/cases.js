@@ -9,6 +9,9 @@ const { communicationRestriction } = require('../services/moderationService');
 const { createNotification } = require('../utils/notify');
 const { publishAdminUpdate } = require('../services/adminRealtime');
 const { MESSAGE_REPORT_TAXONOMY, resolveReportPath } = require('../config/messageReportTaxonomy');
+const { PROFILE_REPORT_PARTS, findProfileReportPart } = require('../config/profileReportParts');
+const User = require('../models/User');
+const { submissionIdentity, getSubmissionState, createSubmittedCase, sendSubmissionError } = require('../services/caseSubmissions');
 
 const router = express.Router();
 
@@ -114,7 +117,7 @@ router.post('/message-reports', authMiddleware, async (req, res) => {
       return res.status(403).json({ message: 'У вас нет доступа к этому сообщению' });
     }
 
-    const item = await Case.create({
+    const item = await createSubmittedCase({
       kind: 'report',
       reporter: req.user._id,
       subjectUser: messageAuthorId,
@@ -154,10 +157,77 @@ router.post('/message-reports', authMiddleware, async (req, res) => {
     });
     res.status(201).json({ case: item, message: 'Жалоба отправлена команде модерации' });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     if (error?.code === 11000) {
       return res.status(409).json({ message: 'Вы уже пожаловались на это сообщение' });
     }
     console.error('[cases] message report:', error);
+    res.status(400).json({ message: error.message || 'Не удалось отправить жалобу' });
+  }
+});
+
+// ── Жалоба на профиль пользователя ─────────────────────────────────────────
+// Сначала «что именно не так» (аватар, имя, описание…), потом причина из
+// того же дерева, что у сообщений. В обращение кладётся снимок профиля.
+
+router.get('/profile-report-options', authMiddleware, (req, res) => {
+  res.json({
+    parts: PROFILE_REPORT_PARTS.map(({ id, label }) => ({ id, label })),
+    categories: MESSAGE_REPORT_TAXONOMY
+  });
+});
+
+router.post('/profile-reports', authMiddleware, async (req, res) => {
+  try {
+    const userId = String(req.body.userId || '');
+    const part = findProfileReportPart(String(req.body.part || ''));
+    const resolved = resolveReportPath(req.body.path);
+    const description = String(req.body.description || '').trim();
+    if (!part) return res.status(400).json({ message: 'Выберите, что не так в профиле' });
+    if (!resolved) return res.status(400).json({ message: 'Выберите точную причину жалобы' });
+    if (resolved.descriptionRequired && description.length < 10) {
+      return res.status(400).json({ message: 'Для этой причины добавьте описание не короче 10 символов' });
+    }
+    if (!/^[a-f0-9]{24}$/i.test(userId)) return res.status(400).json({ message: 'Пользователь не найден' });
+    if (userId === String(req.user._id)) return res.status(400).json({ message: 'Нельзя пожаловаться на собственный профиль' });
+
+    const target = await User.findById(userId)
+      .select('username nickname avatar bio customStatus mood listening hobbies banner')
+      .lean();
+    if (!target) return res.status(404).json({ message: 'Пользователь не найден' });
+
+    const item = await createSubmittedCase({
+      kind: 'report',
+      reporter: req.user._id,
+      subjectUser: target._id,
+      title: `Профиль: ${part.label} · ${resolved.labels.join(' · ')}`.slice(0, 160),
+      description: (description || `${part.label} → ${resolved.labels.join(' → ')}`).slice(0, 10000),
+      priority: resolved.severity,
+      prioritySource: 'system',
+      tags: ['profile-report', `part:${part.id}`, ...resolved.ids.map(id => `reason:${id}`)],
+      sourceKey: `profile-report:${req.user._id}:${target._id}:${part.id}`,
+      evidenceSnapshot: {
+        userId: target._id,
+        part: part.id,
+        username: target.username || '',
+        nickname: target.nickname || '',
+        avatar: target.avatar || null,
+        bio: String(target.bio || '').slice(0, 2000),
+        customStatus: target.customStatus || '',
+        mood: target.mood || '',
+        listening: target.listening || null,
+        hobbies: Array.isArray(target.hobbies) ? target.hobbies.slice(0, 10) : [],
+        capturedAt: new Date()
+      },
+      activity: [{ actor: req.user._id, action: 'profile_report_created', details: { part: part.id, path: resolved.ids } }]
+    });
+    res.status(201).json({ case: item, message: 'Жалоба отправлена команде модерации' });
+  } catch (error) {
+    if (sendSubmissionError(res, error)) return;
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: 'Вы уже жаловались на эту часть профиля' });
+    }
+    console.error('[cases] profile report:', error);
     res.status(400).json({ message: error.message || 'Не удалось отправить жалобу' });
   }
 });
@@ -168,7 +238,8 @@ router.get('/mine', authMiddleware, async (req, res) => {
       .select('-diagnostics -notes')
       .sort({ createdAt: -1 })
       .limit(100);
-    res.json({ cases });
+    const submission = await getSubmissionState(submissionIdentity({ reporter: req.user._id }));
+    res.json({ cases, submission });
   } catch (error) {
     console.error('[cases] mine:', error);
     res.status(500).json({ message: 'Не удалось загрузить обращения' });
@@ -291,7 +362,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const reporterPriority = allowedPriorities.includes(req.body.priority) ? req.body.priority : 'normal';
     const ideaCategory = IDEA_CATEGORIES.has(req.body.category) ? req.body.category : 'other';
     const acceptsReporterPriority = kind === 'support' || kind === 'bug';
-    const item = await Case.create({
+    const item = await createSubmittedCase({
       kind,
       reporter: req.user._id,
       subjectUser: req.body.subjectUser || null,
@@ -319,6 +390,7 @@ router.post('/', authMiddleware, async (req, res) => {
     });
     res.status(201).json({ case: item });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[cases] create:', error);
     res.status(400).json({ message: error.message || 'Не удалось создать обращение' });
   }
@@ -340,7 +412,7 @@ router.post('/appeals', authMiddleware, async (req, res) => {
     const description = String(req.body.description || '').trim();
     if (description.length < 20) return res.status(400).json({ message: 'Опишите причину пересмотра подробнее' });
 
-    const item = await Case.create({
+    const item = await createSubmittedCase({
       kind: 'appeal',
       reporter: req.user._id,
       subjectUser: req.user._id,
@@ -352,6 +424,7 @@ router.post('/appeals', authMiddleware, async (req, res) => {
     });
     res.status(201).json({ case: item });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[cases] appeal:', error);
     res.status(400).json({ message: error.message || 'Не удалось создать апелляцию' });
   }
@@ -394,6 +467,7 @@ router.post('/:id/replies', authMiddleware, async (req, res) => {
     }
     res.status(201).json({ note });
   } catch (error) {
+    if (sendSubmissionError(res, error)) return;
     console.error('[cases] reply:', error);
     res.status(500).json({ message: 'Не удалось отправить ответ' });
   }

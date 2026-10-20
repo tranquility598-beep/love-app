@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { randomInt } = require('node:crypto');
 
 /**
  * Сервис для отправки Email через SMTP.
@@ -40,7 +41,7 @@ const transporter = smtpHost
  * Генерирует 6-значный цифровой код
  */
 const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 };
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({

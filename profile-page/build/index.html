@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Страница профиля — Love</title>
+<!-- Редактор не для поиска: он бесполезен без токена, а в индексе выглядел бы
+     как страница входа в чужой аккаунт. -->
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/build/fonts.css">
+<link rel="stylesheet" href="/build/app.css">
+</head>
+<body>
+
+<!-- Пока JS не решил, куда нас отправить, показываем это. Без экрана загрузки
+     на медленной сети видно белое полотно, а потом рывком форму входа. -->
+<div class="boot" id="boot">
+  <div class="boot-mark" aria-hidden="true"></div>
+  <p class="boot-text" id="boot-text">Проверяем ссылку…</p>
+</div>
+
+<!-- Экран входа. Обычный путь — кнопка в приложении, она приводит сюда с
+     одноразовым кодом. Пароль оставлен на случай «открыл ссылку с другого
+     устройства». -->
+<main class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-logo" aria-hidden="true"></div>
+    <h1 class="gate-title">Страница профиля</h1>
+    <p class="gate-sub" id="gate-sub">Войдите, чтобы настроить свою страницу.</p>
+
+    <form class="form" id="login-form" novalidate>
+      <label class="field">
+        <span class="field-label">Ник или почта</span>
+        <input class="input" id="login-name" name="login" type="text"
+               autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label class="field">
+        <span class="field-label">Пароль</span>
+        <input class="input" id="login-pass" name="password" type="password"
+               autocomplete="current-password" required>
+      </label>
+      <p class="alert" id="gate-error" role="alert" hidden></p>
+      <button class="btn btn--primary btn--wide" id="login-submit" type="submit">Войти</button>
+    </form>
+
+    <p class="gate-hint">
+      Надёжнее открывать редактор кнопкой «Настроить страницу» в приложении Love —
+      тогда пароль вводить не нужно.
+    </p>
+  </div>
+</main>
+
+<!-- Редактор: навигация, настройки и настоящее превью страницы. -->
+<div class="ed" id="editor" hidden>
+
+  <header class="ed-top">
+    <div class="ed-top-left">
+      <div class="ed-logo" aria-hidden="true">L</div>
+      <div class="ed-brand-name">Love <span>Profile studio</span></div>
+      <span class="ed-top-divider" aria-hidden="true"></span>
+      <div class="ed-who">
+        <span class="ed-nick" id="ed-nick">—</span>
+        <span class="badge" id="ed-plan">—</span>
+      </div>
+    </div>
+    <div class="ed-top-right">
+      <span class="ed-saved" id="ed-saved" role="status" aria-live="polite"></span><button class="btn btn--ghost" id="btn-retry-save" type="button" hidden>Повторить</button>
+      <button class="btn btn--ghost" id="btn-preview-mobile" type="button" hidden>Превью</button>
+      <button class="btn btn--primary" id="btn-publish" type="button" hidden>Опубликовать</button>
+    </div>
+  </header>
+
+  <div class="ed-body">
+
+    <nav class="ed-nav" aria-label="Разделы редактора">
+      <div class="ed-nav-heading">СТУДИЯ</div>
+      <button class="ed-nav-link is-active" type="button" data-section="profile" aria-current="page"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></span>Профиль</button>
+      <button class="ed-nav-link" type="button" data-section="appearance"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 12h18M12 3v18"/></svg></span>Внешний вид</button>
+      <button class="ed-nav-link" type="button" data-section="links"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m10 13 4-4m-6 7-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg></span>Ссылки</button>
+      <button class="ed-nav-link" type="button" data-section="music"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9v6m5-11v16m5-13v10m5-6v2"/></svg></span>Музыка</button>
+      <button class="ed-nav-link" type="button" data-section="blocks"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg></span>Блоки</button>
+      <div class="ed-nav-divider"></div>
+      <button class="ed-nav-link" type="button" data-section="publish"><span class="ed-nav-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a19 19 0 0 1 0 18 19 19 0 0 1 0-18"/></svg></span>Публикация</button>
+      <div class="ed-nav-note"><span class="ed-nav-note-dot"></span>Ваше пространство в сети<br><span>Соберите страницу под себя.</span></div>
+    </nav>
+
+    <div class="ed-panel" id="ed-panel">
+
+      <div class="ed-section-heading">
+        <div>
+          <p class="ed-section-kicker">ВАША СТРАНИЦА</p>
+          <h1 class="ed-section-title" id="ed-section-title">Профиль</h1>
+          <p class="ed-section-description" id="ed-section-description">Расскажи о себе и выбери, как тебя увидят.</p>
+        </div>
+        
+      </div>
+
+      <!-- Ссылка на страницу + переключатель публикации -->
+      <section class="card" id="sec-publish" data-editor-group="publish">
+        <div class="card-head">
+          <h2 class="card-title">Ваша ссылка</h2>
+        </div>
+        <div class="card-body" id="publish-body"></div>
+      </section>
+
+      <!-- Заполняется из app.js: у секций разный набор полей в зависимости
+           от тарифа, поэтому в разметке их нет. -->
+      <section class="card" id="sec-basics" data-editor-group="profile">
+        <div class="card-head"><h2 class="card-title">О себе</h2></div>
+        <div class="card-body" id="basics-body"></div>
+      </section>
+
+      <section class="card" id="sec-look" data-editor-group="appearance">
+        <div class="card-head"><h2 class="card-title">Оформление</h2></div>
+        <div class="card-body" id="look-body"></div>
+      </section>
+
+      <section class="card" id="sec-background" data-editor-group="appearance">
+        <div class="card-head"><h2 class="card-title">Фон</h2></div>
+        <div class="card-body" id="background-body"></div>
+      </section>
+
+      <section class="card" id="sec-links" data-editor-group="links">
+        <div class="card-head">
+          <h2 class="card-title">Ссылки</h2>
+          <span class="card-note" id="links-count"></span>
+        </div>
+        <div class="card-body" id="links-body"></div>
+      </section>
+
+      <section class="card" id="sec-music" data-editor-group="music">
+        <div class="card-head"><h2 class="card-title">Музыка</h2></div>
+        <div class="card-body" id="music-body"></div>
+      </section>
+
+      <section class="card" id="sec-entry" data-editor-group="music">
+        <div class="card-head"><h2 class="card-title">Экран входа</h2></div>
+        <div class="card-body" id="entry-body"></div>
+      </section>
+
+      <section class="card" id="sec-blocks" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Что показывать</h2></div>
+        <div class="card-body" id="blocks-body"></div>
+      </section>
+
+      <section class="card" id="sec-people" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Пара и близкие</h2></div>
+        <div class="card-body" id="people-body"></div>
+      </section>
+
+      <section class="card" id="sec-share" data-editor-group="publish">
+        <div class="card-head"><h2 class="card-title">Превью в мессенджерах</h2></div>
+        <div class="card-body" id="share-body"></div>
+      </section>
+
+      <section class="card" id="sec-stats" data-editor-group="publish">
+        <div class="card-head"><h2 class="card-title">Просмотры</h2></div>
+        <div class="card-body" id="stats-body"></div>
+      </section>
+
+      <footer class="ed-foot" data-editor-group="publish">
+        <button class="btn btn--danger-quiet" id="btn-disable" type="button" hidden>Скрыть страницу</button>
+        <p class="ed-foot-note">Изменения сохраняются сами.</p>
+      </footer>
+
+    </div>
+
+    <div class="ed-preview" id="ed-preview">
+      <div class="preview-heading"><div><span class="preview-live-dot" aria-hidden="true"></span><strong>Живое превью</strong></div><span>Так вас увидят гости</span></div>
+      <div class="preview-frame">
+        <div class="preview-bar">
+          <span class="preview-url" id="preview-url">me.loveapp.chat</span>
+          <div class="preview-sizes" role="group" aria-label="Размер превью">
+            <button class="chip is-on" id="size-phone" type="button" data-size="phone">Мобильный</button>
+            <button class="chip" id="size-wide" type="button" data-size="wide">Десктоп</button>
+          </div>
+        </div>
+        <!-- Сюда app.js вешает shadow root с настоящей вёрсткой страницы. -->
+        <div class="preview-stage" id="preview-stage" data-size="phone">
+          <p class="preview-empty">Собираем вашу страницу…</p>
+        </div>
+      </div>
+      <!-- Про то, чего превью не умеет. Текст ставит preview.js и только когда
+           это действительно так: постоянная приписка быстро перестаёт читаться. -->
+      <p class="preview-note" id="preview-note" hidden></p>
+    </div>
+
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script type="module" src="/build/app.js"></script>
+</body>
+</html>

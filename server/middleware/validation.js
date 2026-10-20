@@ -7,12 +7,47 @@
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usernameRegex = /^[a-zA-Z0-9_а-яА-ЯёЁ]{2,32}$/;
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$/;
-const forbiddenUsernames = ['admin', 'root', 'system', 'moderator', 'owner'];
+
+// Зарезервированные имена.
+//
+// Список вырос, когда появились публичные страницы профиля
+// (me.loveapp.chat/<username>): теперь юзернейм — это ещё и путь и поддомен,
+// поэтому имя вида `support` или `download` даёт человеку страницу, которую
+// невозможно отличить от нашей собственной. Проверять надо ДО регистрации:
+// отобрать занятое имя потом — скандал.
+const forbiddenUsernames = [
+  // служебное и инфраструктурное
+  'admin', 'root', 'system', 'moderator', 'owner', 'api', 'www', 'cdn', 'static',
+  'assets', 'uploads', 'mail', 'smtp', 'ns', 'ns1', 'ns2', 'ftp', 'webmail',
+  // пути, которые уже заняты или будут заняты на публичном хосте
+  'me', 'u', 'build', 'og', 'health', 'robots', 'favicon', 'invite', 'release',
+  'changelog', 'download', 'downloads', 'updates', 'login', 'logout', 'signup',
+  'register', 'settings', 'profile', 'profiles', 'terms', 'privacy', 'legal',
+  // роли и всё, что читается как «официальный аккаунт»
+  'support', 'help', 'staff', 'team', 'official', 'moderators', 'security',
+  'billing', 'payments', 'love', 'loveapp', 'noreply', 'no-reply'
+];
+
+const latinRegex = /[a-zA-Z]/;
+const cyrillicRegex = /[а-яА-ЯёЁ]/;
+
+/**
+ * Смешивание алфавитов запрещено.
+ *
+ * Юзернейм разрешает и латиницу, и кириллицу — по отдельности это нормально.
+ * Но `sаsha` с кириллической «а» визуально не отличается от `sasha`, а с
+ * появлением публичных ссылок это уже не косметика: подделанная ссылка на
+ * чужую страницу профиля мессенджера — рабочий фишинг. Требуем один алфавит.
+ */
+const hasMixedScripts = (value) => latinRegex.test(value) && cyrillicRegex.test(value);
 
 const getUsernameValidationError = (username) => {
   const value = String(username || '');
   if (!usernameRegex.test(value)) {
     return 'Имя пользователя должно быть 2-32 символа и содержать только буквы, цифры и _';
+  }
+  if (hasMixedScripts(value)) {
+    return 'Нельзя смешивать латиницу и кириллицу в одном имени — выберите что-то одно';
   }
   if (forbiddenUsernames.includes(value.toLowerCase())) {
     return 'Это имя пользователя зарезервировано';

@@ -9,6 +9,7 @@ import '../../core/realtime/love_socket.dart';
 import '../../core/realtime/app_events.dart';
 import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
+import '../../theme/season.dart';
 import '../../widgets/fade_indexed_stack.dart';
 import '../../widgets/love_background.dart';
 import '../../core/prefs/love_prefs.dart';
@@ -95,6 +96,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _socket.off('moderation:updated', _onModerationUpdated);
     _socket.off('moderation:restricted', _onModerationRestricted);
     _socket.off('community:devlog:update', _onDevLogUpdated);
+    CallCenter.instance.detach(_socket);
+    ChannelVoiceController.instance.detach(_socket);
+    InAppNotifications.dismiss();
     _socket.disconnect();
     super.dispose();
   }
@@ -393,7 +397,7 @@ class _BottomLoveNav extends StatelessWidget {
 
   static const _items = <_NavSpec>[
     _NavSpec(active: LoveNavGlyph.heart, inactive: LoveNavGlyph.bubble),
-    _NavSpec(active: LoveNavGlyph.layers, inactive: LoveNavGlyph.layers),
+    _NavSpec(active: LoveNavGlyph.orbit, inactive: LoveNavGlyph.orbit),
     _NavSpec(active: LoveNavGlyph.users, inactive: LoveNavGlyph.users),
     _NavSpec(active: LoveNavGlyph.bell, inactive: LoveNavGlyph.bell),
     _NavSpec(active: LoveNavGlyph.menu, inactive: LoveNavGlyph.menu),
@@ -405,11 +409,12 @@ class _BottomLoveNav extends StatelessWidget {
     return Container(
       height: kBottomNavHeight + bottomInset,
       padding: EdgeInsets.only(bottom: bottomInset, left: 16, right: 16),
-      decoration:  BoxDecoration(
-        color:
-            context.palette.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
+      decoration: BoxDecoration(
+        color: context
+            .palette.glass, // solid rgba(10,10,10,0.95) — no BackdropFilter
         border: Border(
-          top: BorderSide(color: context.palette.inkA(0.08)), // rgba(255,255,255,0.08)
+          top: BorderSide(
+              color: context.palette.inkA(0.08)), // rgba(255,255,255,0.08)
         ),
         boxShadow: [
           BoxShadow(
@@ -465,18 +470,23 @@ class _NavButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: active
-              ? context.palette.inkA(0.08)
-              : Colors.transparent,
+          color: active ? context.palette.inkA(0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(active ? 12 : 22),
         ),
         child: Center(
-          child: LoveNavIcon(
-            glyph: glyph,
-            filled: filled,
-            glow: active,
-            color: active ? context.palette.accent : context.palette.textSecondary,
-            size: 24,
+          // В Halloween активная вкладка — тыквенная, остальные как обычно.
+          child: SeasonBuilder(
+            builder: (context, halloween) => LoveNavIcon(
+              glyph: glyph,
+              filled: filled,
+              glow: active,
+              color: active
+                  ? (halloween
+                      ? Season.accent(context.palette)
+                      : context.palette.accent)
+                  : context.palette.textSecondary,
+              size: 24,
+            ),
           ),
         ),
       ),

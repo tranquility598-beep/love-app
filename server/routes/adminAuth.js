@@ -8,7 +8,7 @@ const AdminSession = require('../models/AdminSession');
 const AdminAuthChallenge = require('../models/AdminAuthChallenge');
 const { authLimiter, otpLimiter } = require('../middleware/rateLimiter');
 const { adminSessionAuth, SESSION_MAX_MS, setAdminCookie, clearAdminCookie } = require('../middleware/adminSessionAuth');
-const { isStaffRole, canonicalRole, ROLE_LABELS, permissionsFor } = require('../config/adminRoles');
+const { isStaffRole, canonicalRole, ROLE_LABELS, permissionsFor, canDeleteUsers } = require('../config/adminRoles');
 const { generateOTP, sendOTPEmail } = require('../utils/emailService');
 const { randomToken, hashToken, safeEqual, encryptSecret, decryptSecret, requestIp } = require('../utils/security');
 const { getJwtSecret } = require('../utils/jwtSecret');
@@ -41,6 +41,7 @@ function publicAdminUser(user) {
     role,
     roleLabel: ROLE_LABELS[role],
     permissions: [...permissionsFor(role)],
+    canDeleteUsers: canDeleteUsers(user),
     adminTotpEnabled: Boolean(user.adminTotpEnabled),
     adminPolicyRequiredVersion: user.adminPolicyRequiredVersion || '',
     adminPolicyAcceptedVersion: user.adminPolicyAcceptedVersion || '',

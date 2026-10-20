@@ -133,6 +133,39 @@ const userSchema = new mongoose.Schema({
     title: { type: String, default: '', maxlength: 120 }
   },
 
+  // Подписка. Пока платежей нет, plan выдаётся вручную из админ-панели —
+  // это осознанно: сначала фичи и тарифные проверки на сервере, потом касса.
+  // Когда появится оплата, платёжка будет писать в эти же поля, и код фич
+  // менять не придётся.
+  //
+  // duo — Premium на двоих: возможности те же, отличается только цена и то,
+  // что подписку оплачивает один из пары (см. config/profileTiers.js).
+  plan: {
+    type: String,
+    enum: ['free', 'pro', 'premium', 'duo'],
+    default: 'free'
+  },
+  // null = бессрочно. Так удобно выдавать доступ команде и тестерам, не
+  // продлевая его каждый месяц руками.
+  planExpiresAt: {
+    type: Date,
+    default: null
+  },
+  // Откуда взялся тариф: manual (админка), promo (промокод), payment (касса).
+  // Нужно для разбора спорных ситуаций «почему у меня Premium/почему пропал».
+  planSource: {
+    type: String,
+    enum: ['manual', 'promo', 'payment', 'duo-partner'],
+    default: 'manual'
+  },
+  // Кто оплатил Duo, если тариф пришёл от партнёра. Разрыв пары читает это
+  // поле, чтобы понять, кому оставить оплаченный период.
+  planPaidBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+
   // Серверы пользователя
   servers: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -255,6 +288,23 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Право полного удаления аккаунтов. Выдаёт только Разработчик и только
+  // администратору (младший администратор и выше), роль при этом не меняется.
+  // Если человека потом понизили ниже администратора, право само перестаёт
+  // действовать (см. canDeleteUsers в config/adminRoles.js).
+  canDeleteUsers: {
+    type: Boolean,
+    default: false
+  },
+  canDeleteUsersGrantedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  canDeleteUsersGrantedAt: {
+    type: Date,
+    default: null
+  },
   adminTotpSecret: {
     type: String,
     default: null,
@@ -364,6 +414,14 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Действующий тариф для значка в профиле: истёкший или free — null.
+function activePlanBadge(user) {
+  const plan = user.plan || 'free';
+  if (plan === 'free') return null;
+  if (user.planExpiresAt && new Date(user.planExpiresAt) <= new Date()) return null;
+  return plan;
+}
+
 // Метод для получения публичного профиля (без пароля)
 userSchema.methods.toPublicJSON = function() {
   const staffRank = canonicalRole(this.role);
@@ -394,7 +452,10 @@ userSchema.methods.toPublicJSON = function() {
     status: this.status,
     customStatus: this.customStatus,
     createdAt: this.createdAt,
-    lastSeen: this.lastSeen
+    lastSeen: this.lastSeen,
+    // Значок подписки в профиле (pro | premium | duo | null). Срок и источник
+    // оплаты наружу не отдаём — только то, что подписка сейчас есть.
+    planBadge: activePlanBadge(this)
   };
 };
 

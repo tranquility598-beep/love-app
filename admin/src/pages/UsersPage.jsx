@@ -8,6 +8,7 @@ import {
 } from '../components/ui.jsx';
 import { formatDate, toneForStatus } from '../utils/format.js';
 import PageLoader from '../components/PageLoader.jsx';
+import UserAdminTools from './UserAdminTools.jsx';
 import { useAdminRealtime } from '../realtime/useAdminRealtime.js';
 
 const statusOptions = [
@@ -168,6 +169,13 @@ export default function UsersPage() {
                   <div><dt>Серверы владельца</dt><dd>{details.ownedServersCount}</dd></div>
                   <div><dt>Последний онлайн</dt><dd>{formatDate(details.user.lastSeen)}</dd></div>
                 </dl>
+                <UserAdminTools
+                  actor={actor}
+                  target={details.user}
+                  onChanged={async message => { setNotice(message); await loadUsers(); await openUser(selected); }}
+                  onDeleted={async message => { setNotice(message); setSelected(null); setDetails(null); await loadUsers(); }}
+                  onError={setError}
+                />
                 {!!availableActions.length && <div className="moderation-actions safe-desktop-only">{availableActions.map(({ value, label, icon: Icon }) => <button className={`button ${value === 'ban' || value === 'deactivate' ? 'button-danger' : 'button-secondary'}`} key={value} onClick={() => beginAction(value)}><Icon size={16} />{label}</button>)}</div>}
               </section>
               <section className="detail-history">

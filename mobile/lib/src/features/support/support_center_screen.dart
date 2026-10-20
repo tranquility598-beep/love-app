@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_config.dart';
 import '../../core/network/love_api.dart';
-import '../../core/platform/audio_file_picker.dart';
 import '../../core/realtime/app_events.dart';
 import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
@@ -17,6 +16,8 @@ import '../settings/settings_widgets.dart';
 import '../chat/chat_models.dart';
 import '../shell/screen_frame.dart';
 import 'support_models.dart';
+import 'case_submission_gate.dart';
+import 'case_attachments.dart';
 
 class SupportCenterScreen extends StatefulWidget {
   const SupportCenterScreen({
@@ -50,6 +51,10 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
   int _seenSupportRevision = 0;
   int _seenModerationRevision = 0;
   bool _openedInitial = false;
+  bool _openingCase = false;
+  bool _refreshingCases = false;
+  CaseSubmissionState? _submission;
+  Timer? _submissionTimer;
 
   @override
   void initState() {
@@ -59,11 +64,23 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
     _events.addListener(_handleEvents);
     _loadCases();
     _loadStatus();
+    _submissionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_submission?.code == 'CASE_COOLDOWN' &&
+          mounted &&
+          _casesError == null) {
+        if (_submission!.remainingSeconds == 0 && !_loadingCases) {
+          _loadCases(quiet: true);
+        } else {
+          setState(() {});
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _events.removeListener(_handleEvents);
+    _submissionTimer?.cancel();
     super.dispose();
   }
 
@@ -79,12 +96,15 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
   }
 
   Future<void> _loadCases({bool quiet = false}) async {
+    if (_refreshingCases) return;
+    _refreshingCases = true;
     if (!quiet && mounted) setState(() => _loadingCases = true);
     try {
-      final items = await widget.api.myCases();
+      final inbox = await widget.api.caseInbox();
       if (!mounted) return;
       setState(() {
-        _cases = items;
+        _cases = inbox.cases;
+        _submission = inbox.submission;
         _casesError = null;
         _loadingCases = false;
       });
@@ -95,6 +115,8 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
         _casesError = error.toString();
         _loadingCases = false;
       });
+    } finally {
+      _refreshingCases = false;
     }
   }
 
@@ -141,7 +163,9 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
           trailing: _tab == 0
               ? IconButton(
                   tooltip: 'Новое обращение',
-                  onPressed: _createCase,
+                  onPressed: _openingCase || !(_submission?.canSubmit ?? false)
+                      ? null
+                      : _createCase,
                   icon: const Icon(Icons.add_comment_outlined),
                 )
               : null,
@@ -158,6 +182,34 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
                   onSelected: (value) => setState(() => _tab = value),
                 ),
               ),
+              if (_tab == 0 && _submission != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: CaseSubmissionNotice(
+                      state: _submission!,
+                      onOpen: _submission!.activeCaseId.isEmpty
+                          ? null
+                          : () => _openCase(_submission!.activeCaseId)),
+                ),
+              if (_tab == 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    OutlinedButton.icon(
+                        onPressed:
+                            _openingCase || !(_submission?.canSubmit ?? false)
+                                ? null
+                                : () => _createCase(kind: 'bug'),
+                        icon: const Icon(Icons.bug_report_outlined, size: 18),
+                        label: const Text('Сообщить о баге')),
+                    OutlinedButton(
+                        onPressed:
+                            _openingCase || !(_submission?.canSubmit ?? false)
+                                ? null
+                                : _createCase,
+                        child: const Text('Задать вопрос')),
+                  ]),
+                ),
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
@@ -192,7 +244,9 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
         title: 'Обращений пока нет',
         message: 'Здесь появится ваша переписка с командой Love.',
         action: FilledButton.icon(
-          onPressed: _createCase,
+          onPressed: _openingCase || !(_submission?.canSubmit ?? false)
+              ? null
+              : _createCase,
           icon: const Icon(Icons.add_rounded),
           label: const Text('Новое обращение'),
         ),
@@ -245,13 +299,17 @@ class _SupportCenterScreenState extends State<SupportCenterScreen> {
     if (mounted) unawaited(_loadCases(quiet: true));
   }
 
-  Future<void> _createCase() async {
+  Future<void> _createCase({String kind = 'support'}) async {
+    if (_openingCase || !(_submission?.canSubmit ?? false)) return;
+    setState(() => _openingCase = true);
     final created = await showModalBottomSheet<SupportCase>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _NewCaseSheet(api: widget.api),
+      builder: (context) => _NewCaseSheet(api: widget.api, kind: kind),
     );
+    if (mounted) setState(() => _openingCase = false);
+    if (mounted) unawaited(_loadCases(quiet: true));
     if (created == null || !mounted) return;
     setState(() => _cases = [created, ..._cases]);
     await _openCase(created.id);
@@ -410,7 +468,7 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
           ),
           const SizedBox(height: 8),
           Text(item.description,
-              style:  TextStyle(
+              style: TextStyle(
                   color: context.palette.textSecondary, height: 1.45)),
           const SizedBox(height: 12),
           Wrap(
@@ -445,7 +503,7 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
             child: Divider(height: 1),
           ),
           if (item.notes.isEmpty)
-             Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
               child: Text(
                 'Команда ещё не ответила. Новые сообщения появятся здесь автоматически.',
@@ -470,7 +528,7 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration:  BoxDecoration(
+        decoration: BoxDecoration(
           color: context.palette.bgPrimary,
           border: Border(top: BorderSide(color: context.palette.border)),
         ),
@@ -547,8 +605,9 @@ class _SupportCaseScreenState extends State<SupportCaseScreen> {
 }
 
 class _NewCaseSheet extends StatefulWidget {
-  const _NewCaseSheet({required this.api});
+  const _NewCaseSheet({required this.api, this.kind = 'support'});
   final LoveApi api;
+  final String kind;
 
   @override
   State<_NewCaseSheet> createState() => _NewCaseSheetState();
@@ -557,7 +616,7 @@ class _NewCaseSheet extends StatefulWidget {
 class _NewCaseSheetState extends State<_NewCaseSheet> {
   final _title = TextEditingController();
   final _description = TextEditingController();
-  final List<PickedChatFile> _files = [];
+  final List<CaseFileDraft> _files = [];
   String _priority = 'normal';
   bool _busy = false;
 
@@ -571,119 +630,103 @@ class _NewCaseSheetState extends State<_NewCaseSheet> {
   @override
   Widget build(BuildContext context) {
     return _LoveSheetFrame(
-      title: 'Новое обращение',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _title,
-            maxLength: 160,
-            decoration: const InputDecoration(
-                labelText: 'Тема', hintText: 'Кратко опишите проблему'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _description,
-            minLines: 4,
-            maxLines: 8,
-            maxLength: 10000,
-            decoration: const InputDecoration(
-                labelText: 'Описание',
-                hintText: 'Что произошло и какой результат вы ожидали?'),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _priority,
-            decoration: const InputDecoration(labelText: 'Приоритет'),
-            items: const [
-              DropdownMenuItem(value: 'low', child: Text('Низкий')),
-              DropdownMenuItem(value: 'normal', child: Text('Обычный')),
-              DropdownMenuItem(value: 'high', child: Text('Высокий')),
-              DropdownMenuItem(value: 'critical', child: Text('Критический')),
-            ],
-            onChanged: _busy
-                ? null
-                : (value) => setState(() => _priority = value ?? 'normal'),
-          ),
-          const SizedBox(height: 8),
-           Text(
-            'Критический приоритет используйте только при угрозе безопасности или полной потере доступа.',
-            style: TextStyle(
-                color: context.palette.textMuted, fontSize: 12, height: 1.35),
-          ),
-          if (_files.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            for (final file in _files)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: Text(file.name,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: IconButton(
-                  tooltip: 'Убрать файл',
-                  onPressed:
-                      _busy ? null : () => setState(() => _files.remove(file)),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ),
-          ],
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _pickFile,
-                icon: const Icon(Icons.attach_file_rounded),
-                label: const Text('Файл'),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : _submit,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send_rounded),
-                  label: const Text('Отправить'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      title: widget.kind == 'bug' ? 'Сообщить о баге' : 'Задать вопрос',
+      child: CaseSubmissionGate(
+          api: widget.api,
+          builder: (context, allowed) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _title,
+                    maxLength: 160,
+                    decoration: const InputDecoration(
+                        labelText: 'Тема', hintText: 'Кратко опишите проблему'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _description,
+                    minLines: 4,
+                    maxLines: 8,
+                    maxLength: 10000,
+                    decoration: const InputDecoration(
+                        labelText: 'Описание',
+                        hintText:
+                            'Что произошло и какой результат вы ожидали?'),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: _priority,
+                    decoration: const InputDecoration(labelText: 'Приоритет'),
+                    items: const [
+                      DropdownMenuItem(value: 'low', child: Text('Низкий')),
+                      DropdownMenuItem(value: 'normal', child: Text('Обычный')),
+                      DropdownMenuItem(value: 'high', child: Text('Высокий')),
+                      DropdownMenuItem(
+                          value: 'critical', child: Text('Критический')),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (value) =>
+                            setState(() => _priority = value ?? 'normal'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Критический приоритет используйте только при угрозе безопасности или полной потере доступа.',
+                    style: TextStyle(
+                        color: context.palette.textMuted,
+                        fontSize: 12,
+                        height: 1.35),
+                  ),
+                  CaseAttachments(
+                      files: _files,
+                      enabled: allowed && !_busy,
+                      onChanged: () => setState(() {})),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton.icon(
+                          onPressed: _busy || !allowed ? null : _submit,
+                          icon: _busy
+                              ? const SizedBox(
+                                  width: 17,
+                                  height: 17,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.send_rounded),
+                          label: const Text('Отправить'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )),
     );
   }
 
-  Future<void> _pickFile() async {
-    final file = await ChatNativeFiles.pickFile();
-    if (file != null && mounted) setState(() => _files.add(file));
-  }
-
   Future<void> _submit() async {
+    if (_busy) return;
     if (_title.text.trim().length < 3 || _description.text.trim().length < 10) {
       _snack('Добавьте тему и подробное описание не короче 10 символов.');
       return;
     }
     setState(() => _busy = true);
     try {
+      await widget.api.ensureCaseSubmissionAllowed();
       final attachments = <Map<String, dynamic>>[];
       for (final file in _files) {
-        final uploaded = await widget.api
-            .uploadAttachment(file.path, mimeType: file.mimeType);
-        attachments.add({
-          'name': asText(uploaded['originalName'], file.name),
-          'url': asText(uploaded['url']),
-          'mimeType': asText(uploaded['mimetype'], file.mimeType),
-          'size': (uploaded['size'] as num?)?.toInt() ?? file.size,
-        });
+        attachments.add(await file.upload(widget.api));
       }
-      final created = await widget.api.createSupportCase(
+      final result = await widget.api.createCommunityCase(
+        kind: widget.kind,
         title: _title.text,
         description: _description.text,
         priority: _priority,
         attachments: attachments,
       );
+      final created =
+          SupportCase.fromJson((result['case'] as Map).cast<String, dynamic>());
       if (mounted) Navigator.of(context).pop(created);
     } catch (error) {
       _snack(error.toString());
@@ -834,7 +877,7 @@ class _ViolationsView extends StatelessWidget {
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                     Text('Активные предупреждения',
+                    Text('Активные предупреждения',
                         style: TextStyle(color: context.palette.textSecondary)),
                     const Spacer(),
                     Text('${status.warningCount}/7',
@@ -859,7 +902,7 @@ class _ViolationsView extends StatelessWidget {
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           if (status.actions.isEmpty)
-             Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 36),
               child: Text('Нарушений нет.',
                   textAlign: TextAlign.center,
@@ -915,13 +958,13 @@ class _CaseCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
                     Text('${item.number} · ${_statusLabel(item.status)}',
-                        style:  TextStyle(
+                        style: TextStyle(
                             color: context.palette.textMuted, fontSize: 11.5)),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-               Icon(Icons.chevron_right_rounded,
+              Icon(Icons.chevron_right_rounded,
                   color: context.palette.textMuted),
             ],
           ),
@@ -947,12 +990,10 @@ class _NoteBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: own
-              ?  context.palette.bgPrimary
-              : context.palette.inkA(0.045),
+          color: own ? context.palette.bgPrimary : context.palette.inkA(0.045),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: own ?  context.palette.dangerBg : context.palette.border),
+              color: own ? context.palette.dangerBg : context.palette.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1000,7 +1041,9 @@ class _ModerationCard extends StatelessWidget {
         color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: action.active ? context.palette.borderActive : context.palette.border),
+            color: action.active
+                ? context.palette.borderActive
+                : context.palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1022,12 +1065,11 @@ class _ModerationCard extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(action.reason,
-              style:  TextStyle(
-                  color: context.palette.textSecondary, height: 1.4)),
+              style:
+                  TextStyle(color: context.palette.textSecondary, height: 1.4)),
           const SizedBox(height: 8),
           Text(_actionTerm(action),
-              style:
-                   TextStyle(color: context.palette.textMuted, fontSize: 12)),
+              style: TextStyle(color: context.palette.textMuted, fontSize: 12)),
           if (action.appeal != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -1070,7 +1112,9 @@ class _WarningTrack extends StatelessWidget {
               child: Container(
                   height: 7,
                   decoration: BoxDecoration(
-                      color: count >= 5 ? context.palette.danger : context.palette.inkA(0.25),
+                      color: count >= 5
+                          ? context.palette.danger
+                          : context.palette.inkA(0.25),
                       borderRadius: BorderRadius.circular(99))),
             ),
           ],
@@ -1087,7 +1131,7 @@ class _WarningTrack extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w900))),
                 Expanded(
                     child: Text(threshold.consequence,
-                        style:  TextStyle(
+                        style: TextStyle(
                             color: context.palette.textMuted, fontSize: 11.5))),
               ],
             ),
@@ -1109,7 +1153,7 @@ class _LoveSheetFrame extends StatelessWidget {
       child: Container(
         constraints:
             BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.92),
-        decoration:  BoxDecoration(
+        decoration: BoxDecoration(
           color: context.palette.bgSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           border: Border(top: BorderSide(color: context.palette.borderActive)),
@@ -1175,8 +1219,9 @@ class _CaseBadge extends StatelessWidget {
           style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w800,
-              color:
-                  accent ?  context.palette.dangerText : context.palette.textSecondary)),
+              color: accent
+                  ? context.palette.dangerText
+                  : context.palette.textSecondary)),
     );
   }
 }
@@ -1194,12 +1239,12 @@ class _RetryState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             Icon(Icons.cloud_off_outlined,
+            Icon(Icons.cloud_off_outlined,
                 size: 36, color: context.palette.textMuted),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style:  TextStyle(color: context.palette.textSecondary)),
+                style: TextStyle(color: context.palette.textSecondary)),
             const SizedBox(height: 14),
             OutlinedButton.icon(
                 onPressed: () => onRetry(),

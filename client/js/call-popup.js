@@ -9,7 +9,7 @@ const btnDecline = document.getElementById('btn-decline');
 const bulkRipple = document.getElementById('bulk-ripple');
 const avatarContainer = document.getElementById('avatar-container');
 
-const ringingSound = new Audio('assets/sounds/calls/call_incoming.mp3');
+const ringingSound = new Audio('assets/sounds/calls/call_incoming.ogg');
 ringingSound.volume = 0.3;
 ringingSound.loop = true;
 

@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import '../../core/voice/peer_negotiation.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/audio/love_sounds.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/network/api_client.dart';
 import '../../core/realtime/love_socket.dart';
@@ -65,7 +68,23 @@ class DmCallController extends ChangeNotifier {
 
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
-  final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
+  int _generation = 0;
+  final _peerGenerations = <String, int>{};
+  bool mediaBusy = false;
+  Future<void>? _cleanupTask;
+  final remoteMediaModes = <String, String>{};
+  final _remoteStreams = <String, MediaStream>{};
+  final _remoteTasks = <String, Future<void>>{};
+  final _reconnectTimers = <String, Timer>{};
+  late final _negotiation = PeerNegotiation(
+    channelId: () => (_activeRoomId ?? ''),
+    localSocketId: () => socket.socketId,
+    createPeer: _createPeerConnection,
+    peer: (id) => _peerConnections[id],
+    send: (event, data) => socket.emit(event, data),
+  );
+  bool _current(int generation) =>
+      generation == _generation && (!_disposed && _activeRoomId != null);
   Map<String, dynamic> _iceConfiguration = _stunIceConfiguration;
 
   MediaStream? _localStream;
@@ -96,7 +115,9 @@ class DmCallController extends ChangeNotifier {
   String get statusText {
     switch (phase) {
       case DmCallPhase.outgoing:
-        return 'Ожидание ответа...';
+        return _peerOffline
+            ? 'Не в сети · ждём ответа...'
+            : 'Ожидание ответа...';
       case DmCallPhase.incoming:
         return 'Входящий звонок';
       case DmCallPhase.connecting:
@@ -110,9 +131,14 @@ class DmCallController extends ChangeNotifier {
     }
   }
 
+  /// Сервер сообщил, что собеседник не в сети: вызов всё равно ждёт 45 с —
+  /// вдруг откроет приложение (server/services/callRings.js).
+  bool _peerOffline = false;
+
   void attach() {
     if (_attached) return;
     _attached = true;
+    socket.on('call:ringing', _handleCallRinging);
     socket.on('call:incoming', _handleIncomingCall);
     socket.on('call:response', _handleCallResponse);
     socket.on('call:terminated', _handleCallTerminated);
@@ -132,10 +158,13 @@ class DmCallController extends ChangeNotifier {
 
   Future<void> startOutgoing({bool video = false}) async {
     if (!canStart) return;
-    if (!socket.isConnected) {
-      _setError('Сокет еще не подключен');
+    if (!socket.isConnected &&
+        !await socket.connectAndWait(const Duration(seconds: 6))) {
+      _setError(
+          'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.');
       return;
     }
+    if (!canStart || _disposed) return;
     // Из войса звонить нельзя: микрофон и WebRTC-комната одни, звонок
     // отобрал бы поток, а в канале остался бы «призрак».
     if (ChannelVoiceController.instance.isActive) {
@@ -144,6 +173,7 @@ class DmCallController extends ChangeNotifier {
     }
     _activePeerId = peerId;
     _outgoingVideoRequested = video;
+    _peerOffline = false;
     phase = DmCallPhase.outgoing;
     errorMessage = null;
     _safeNotify();
@@ -156,10 +186,17 @@ class DmCallController extends ChangeNotifier {
   Future<void> acceptIncoming() async {
     if (phase != DmCallPhase.incoming || _activePeerId == null) return;
     final callerId = _activePeerId!;
+    phase = DmCallPhase.connecting;
+    _safeNotify();
     // Принимаем звонок, находясь в войсе — выходим из канала сами, иначе
     // микрофон уйдёт звонку, а участники продолжат видеть нас в войсе.
     if (ChannelVoiceController.instance.isActive) {
       await ChannelVoiceController.instance.leave();
+    }
+    if (_disposed ||
+        phase != DmCallPhase.connecting ||
+        _activePeerId != callerId) {
+      return;
     }
     socket.emit('call:response', {
       'callerId': callerId,
@@ -214,8 +251,9 @@ class DmCallController extends ChangeNotifier {
     if (targetId.isNotEmpty && phase != DmCallPhase.idle) {
       socket.emit('call:end', {'targetUserId': targetId});
     }
-    await _leaveCall();
+    final closing = _leaveCall();
     _resetToIdle();
+    await closing;
   }
 
   Future<void> toggleMute() async {
@@ -243,32 +281,41 @@ class DmCallController extends ChangeNotifier {
   // ── Камера и демонстрация экрана ──
 
   Future<void> toggleCamera() async {
-    if (cameraOn) {
-      await stopVideo();
-      return;
-    }
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      errorMessage = 'Нет доступа к камере';
-      _safeNotify();
-      return;
-    }
-    MediaStream stream;
+    if (mediaBusy || !(!_disposed && _activeRoomId != null)) return;
+    final generation = _generation;
+    mediaBusy = true;
+    _safeNotify();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      if (cameraOn) {
+        await stopVideo();
+        return;
+      }
+      final status = await Permission.camera.request();
+      if (!_current(generation)) return;
+      if (!status.isGranted) throw StateError('Нет доступа к камере');
+      final stream = await navigator.mediaDevices.getUserMedia({
         'audio': false,
         'video': {
           'facingMode': frontCamera ? 'user' : 'environment',
           'width': {'ideal': 1280},
-          'height': {'ideal': 720},
-        },
+          'height': {'ideal': 720}
+        }
       });
+      if (!_current(generation)) {
+        await _releaseStream(stream);
+        return;
+      }
+      await _startVideo(stream, screen: false);
     } catch (_) {
-      errorMessage = 'Не удалось включить камеру';
-      _safeNotify();
-      return;
+      if (_current(generation)) {
+        errorMessage = 'Не удалось включить камеру. Проверьте разрешение.';
+      }
+    } finally {
+      if (_current(generation)) {
+        mediaBusy = false;
+        _safeNotify();
+      }
     }
-    await _startVideo(stream, screen: false);
   }
 
   Future<void> switchCamera() async {
@@ -285,58 +332,70 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> toggleScreenShare() async {
-    if (screenSharing) {
-      await stopVideo();
-      return;
-    }
-    MediaStream stream;
+    if (mediaBusy || !(!_disposed && _activeRoomId != null)) return;
+    final generation = _generation;
+    mediaBusy = true;
+    _safeNotify();
     try {
-      stream = await ScreenShareManager.startScreenShare();
-    } on ScreenShareException catch (e) {
-      errorMessage = e.message;
-      _safeNotify();
-      return;
+      if (screenSharing) {
+        await stopVideo();
+        return;
+      }
+      final stream = await ScreenShareManager.startScreenShare();
+      if (!_current(generation)) {
+        await _releaseStream(stream);
+        await ScreenShareManager.stopScreenShare();
+        return;
+      }
+      if (stream.getVideoTracks().isEmpty) {
+        await _releaseStream(stream);
+        await ScreenShareManager.stopScreenShare();
+        throw StateError('empty-capture');
+      }
+      await _startVideo(stream, screen: true);
+    } on ScreenShareException catch (error) {
+      if (_current(generation)) errorMessage = error.message;
     } catch (_) {
-      errorMessage = 'Демонстрация экрана отменена или недоступна';
-      _safeNotify();
-      return;
+      if (_current(generation)) {
+        errorMessage = 'Демонстрация экрана отменена или недоступна';
+      }
+    } finally {
+      if (_current(generation)) {
+        mediaBusy = false;
+        _safeNotify();
+      }
     }
-    if (stream.getVideoTracks().isEmpty) {
-      try {
-        await stream.dispose();
-      } catch (_) {}
-      await ScreenShareManager.stopScreenShare();
-      errorMessage = 'Android не передал видеопоток демонстрации';
-      _safeNotify();
-      return;
-    }
-    await _startVideo(stream, screen: true);
   }
 
   Future<void> _startVideo(MediaStream stream, {required bool screen}) async {
-    // Камера и демонстрация взаимоисключающие — гасим предыдущее.
-    if (_videoStream != null) {
-      await stopVideo(silent: true);
+    final generation = _generation;
+    if (_videoStream != null) await stopVideo(silent: true);
+    if (!_current(generation)) {
+      await _releaseStream(stream);
+      return;
     }
     _videoStream = stream;
-    final tracks = stream.getVideoTracks();
-    if (tracks.isEmpty) return;
-    final track = tracks.first;
-    // Пользователь остановил захват из системного UI Android.
-    track.onEnded = () => unawaited(stopVideo());
+    final track = stream.getVideoTracks().first;
+    track.onEnded = () {
+      if (identical(_videoStream, stream)) unawaited(stopVideo());
+    };
     if (localRenderer == null) {
       final renderer = RTCVideoRenderer();
       await renderer.initialize();
+      if (!_current(generation)) {
+        await renderer.dispose();
+        return;
+      }
       localRenderer = renderer;
     }
     localRenderer!.srcObject = stream;
-    for (final pc in _peerConnections.values) {
+    for (final pc in _peerConnections.values.toList()) {
+      if (!_current(generation)) return;
       try {
         await pc.addTrack(track, stream);
-      } catch (_) {
-        // Пир в процессе переподключения — добавим трек при пересоздании.
-      }
+      } catch (_) {}
     }
+    if (!_current(generation)) return;
     cameraOn = !screen;
     screenSharing = screen;
     _emitMediaState(screen ? 'screen' : 'camera');
@@ -344,64 +403,35 @@ class DmCallController extends ChangeNotifier {
     await _renegotiateAll();
   }
 
-  /// Выключить камеру/демонстрацию (звонок продолжается).
   Future<void> stopVideo({bool silent = false}) async {
-    final hadVideo = _videoStream != null;
-    final wasScreen = screenSharing;
-    if (hadVideo) {
-      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
-    }
-    for (final pc in _peerConnections.values) {
-      try {
-        final senders = await pc.getSenders();
-        for (final sender in senders) {
-          if (sender.track?.kind == 'video') {
-            await pc.removeTrack(sender);
-          }
-        }
-      } catch (_) {
-        // Соединение уже закрывается.
-      }
-    }
-    final stream = _videoStream;
+    final generation = _generation,
+        stream = _videoStream,
+        wasScreen = screenSharing;
     _videoStream = null;
-    if (stream != null) {
-      for (final track in stream.getTracks()) {
-        try {
-          await track.stop();
-        } catch (_) {}
-      }
-      await stream.dispose();
-    }
     localRenderer?.srcObject = null;
     cameraOn = false;
     screenSharing = false;
+    if (stream != null) {
+      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
+    }
+    _safeNotify();
+    final ids = stream?.getVideoTracks().map((t) => t.id).toSet() ?? <String>{};
+    for (final pc in _peerConnections.values.toList()) {
+      try {
+        for (final sender in await pc.getSenders()) {
+          if (ids.contains(sender.track?.id)) await pc.removeTrack(sender);
+        }
+      } catch (_) {}
+    }
+    await _releaseStream(stream);
     if (wasScreen) await ScreenShareManager.stopScreenShare();
-    if (!silent) {
-      _safeNotify();
-      if (hadVideo) await _renegotiateAll();
+    if (!silent && _current(generation) && stream != null) {
+      await _renegotiateAll();
     }
   }
 
   Future<void> _renegotiateAll() async {
-    final roomId = _activeRoomId;
-    if (roomId == null) return;
-    for (final entry in _peerConnections.entries.toList()) {
-      try {
-        final offer = await entry.value.createOffer({
-          'offerToReceiveAudio': true,
-          'offerToReceiveVideo': true,
-        });
-        await entry.value.setLocalDescription(offer);
-        socket.emit('webrtc:offer', {
-          'targetSocketId': entry.key,
-          'offer': offer.toMap(),
-          'channelId': roomId,
-        });
-      } catch (_) {
-        // Пир переподключится штатным путём.
-      }
-    }
+    await Future.wait(_peerConnections.keys.toList().map(_negotiation.offer));
   }
 
   void _emitMediaState(String mode, {String? previousMode}) {
@@ -511,6 +541,14 @@ class DmCallController extends ChangeNotifier {
     if (missedFrom != null) onMissedCall?.call(missedFrom);
   }
 
+  void _handleCallRinging(dynamic data) {
+    if (phase != DmCallPhase.outgoing || data is! Map) return;
+    if (data['online'] == false) {
+      _peerOffline = true;
+      _safeNotify();
+    }
+  }
+
   void _handleCallError(dynamic data) {
     final message = data is Map ? asText(data['message']) : '';
     if (phase != DmCallPhase.idle) {
@@ -548,17 +586,16 @@ class DmCallController extends ChangeNotifier {
   // демонстрацию: onRemoveTrack в unified-plan не приходит, трек лишь уходит в
   // muted, и на телефоне оставался застывший кадр.
   void _handleMediaState(dynamic data) {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
-    final raw = data.cast<String, dynamic>();
-    final socketId = asText(raw['socketId']);
-    // Сервер рассылает состояние всей комнате, включая отправителя, а своего
-    // socket.id у клиента нет — поэтому верим только известным пирам, иначе
-    // собственная камера поднимала бы peerHasVideo.
-    if (socketId.isEmpty || !_peerConnections.containsKey(socketId)) return;
-    final mode = asText(raw['mode']);
-    final hasVideo = mode == 'camera' || mode == 'screen';
-    if (remoteVideo[socketId] == hasVideo) return;
-    remoteVideo[socketId] = hasVideo;
+    if (data is! Map ||
+        _activeRoomId == null ||
+        asId(data['channelId']) != _activeRoomId) {
+      return;
+    }
+    final id = asText(data['socketId']);
+    if (id.isEmpty || id == socket.socketId) return;
+    final mode = asText(data['mode']);
+    remoteMediaModes[id] = mode;
+    remoteVideo[id] = mode == 'camera' || mode == 'screen';
     _safeNotify();
   }
 
@@ -567,36 +604,11 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _handleOfferAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    if (fromSocketId.isEmpty) return;
-    try {
-      var pc = _peerConnections[fromSocketId];
-      if (pc != null &&
-          pc.signalingState ==
-              RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-        // Glare: обе стороны отправили offer одновременно —
-        // пересоздаём соединение и принимаем чужой.
-        await _removeConnection(fromSocketId);
-        pc = null;
-      }
-      // Существующее stable-соединение НЕ пересоздаём:
-      // renegotiation (вкл/выкл камеры и демонстрации) приходит
-      // обычным offer на том же соединении.
-      pc ??= await _createPeerConnection(fromSocketId);
-      await pc.setRemoteDescription(_sessionDescription(raw['offer']));
-      await _flushIceCandidates(fromSocketId);
-      final answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('webrtc:answer', {
-        'targetSocketId': fromSocketId,
-        'answer': answer.toMap(),
-        'channelId': _activeRoomId,
-      });
-    } catch (error) {
-      _setError('Не удалось принять WebRTC offer');
-    }
+    final room = (_activeRoomId ?? '');
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == socket.socketId) return;
+    await _negotiation.receiveOffer(id, _sessionDescription(data['offer']));
   }
 
   void _handleAnswer(dynamic data) {
@@ -604,21 +616,11 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _handleAnswerAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    final pc = _peerConnections[fromSocketId];
-    if (pc == null) return;
-    if (pc.signalingState !=
-        RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-      return;
-    }
-    try {
-      await pc.setRemoteDescription(_sessionDescription(raw['answer']));
-      await _flushIceCandidates(fromSocketId);
-    } catch (_) {
-      _setError('Не удалось подключить ответ звонка');
-    }
+    final room = (_activeRoomId ?? '');
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == socket.socketId) return;
+    await _negotiation.receiveAnswer(id, _sessionDescription(data['answer']));
   }
 
   void _handleIceCandidate(dynamic data) {
@@ -626,70 +628,86 @@ class DmCallController extends ChangeNotifier {
   }
 
   Future<void> _handleIceCandidateAsync(dynamic data) async {
-    if (data is! Map || asId(data['channelId']) != _activeRoomId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    if (fromSocketId.isEmpty) return;
-    final candidate = _iceCandidate(raw['candidate']);
-    final pc = _peerConnections[fromSocketId];
-    final remoteDescription = await pc?.getRemoteDescription();
-    if (pc == null || remoteDescription?.type == null) {
-      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
-      return;
-    }
-    try {
-      await pc.addCandidate(candidate);
-    } catch (_) {
-      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
-    }
+    final room = (_activeRoomId ?? '');
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == socket.socketId) return;
+    await _negotiation.candidate(id, _iceCandidate(data['candidate']));
   }
 
   Future<void> _joinCall(String roomId) async {
+    await _cleanupTask;
+    if (_activeRoomId == roomId && phase == DmCallPhase.connecting) return;
+    if (_disposed ||
+        phase != DmCallPhase.connecting && phase != DmCallPhase.outgoing) {
+      return;
+    }
+    final generation = ++_generation;
+    _activeRoomId = roomId;
+    _iceConfiguration = _stunIceConfiguration;
     try {
       phase = DmCallPhase.connecting;
       errorMessage = null;
       _safeNotify();
-      await _refreshIceConfiguration();
+      unawaited(_refreshIceConfiguration());
       await _ensureLocalStream();
-      _activeRoomId = roomId;
+      if (!_current(generation)) return;
       try {
         // Динамик всегда включён — отдельной кнопки больше нет.
         await Helper.setSpeakerphoneOn(true);
       } catch (_) {
         // Часть сборок Android не даёт менять аудио-маршрут — не критично.
       }
+      if (!_current(generation)) return;
       final response = await socket.emitWithAck(
         'voice:join',
         {'channelId': roomId},
         timeout: const Duration(seconds: 15),
       );
+      if (!_current(generation)) {
+        if ((_activeRoomId ?? '') != roomId) {
+          socket.emit('voice:leave', {'channelId': roomId});
+        }
+        return;
+      }
       if (response['status'] != 'ok') {
         throw StateError(
             asText(response['message'], 'Сервер не подтвердил вход в звонок'));
       }
       _startConnectionTimeout();
     } on TimeoutException {
+      if (!_current(generation)) return;
       await _leaveCall();
       _setError('Время ожидания подтверждения звонка истекло');
     } on StateError catch (error) {
+      if (!_current(generation)) return;
       await _leaveCall();
       final message = error.message.toString();
       _setError(message == 'microphone-denied'
           ? 'Нет доступа к микрофону'
           : asText(message, 'Не удалось подключиться к звонку'));
     } catch (_) {
+      if (!_current(generation)) return;
       await _leaveCall();
       _setError('Не удалось подключиться к звонку');
     }
   }
 
   Future<void> _refreshIceConfiguration() async {
-    _iceConfiguration = _stunIceConfiguration;
+    final generation = _generation;
     try {
       final response = await ApiClient().get('/webrtc/ice-config');
       final servers = response['iceServers'];
-      if (servers is List && servers.isNotEmpty) {
-        _iceConfiguration = {'iceServers': servers};
+      if (!_current(generation) || servers is! List || servers.isEmpty) return;
+      _iceConfiguration = {'iceServers': servers};
+      for (final entry in _peerConnections.entries.toList()) {
+        if (!_current(generation)) return;
+        try {
+          await entry.value.setConfiguration(_iceConfiguration);
+        } catch (_) {}
+        if (_current(generation)) {
+          unawaited(_negotiation.offer(entry.key, iceRestart: true));
+        }
       }
     } catch (_) {}
   }
@@ -710,11 +728,13 @@ class DmCallController extends ChangeNotifier {
 
   Future<void> _ensureLocalStream() async {
     if (_localStream != null) return;
+    final generation = _generation;
     final status = await Permission.microphone.request();
+    if (!_current(generation)) throw StateError('stale-call');
     if (!status.isGranted) {
       throw StateError('microphone-denied');
     }
-    _localStream = await navigator.mediaDevices.getUserMedia({
+    final stream = await navigator.mediaDevices.getUserMedia({
       'audio': {
         'echoCancellation':
             LovePrefs.instance.getBool(K.echoCancellation, true),
@@ -725,138 +745,173 @@ class DmCallController extends ChangeNotifier {
       },
       'video': false,
     });
+    if (!_current(generation)) {
+      await _releaseStream(stream);
+      throw StateError('stale-call');
+    }
+    _localStream = stream;
   }
 
-  Future<void> _initiateConnection(String socketId) async {
-    try {
-      final pc = await _createPeerConnection(socketId);
-      final offer = await pc.createOffer({
-        'offerToReceiveAudio': true,
-        'offerToReceiveVideo': true,
-      });
-      await pc.setLocalDescription(offer);
-      socket.emit('webrtc:offer', {
-        'targetSocketId': socketId,
-        'offer': offer.toMap(),
-        'channelId': _activeRoomId,
-      });
-    } catch (_) {
-      _setError('Не удалось начать WebRTC соединение');
-    }
-  }
+  Future<void> _initiateConnection(String socketId) =>
+      _negotiation.offer(socketId);
 
   Future<RTCPeerConnection> _createPeerConnection(String socketId) async {
     final existing = _peerConnections[socketId];
-    if (existing != null &&
-        existing.signalingState != RTCSignalingState.RTCSignalingStateClosed) {
-      return existing;
-    }
-
+    if (existing != null) return existing;
+    final peerGeneration = _peerGenerations[socketId] ?? 0;
+    final generation = _generation, room = (_activeRoomId ?? '');
     final pc = await createPeerConnection(_iceConfiguration);
+    if ((_peerGenerations[socketId] ?? 0) != peerGeneration ||
+        !_current(generation) ||
+        (_activeRoomId ?? '') != room) {
+      await pc.close();
+      await pc.dispose();
+      throw StateError('stale-peer');
+    }
     _peerConnections[socketId] = pc;
-
+    bool current() =>
+        _current(generation) && identical(_peerConnections[socketId], pc);
+    _negotiation.bind(socketId, pc);
     pc.onIceCandidate = (candidate) {
-      if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
+      if (!current() || candidate.candidate?.isNotEmpty != true) return;
       socket.emit('webrtc:ice_candidate', {
         'targetSocketId': socketId,
         'candidate': candidate.toMap(),
-        'channelId': _activeRoomId,
+        'channelId': room
       });
     };
-
     pc.onTrack = (event) {
-      if (event.track.kind == 'video') {
-        remoteVideo[socketId] = true;
+      if (!current()) return;
+      final track = event.track;
+      final volume = (LovePrefs.instance.getInt(K.outputVolume, 100) / 100)
+          .clamp(0.0, 1.0);
+      if (track.kind == 'audio') {
+        // Звук собеседника Android/iOS воспроизводят сами — здесь только
+        // громкость. В рендерер звук класть не нужно.
+        unawaited(Helper.setVolume(volume, track).catchError((Object _) {}));
+        return;
       }
-      // Аудио и видео у ПК идут разными MediaStream (localStream и
-      // screenStream/cameraStream). Рендерер один, и раньше он привязывался к
-      // первому попавшемуся потоку: если аудио приходило после видео, картинку
-      // вытесняло аудио — «демку включаю, на мобиле не появляется».
-      if (event.streams.isNotEmpty) {
-        unawaited(_attachRemoteStream(socketId, event.streams.first));
-      }
+      if (track.kind != 'video') return;
+      final mode = remoteMediaModes[socketId];
+      remoteVideo[socketId] =
+          mode == null || mode == 'camera' || mode == 'screen';
+      final previous = _remoteTasks[socketId] ?? Future<void>.value();
+      final task = previous.catchError((Object _) {}).then((_) async {
+        if (!current()) return;
+        // Раньше все дорожки собеседника складывались в один «свой» поток, а
+        // старую видеодорожку из него удаляли. На Android removeTrack снимает
+        // только ЛОКАЛЬНЫЕ дорожки: на чужой он падал, ошибка глоталась, и
+        // новая видеодорожка (повторная камера, камера → демонстрация) так и
+        // не попадала в рендерер — собеседник видел застывший кадр или пусто.
+        // Теперь рендерер просто берёт поток самой дорожки.
+        MediaStream stream;
+        if (event.streams.isNotEmpty) {
+          stream = event.streams.first;
+        } else {
+          stream =
+              await createLocalMediaStream('love-remote-$socketId-${track.id}');
+          if (!current()) {
+            await stream.dispose();
+            return;
+          }
+          await stream.addTrack(track);
+        }
+        if (!current()) return;
+        var renderer = _remoteRenderers[socketId];
+        if (renderer == null) {
+          renderer = RTCVideoRenderer();
+          await renderer.initialize();
+          if (!current()) {
+            await renderer.dispose();
+            return;
+          }
+          _remoteRenderers[socketId] = renderer;
+        }
+        renderer.srcObject = stream;
+        final replaced = _remoteStreams[socketId];
+        _remoteStreams[socketId] = stream;
+        // Свои временные потоки (love-remote-…) освобождаем; потоки
+        // соединения освободит само соединение.
+        if (replaced != null &&
+            !identical(replaced, stream) &&
+            replaced.id.startsWith('love-remote-')) {
+          await replaced.dispose();
+        }
+        if (current()) _safeNotify();
+      }).catchError((Object _) {});
+      _remoteTasks[socketId] = task;
       _safeNotify();
     };
-
     pc.onRemoveTrack = (stream, track) {
-      if (track.kind == 'video') {
+      if (current() && track.kind == 'video') {
         remoteVideo[socketId] = false;
         _safeNotify();
       }
     };
-
     pc.onConnectionState = (state) {
+      if (!current()) return;
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _reconnectTimers.remove(socketId)?.cancel();
         _cancelConnectionTimeout();
         phase = DmCallPhase.connected;
         connectedAt ??= DateTime.now();
         errorMessage = null;
         _safeNotify();
-      }
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      } else if (state ==
+              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        _reconnectTimers.putIfAbsent(
+            socketId,
+            () => Timer(const Duration(seconds: 6), () {
+                  _reconnectTimers.remove(socketId);
+                  if (current() &&
+                      pc.connectionState !=
+                          RTCPeerConnectionState
+                              .RTCPeerConnectionStateConnected) {
+                    unawaited(_negotiation.offer(socketId, iceRestart: true));
+                  }
+                }));
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         unawaited(_removeConnection(socketId));
       }
     };
-
-    final stream = _localStream;
-    if (stream != null) {
-      for (final track in stream.getAudioTracks()) {
-        await pc.addTrack(track, stream);
+    final audio = _localStream, video = _videoStream;
+    if (audio != null) {
+      for (final track in audio.getAudioTracks()) {
+        if (!current()) throw StateError('stale-peer');
+        await pc.addTrack(track, audio);
       }
     }
-    final videoStream = _videoStream;
-    if (videoStream != null) {
-      for (final track in videoStream.getVideoTracks()) {
-        await pc.addTrack(track, videoStream);
+    if (video != null) {
+      for (final track in video.getVideoTracks()) {
+        if (!current()) throw StateError('stale-peer');
+        await pc.addTrack(track, video);
       }
     }
     return pc;
   }
 
-  Future<void> _attachRemoteStream(String socketId, MediaStream stream) async {
-    var renderer = _remoteRenderers[socketId];
-    if (renderer == null) {
-      renderer = RTCVideoRenderer();
-      await renderer.initialize();
-      _remoteRenderers[socketId] = renderer;
-    }
-    // Не подменяем поток с видео на поток без видео: иначе аудио-трек,
-    // пришедший вторым, гасил уже показанную камеру/демонстрацию.
-    final current = renderer.srcObject;
-    if (current != null &&
-        current.id != stream.id &&
-        stream.getVideoTracks().isEmpty &&
-        current.getVideoTracks().isNotEmpty) {
-      return;
-    }
-    renderer.srcObject = stream;
-    await renderer.setVolume(1);
-  }
-
-  Future<void> _flushIceCandidates(String socketId) async {
-    final candidates = _iceCandidateBuffer.remove(socketId);
-    final pc = _peerConnections[socketId];
-    if (pc == null || candidates == null) return;
-    for (final candidate in candidates) {
-      try {
-        await pc.addCandidate(candidate);
-      } catch (_) {
-        // Candidate became stale during renegotiation; ignore it.
-      }
-    }
-  }
-
   Future<void> _removeConnection(String socketId) async {
+    _peerGenerations[socketId] = (_peerGenerations[socketId] ?? 0) + 1;
+    _negotiation.remove(socketId);
+    _reconnectTimers.remove(socketId)?.cancel();
     final pc = _peerConnections.remove(socketId);
-    await pc?.close();
-    await pc?.dispose();
     final renderer = _remoteRenderers.remove(socketId);
-    renderer?.srcObject = null;
-    await renderer?.dispose();
-    _iceCandidateBuffer.remove(socketId);
+    final stream = _remoteStreams.remove(socketId);
+    final task = _remoteTasks.remove(socketId);
     remoteVideo.remove(socketId);
+    remoteMediaModes.remove(socketId);
+    _safeNotify();
+    await task;
+    renderer?.srcObject = null;
+    try {
+      await pc?.close();
+      await pc?.dispose();
+    } catch (_) {}
+    try {
+      await renderer?.dispose();
+      await stream?.dispose();
+    } catch (_) {}
   }
 
   Future<void> _leaveCall() async {
@@ -867,30 +922,77 @@ class DmCallController extends ChangeNotifier {
     await _cleanupMedia();
   }
 
-  Future<void> _cleanupMedia() async {
-    _cancelConnectionTimeout();
-    await stopVideo(silent: true);
-    for (final socketId in _peerConnections.keys.toList()) {
-      await _removeConnection(socketId);
-    }
-    for (final renderer in _remoteRenderers.values) {
-      renderer.srcObject = null;
-      await renderer.dispose();
-    }
-    _remoteRenderers.clear();
-    _iceCandidateBuffer.clear();
-    remoteVideo.clear();
-    final stream = _localStream;
-    if (stream != null) {
-      for (final track in stream.getTracks()) {
-        await track.stop();
-      }
-      await stream.dispose();
-    }
-    _localStream = null;
+  Future<void> _cleanupMedia() {
+    final pending = _cleanupTask;
+    if (pending != null) return pending;
+    ++_generation;
+    _peerGenerations.clear();
+    _negotiation.reset();
     _activeRoomId = null;
+    _cancelConnectionTimeout();
+    final pcs = _peerConnections.values.toList();
+    _peerConnections.clear();
+    final renderers = _remoteRenderers.values.toList();
+    _remoteRenderers.clear();
+    final streams = _remoteStreams.values.toList();
+    _remoteStreams.clear();
+    final tasks = _remoteTasks.values.toList();
+    _remoteTasks.clear();
+    for (final timer in _reconnectTimers.values) {
+      timer.cancel();
+    }
+    _reconnectTimers.clear();
+    remoteVideo.clear();
+    remoteMediaModes.clear();
+    final audio = _localStream, video = _videoStream, wasScreen = screenSharing;
+    _localStream = null;
+    _videoStream = null;
+    localRenderer?.srcObject = null;
+    cameraOn = false;
+    screenSharing = false;
+    mediaBusy = false;
     muted = false;
     connectedAt = null;
+    _safeNotify();
+    final task = () async {
+      await Future.wait(tasks);
+      for (final pc in pcs) {
+        try {
+          await pc.close();
+          await pc.dispose();
+        } catch (_) {}
+      }
+      for (final renderer in renderers) {
+        renderer.srcObject = null;
+        try {
+          await renderer.dispose();
+        } catch (_) {}
+      }
+      for (final stream in streams) {
+        try {
+          await stream.dispose();
+        } catch (_) {}
+      }
+      await _releaseStream(audio);
+      await _releaseStream(video);
+      if (wasScreen) await ScreenShareManager.stopScreenShare();
+    }();
+    _cleanupTask = task;
+    return task.whenComplete(() {
+      if (identical(_cleanupTask, task)) _cleanupTask = null;
+    });
+  }
+
+  Future<void> _releaseStream(MediaStream? stream) async {
+    if (stream == null) return;
+    for (final track in stream.getTracks()) {
+      try {
+        await track.stop();
+      } catch (_) {}
+    }
+    try {
+      await stream.dispose();
+    } catch (_) {}
   }
 
   void _resetToIdle() {
@@ -935,11 +1037,24 @@ class DmCallController extends ChangeNotifier {
         : channel.isNotEmpty
             ? channel
             : fallbackPeer;
-    return 'dm_call:$id';
+    return id.startsWith('dm_call:') ? id : 'dm_call:$id';
   }
 
   void _safeNotify() {
+    _syncRingSound();
     if (!_disposed) notifyListeners();
+  }
+
+  /// Входящий — мелодия, исходящий — гудки; любая другая фаза их гасит.
+  void _syncRingSound() {
+    final sounds = LoveSounds.instance;
+    if (!_disposed && phase == DmCallPhase.incoming) {
+      unawaited(sounds.startLoop('call_incoming'));
+    } else if (!_disposed && phase == DmCallPhase.outgoing) {
+      unawaited(sounds.startLoop('call_outgoing'));
+    } else {
+      unawaited(sounds.stopLoop());
+    }
   }
 
   static const _stunIceConfiguration = {
@@ -953,7 +1068,9 @@ class DmCallController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(LoveSounds.instance.stopLoop());
     if (_attached) {
+      socket.off('call:ringing', _handleCallRinging);
       socket.off('call:incoming', _handleIncomingCall);
       socket.off('call:response', _handleCallResponse);
       socket.off('call:terminated', _handleCallTerminated);

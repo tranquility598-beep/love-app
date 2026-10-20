@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const { CASE_SUBMISSION_INDEX } = require('../config/caseSubmissionPolicy');
 
 const attachmentSchema = new mongoose.Schema({
   name: { type: String, required: true, maxlength: 255 },
@@ -58,6 +59,8 @@ const caseSchema = new mongoose.Schema({
   activity: { type: [activitySchema], default: [] },
   sourceReport: { type: mongoose.Schema.Types.ObjectId, ref: 'Report' },
   sourceKey: { type: String },
+  // Remains occupied for 15 minutes after closing; absent on legacy/system cases.
+  submissionKey: { type: String, select: false },
   public: {
     published: { type: Boolean, default: false, index: true },
     slug: { type: String, default: null },
@@ -69,7 +72,7 @@ const caseSchema = new mongoose.Schema({
     score: { type: Number, default: 0, index: true }
   },
   resolvedAt: { type: Date, default: null }
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
 caseSchema.pre('validate', function(next) {
   if (!this.number) {
@@ -79,7 +82,14 @@ caseSchema.pre('validate', function(next) {
   next();
 });
 
+caseSchema.set('toJSON', { transform(_doc, value) {
+  delete value.submissionKey;
+  return value;
+} });
+
 caseSchema.index({ kind: 1, status: 1, priority: 1, createdAt: -1 });
+caseSchema.index({ submissionKey: 1 }, { ...CASE_SUBMISSION_INDEX });
+caseSchema.index({ reporter: 1, status: 1, resolvedAt: -1 });
 caseSchema.index({ 'public.published': 1, 'public.score': -1, createdAt: -1 });
 caseSchema.index(
   { sourceReport: 1 },

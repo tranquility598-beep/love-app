@@ -34,8 +34,27 @@ const authMiddleware = async (req, res, next) => {
     //    (кладётся в io auth, в renderer памяти на время сессии);
     //  - REST API должен принимать только основной long-lived JWT с sid.
     // Лог без токена и без секретов.
-    if (decoded.aud === 'socket') {
-      console.warn('[auth] rejected socket-token used for REST; userId=', decoded.userId);
+    //
+    // Проверка обобщена с конкретного 'socket' на любой aud: узких токенов
+    // стало больше (aud='profile-editor' для редактора публичной страницы),
+    // и каждый новый список пришлось бы дополнять здесь руками — рано или
+    // поздно забыли бы, и узкий токен открыл бы весь API. Основные токены
+    // сессии aud не ставят вообще (см. jwt.sign в routes/auth.js), поэтому
+    // «есть aud — не наш токен» верно по построению.
+    if (decoded.aud) {
+      console.warn('[auth] rejected scoped token used for REST; aud=', decoded.aud, 'userId=', decoded.userId);
+      return res.status(401).json({ message: 'Недействительный токен для REST API' });
+    }
+
+    // Промежуточные токены с purpose тоже не сессии.
+    // purpose='2fa-login' выдаётся МЕЖДУ вводом пароля и вводом кода второго
+    // фактора. Он не содержит sid, поэтому проверка сессии ниже его молча
+    // пропускала, и такой токен работал как полноценный — то есть второй
+    // фактор можно было не вводить вовсе в течение его TTL. Обмен на
+    // настоящую сессию делает только POST /api/auth/verify-2fa, который
+    // проверяет payload сам.
+    if (decoded.purpose) {
+      console.warn('[auth] rejected intermediate token used for REST; purpose=', decoded.purpose, 'userId=', decoded.userId);
       return res.status(401).json({ message: 'Недействительный токен для REST API' });
     }
 

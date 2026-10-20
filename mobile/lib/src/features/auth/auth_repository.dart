@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../core/network/api_client.dart';
 import '../../core/storage/auth_token_store.dart';
 import '../../config/app_config.dart';
@@ -60,6 +62,8 @@ class AuthUser {
     this.createdAt,
     this.lastSeen,
     this.isFounder = false,
+    this.plan,
+    this.planExpiresAt,
   });
 
   final String id;
@@ -85,6 +89,11 @@ class AuthUser {
   final DateTime? createdAt;
   final DateTime? lastSeen;
   final bool isFounder;
+
+  /// Тариф: free | pro | premium | duo. Сервер отдаёт его только для своего
+  /// аккаунта. planExpiresAt == null — бессрочно.
+  final String? plan;
+  final DateTime? planExpiresAt;
 
   String get initials => username.isEmpty ? '?' : username[0].toUpperCase();
   String get displayName =>
@@ -119,6 +128,8 @@ class AuthUser {
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
       lastSeen: DateTime.tryParse(json['lastSeen']?.toString() ?? ''),
       isFounder: json['isFounder'] == true,
+      plan: json['plan']?.toString(),
+      planExpiresAt: DateTime.tryParse(json['planExpiresAt']?.toString() ?? ''),
     );
   }
 
@@ -144,6 +155,9 @@ class AuthResult {
     this.pendingToken,
     this.message,
     this.restriction,
+    this.registrationToken,
+    this.retryAfter = 0,
+    this.deliveryFailed = false,
   });
 
   final AuthResultType type;
@@ -152,6 +166,16 @@ class AuthResult {
   final String? pendingToken;
   final String? message;
   final AccountRestriction? restriction;
+
+  /// Узкий токен сервера на смену почты неподтверждённой регистрации.
+  /// Нет у Google-аккаунтов: там почту меняет Google.
+  final String? registrationToken;
+
+  /// Сколько секунд ждать до повторной отправки кода.
+  final int retryAfter;
+
+  /// Аккаунт есть, но письмо с кодом не ушло (EMAIL_SEND_FAILED).
+  final bool deliveryFailed;
 
   factory AuthResult.authenticated(AuthUser user, {String? message}) {
     return AuthResult._(
@@ -174,11 +198,38 @@ class AuthResult {
     );
   }
 
-  factory AuthResult.needsOtp({required String email, String? message}) {
+  factory AuthResult.needsOtp({
+    required String email,
+    String? message,
+    String? registrationToken,
+    int retryAfter = 0,
+    bool deliveryFailed = false,
+  }) {
     return AuthResult._(
       type: AuthResultType.needsOtp,
       email: email,
       message: message,
+      registrationToken: registrationToken,
+      retryAfter: retryAfter,
+      deliveryFailed: deliveryFailed,
+    );
+  }
+
+  /// Ответ сервера «нужно подтвердить почту». Приходит и как 200/201
+  /// (регистрация), и как 403 (вход в неподтверждённый аккаунт), и как 503
+  /// (аккаунт есть, письмо не ушло) — во всех случаях человеку нужен экран кода.
+  factory AuthResult.verificationFrom(
+    Map<String, dynamic> data, {
+    required String fallbackEmail,
+  }) {
+    final email = data['email']?.toString();
+    final token = data['registrationToken']?.toString();
+    return AuthResult.needsOtp(
+      email: (email == null || email.isEmpty) ? fallbackEmail : email,
+      message: data['message']?.toString(),
+      registrationToken: (token == null || token.isEmpty) ? null : token,
+      retryAfter: secondsFrom(data['retryAfter']),
+      deliveryFailed: data['code'] == 'EMAIL_SEND_FAILED',
     );
   }
 
@@ -194,6 +245,61 @@ class AuthResult {
       message: message,
     );
   }
+}
+
+int secondsFrom(Object? value) {
+  final parsed =
+      value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
+  return parsed == null || parsed < 0 ? 0 : parsed;
+}
+
+/// Код уже принят (например, ответ на первую попытку потерялся в сети):
+/// аккаунт подтверждён, осталось войти паролем.
+class EmailAlreadyVerified implements Exception {
+  const EmailAlreadyVerified(this.email, this.message);
+
+  final String email;
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Повторная отправка кода: сколько ждать следующую.
+class OtpDelivery {
+  const OtpDelivery({required this.retryAfter, this.message});
+
+  final int retryAfter;
+  final String? message;
+}
+
+/// Отказ с подсказкой, через сколько секунд можно повторить (429).
+class RetryLater implements Exception {
+  const RetryLater(this.message, this.retryAfter);
+
+  final String message;
+  final int retryAfter;
+
+  @override
+  String toString() => message;
+}
+
+Map<String, dynamic> _dataOf(ApiException error) {
+  final data = error.data;
+  return data is Map<String, dynamic> ? data : const <String, dynamic>{};
+}
+
+/// Общая обработка ответов кода и почты: «уже подтверждена» и «подождите».
+Never _rethrowVerificationError(ApiException error, String email) {
+  final data = _dataOf(error);
+  if (error.statusCode == 409 && data['code'] == 'EMAIL_ALREADY_VERIFIED') {
+    throw EmailAlreadyVerified(
+        data['email']?.toString() ?? email, error.message);
+  }
+  if (error.statusCode == 429) {
+    throw RetryLater(error.message, secondsFrom(data['retryAfter']));
+  }
+  throw error;
 }
 
 class AuthRepository {
@@ -240,11 +346,21 @@ class AuthRepository {
   }
 
   Future<AuthResult> login(String email, String password) async {
-    final response = await api.post(
-      '/auth/login',
-      body: {'email': email.trim(), 'password': password},
-    );
-    return _authResultFromResponse(response);
+    try {
+      final response = await api.post(
+        '/auth/login',
+        body: {'email': email.trim(), 'password': password},
+      );
+      return _authResultFromResponse(response);
+    } on ApiException catch (error) {
+      // Неподтверждённая почта приходит как 403 (или 503, если письмо не
+      // ушло): это не ошибка входа, а следующий шаг — экран кода.
+      final data = _dataOf(error);
+      if (data['requireVerification'] == true) {
+        return AuthResult.verificationFrom(data, fallbackEmail: email.trim());
+      }
+      rethrow;
+    }
   }
 
   Future<AuthResult> register({
@@ -252,26 +368,73 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    final response = await api.post(
-      '/auth/register',
-      body: {
-        'username': username.trim(),
-        'email': email.trim(),
-        'password': password,
-      },
-    );
-    return AuthResult.needsOtp(
-      email: response['email']?.toString() ?? email.trim(),
-      message: response['message']?.toString(),
-    );
+    try {
+      final response = await api.post(
+        '/auth/register',
+        body: {
+          'username': username.trim(),
+          'email': email.trim(),
+          'password': password,
+        },
+      );
+      return AuthResult.verificationFrom(response, fallbackEmail: email.trim());
+    } on ApiException catch (error) {
+      // 503 EMAIL_SEND_FAILED: аккаунт создан, письмо не ушло — всё равно
+      // экран кода, где можно исправить почту или запросить код ещё раз.
+      final data = _dataOf(error);
+      if (data['requireVerification'] == true) {
+        return AuthResult.verificationFrom(data, fallbackEmail: email.trim());
+      }
+      rethrow;
+    }
   }
 
   Future<AuthResult> verifyOtp(String email, String code) async {
-    final response = await api.post(
-      '/auth/verify-otp',
-      body: {'email': email.trim(), 'code': code.trim()},
-    );
-    return _authenticatedFromResponse(response);
+    try {
+      final response = await api.post(
+        '/auth/verify-otp',
+        body: {'email': email.trim(), 'code': code.trim()},
+      );
+      return _authenticatedFromResponse(response);
+    } on ApiException catch (error) {
+      _rethrowVerificationError(error, email.trim());
+    }
+  }
+
+  Future<OtpDelivery> resendOtp(String email) async {
+    try {
+      final response = await api.post(
+        '/auth/resend-otp',
+        body: {'email': email.trim()},
+      );
+      return OtpDelivery(
+        retryAfter: secondsFrom(response['retryAfter'] ?? 60),
+        message: response['message']?.toString(),
+      );
+    } on ApiException catch (error) {
+      _rethrowVerificationError(error, email.trim());
+    }
+  }
+
+  /// Исправить почту неподтверждённой регистрации: тот же аккаунт, код
+  /// уходит на новый адрес. Сервер выдаёт новый registrationToken.
+  Future<AuthResult> changeRegistrationEmail(
+    String registrationToken,
+    String email,
+  ) async {
+    try {
+      final response = await api.post(
+        '/auth/registration-email',
+        body: {'registrationToken': registrationToken, 'email': email.trim()},
+      );
+      return AuthResult.verificationFrom(response, fallbackEmail: email.trim());
+    } on ApiException catch (error) {
+      final data = _dataOf(error);
+      if (data['requireVerification'] == true) {
+        return AuthResult.verificationFrom(data, fallbackEmail: email.trim());
+      }
+      _rethrowVerificationError(error, email.trim());
+    }
   }
 
   Future<AuthResult> verifyTwoFactor(String pendingToken, String code) async {
@@ -317,12 +480,11 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    try {
-      await api.post('/auth/logout');
-    } catch (_) {
-      // Local logout must still work when the server is unavailable.
-    }
+    final oldToken = await tokenStore.readToken();
     await tokenStore.clear();
+    if (oldToken != null && oldToken.isNotEmpty) {
+      unawaited(api.revokeSession(oldToken));
+    }
   }
 
   Future<AuthResult> _authResultFromResponse(Map<String, dynamic> response) {
@@ -334,10 +496,9 @@ class AuthRepository {
       ));
     }
     if (response['requireVerification'] == true) {
-      return Future.value(AuthResult.needsOtp(
-        email: response['email']?.toString() ?? '',
-        message: response['message']?.toString(),
-      ));
+      return Future.value(
+        AuthResult.verificationFrom(response, fallbackEmail: ''),
+      );
     }
     return _authenticatedFromResponse(response);
   }

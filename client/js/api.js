@@ -127,6 +127,8 @@ function isAuthEntryEndpoint(endpoint) {
     endpoint.startsWith('/auth/forgot-password') ||
     endpoint.startsWith('/auth/reset-password') ||
     endpoint.startsWith('/auth/resend-otp')
+    || endpoint.startsWith('/auth/verify-2fa')
+    || endpoint.startsWith('/auth/registration-email')
   );
 }
 
@@ -146,6 +148,12 @@ function isOnAuthScreen() {
 
 function normalizeApiErrorMessage(message, status) {
   if (typeof message !== 'string') return 'Ошибка запроса';
+  if (/failed to fetch|fetch failed|networkerror|load failed/i.test(message)) {
+    return 'Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз.';
+  }
+  if (/timeout|timed out|operation was aborted/i.test(message)) {
+    return 'Сервер долго не отвечает. Изменения остались в форме — попробуйте ещё раз.';
+  }
   if (message.includes('<!DOCTYPE html>') || message.includes('Cannot POST') || message.includes('Cannot GET')) {
     if (status === 404) return 'Сервер еще не обновлен. Обновите backend и попробуйте снова.';
     return 'Сервер вернул некорректный ответ. Попробуйте позже.';
@@ -154,7 +162,7 @@ function normalizeApiErrorMessage(message, status) {
 }
 
 // Базовый fetch с авторизацией через IPC proxy
-async function apiFetch(endpoint, options = {}) {
+async function apiFetchOnce(endpoint, options = {}) {
   await window.apiReady;
 
   // В Electron используем безопасный IPC proxy
@@ -164,16 +172,22 @@ async function apiFetch(endpoint, options = {}) {
         path: endpoint,
         method: options.method || 'GET',
         body: options.body,
-        headers: options.headers || {}
+        headers: options.headers || {},
+        timeoutMs: options.timeoutMs || 35000
       });
 
       if (!result.ok) {
+        if (result.networkError || result.status === 0) {
+          const error = new Error(normalizeApiErrorMessage(result.data?.message, 0));
+          error.isNetworkError = true;
+          throw error;
+        }
         if (result.aborted) {
           const abortError = new Error('Отменено');
           abortError.isAborted = true;
           throw abortError;
         }
-        console.error('API request failed:', endpoint, result.status, result.data);
+        console.error('API request failed:', endpoint, result.status);
         if (result.status === 401 && !isAuthEntryEndpoint(endpoint) && !isOnAuthScreen()) {
           // Авторизованный запрос с протухшим токеном — чистим и
           // мягко выкидываем на экран логина. БЕЗ reload, чтобы не было
@@ -194,11 +208,13 @@ async function apiFetch(endpoint, options = {}) {
       return result.data;
     } catch (error) {
       // Если это уже наша ошибка с статусом, пробрасываем дальше
-      if (error.status) throw error;
+      if (error.status || error.isNetworkError || error.isAborted) throw error;
       
       // Иначе это сетевая ошибка
       console.error('Network error:', error.message);
-      throw new Error('Сервер недоступен. Проверьте подключение к интернету или подождите — сервер может загружаться.');
+      const networkError = new Error('Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз.');
+      networkError.isNetworkError = true;
+      throw networkError;
     }
   }
   
@@ -215,26 +231,37 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   let response;
+  let data;
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener('abort', onAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 35000);
   try {
     response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
-      headers
+      headers,
+      signal: controller.signal
     });
-  } catch (networkError) {
-    console.error('Network error:', networkError.message, 'URL:', `${API_BASE}${endpoint}`);
-    throw new Error('Сервер недоступен. Проверьте подключение к интернету или подождите — сервер может загружаться.');
-  }
-
-  let data;
-  try {
-    data = await response.json();
-  } catch (e) {
-    if (!response.ok) {
-      const error = new Error(`Сервер недоступен или загружается (Ожидайте...)`);
+    const responseText = await response.text();
+    try { data = responseText ? JSON.parse(responseText) : {}; }
+    catch (_) {
+      const error = new Error('Сервер вернул некорректный ответ. Попробуйте позже.');
       error.status = response.status;
       throw error;
     }
-    throw new Error('Ошибка формата ответа от сервера');
+  } catch (networkError) {
+    if (networkError.status) throw networkError;
+    console.error('Network error:', networkError.message, 'URL:', `${API_BASE}${endpoint}`);
+    const error = new Error(controller.signal.aborted
+      ? 'Сервер долго не отвечает. Попробуйте ещё раз.'
+      : 'Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз.');
+    error.isAborted = options.signal?.aborted === true;
+    error.isNetworkError = !error.isAborted;
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onAbort);
   }
 
   if (!response.ok) {
@@ -253,6 +280,60 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   return data;
+}
+
+const replayAuthPaths = new Set(['/auth/register', '/auth/login', '/auth/verify-otp', '/auth/verify-2fa', '/auth/resend-otp', '/auth/registration-email']);
+const pendingAuthRequests = new Map();
+let authCapabilitiesPromise;
+
+async function apiFetch(endpoint, options = {}) {
+  // This endpoint only sets profile fields. Reapplying the same PUT is safe
+  // when the connection was lost after MongoDB accepted the update.
+  if (endpoint === '/users/profile' && options.method === 'PUT') {
+    try { return await apiFetchOnce(endpoint, options); }
+    catch (error) {
+      if (!error.isNetworkError) throw error;
+      await new Promise(resolve => setTimeout(resolve, 400));
+      return apiFetchOnce(endpoint, options);
+    }
+  }
+  if (!replayAuthPaths.has(endpoint) || options.method !== 'POST' || !globalThis.crypto?.subtle) {
+    return apiFetchOnce(endpoint, options);
+  }
+  // Negotiate first: older servers cannot replay a consumed OTP safely.
+  if (!authCapabilitiesPromise) authCapabilitiesPromise = apiFetchOnce('/auth/capabilities', { timeoutMs: 8000 }).catch(error => {
+    if (error.isNetworkError) authCapabilitiesPromise = null;
+    return {};
+  });
+  const capabilities = await authCapabilitiesPromise;
+  if (!capabilities.authReplay) return apiFetchOnce(endpoint, options);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint + options.body));
+  const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  for (const [id, entry] of pendingAuthRequests) if (entry.expiresAt <= Date.now() && !entry.promise) pendingAuthRequests.delete(id);
+  let entry = pendingAuthRequests.get(key);
+  if (entry?.promise) return entry.promise;
+  if (!entry || entry.expiresAt <= Date.now()) {
+    // Leave enough server-cache lifetime for both bounded network attempts.
+    entry = { requestId: crypto.randomUUID(), expiresAt: Date.now() + 90000 };
+    pendingAuthRequests.set(key, entry);
+  }
+  const requestOptions = { ...options, headers: { ...options.headers, 'X-Auth-Request-Id': entry.requestId } };
+  entry.promise = (async () => {
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const result = await apiFetchOnce(endpoint, requestOptions);
+          pendingAuthRequests.delete(key);
+          return result;
+        } catch (error) {
+          if (!error.isNetworkError) { pendingAuthRequests.delete(key); throw error; }
+          if (attempt === 1) throw error;
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+      }
+    } finally { entry.promise = null; }
+  })();
+  return entry.promise;
 }
 
 // Загрузка файла через IPC proxy
@@ -293,7 +374,10 @@ async function apiUpload(endpoint, formData, method = 'POST') {
       });
       
       if (!result.ok) {
-        throw new Error(result.data?.message || 'Ошибка загрузки');
+        const error = new Error(normalizeApiErrorMessage(result.data?.message || 'Ошибка загрузки', result.status));
+        error.status = result.status;
+        error.isNetworkError = result.networkError === true;
+        throw error;
       }
       
       return result.data;
@@ -305,13 +389,14 @@ async function apiUpload(endpoint, formData, method = 'POST') {
   
   // Fallback для веб-версии (не Electron)
   const token = localStorage.getItem('token');
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  let response;
+  try { response = await fetch(`${API_BASE}${endpoint}`, {
     method: method,
     headers: {
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     },
     body: formData
-  });
+  }); } catch (_) { throw new Error('Не удалось загрузить файл. Проверьте интернет и попробуйте ещё раз.'); }
 
   const data = await response.json();
   if (!response.ok) throw new Error(data.message || 'Ошибка загрузки');
@@ -339,6 +424,9 @@ const AuthAPI = {
     
   resendOtp: (email) =>
     apiFetch('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  changeRegistrationEmail: (registrationToken, email) =>
+    apiFetch('/auth/registration-email', { method: 'POST', body: JSON.stringify({ registrationToken, email }) }),
     
   forgotPassword: (email) =>
     apiFetch('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
@@ -386,6 +474,15 @@ const UsersAPI = {
 
   getUser: (userId) =>
     apiFetch(`/users/${userId}`),
+
+  getByUsername: (username) =>
+    apiFetch(`/users/by-username/${encodeURIComponent(username)}`),
+
+  getBlocked: () =>
+    apiFetch('/users/me/blocked'),
+
+  unblock: (userId) =>
+    apiFetch(`/users/me/blocked/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
 
   updateProfile: (data) =>
     apiFetch('/users/profile', { method: 'PUT', body: JSON.stringify(data) }),
@@ -692,8 +789,52 @@ const CommunityAPI = {
   })
 };
 
+function caseSubmissionStateFromResponse(response) {
+  const state = response?.submission;
+  if (Number(state?.policyVersion) >= 1 && typeof state.allowed === 'boolean') return state;
+  // An old running backend can serve fresh JS from disk while its routes stay
+  // in require.cache. Missing policy information must never permit a POST.
+  const active = (Array.isArray(response?.cases) ? response.cases : []).find(item =>
+    !['resolved', 'rejected', 'archived'].includes(item.status)
+    && !String(item.sourceKey || '').startsWith('warning-review:'));
+  if (active) return {
+    allowed: false, code: 'CASE_ALREADY_OPEN', retryAfter: 0, activeCase: active,
+    message: `У вас уже есть открытое обращение ${active.number || ''}. Дождитесь его закрытия; дополнения отправляйте в существующей переписке.`
+  };
+  return {
+    allowed: false, code: 'CASE_SERVER_OUTDATED', retryAfter: 0,
+    message: usesProductionBackend || isCapacitorRuntime
+      ? 'Отправка новых обращений временно недоступна: требуется обновление сервера.'
+      : 'Локальный сервер ещё не обновился. Полностью закройте Love, включая значок в трее, и запустите приложение заново.'
+  };
+}
+
+let caseSubmissionInFlight = false;
+async function submitNewCase(endpoint, options) {
+  if (caseSubmissionInFlight) {
+    const error = new Error('Обращение уже отправляется. Дождитесь результата.');
+    error.status = 409;
+    throw error;
+  }
+  caseSubmissionInFlight = true;
+  try {
+    const response = await apiFetch('/cases/mine');
+    const state = caseSubmissionStateFromResponse(response);
+    if (!state.allowed) {
+      const error = new Error(state.message || 'Новое обращение пока недоступно.');
+      error.status = state.code === 'CASE_COOLDOWN' ? 429 : state.code === 'CASE_SERVER_OUTDATED' ? 503 : 409;
+      error.data = { ...state, submission: state };
+      throw error;
+    }
+    return await apiFetch(endpoint, options);
+  } finally {
+    caseSubmissionInFlight = false;
+  }
+}
+
 const CasesAPI = {
-  create: (payload) => apiFetch('/cases', {
+  submissionStateFromResponse: caseSubmissionStateFromResponse,
+  create: (payload) => submitNewCase('/cases', {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
@@ -701,7 +842,12 @@ const CasesAPI = {
   get: (id) => apiFetch(`/cases/${id}`),
   status: () => apiFetch('/cases/status'),
   reportTaxonomy: () => apiFetch('/cases/message-report-taxonomy'),
-  reportMessage: (messageId, path, description = '') => apiFetch('/cases/message-reports', {
+  profileReportOptions: () => apiFetch('/cases/profile-report-options'),
+  reportProfile: (userId, part, path, description = '') => submitNewCase('/cases/profile-reports', {
+    method: 'POST',
+    body: JSON.stringify({ userId, part, path, description })
+  }),
+  reportMessage: (messageId, path, description = '') => submitNewCase('/cases/message-reports', {
     method: 'POST',
     body: JSON.stringify({ messageId, path, description })
   }),
@@ -709,7 +855,7 @@ const CasesAPI = {
     method: 'POST',
     body: JSON.stringify({ body })
   }),
-  appeal: (moderationAction, description) => apiFetch('/cases/appeals', {
+  appeal: (moderationAction, description) => submitNewCase('/cases/appeals', {
     method: 'POST',
     body: JSON.stringify({ moderationAction, description })
   })
@@ -717,3 +863,23 @@ const CasesAPI = {
 
 window.CommunityAPI = CommunityAPI;
 window.CasesAPI = CasesAPI;
+
+// ===== ПУБЛИЧНАЯ СТРАНИЦА ПРОФИЛЯ =====
+/*
+ * Всего два вызова, и оба — из приложения с обычным токеном.
+ *
+ * Сам редактор живёт на другом домене (me.loveapp.chat/build) и работает уже
+ * со своим узким токеном, который получает из одноразового кода. Поэтому здесь
+ * нет ни чтения полей страницы, ни сохранения: приложению это не нужно и не
+ * положено — токен из localStorage не должен уезжать на публичный хост.
+ *
+ * summary может ответить 404, если фича выключена флагом на сервере. Это не
+ * ошибка, а нормальный ответ «раздела пока нет», и вызывающий код так его и
+ * трактует.
+ */
+const ProfilePageAPI = {
+  summary: () => apiFetch('/profile-page/summary'),
+  editorSession: () => apiFetch('/profile-page/editor-session', { method: 'POST' })
+};
+
+window.ProfilePageAPI = ProfilePageAPI;

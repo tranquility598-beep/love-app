@@ -62,7 +62,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 npm start
 ```
 
-Это запустит одновременно backend сервер и Electron приложение.
+Это запустит локальный backend и Electron-приложение в режиме разработки.
+Для запуска Electron с production API используйте `npm run start:prod`.
+Страницы профиля в dev включены по умолчанию; редактор доступен по адресу
+`http://127.0.0.1:5555/build` (или через карточку в настройках Love).
 
 ---
 

@@ -1,10 +1,11 @@
 {
   "name": "love-app",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Love - A beautiful chat application",
   "main": "client/main.js",
   "scripts": {
-    "start": "npm run electron",
+    "start": "npm run electron:local",
+    "start:prod": "npm run electron",
     "electron": "electron . --backend=production",
     "electron:local": "electron . --backend=local",
     "server": "node server/index.js",
@@ -29,10 +30,15 @@
     "files": [
       "client/**/*",
       "server/**/*",
+      "profile-page/**/*",
       "node_modules/**/*",
       "package.json",
       "!**/.env",
-      "!**/.env.*"
+      "!**/.env.*",
+      "!server/uploads/**",
+      "!server/private-uploads/**",
+      "!server/temp/**",
+      "!server/tests/**"
     ],
     "win": {
       "target": [
@@ -50,12 +56,23 @@
     },
     "extraResources": [
       {
+        "from": "profile-page",
+        "to": "profile-page",
+        "filter": [
+          "build/**/*"
+        ]
+      },
+      {
         "from": "server",
         "to": "server",
         "filter": [
           "**/*",
           "!**/.env",
-          "!**/.env.*"
+          "!**/.env.*",
+          "!uploads/**",
+          "!private-uploads/**",
+          "!temp/**",
+          "!tests/**"
         ]
       }
     ],
@@ -127,8 +144,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
     "png-to-ico": "^3.0.1",
     "wait-on": "^7.2.0"
   },
@@ -136,7 +153,7 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
-    "axios": "^1.6.0",
+    "axios": "^1.20.0",
     "bcryptjs": "^2.4.3",
     "canvas": "^3.2.3",
     "cloudinary": "^2.10.0",
@@ -146,7 +163,7 @@
     "dotenv": "^16.3.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
-    "express": "^4.18.2",
+    "express": "^4.22.3",
     "express-fileupload": "^1.4.3",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.3.2",
@@ -155,16 +172,16 @@
     "isomorphic-dompurify": "^3.7.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
-    "multer": "^2.1.1",
-    "nodemailer": "^6.9.13",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.1.7",
     "otplib": "^12.0.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "qrcode": "^1.5.4",
     "resend": "^6.10.0",
-    "socket.io": "^4.6.1",
+    "socket.io": "^4.8.4",
     "socket.io-client": "^4.6.1",
     "streamifier": "^0.1.1",
-    "uuid": "^9.0.0"
+    "uuid": "^11.1.1"
   }
 }

@@ -9,6 +9,7 @@ on:
       - "server/**"
       - "admin/**"
       - "client/**"
+      - "profile-page/**"
       - "sandbox/public/**"
       - "ops/production/**"
       - "package.json"
@@ -70,7 +71,7 @@ jobs:
             --exclude='server/private-uploads' \
             --exclude='server/temp' \
             -czf love-release.tgz \
-            release-manifest.json package.json server client sandbox/public ops/production admin/dist
+            release-manifest.json package.json server client sandbox/public ops/production admin/dist profile-page/build
           sha256sum love-release.tgz > love-release.tgz.sha256
 
       - name: Configure strict SSH host verification

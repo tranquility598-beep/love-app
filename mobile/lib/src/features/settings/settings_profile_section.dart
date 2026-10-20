@@ -9,6 +9,7 @@ import '../../session/app_session.dart';
 import '../../theme/love_tokens.dart';
 import '../../widgets/love_avatar.dart';
 import 'settings_widgets.dart';
+import 'settings_public_page.dart';
 
 /// Settings → Профиль. The public profile card exactly as on desktop: avatar,
 /// display name, bio, status, mood-icon picker, "now listening" (+ music
@@ -91,6 +92,7 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
           desc: 'Так вас видят другие пользователи Love',
         ),
         const SizedBox(height: 16),
+        PublicPageSettings(api: widget.api),
         // Avatar card
         SettingsCard(
           children: [
@@ -120,7 +122,7 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                         const SizedBox(height: 2),
                         Text(
                           '@${user?.username ?? 'love'}',
-                          style:  TextStyle(color: context.palette.textMuted),
+                          style: TextStyle(color: context.palette.textMuted),
                         ),
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
@@ -222,8 +224,8 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                               ? const SizedBox(
                                   width: 15,
                                   height: 15,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.audio_file_outlined, size: 18),
                           label: const Text('Загрузить трек'),
@@ -252,10 +254,12 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              _musicTitle.isEmpty ? 'Трек загружен' : _musicTitle,
+                              _musicTitle.isEmpty
+                                  ? 'Трек загружен'
+                                  : _musicTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style:  TextStyle(
+                              style: TextStyle(
                                 color: context.palette.textMuted,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -271,11 +275,12 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
                     child: SettingsSubtitle('Сферы увлечений',
                         padding: const EdgeInsets.only(bottom: 4)),
                   ),
-                   Padding(
+                  Padding(
                     padding: EdgeInsets.only(bottom: 10),
                     child: Text(
                       'До 5 увлечений, по 20 символов каждое.',
-                      style: TextStyle(color: context.palette.textMuted, fontSize: 12),
+                      style: TextStyle(
+                          color: context.palette.textMuted, fontSize: 12),
                     ),
                   ),
                   HobbiesEditor(
@@ -291,14 +296,14 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
           const SizedBox(height: 12),
           Text(
             _error!,
-            style:  TextStyle(color: context.palette.danger, height: 1.35),
+            style: TextStyle(color: context.palette.danger, height: 1.35),
           ),
         ],
         const SizedBox(height: 18),
         FilledButton.icon(
           onPressed: _saving ? null : () => _saveProfile(session),
           icon: _saving
-              ?  SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
@@ -314,6 +319,9 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
   }
 
   Future<void> _pickAvatar() async {
+    if (_uploadingAvatar) return;
+    final session = AppSessionScope.of(context);
+    final owner = session.user?.id;
     setState(() {
       _uploadingAvatar = true;
       _error = null;
@@ -325,13 +333,12 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
         maxWidth: 640,
         maxHeight: 640,
       );
-      if (picked == null) return;
+      if (picked == null || !mounted || session.user?.id != owner) return;
       final response =
           await widget.api.uploadAvatar(picked.path, mimeType: picked.mimeType);
       final rawUser = response['user'];
-      if (rawUser is Map && mounted) {
-        AppSessionScope.of(context)
-            .updateUserFromJson(rawUser.cast<String, dynamic>());
+      if (rawUser is Map && mounted && session.user?.id == owner) {
+        session.updateUserFromJson(rawUser.cast<String, dynamic>());
       }
     } catch (error) {
       if (!mounted) return;
@@ -342,15 +349,19 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
   }
 
   Future<void> _pickMusic() async {
+    if (_uploadingMusic) return;
+    final session = AppSessionScope.of(context);
+    final owner = session.user?.id;
     setState(() {
       _uploadingMusic = true;
       _error = null;
     });
     try {
       final file = await AudioFilePicker.pickAudio();
-      if (file == null) return;
+      if (file == null || !mounted || session.user?.id != owner) return;
       final response =
           await widget.api.uploadMusic(file.path, mimeType: file.mimeType);
+      if (!mounted || session.user?.id != owner) return;
       final url = response['url']?.toString() ?? '';
       if (url.isEmpty) {
         throw const FormatException('Сервер не вернул ссылку на трек');
@@ -373,6 +384,8 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
   }
 
   Future<void> _saveProfile(AppSession session) async {
+    if (_saving) return;
+    final owner = session.user?.id;
     if (_nickname.text.trim().isEmpty) {
       setState(() => _error = 'Имя не может быть пустым');
       return;
@@ -392,6 +405,7 @@ class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
         'hobbies': _hobbies.map((h) => h.toJson()).toList(),
       });
       final rawUser = response['user'];
+      if (!mounted || session.user?.id != owner) return;
       if (rawUser is Map) {
         session.updateUserFromJson(rawUser.cast<String, dynamic>());
       }

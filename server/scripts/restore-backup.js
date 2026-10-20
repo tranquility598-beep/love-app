@@ -24,7 +24,7 @@ require('dotenv').config();
 
 const backupDir = process.argv[2] ? path.resolve(process.argv[2]) : null;
 const apply = process.argv.includes('--apply');
-const targetUri = process.env.RESTORE_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const targetUri = process.env.RESTORE_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 
 async function run() {
   if (!backupDir) {

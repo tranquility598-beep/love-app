@@ -44,6 +44,7 @@ class CallCenter extends ChangeNotifier {
   bool _lastVoiceActive = false;
   bool _lastVoiceMuted = false;
   String _lastVoiceTitle = '';
+  ReceivePort? _actionPort;
 
   /// Активный звонок в ЛС (для плашки ActiveCallBar и полноэкранного UI).
   DmCallController? get activeDm {
@@ -67,7 +68,13 @@ class CallCenter extends ChangeNotifier {
             dm.phase == DmCallPhase.incoming);
   }
 
+  /// Общий сокет приложения (для экранов, открытых не из оболочки — например
+  /// профиль по ссылке love-app://user/НИК).
+  LoveSocket? get socket => _socket;
+
   void init(LoveSocket socket) {
+    final previous = _socket;
+    if (previous != null && !identical(previous, socket)) detach(previous);
     if (_socket != null) return;
     _socket = socket;
     socket.on('call:incoming', _onGlobalIncoming);
@@ -75,11 +82,30 @@ class CallCenter extends ChangeNotifier {
     _registerActionPort();
   }
 
+  void detach(LoveSocket socket) {
+    if (!identical(_socket, socket)) return;
+    socket.off('call:incoming', _onGlobalIncoming);
+    ChannelVoiceController.instance.removeListener(_onVoiceChanged);
+    _dropController();
+    _dropTemp();
+    _socket = null;
+    _actionPort?.close();
+    _actionPort = null;
+    IsolateNameServer.removePortNameMapping(kLoveCallActionPort);
+    _lastPhase = DmCallPhase.idle;
+    _lastVoiceActive = false;
+    _lastVoiceTitle = '';
+    LocalNotifications.cancelIncomingCall();
+    LocalNotifications.cancelOngoingCall();
+  }
+
   /// Принимает нажатия кнопок уведомлений из фонового изолята
   /// (showsUserInterface: false — приложение НЕ открывается).
   void _registerActionPort() {
+    _actionPort?.close();
     IsolateNameServer.removePortNameMapping(kLoveCallActionPort);
     final port = ReceivePort();
+    _actionPort = port;
     IsolateNameServer.registerPortWithName(port.sendPort, kLoveCallActionPort);
     port.listen((message) {
       final text = '$message';

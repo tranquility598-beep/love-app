@@ -46,31 +46,38 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Клавиатура поднимает лист целиком, чтобы кнопка отправки оставалась
+    // над ней, а не пряталась под полем описания.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return PopScope(
       canPop: _path.isEmpty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _path.isNotEmpty) setState(() => _path.removeLast());
       },
-      child: Container(
-        height: MediaQuery.sizeOf(context).height * 0.9,
-        decoration:  BoxDecoration(
-          color: context.palette.bgTertiary,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: context.palette.borderActive)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: FutureBuilder<List<ReportReason>>(
-            future: _future,
-            builder: (context, snapshot) {
-              return Column(
-                children: [
-                  _header(),
-                  Expanded(child: _body(snapshot)),
-                  _footer(snapshot.data ?? const []),
-                ],
-              );
-            },
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: Container(
+          height: (MediaQuery.sizeOf(context).height - keyboard) * 0.9,
+          decoration: BoxDecoration(
+            color: context.palette.bgTertiary,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border:
+                Border(top: BorderSide(color: context.palette.borderActive)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: FutureBuilder<List<ReportReason>>(
+              future: _future,
+              builder: (context, snapshot) {
+                return Column(
+                  children: [
+                    _header(),
+                    Expanded(child: _body(snapshot)),
+                    _footer(snapshot.data ?? const []),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -81,7 +88,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
     final selected = _path.isNotEmpty;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
-      decoration:  BoxDecoration(
+      decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: context.palette.border))),
       child: Column(
         children: [
@@ -103,7 +110,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
                 )
               else
                 const SizedBox(width: 48),
-               Expanded(
+              Expanded(
                 child: Column(
                   children: [
                     Text('Жалоба на сообщение',
@@ -141,7 +148,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
             children: [
               Text(snapshot.error.toString(),
                   textAlign: TextAlign.center,
-                  style:  TextStyle(color: context.palette.textSecondary)),
+                  style: TextStyle(color: context.palette.textSecondary)),
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: () => setState(
@@ -191,7 +198,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: context.palette.border)),
           child: Text(_path.map((item) => item.label).join('  ›  '),
-              style:  TextStyle(
+              style: TextStyle(
                   color: context.palette.dangerText,
                   fontWeight: FontWeight.w700,
                   height: 1.4)),
@@ -211,7 +218,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
           ),
         ),
         const SizedBox(height: 8),
-         Text(
+        Text(
           'Автор жалобы не будет показан нарушителю. Ложные жалобы могут привести к предупреждению.',
           style: TextStyle(
               color: context.palette.textMuted, fontSize: 11.5, height: 1.4),
@@ -232,7 +239,7 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(widget.message.authorName,
-              style:  TextStyle(
+              style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
                   color: context.palette.textSecondary)),
@@ -250,34 +257,44 @@ class _MessageReportSheetState extends State<_MessageReportSheet> {
     final ready = _path.isNotEmpty && _path.last.isLeaf;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration:  BoxDecoration(
+      decoration: BoxDecoration(
           color: context.palette.bgPrimary,
           border: Border(top: BorderSide(color: context.palette.border))),
+      // Кнопки темы растягиваются на всю ширину (Size.fromHeight), поэтому в
+      // строке каждая обязана быть в Expanded — иначе release-сборка рисует
+      // пустую полосу и жалобу нельзя отправить.
       child: Row(
         children: [
           if (_path.isNotEmpty)
-            OutlinedButton.icon(
-              onPressed:
-                  _submitting ? null : () => setState(() => _path.removeLast()),
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: const Text('Назад'),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(() => _path.removeLast()),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Назад'),
+              ),
             )
           else
             Text('${roots.length} категорий',
                 style:
-                     TextStyle(color: context.palette.textMuted, fontSize: 12)),
-          const Spacer(),
-          if (ready)
-            FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.flag_rounded),
-              label: const Text('Отправить жалобу'),
+                    TextStyle(color: context.palette.textMuted, fontSize: 12)),
+          if (ready) ...[
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.flag_rounded),
+                label: const Text('Отправить жалобу'),
+              ),
             ),
+          ],
         ],
       ),
     );
@@ -334,7 +351,7 @@ class _ReasonTile extends StatelessWidget {
                 border: Border.all(color: context.palette.border)),
             child: Row(
               children: [
-                 Icon(Icons.flag_outlined,
+                Icon(Icons.flag_outlined,
                     size: 20, color: context.palette.dangerText),
                 const SizedBox(width: 12),
                 Expanded(
@@ -346,7 +363,7 @@ class _ReasonTile extends StatelessWidget {
                       if (reason.description.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(reason.description,
-                            style:  TextStyle(
+                            style: TextStyle(
                                 color: context.palette.textMuted,
                                 fontSize: 12,
                                 height: 1.35)),
@@ -354,7 +371,7 @@ class _ReasonTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                 Icon(Icons.chevron_right_rounded,
+                Icon(Icons.chevron_right_rounded,
                     color: context.palette.textMuted),
               ],
             ),

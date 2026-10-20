@@ -12,6 +12,8 @@ import '../../widgets/love_avatar.dart';
 import '../../widgets/staff_role_badge.dart';
 import '../chat/chat_models.dart';
 import '../settings/settings_widgets.dart';
+import '../support/case_submission_gate.dart';
+import '../support/case_attachments.dart';
 import '../shell/screen_frame.dart';
 
 /// Love Hub community dashboard backed by the shared Love API.
@@ -34,9 +36,10 @@ class LoveHubScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
-               Text(
+              Text(
                 'Центр управления сообществом и обновлениями',
-                style: TextStyle(color: context.palette.textSecondary, fontSize: 14),
+                style: TextStyle(
+                    color: context.palette.textSecondary, fontSize: 14),
               ),
               const SizedBox(height: 14),
               // Action buttons
@@ -84,7 +87,7 @@ class LoveHubScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                     Text(
+                    Text(
                       'Спасибо, что вы с нами. Полная история обновлений и '
                       'голосование за идеи появятся в одном из ближайших '
                       'релизов.',
@@ -100,7 +103,7 @@ class LoveHubScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                     Text(
+                    Text(
                       'Версия',
                       style: TextStyle(
                         fontFamily: LoveFonts.mono,
@@ -120,7 +123,7 @@ class LoveHubScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                     Text(
+                    Text(
                       'установлена',
                       style: TextStyle(
                           color: context.palette.textMuted, fontSize: 12.5),
@@ -143,7 +146,7 @@ class LoveHubScreen extends StatelessWidget {
                           TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
-                     Text(
+                    Text(
                       'Голосуйте за лучшие предложения в реальном времени. '
                       'Функция появится в следующем обновлении.',
                       style: TextStyle(
@@ -193,7 +196,7 @@ class LoveHubScreen extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                     Text(
+                    Text(
                       'Полный список изменений будет доступен здесь.',
                       style: TextStyle(
                           color: context.palette.textSecondary, height: 1.4),
@@ -214,7 +217,7 @@ class LoveHubScreen extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 17, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                     Text(
+                    Text(
                       'Голосуйте за идеи и направление развития — ♥ за, '
                       '💔 против.',
                       style: TextStyle(
@@ -285,8 +288,7 @@ class LoveHubScreen extends StatelessWidget {
         children: [
           Text(
             info.lead,
-            style:
-                 TextStyle(color: context.palette.textSecondary, height: 1.5),
+            style: TextStyle(color: context.palette.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 16),
           for (var i = 0; i < info.items.length; i++)
@@ -407,7 +409,7 @@ class _CommunityIdeasListState extends State<_CommunityIdeasList> {
                           const SizedBox(height: 6),
                           Text(
                             idea['summary']?.toString() ?? 'Без описания',
-                            style:  TextStyle(
+                            style: TextStyle(
                               color: context.palette.textSecondary,
                               height: 1.4,
                             ),
@@ -471,6 +473,7 @@ class _CommunityCaseFormState extends State<_CommunityCaseForm> {
   final _description = TextEditingController();
   bool _diagnostics = false;
   bool _submitting = false;
+  final _files = <CaseFileDraft>[];
   String _priority = 'normal';
   String _category = 'other';
 
@@ -482,6 +485,7 @@ class _CommunityCaseFormState extends State<_CommunityCaseForm> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (_title.text.trim().length < 3 || _description.text.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -491,7 +495,14 @@ class _CommunityCaseFormState extends State<_CommunityCaseForm> {
     }
     setState(() => _submitting = true);
     try {
+      await widget.api.ensureCaseSubmissionAllowed();
+      final attachments = <Map<String, dynamic>>[];
+      for (final file in _files) {
+        attachments.add(await file.upload(widget.api));
+      }
+      if (!mounted) return;
       final result = await widget.api.createCommunityCase(
+        attachments: attachments,
         kind: widget.isBug ? 'bug' : 'idea',
         title: _title.text,
         description: _description.text,
@@ -511,102 +522,126 @@ class _CommunityCaseFormState extends State<_CommunityCaseForm> {
             content: Text(
                 'Обращение отправлено${number == null ? '' : ': $number'}')),
       );
-    } on ApiException catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error is ApiException
+              ? error.message
+              : 'Не удалось отправить обращение. Черновик сохранён.')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          widget.isBug
-              ? 'Опишите, что произошло, что ожидалось и как повторить ошибку.'
-              : 'Расскажите, что стоит добавить и какую проблему это решает.',
-          style:  TextStyle(color: context.palette.textSecondary, height: 1.45),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _title,
-          maxLength: 160,
-          decoration: const InputDecoration(labelText: 'Название'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _description,
-          minLines: 4,
-          maxLines: 8,
-          maxLength: 10000,
-          decoration: const InputDecoration(labelText: 'Подробное описание'),
-        ),
-        const SizedBox(height: 10),
-        if (widget.isBug)
-          DropdownButtonFormField<String>(
-            initialValue: _priority,
-            decoration: const InputDecoration(labelText: 'Риск ошибки'),
-            items: const [
-              DropdownMenuItem(
-                  value: 'low', child: Text('Низкий — косметическая проблема')),
-              DropdownMenuItem(
-                  value: 'normal',
-                  child: Text('Обычный — функция работает неверно')),
-              DropdownMenuItem(
-                  value: 'high', child: Text('Высокий — функция недоступна')),
-              DropdownMenuItem(
-                  value: 'critical',
-                  child: Text('Критический — безопасность или потеря данных')),
-            ],
-            onChanged: _submitting
-                ? null
-                : (value) => setState(() => _priority = value ?? 'normal'),
-          )
-        else
-          DropdownButtonFormField<String>(
-            initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Категория идеи'),
-            items: const [
-              DropdownMenuItem(value: 'messaging', child: Text('Сообщения')),
-              DropdownMenuItem(value: 'voice', child: Text('Голос и звонки')),
-              DropdownMenuItem(value: 'servers', child: Text('Серверы')),
-              DropdownMenuItem(value: 'profile', child: Text('Профиль')),
-              DropdownMenuItem(
-                  value: 'mobile', child: Text('Мобильное приложение')),
-              DropdownMenuItem(value: 'safety', child: Text('Безопасность')),
-              DropdownMenuItem(
-                  value: 'accessibility', child: Text('Доступность')),
-              DropdownMenuItem(value: 'other', child: Text('Другое')),
-            ],
-            onChanged: _submitting
-                ? null
-                : (value) => setState(() => _category = value ?? 'other'),
-          ),
-        if (widget.isBug)
-          CheckboxListTile(
-            value: _diagnostics,
-            onChanged: _submitting
-                ? null
-                : (value) => setState(() => _diagnostics = value ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text(
-              'Приложить версию приложения, сведения об ОС и безопасный технический журнал',
-              style: TextStyle(fontSize: 13),
-            ),
-            subtitle: const Text('Токены и переписки не отправляются.'),
-          ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? 'Отправляем...' : 'Отправить'),
-        ),
-      ],
-    );
+    return CaseSubmissionGate(
+        api: widget.api,
+        builder: (context, allowed) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  widget.isBug
+                      ? 'Опишите, что произошло, что ожидалось и как повторить ошибку.'
+                      : 'Расскажите, что стоит добавить и какую проблему это решает.',
+                  style: TextStyle(
+                      color: context.palette.textSecondary, height: 1.45),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _title,
+                  maxLength: 160,
+                  decoration: const InputDecoration(labelText: 'Название'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _description,
+                  minLines: 4,
+                  maxLines: 8,
+                  maxLength: 10000,
+                  decoration:
+                      const InputDecoration(labelText: 'Подробное описание'),
+                ),
+                const SizedBox(height: 10),
+                if (widget.isBug)
+                  DropdownButtonFormField<String>(
+                    initialValue: _priority,
+                    decoration: const InputDecoration(labelText: 'Риск ошибки'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'low',
+                          child: Text('Низкий — косметическая проблема')),
+                      DropdownMenuItem(
+                          value: 'normal',
+                          child: Text('Обычный — функция работает неверно')),
+                      DropdownMenuItem(
+                          value: 'high',
+                          child: Text('Высокий — функция недоступна')),
+                      DropdownMenuItem(
+                          value: 'critical',
+                          child: Text(
+                              'Критический — безопасность или потеря данных')),
+                    ],
+                    onChanged: _submitting
+                        ? null
+                        : (value) =>
+                            setState(() => _priority = value ?? 'normal'),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: _category,
+                    decoration:
+                        const InputDecoration(labelText: 'Категория идеи'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'messaging', child: Text('Сообщения')),
+                      DropdownMenuItem(
+                          value: 'voice', child: Text('Голос и звонки')),
+                      DropdownMenuItem(
+                          value: 'servers', child: Text('Серверы')),
+                      DropdownMenuItem(
+                          value: 'profile', child: Text('Профиль')),
+                      DropdownMenuItem(
+                          value: 'mobile', child: Text('Мобильное приложение')),
+                      DropdownMenuItem(
+                          value: 'safety', child: Text('Безопасность')),
+                      DropdownMenuItem(
+                          value: 'accessibility', child: Text('Доступность')),
+                      DropdownMenuItem(value: 'other', child: Text('Другое')),
+                    ],
+                    onChanged: _submitting
+                        ? null
+                        : (value) =>
+                            setState(() => _category = value ?? 'other'),
+                  ),
+                if (widget.isBug)
+                  CheckboxListTile(
+                    value: _diagnostics,
+                    onChanged: _submitting
+                        ? null
+                        : (value) =>
+                            setState(() => _diagnostics = value ?? false),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text(
+                      'Приложить версию приложения, сведения об ОС и безопасный технический журнал',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    subtitle: const Text('Токены и переписки не отправляются.'),
+                  ),
+                const SizedBox(height: 12),
+                CaseAttachments(
+                    files: _files,
+                    enabled: allowed && !_submitting,
+                    onChanged: () => setState(() {})),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _submitting || !allowed ? null : _submit,
+                  child: Text(_submitting ? 'Отправляем...' : 'Отправить'),
+                ),
+              ],
+            ));
   }
 }
 
@@ -657,8 +692,8 @@ class _IconEmptyState extends StatelessWidget {
           const SizedBox(height: 7),
           Text(text,
               textAlign: TextAlign.center,
-              style:  TextStyle(
-                  color: context.palette.textSecondary, height: 1.4)),
+              style:
+                  TextStyle(color: context.palette.textSecondary, height: 1.4)),
           if (action != null) ...[const SizedBox(height: 16), action!],
         ],
       ),
@@ -690,7 +725,7 @@ class _BentoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.palette.inkA(0.03),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color:  context.palette.inkA(0.05)),
+        border: Border.all(color: context.palette.inkA(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,7 +740,7 @@ class _BentoCard extends StatelessWidget {
                 ],
                 const Spacer(),
                 if (onTap != null)
-                   Icon(Icons.north_east_rounded,
+                  Icon(Icons.north_east_rounded,
                       size: 16, color: context.palette.textMuted),
               ],
             ),
@@ -807,7 +842,7 @@ class _LinkRow extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w500, fontSize: 14)),
               ),
-               Icon(Icons.north_east_rounded,
+              Icon(Icons.north_east_rounded,
                   size: 15, color: context.palette.textMuted),
             ],
           ),
@@ -1037,7 +1072,7 @@ class _UpdateItem extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(update.version,
-                  style:  TextStyle(
+                  style: TextStyle(
                       fontFamily: LoveFonts.mono,
                       fontSize: 12.5,
                       color: context.palette.textSecondary)),
@@ -1047,8 +1082,8 @@ class _UpdateItem extends StatelessWidget {
           _BentoTag(update.tag),
           const SizedBox(height: 10),
           Text(update.desc,
-              style:  TextStyle(
-                  color: context.palette.textSecondary, height: 1.4)),
+              style:
+                  TextStyle(color: context.palette.textSecondary, height: 1.4)),
           const SizedBox(height: 10),
           for (final change in update.changes)
             Padding(
@@ -1056,11 +1091,11 @@ class _UpdateItem extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Text('•  ',
+                  Text('•  ',
                       style: TextStyle(color: context.palette.textMuted)),
                   Expanded(
                     child: Text(change,
-                        style:  TextStyle(
+                        style: TextStyle(
                             color: context.palette.textSecondary,
                             fontSize: 13,
                             height: 1.35)),
@@ -1195,7 +1230,7 @@ class _InfoItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(item.text,
-                    style:  TextStyle(
+                    style: TextStyle(
                         color: context.palette.textSecondary,
                         fontSize: 13,
                         height: 1.4)),
@@ -1446,7 +1481,7 @@ class _DevLogFeedState extends State<_DevLogFeed> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-         Padding(
+        Padding(
           padding: EdgeInsets.only(bottom: 12),
           child: Text(
             'Заметки разработки. Голосуйте за идеи — ♥ за, 💔 против.',
@@ -1557,13 +1592,13 @@ class _DevLogCardState extends State<_DevLogCard> {
               ],
               const Spacer(),
               Text(post.date,
-                  style:  TextStyle(
+                  style: TextStyle(
                       color: context.palette.textMuted, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 12),
           Text(post.text,
-              style:  TextStyle(
+              style: TextStyle(
                   color: context.palette.textSecondary, height: 1.45)),
           const SizedBox(height: 14),
           // Vote bar
@@ -1573,7 +1608,7 @@ class _DevLogCardState extends State<_DevLogCard> {
               value: total == 0 ? 0 : hearts / total,
               minHeight: 6,
               backgroundColor: context.palette.inkA(0.06),
-              valueColor:  AlwaysStoppedAnimation<Color>(context.palette.accent),
+              valueColor: AlwaysStoppedAnimation<Color>(context.palette.accent),
             ),
           ),
           const SizedBox(height: 12),
@@ -1594,7 +1629,7 @@ class _DevLogCardState extends State<_DevLogCard> {
               ),
               const Spacer(),
               Text('$pct% за',
-                  style:  TextStyle(
+                  style: TextStyle(
                       color: context.palette.textMuted,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
@@ -1649,7 +1684,7 @@ class _DevLogCardState extends State<_DevLogCard> {
     return Container(
       margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.only(top: 12),
-      decoration:  BoxDecoration(
+      decoration: BoxDecoration(
           border: Border(top: BorderSide(color: context.palette.border))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1660,7 +1695,7 @@ class _DevLogCardState extends State<_DevLogCard> {
                     padding: EdgeInsets.all(18),
                     child: CircularProgressIndicator()))
           else if (_comments.isEmpty)
-             Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
               child: Text('Комментариев пока нет.',
                   textAlign: TextAlign.center,
@@ -1679,8 +1714,9 @@ class _DevLogCardState extends State<_DevLogCard> {
                 children: [
                   Expanded(
                       child: Text('Ответ для ${_commentAuthor(_replyTo!)}',
-                          style:  TextStyle(
-                              color: context.palette.textSecondary, fontSize: 12))),
+                          style: TextStyle(
+                              color: context.palette.textSecondary,
+                              fontSize: 12))),
                   IconButton(
                       tooltip: 'Отменить ответ',
                       onPressed: () => setState(() => _replyTo = null),
@@ -1754,7 +1790,7 @@ class _DevLogCardState extends State<_DevLogCard> {
             ),
             const SizedBox(height: 6),
             Text(asText(comment['body']),
-                style:  TextStyle(
+                style: TextStyle(
                     color: context.palette.textSecondary, height: 1.4)),
             Align(
               alignment: Alignment.centerLeft,
@@ -1834,20 +1870,26 @@ class _VoteButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-                color: active ? context.palette.borderActive : context.palette.border),
+                color: active
+                    ? context.palette.borderActive
+                    : context.palette.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon,
                   size: 15,
-                  color: active ? context.palette.accent : context.palette.textSecondary),
+                  color: active
+                      ? context.palette.accent
+                      : context.palette.textSecondary),
               const SizedBox(width: 6),
               Text('$count',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: active ? context.palette.accent : context.palette.textSecondary,
+                    color: active
+                        ? context.palette.accent
+                        : context.palette.textSecondary,
                   )),
             ],
           ),
@@ -1856,8 +1898,6 @@ class _VoteButton extends StatelessWidget {
     );
   }
 }
-
-
 
 String _ideaCategory(String value) {
   return const {

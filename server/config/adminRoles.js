@@ -88,7 +88,23 @@ function canActOn(actor, target) {
   return targetLevel < 0 || actorLevel > targetLevel;
 }
 
+// Полное удаление аккаунтов: Разработчик — всегда; администратор — только
+// если Разработчик выдал ему отдельное право (user.canDeleteUsers).
+function canDeleteUsers(user) {
+  const role = canonicalRole(user?.role);
+  if (role === 'developer') return true;
+  return Boolean(user?.canDeleteUsers) && roleLevel(role) >= roleLevel('junior_admin');
+}
+
+// Кому Разработчик может выдать право удаления: только администраторам.
+function canReceiveDeleteRight(user) {
+  const role = canonicalRole(user?.role);
+  return role !== 'developer' && roleLevel(role) >= roleLevel('junior_admin');
+}
+
 module.exports = {
+  canDeleteUsers,
+  canReceiveDeleteRight,
   ROLE_ORDER,
   ROLE_LABELS,
   canonicalRole,

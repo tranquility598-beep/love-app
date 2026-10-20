@@ -16,6 +16,7 @@ class CallParticipant {
     this.renderer,
     this.hasVideo = false,
     this.mirror = false,
+    this.screenSharing = false,
   });
 
   final String id;
@@ -28,6 +29,7 @@ class CallParticipant {
 
   /// Mirror only the local front-camera preview, never a remote stream.
   final bool mirror;
+  final bool screenSharing;
 }
 
 /// Общий интерфейс полноэкранного звонка: один экран [CallScreen]
@@ -44,6 +46,7 @@ abstract class CallSession {
   bool get cameraOn;
   bool get screenSharing;
   bool get frontCamera;
+  bool get mediaBusy;
   RTCVideoRenderer? get localRenderer;
   String? get errorMessage;
 
@@ -102,6 +105,9 @@ class DmCallSession implements CallSession {
   bool get frontCamera => controller.frontCamera;
 
   @override
+  bool get mediaBusy => controller.mediaBusy;
+
+  @override
   RTCVideoRenderer? get localRenderer => controller.localRenderer;
 
   @override
@@ -115,6 +121,7 @@ class DmCallSession implements CallSession {
           avatar: controller.peerAvatar,
           renderer: controller.peerHasVideo ? controller.remoteRenderer : null,
           hasVideo: controller.peerHasVideo,
+          screenSharing: controller.remoteMediaModes.values.contains('screen'),
         ),
       ];
 
@@ -161,8 +168,7 @@ class ChannelCallSession implements CallSession {
   String get title => voice.channelTitle;
 
   @override
-  String get subtitle =>
-      voice.isConnected ? 'Вы в войсе' : 'Подключение...';
+  String get subtitle => voice.isConnected ? 'Вы в войсе' : 'Подключение...';
 
   @override
   bool get isActive => voice.isActive;
@@ -189,6 +195,9 @@ class ChannelCallSession implements CallSession {
   bool get frontCamera => voice.frontCamera;
 
   @override
+  bool get mediaBusy => voice.mediaBusy;
+
+  @override
   RTCVideoRenderer? get localRenderer => voice.localRenderer;
 
   @override
@@ -196,6 +205,7 @@ class ChannelCallSession implements CallSession {
 
   @override
   List<CallParticipant> get participants {
+    if (!voice.isActive) return const [];
     final result = <CallParticipant>[
       CallParticipant(
         id: selfId.isEmpty ? 'self' : selfId,
@@ -208,6 +218,7 @@ class ChannelCallSession implements CallSession {
             : null,
         hasVideo: voice.cameraOn || voice.screenSharing,
         mirror: voice.cameraOn && voice.frontCamera,
+        screenSharing: voice.screenSharing,
       ),
     ];
     for (final member in voice.members) {
@@ -230,6 +241,7 @@ class ChannelCallSession implements CallSession {
         muted: member['muted'] == true || member['isMuted'] == true,
         renderer: hasVideo ? voice.renderers[socketId] : null,
         hasVideo: hasVideo,
+        screenSharing: voice.remoteMediaModes[socketId] == 'screen',
       ));
     }
     return result;

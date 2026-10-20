@@ -16,6 +16,48 @@
   --settings-success-bg: var(--success-bg);
 }
 
+/* Subscription preview: informational cards, no checkout controls. */
+.lvs-plan-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--settings-card-bg);
+}
+.lvs-plan-eyebrow { display: block; margin-bottom: 7px; font-size: 11px; color: var(--text-muted); }
+.lvs-plan-summary strong { font-size: 21px; font-weight: 600; color: var(--text-primary); }
+.lvs-plan-summary p { margin: 7px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.lvs-plan-tag { padding: 7px 12px; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-secondary); font-size: 13px; }
+.lvs-plan-notice { display: flex; gap: 10px; margin: 20px 0; color: var(--text-secondary); }
+.lvs-plan-notice svg { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; }
+.lvs-plan-notice p { margin: 0; font-size: 12px; line-height: 1.7; }
+.lvs-plan-notice strong { display: block; font-weight: 500; color: var(--text-primary); }
+.lvs-plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.lvs-plan-card { display: flex; flex-direction: column; min-width: 0; padding: 22px 18px 18px; border: 1px solid var(--border-color); border-radius: 14px; background: var(--settings-card-bg); }
+.lvs-plan-card--featured { background: var(--tint-a-4); }
+.lvs-plan-card.is-current { border-color: var(--text-secondary); }
+.lvs-plan-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 25px; }
+.lvs-plan-card h2 { margin: 0; color: var(--text-primary); font-family: var(--font-sans); font-size: 17px; font-weight: 600; }
+.lvs-plan-current { margin-left: auto; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-secondary); font-size: 10px; }
+.lvs-plan-current[hidden] { display: none; }
+.lvs-plan-description { margin: 10px 0 18px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.lvs-plan-price { margin: 0 0 20px; color: var(--text-primary); font-size: 29px; font-weight: 600; letter-spacing: -1px; white-space: nowrap; }
+.lvs-plan-price span { font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--text-muted); }
+.lvs-plan-card ul { display: grid; gap: 10px; margin: 0 0 24px; padding: 0; list-style: none; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.lvs-plan-card li { position: relative; padding-left: 17px; }
+.lvs-plan-card li::before { content: '✓'; position: absolute; left: 0; color: var(--text-muted); font-size: 11px; }
+.lvs-plan-button { width: 100%; min-height: 38px; margin-top: auto; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: transparent; font-family: inherit; font-size: 11px; line-height: 1.5; }
+.lvs-plan-button:disabled { opacity: 1; cursor: not-allowed; color: var(--text-muted); }
+.lvs-plan-footnote { margin: 18px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.7; }
+@media (max-width: 520px) {
+  .lvs-plan-grid { grid-template-columns: minmax(0, 1fr); }
+  .lvs-plan-summary { padding: 18px; }
+  .lvs-plan-card { padding: 20px; }
+}
+
 /* ─────────────────────────  LAYOUT  ───────────────────────── */
 
 /* #view-settings ведёт себя как модальный оверлей (как Love Hub) */
@@ -103,6 +145,10 @@
 
 .settings-sidebar-header {
   padding: 26px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .settings-sidebar-title {
@@ -145,7 +191,7 @@
   cursor: pointer;
   text-align: left;
   width: 100%;
-  transition: var(--transition-smooth);
+  transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .settings-nav-item svg {
@@ -153,7 +199,7 @@
   height: 18px;
   flex-shrink: 0;
   opacity: 0.7;
-  transition: var(--transition-smooth);
+  transition: color 0.16s ease, opacity 0.16s ease;
 }
 
 .settings-nav-item:hover {
@@ -173,6 +219,7 @@
 /* Контент */
 .settings-content {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -180,6 +227,8 @@
 
 .settings-content-scroll {
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 40px 48px 64px;
   max-width: 920px;
@@ -322,6 +371,82 @@
   color: var(--text-muted);
   margin-top: 2px;
   line-height: 1.4;
+}
+
+/* Long Windows device names must fit the voice panel, including narrow windows. */
+#settings-voice .lvs-row { flex-wrap: wrap; }
+#settings-voice .lvs-select { flex: 0 1 335px; min-width: 0; max-width: 100%; }
+#settings-voice .lvs-select-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#settings-voice .lvs-select-btn > svg { flex-shrink: 0; }
+#settings-voice .lvs-slider-wrap { min-width: 0; max-width: 100%; }
+#settings-voice .lvs-slider { min-width: 0; }
+
+.support-pane-head { flex-wrap: wrap; }
+.support-pane-head h2 { font-size: 19px; }
+.support-pane-head p { font-size: 13px; line-height: 1.5; }
+.support-case-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.support-case-actions .lvs-btn { min-height: 42px; padding: 10px 16px; font-size: 14px; }
+.support-new-case { padding: 22px; gap: 18px; border-radius: 16px; background: var(--settings-card-bg); border-color: var(--settings-card-border); }
+.support-new-case h3 { margin: 0; color: var(--text-primary); font-family: var(--font-serif); font-size: 22px; font-weight: 600; }
+.support-new-case label, .support-priority-field > span { color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; font-weight: 500; text-transform: none; }
+.support-new-case label { gap: 9px; }
+.support-new-case input:not([type="hidden"]), .support-new-case textarea { padding: 13px 14px; border-radius: 11px; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; color: var(--text-primary); background: var(--tint-a-2); }
+.support-new-case input:focus-visible, .support-new-case textarea:focus-visible { outline: 2px solid var(--text-muted); outline-offset: 2px; }
+.support-new-case textarea { height: 154px; min-height: 154px; max-height: min(320px, 45vh); resize: vertical; overflow-y: auto; }
+.support-new-case .lvs-btn { min-height: 42px; padding: 10px 16px; font-size: 14px; }
+.support-new-case button[type="submit"] { min-width: 128px; background: var(--text-primary); color: var(--bg-primary); border-color: transparent; }
+.support-new-case button[type="submit"]:disabled { opacity: .55; cursor: wait; }
+.support-bug-hint { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
+.support-new-case > .support-priority-field { display: grid; justify-content: stretch; gap: 9px; min-width: 0; }
+.support-priority-field .lvs-select { min-width: 0; }
+.support-priority-field .lvs-select-btn { min-height: 46px; padding: 11px 14px; font-size: 14px; text-align: left; }
+.support-priority-field .lvs-select-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-priority-field .lvs-select-btn > svg { flex-shrink: 0; }
+.lvs-select-menu.support-priority-menu li { padding: 12px; font-size: 14px; white-space: normal; line-height: 1.5; }
+.lvs-select-menu.support-priority-menu li:focus-visible { outline: 2px solid var(--text-muted); outline-offset: -2px; background: var(--settings-card-hover); }
+.support-new-case .support-priority-note { padding: 12px 14px; margin: -4px 0 0; border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-muted); background: var(--tint-a-2); font-size: 12px; line-height: 1.65; }
+.support-new-case > .support-file-picker { justify-content: flex-start; align-items: center; flex-wrap: wrap; }
+.support-file-picker > span { color: var(--text-muted); font-size: 12px; line-height: 1.6; flex: 1 1 220px; }
+.support-pending-files { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.support-pending-files:empty, .support-file-status:empty { display: none; }
+.support-pending-files li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border-color); border-radius: 10px; }
+.support-pending-files li > span { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.support-pending-files strong { color: var(--text-primary); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.support-pending-files small, .support-case-files small { color: var(--text-muted); font-size: 12px; }
+.support-file-remove { flex-shrink: 0; width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 21px; cursor: pointer; }
+.support-file-remove:hover { background: var(--fill-hover); color: var(--text-primary); }
+.support-file-remove:disabled { opacity: .4; cursor: default; }
+.support-file-status { margin: 0; color: var(--warning-soft); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.support-case-files { display: grid; gap: 6px; margin: 0 16px 16px; }
+.support-case-files a { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 9px; color: var(--text-primary); font-size: 14px; text-decoration: none; }
+.support-case-files a > span { min-width: 0; overflow-wrap: anywhere; }
+.support-case-files a:hover { background: var(--fill-hover); }
+.support-submission-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 18px; margin-bottom: 16px; border: 1px solid var(--border-color); border-radius: 13px; background: var(--settings-card-bg); }
+.support-submission-notice[hidden], #support-open-active-case[hidden] { display: none; }
+.support-submission-notice p { flex: 1 1 260px; margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-secondary); }
+.support-case-actions .lvs-btn:disabled { opacity: .45; cursor: default; }
+
+/* ── Собственные блокировки в Конфиденциальности ── */
+.lvs-blocked-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.lvs-blocked-head .lvs-section-subtitle { margin: 0; }
+#lvs-blocked-count { margin-left: 6px; color: var(--text-secondary); letter-spacing: normal; }
+.lvs-blocked-description, .lvs-blocked-status, .lvs-blocked-note { margin: 8px 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; }
+.lvs-blocked-status { padding: 16px 0; color: var(--text-muted); }
+.lvs-blocked-status:empty, .lvs-blocked-list:empty { display: none; }
+.lvs-blocked-note { margin-bottom: 0; font-size: 12px; color: var(--text-muted); }
+.lvs-blocked-list { display: flex; flex-direction: column; list-style: none; padding: 0; margin: 10px 0 0; }
+.lvs-blocked-user { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--border-color); }
+.lvs-blocked-user:last-child { border-bottom: none; }
+.lvs-blocked-avatar { position: relative; display: grid; place-items: center; flex: none; width: 42px; height: 42px; overflow: hidden; border: 1px solid var(--border-color); border-radius: 50%; background: var(--bg-tertiary); color: var(--text-primary); font-family: var(--font-sans); font-size: 17px; font-weight: 600; }
+.lvs-blocked-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lvs-blocked-identity { display: flex; flex: 1 1 120px; min-width: 0; flex-direction: column; gap: 4px; font-family: var(--font-sans); }
+.lvs-blocked-name { color: var(--text-primary); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.lvs-blocked-username { color: var(--text-muted); font-size: 13px; overflow-wrap: anywhere; }
+.lvs-blocked-card .lvs-btn { min-height: 38px; flex-shrink: 0; }
+.lvs-blocked-card .lvs-btn:disabled { opacity: .5; cursor: default; transform: none; }
+.lvs-blocked-card .lvs-btn:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
+@media (max-width: 480px) {
+  .lvs-blocked-user > .lvs-btn { width: 100%; }
 }
 
 .lvs-divider {
@@ -792,6 +917,12 @@
   flex-shrink: 0;
 }
 
+.lvs-save-status { min-width: 0; white-space: normal; line-height: 1.45 }
+.lvs-save-bar [aria-busy="true"] { cursor: progress; opacity: .7 }
+@media (max-width: 768px) {
+  .lvs-save-bar .lvs-save-status { display: block; font-size: 11px; flex: 1 }
+}
+
 @media (max-width: 768px) {
   .lvs-save-bar {
     position: fixed;
@@ -915,6 +1046,40 @@
 
 .lvs-theme-option.active .lvs-theme-name { color: var(--text-primary); }
 
+/* Сезонная тема: та же сетка, что у тем, чтобы карточки стояли под
+   «Тёмной» и «Светлой». Превью Halloween — тёмный макет с паутиной и тыквой. */
+.lvs-theme-mock.is-halloween .lvs-theme-mock-line:first-child {
+  background: rgba(242, 140, 40, 0.7);
+}
+
+.lvs-season-mock-web {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  background: rgba(245, 245, 245, 0.3);
+  -webkit-mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  mask: url("../assets/season/web.svg") no-repeat 0 0 / 100% 100%;
+  transform: scaleX(-1);
+}
+
+.lvs-season-mock-pumpkin {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 0 6px rgba(242, 140, 40, 0.35));
+}
+
+.lvs-season-note {
+  margin: 10px 2px 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 /* ─────────────────────────  NOTIFICATION PREVIEW  ───────────────────────── */
 
 .lvs-notif-preview {
@@ -952,6 +1117,9 @@
 
 .lvs-notif-title { font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
 .lvs-notif-body { font-family: var(--font-sans); font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+/* Всплывающий тост: текст до 4 строк, а не одна строка с «…». */
+.app-toast-body { display: block; max-height: 40vh; overflow-y: auto; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.app-toast-saved { font-family: var(--font-sans); font-size: 11px; color: var(--text-muted, var(--text-secondary)); opacity: 0.75; margin-top: 6px; }
 
 /* ─────────────────────────  AUDIO METER  ───────────────────────── */
 
@@ -1121,7 +1289,10 @@
 
   .lvs-row { flex-wrap: wrap; }
   .lvs-slider-wrap { min-width: 100%; }
+  #settings-voice .lvs-slider-wrap { width: 100%; }
   .lvs-select { min-width: 150px; }
+  .support-new-case { padding: 18px; }
+  .support-new-case input:not([type="hidden"]), .support-new-case textarea { font-size: 16px; }
 }
 
 @media (max-width: 420px) {
@@ -1355,4 +1526,113 @@
 
 @media (max-width: 768px) {
   .lvs-vitrine-preview { position: static; }
+}
+
+/* ── Поиск по настройкам (settings-ui.js → initSettingsSearch) ── */
+.settings-search { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; flex-shrink: 0; box-sizing: border-box; margin-top: 14px; height: 36px; padding: 0 12px; border-radius: 10px; background: var(--bg-tertiary, rgba(255,255,255,0.03)); border: 1px solid var(--border-color); color: var(--text-muted); cursor: text; transition: border-color 0.2s; }
+.settings-search:focus-within { border-color: var(--text-muted); }
+.settings-search svg { width: 15px; height: 15px; flex-shrink: 0; }
+.settings-search input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: none; color: var(--text-primary); font-family: var(--font-sans); font-size: 13.5px; }
+.settings-search input::-webkit-search-cancel-button { filter: grayscale(1); cursor: pointer; }
+.settings-search-results { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px 24px; }
+.settings-search-results[hidden] { display: none; }
+.settings-search-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; font-family: var(--font-sans); transition: background 0.15s; }
+.settings-search-item:hover, .settings-search-item:focus-visible { background: var(--bg-hover, rgba(255,255,255,0.05)); outline: none; }
+.settings-search-label { font-size: 13.5px; font-weight: 500; }
+.settings-search-where { font-size: 11.5px; color: var(--text-muted); }
+.settings-search-empty { padding: 18px 12px; font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); }
+.settings-nav[hidden] { display: none; }
+@keyframes lvs-search-hit { 0%, 60% { box-shadow: 0 0 0 2px var(--text-primary); } 100% { box-shadow: 0 0 0 2px transparent; } }
+.lvs-search-hit { border-radius: 10px; animation: lvs-search-hit 1.8s ease-out; }
+
+/* ── «О приложении» (новый вид: шапка, плитки-ссылки с иконками, команда) ── */
+.lvs-about-hero { align-items: center; text-align: center; padding: 40px 28px 32px; gap: 0; position: relative; overflow: hidden; }
+.lvs-about-hero::before { content: ""; position: absolute; left: 50%; top: -40%; width: 420px; height: 320px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(255,255,255,0.07), transparent); pointer-events: none; }
+.lvs-about-hero .lvs-about-logo, .lvs-about-hero .lvs-about-name, .lvs-about-hero .lvs-about-tagline, .lvs-about-hero .lvs-about-version { position: relative; }
+.lvs-about-hero .lvs-about-tagline { margin: 10px 0 16px; }
+.lvs-about-subtitle { margin: 26px 0 10px; }
+.lvs-about-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .lvs-about-tiles { grid-template-columns: 1fr; } }
+.lvs-about-tile { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 14px; background: var(--bg-secondary, rgba(255,255,255,0.02)); border: 1px solid var(--border-color); color: var(--text-primary); text-decoration: none; text-align: left; cursor: pointer; font: inherit; transition: background 0.18s, border-color 0.18s, transform 0.18s; box-sizing: border-box; }
+.lvs-about-tile:hover, .lvs-about-tile:focus-visible { background: var(--bg-hover, rgba(255,255,255,0.05)); border-color: var(--text-muted); transform: translateY(-1px); outline: none; }
+.lvs-about-tile-icon { width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary, rgba(255,255,255,0.04)); border: 1px solid var(--border-color); color: var(--text-primary); }
+.lvs-about-tile-icon svg { width: 18px; height: 18px; }
+.lvs-about-tile-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lvs-about-tile-title { font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.lvs-about-tile-sub { font-family: var(--font-sans); font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lvs-about-go { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-muted); transition: color 0.18s, transform 0.18s; }
+.lvs-about-tile:hover .lvs-about-go { color: var(--text-primary); transform: translateX(2px); }
+.lvs-about-team { padding: 14px 16px; }
+.lvs-about-member { display: flex; align-items: center; gap: 14px; }
+.lvs-about-member-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--text-primary); color: var(--bg-primary, #000); font-family: var(--font-serif); font-style: italic; font-size: 16px; }
+.lvs-about-hero ~ .lvs-about-made { display: flex; justify-content: center; margin: 26px 0 8px; }
+
+/* ── Карточка «Публичная страница» в профиле ── */
+.lvs-pp { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; margin-top: 18px; } /* не прилипать к превью профиля сверху */
+.lvs-pp-head { display: flex; align-items: center; gap: 14px; }
+.lvs-pp-icon { width: 42px; height: 42px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary, rgba(255,255,255,0.04)); border: 1px solid var(--border-color); color: var(--text-primary); }
+.lvs-pp-icon svg { width: 20px; height: 20px; }
+.lvs-pp.is-live .lvs-pp-icon { box-shadow: 0 0 0 3px rgba(255,255,255,0.04), 0 0 18px rgba(255,255,255,0.08); }
+.lvs-pp-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lvs-pp-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lvs-pp-desc { font-family: var(--font-sans); font-size: 12.5px; color: var(--text-muted); line-height: 1.4; }
+/* Обычная тёмная кнопка, как «Проверить обновления»: белая слишком резала глаз. */
+.lvs-pp-main { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.lvs-pp-main svg { width: 15px; height: 15px; }
+.lvs-pp-link { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 6px 0 14px; border-radius: 10px; background: var(--bg-secondary, rgba(255,255,255,0.02)); border: 1px solid var(--border-color); }
+.lvs-pp-link-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--text-muted); }
+.lvs-pp-url { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lvs-pp-icon-btn { width: 32px; height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.lvs-pp-icon-btn:hover, .lvs-pp-icon-btn:focus-visible { background: var(--bg-hover, rgba(255,255,255,0.06)); color: var(--text-primary); outline: none; }
+.lvs-pp-icon-btn[hidden] { display: none; }
+.lvs-pp-icon-btn svg { width: 15px; height: 15px; }
+.lvs-pp-note { margin: 0; }
+@media (max-width: 600px) { .lvs-pp-head { flex-wrap: wrap; } .lvs-pp-main { width: 100%; justify-content: center; } }
+
+/* ── Выход из аккаунта внизу боковой панели настроек ── */
+/* Прокручивается только список разделов (и результаты поиска), а выход
+   стоит неподвижно у нижнего края. sticky не годился: у панели нижний
+   padding, и прокрученный список просвечивал под кнопкой. */
+#settings-shell .settings-sidebar {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+#settings-shell .settings-sidebar .settings-nav,
+#settings-shell .settings-sidebar .settings-search-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#settings-shell .settings-sidebar .settings-nav[hidden],
+#settings-shell .settings-sidebar .settings-search-results[hidden] { display: none; }
+.settings-sidebar-footer {
+  flex: none;
+  margin: 0 -16px;
+  padding: 10px 16px 14px;
+  background: inherit;
+  border-top: 1px solid var(--border-color);
+}
+.settings-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-logout-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.settings-logout-btn:hover,
+.settings-logout-btn:focus-visible {
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  outline: none;
 }

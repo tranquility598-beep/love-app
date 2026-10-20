@@ -9,7 +9,16 @@ const featureFlags = Object.freeze({
   casesV1: envFlag('FEATURE_CASES_V1'),
   communityV1: envFlag('FEATURE_COMMUNITY_V1'),
   analyticsV1: envFlag('FEATURE_ANALYTICS_V1'),
-  staffCommsV1: envFlag('FEATURE_STAFF_COMMS_V1')
+  staffCommsV1: envFlag('FEATURE_STAFF_COMMS_V1'),
+  // Публичные страницы профиля (me.loveapp.chat). В продакшене выключено:
+  // фича приезжает в релизе раньше, чем поддомен и сертификат, и раньше, чем
+  // мы готовы показывать её людям. Включение — одна строка в production.env
+  // плюс pm2 reload, без переезда кода.
+  //
+  // В разработке включено по умолчанию — иначе страницу нельзя было бы открыть
+  // на npm start, не заводя себе .env. Значение переменной сильнее дефолта в
+  // обе стороны: FEATURE_PROFILE_PAGES_V1=0 глушит её и локально.
+  profilePagesV1: envFlag('FEATURE_PROFILE_PAGES_V1', process.env.NODE_ENV !== 'production')
 });
 
 function requireFeature(name) {

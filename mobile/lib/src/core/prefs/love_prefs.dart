@@ -37,6 +37,9 @@ class LovePrefs {
   /// по platformBrightness, чтобы смена темы ОС подхватывалась живьём.
   final ValueNotifier<String> theme = ValueNotifier<String>('dark');
 
+  /// Сезонное оформление: none | halloween (matches web `app-season`).
+  final ValueNotifier<String> season = ValueNotifier<String>('none');
+
   Future<void> init() async {
     if (_prefs != null) return;
     _prefs = await SharedPreferences.getInstance();
@@ -46,6 +49,7 @@ class LovePrefs {
     final savedTheme = getString(K.theme, 'dark');
     theme.value =
         savedTheme == 'light' || savedTheme == 'system' ? savedTheme : 'dark';
+    season.value = getString(K.season, 'none') == 'halloween' ? 'halloween' : 'none';
   }
 
   // ── Typed accessors ──────────────────────────────────────────────────
@@ -73,6 +77,7 @@ class LovePrefs {
   Future<void> setString(String key, String value) async {
     await _p.setString(key, value);
     if (key == K.theme) theme.value = value;
+    if (key == K.season) season.value = value == 'halloween' ? 'halloween' : 'none';
   }
 
   // ── Dev Log votes (matches localStorage["love_devlog_votes"]) ────────────
@@ -115,6 +120,7 @@ class LovePrefs {
 class K {
   // Appearance
   static const theme = 'app-theme'; // dark | light | system
+  static const season = 'app-season'; // none | halloween
   static const uiScale = 'ui-scale'; // 75..125
   static const compactMode = 'compact-mode';
   static const animations = 'animations';
@@ -138,6 +144,9 @@ class K {
   static const notifMentions = 'notif-mentions';
   static const notifAppUpdates = 'notif-app-updates';
   static const notifHub = 'notif-hub';
+
+  /// Звуки интерфейса: сообщения, войс, звонки (набор Soft v3, как на ПК).
+  static const uiSounds = 'love_ui_sounds';
 
   // Voice
   static const voiceInputDevice = 'voice-input-device';

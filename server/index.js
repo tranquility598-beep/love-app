@@ -89,7 +89,7 @@ app.set('io', io);
 const PORT = process.env.PORT || 5555;
 
 // Подключение к MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/love-app';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/love-app';
 
 mongoose.connect(MONGODB_URI)
   .then(async () => {
@@ -169,7 +169,7 @@ app.use(cors({
     return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Request-Id'],
   credentials: true
 }));
 
@@ -201,6 +201,28 @@ const audioDir = path.join(uploadsDir, 'audio');
     fs.mkdirSync(dir, { recursive: true });
   }
 });
+
+// Публичные страницы профиля (me.loveapp.chat) — РАНЬШЕ любой раздачи файлов.
+//
+// Порядок здесь не косметика. Ни express.static('/uploads'), ни
+// express.static(client) ниже не привязаны к домену: без этих двух строк любой
+// поддомен, направленный на этот сервер, отдавал бы веб-клиент Love — с его
+// localStorage и токеном аккаунта — на том же origin, где рендерится
+// оформление, придуманное пользователями.
+//
+// Сторож хоста — белый список путей публичного поддомена; /uploads в него не
+// входит намеренно, медиа страниц ссылается на api.loveapp.chat (см.
+// utils/profilePageUrls.mediaOrigin). Роутер ниже дополнительно замыкает
+// публичный хост на себе, так что до статики и SPA-фолбэка запросы с
+// me.loveapp.chat не доходят в принципе.
+app.use(require('./middleware/profileHost'));
+
+// Фича-флаг НЕ здесь: роутер подключён в корень, и requireFeature на этом
+// уровне отдавал бы 404 на весь сервер. Проверка стоит внутри роутера, после
+// определения хоста. На остальных хостах в production роутер не делает ничего,
+// а в разработке отзывается только на /u/..., /build и /og/... — чтобы
+// страницу можно было открыть на npm start.
+app.use(require('./routes/profilePublic'));
 
 // Статические файлы (загрузки).
 //
@@ -307,6 +329,11 @@ app.use('/api/support', supportRoutes);
 app.use('/api/release', releaseRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/webrtc', webrtcRoutes);
+// API страниц профиля. Доступно с ДВУХ хостов, и это не упущение: приложение
+// просит одноразовый код на api.loveapp.chat (там лежит полный токен), а сам
+// редактор на me.loveapp.chat ходит сюда уже с узким токеном — для него это
+// same-origin, поэтому CORS не нужен вообще.
+app.use('/api/profile-page', requireFeature('profilePagesV1'), require('./routes/profilePages'));
 
 // Базовый роут для проверки работы сервера.
 // Отражает реальную деградацию: без подключения к MongoDB API нефункционален,

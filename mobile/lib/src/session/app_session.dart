@@ -13,14 +13,17 @@ class AppSession extends ChangeNotifier {
   bool isBooting = true;
   bool isBusy = false;
   String? error;
+  int _sessionEpoch = 0;
 
   bool get isAuthenticated => user != null;
   bool get isRestricted => user != null && restriction != null;
 
   Future<void> restore() async {
+    final epoch = _sessionEpoch;
     isBooting = true;
     notifyListeners();
     final restored = await authRepository.restoreSession();
+    if (epoch != _sessionEpoch) return;
     user ??= restored?.user;
     restriction ??= restored?.restriction;
     isBooting = false;
@@ -103,13 +106,19 @@ class AppSession extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    if (isBusy) return;
+    ++_sessionEpoch;
     isBusy = true;
     notifyListeners();
-    await authRepository.logout();
-    user = null;
-    restriction = null;
-    isBusy = false;
-    notifyListeners();
+    try {
+      await authRepository.logout();
+      user = null;
+      restriction = null;
+      error = null;
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<AuthResult> _runAuth(Future<AuthResult> Function() action) async {

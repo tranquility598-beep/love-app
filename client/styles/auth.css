@@ -931,3 +931,14 @@
 
 @media (max-width: 380px) {
 }
+
+.auth-email-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .025);
+}
+.auth-email-editor .auth-input { box-sizing: border-box; width: 100%; }

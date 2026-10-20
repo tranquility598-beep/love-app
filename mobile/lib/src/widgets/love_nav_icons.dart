@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// feather/lucide style, stroke-width 1.8, round caps). Rendered via
 /// [CustomPaint] so they stay crisp and cheap and can animate their colour /
 /// glow without rasterising an asset per frame.
-enum LoveNavGlyph { heart, bubble, layers, users, bell, menu }
+enum LoveNavGlyph { heart, bubble, layers, orbit, hub, users, bell, menu }
 
 class LoveNavIcon extends StatelessWidget {
   const LoveNavIcon({
@@ -106,6 +106,22 @@ class _NavIconPainter extends CustomPainter {
         );
         canvas.drawPath(_path('M2 17l10 5 10-5'), stroke);
         canvas.drawPath(_path('M2 12l10 5 10-5'), stroke);
+        break;
+      // «Сферы»: орбита (lucide orbit) — как в боковом меню ПК.
+      case LoveNavGlyph.orbit:
+        canvas.drawCircle(const Offset(12, 12), 3, stroke);
+        canvas.drawCircle(const Offset(19, 5), 2, stroke);
+        canvas.drawCircle(const Offset(5, 19), 2, stroke);
+        canvas.drawPath(_path('M10.4 21.9a10 10 0 0 0 9.941-15.416'), stroke);
+        canvas.drawPath(_path('M13.5 2.1a10 10 0 0 0-9.841 15.416'), stroke);
+        break;
+      // Love Hub: сердце в облачке (lucide message-circle-heart).
+      case LoveNavGlyph.hub:
+        canvas.drawPath(_path('M7.9 20A9 9 0 1 0 4 16.1L2 22Z'), stroke);
+        canvas.drawPath(
+          _path('M15.8 9.2a2.5 2.5 0 0 0-3.5 0l-.3.4-.35-.3a2.42 2.42 0 1 0-3.2 3.6l3.6 3.5 3.6-3.5c1.2-1.2 1.1-2.7.2-3.7'),
+          stroke,
+        );
         break;
       case LoveNavGlyph.users:
         canvas.drawPath(

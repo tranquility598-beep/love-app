@@ -31,6 +31,18 @@ class ApiClient {
   final AuthTokenStore tokenStore;
   final Duration timeout;
 
+  /// Revoke only the captured old session after its local token was removed.
+  Future<void> revokeSession(String token) async {
+    try {
+      await _http.post(AppConfig.apiUri('/auth/logout'), headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Offline logout still clears the local session immediately.
+    }
+  }
+
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String?>? query,

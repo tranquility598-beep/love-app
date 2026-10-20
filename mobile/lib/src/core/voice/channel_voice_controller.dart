@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'peer_negotiation.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../features/chat/chat_models.dart';
+import '../audio/love_sounds.dart';
 import '../calls/call_center.dart';
 import '../network/api_client.dart';
 import '../prefs/love_prefs.dart';
@@ -52,7 +55,22 @@ class ChannelVoiceController extends ChangeNotifier {
 
   final _peerConnections = <String, RTCPeerConnection>{};
   final _remoteRenderers = <String, RTCVideoRenderer>{};
-  final _iceCandidateBuffer = <String, List<RTCIceCandidate>>{};
+  int _generation = 0;
+  final _peerGenerations = <String, int>{};
+  bool mediaBusy = false;
+  Future<void>? _cleanupTask;
+  final remoteMediaModes = <String, String>{};
+  final _remoteStreams = <String, MediaStream>{};
+  final _remoteTasks = <String, Future<void>>{};
+  final _reconnectTimers = <String, Timer>{};
+  late final _negotiation = PeerNegotiation(
+    channelId: () => channelId,
+    localSocketId: () => (_socket?.socketId ?? ''),
+    createPeer: _createPeerConnection,
+    peer: (id) => _peerConnections[id],
+    send: (event, data) => _socket?.emit(event, data),
+  );
+  bool _current(int generation) => generation == _generation && isActive;
   Map<String, dynamic> _iceConfiguration = _stunIceConfiguration;
   MediaStream? _localStream;
   MediaStream? _videoStream;
@@ -65,6 +83,8 @@ class ChannelVoiceController extends ChangeNotifier {
 
   /// Подключить контроллер к сокету. Вызывается один раз из MainShell.
   void init(LoveSocket socket) {
+    final previous = _socket;
+    if (previous != null && !identical(previous, socket)) detach(previous);
     _socket = socket;
     if (_attached) return;
     _attached = true;
@@ -73,9 +93,29 @@ class ChannelVoiceController extends ChangeNotifier {
     socket.on('voice:user_left', _handleUserLeft);
     socket.on('voice:user_muted', _handleUserMuted);
     socket.on('voice:left', _handleVoiceLeft);
+    socket.on('voice:media_state', _handleMediaState);
     socket.on('webrtc:offer', _handleOffer);
     socket.on('webrtc:answer', _handleAnswer);
     socket.on('webrtc:ice_candidate', _handleIceCandidate);
+  }
+
+  void detach(LoveSocket socket) {
+    if (!identical(_socket, socket)) return;
+    if (channelId.isNotEmpty) {
+      socket.emit('voice:leave', {'channelId': channelId});
+    }
+    unawaited(_cleanupMedia(notify: false));
+    socket.off('voice:existing_members', _handleExistingMembers);
+    socket.off('voice:members_update', _handleMembersUpdate);
+    socket.off('voice:user_left', _handleUserLeft);
+    socket.off('voice:user_muted', _handleUserMuted);
+    socket.off('voice:left', _handleVoiceLeft);
+    socket.off('voice:media_state', _handleMediaState);
+    socket.off('webrtc:offer', _handleOffer);
+    socket.off('webrtc:answer', _handleAnswer);
+    socket.off('webrtc:ice_candidate', _handleIceCandidate);
+    _socket = null;
+    _attached = false;
   }
 
   /// Войти в голосовой канал. Если уже в другом канале — сначала выходим.
@@ -87,35 +127,43 @@ class ChannelVoiceController extends ChangeNotifier {
     // Звонок в ЛС уже держит микрофон и свою WebRTC-комнату. Заход в войс
     // поверх звонка отбирал поток, и звонок оставался «висеть» без звука.
     if (CallCenter.instance.dmBusy) {
-      errorMessage = 'Сначала завершите звонок — во время звонка нельзя зайти в войс';
+      errorMessage =
+          'Сначала завершите звонок — во время звонка нельзя зайти в войс';
       notifyListeners();
       return false;
     }
 
     if (isActive) await leave();
+    await _cleanupTask;
 
     errorMessage = null;
-    if (!socket.isConnected) {
-      errorMessage = 'Сокет еще не подключен';
-      notifyListeners();
-      return false;
-    }
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      errorMessage = 'Нет доступа к микрофону';
-      notifyListeners();
-      return false;
-    }
-
+    final generation = ++_generation;
     phase = ChannelVoicePhase.connecting;
     channelId = id;
     channelTitle = title;
+    _iceConfiguration = _stunIceConfiguration;
     notifyListeners();
+    final online = socket.isConnected ||
+        await socket.connectAndWait(const Duration(seconds: 8));
+    if (!_current(generation)) return false;
+    if (!online) {
+      await _abortJoin(
+          'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.');
+      return false;
+    }
+    final status = await Permission.microphone.request();
+    if (!_current(generation)) return false;
+    if (!status.isGranted) {
+      await _abortJoin('Нет доступа к микрофону');
+      return false;
+    }
 
     try {
-      await _refreshIceConfiguration();
+      unawaited(_refreshIceConfiguration());
       await _ensureLocalStream();
+      if (!_current(generation)) return false;
     } catch (_) {
+      if (!_current(generation)) return false;
       await _abortJoin('Не удалось включить микрофон');
       return false;
     }
@@ -127,25 +175,36 @@ class ChannelVoiceController extends ChangeNotifier {
     }
 
     try {
+      if (!_current(generation)) return false;
       final response = await socket.emitWithAck(
         'voice:join',
         {'channelId': id},
         timeout: const Duration(seconds: 15),
       );
+      if (!_current(generation)) {
+        if (channelId != id) socket.emit('voice:leave', {'channelId': id});
+        return false;
+      }
       if (response['status'] != 'ok') {
-        await _abortJoin(asText(response['message'], 'Не удалось войти в войс'));
+        if (!_current(generation)) return false;
+        await _abortJoin(
+            asText(response['message'], 'Не удалось войти в войс'));
         return false;
       }
     } on TimeoutException {
-      await _abortJoin('Сервер долго не отвечает. Проверь подключение и попробуй снова.');
+      if (!_current(generation)) return false;
+      await _abortJoin(
+          'Сервер долго не отвечает. Проверь подключение и попробуй снова.');
       return false;
     } catch (_) {
+      if (!_current(generation)) return false;
       await _abortJoin('Не удалось подключиться к голосовому каналу');
       return false;
     }
 
     phase = ChannelVoicePhase.connected;
     connectedAt = DateTime.now();
+    unawaited(LoveSounds.instance.play('user_join'));
     if (muted) {
       socket.emit('voice:toggle_mute', {'channelId': id, 'muted': true});
     }
@@ -157,14 +216,19 @@ class ChannelVoiceController extends ChangeNotifier {
   Future<void> leave() async {
     if (channelId.isNotEmpty) {
       _socket?.emit('voice:leave', {'channelId': channelId});
+      if (phase == ChannelVoicePhase.connected) {
+        unawaited(LoveSounds.instance.play('user_leave'));
+      }
     }
-    await _cleanupMedia();
+    final closing = _cleanupMedia();
     _resetToIdle();
+    await closing;
   }
 
   /// Переключить микрофон.
   void toggleMute() {
     muted = !muted;
+    unawaited(LoveSounds.instance.play(muted ? 'voice_mute' : 'voice_unmute'));
     final stream = _localStream;
     if (stream != null) {
       for (final track in stream.getAudioTracks()) {
@@ -186,32 +250,41 @@ class ChannelVoiceController extends ChangeNotifier {
   // ── Камера и демонстрация экрана ──
 
   Future<void> toggleCamera() async {
-    if (cameraOn) {
-      await stopVideo();
-      return;
-    }
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      errorMessage = 'Нет доступа к камере';
-      notifyListeners();
-      return;
-    }
-    MediaStream stream;
+    if (mediaBusy || !isActive) return;
+    final generation = _generation;
+    mediaBusy = true;
+    notifyListeners();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      if (cameraOn) {
+        await stopVideo();
+        return;
+      }
+      final status = await Permission.camera.request();
+      if (!_current(generation)) return;
+      if (!status.isGranted) throw StateError('Нет доступа к камере');
+      final stream = await navigator.mediaDevices.getUserMedia({
         'audio': false,
         'video': {
           'facingMode': frontCamera ? 'user' : 'environment',
           'width': {'ideal': 1280},
-          'height': {'ideal': 720},
-        },
+          'height': {'ideal': 720}
+        }
       });
+      if (!_current(generation)) {
+        await _releaseStream(stream);
+        return;
+      }
+      await _startVideo(stream, screen: false);
     } catch (_) {
-      errorMessage = 'Не удалось включить камеру';
-      notifyListeners();
-      return;
+      if (_current(generation)) {
+        errorMessage = 'Не удалось включить камеру. Проверьте разрешение.';
+      }
+    } finally {
+      if (_current(generation)) {
+        mediaBusy = false;
+        notifyListeners();
+      }
     }
-    await _startVideo(stream, screen: false);
   }
 
   Future<void> switchCamera() async {
@@ -228,57 +301,70 @@ class ChannelVoiceController extends ChangeNotifier {
   }
 
   Future<void> toggleScreenShare() async {
-    if (screenSharing) {
-      await stopVideo();
-      return;
-    }
-    MediaStream stream;
+    if (mediaBusy || !isActive) return;
+    final generation = _generation;
+    mediaBusy = true;
+    notifyListeners();
     try {
-      stream = await ScreenShareManager.startScreenShare();
-    } on ScreenShareException catch (e) {
-      errorMessage = e.message;
-      notifyListeners();
-      return;
+      if (screenSharing) {
+        await stopVideo();
+        return;
+      }
+      final stream = await ScreenShareManager.startScreenShare();
+      if (!_current(generation)) {
+        await _releaseStream(stream);
+        await ScreenShareManager.stopScreenShare();
+        return;
+      }
+      if (stream.getVideoTracks().isEmpty) {
+        await _releaseStream(stream);
+        await ScreenShareManager.stopScreenShare();
+        throw StateError('empty-capture');
+      }
+      await _startVideo(stream, screen: true);
+    } on ScreenShareException catch (error) {
+      if (_current(generation)) errorMessage = error.message;
     } catch (_) {
-      errorMessage = 'Демонстрация экрана отменена или недоступна';
-      notifyListeners();
-      return;
+      if (_current(generation)) {
+        errorMessage = 'Демонстрация экрана отменена или недоступна';
+      }
+    } finally {
+      if (_current(generation)) {
+        mediaBusy = false;
+        notifyListeners();
+      }
     }
-    if (stream.getVideoTracks().isEmpty) {
-      try {
-        await stream.dispose();
-      } catch (_) {}
-      await ScreenShareManager.stopScreenShare();
-      errorMessage = 'Android не передал видеопоток демонстрации';
-      notifyListeners();
-      return;
-    }
-    await _startVideo(stream, screen: true);
   }
 
   Future<void> _startVideo(MediaStream stream, {required bool screen}) async {
-    if (_videoStream != null) {
-      await stopVideo(silent: true);
+    final generation = _generation;
+    if (_videoStream != null) await stopVideo(silent: true);
+    if (!_current(generation)) {
+      await _releaseStream(stream);
+      return;
     }
     _videoStream = stream;
-    final tracks = stream.getVideoTracks();
-    if (tracks.isEmpty) return;
-    final track = tracks.first;
-    // Пользователь остановил захват из системного UI Android.
-    track.onEnded = () => unawaited(stopVideo());
+    final track = stream.getVideoTracks().first;
+    track.onEnded = () {
+      if (identical(_videoStream, stream)) unawaited(stopVideo());
+    };
     if (localRenderer == null) {
       final renderer = RTCVideoRenderer();
       await renderer.initialize();
+      if (!_current(generation)) {
+        await renderer.dispose();
+        return;
+      }
       localRenderer = renderer;
     }
     localRenderer!.srcObject = stream;
-    for (final pc in _peerConnections.values) {
+    for (final pc in _peerConnections.values.toList()) {
+      if (!_current(generation)) return;
       try {
         await pc.addTrack(track, stream);
-      } catch (_) {
-        // Пир в процессе переподключения.
-      }
+      } catch (_) {}
     }
+    if (!_current(generation)) return;
     cameraOn = !screen;
     screenSharing = screen;
     _emitMediaState(screen ? 'screen' : 'camera');
@@ -286,63 +372,35 @@ class ChannelVoiceController extends ChangeNotifier {
     await _renegotiateAll();
   }
 
-  /// Выключить камеру/демонстрацию (войс продолжается).
   Future<void> stopVideo({bool silent = false}) async {
-    final hadVideo = _videoStream != null;
-    final wasScreen = screenSharing;
-    if (hadVideo) {
-      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
-    }
-    for (final pc in _peerConnections.values) {
-      try {
-        final senders = await pc.getSenders();
-        for (final sender in senders) {
-          if (sender.track?.kind == 'video') {
-            await pc.removeTrack(sender);
-          }
-        }
-      } catch (_) {
-        // Соединение уже закрывается.
-      }
-    }
-    final stream = _videoStream;
+    final generation = _generation,
+        stream = _videoStream,
+        wasScreen = screenSharing;
     _videoStream = null;
-    if (stream != null) {
-      for (final track in stream.getTracks()) {
-        try {
-          await track.stop();
-        } catch (_) {}
-      }
-      await stream.dispose();
-    }
     localRenderer?.srcObject = null;
     cameraOn = false;
     screenSharing = false;
+    if (stream != null) {
+      _emitMediaState('none', previousMode: wasScreen ? 'screen' : 'camera');
+    }
+    notifyListeners();
+    final ids = stream?.getVideoTracks().map((t) => t.id).toSet() ?? <String>{};
+    for (final pc in _peerConnections.values.toList()) {
+      try {
+        for (final sender in await pc.getSenders()) {
+          if (ids.contains(sender.track?.id)) await pc.removeTrack(sender);
+        }
+      } catch (_) {}
+    }
+    await _releaseStream(stream);
     if (wasScreen) await ScreenShareManager.stopScreenShare();
-    if (!silent) {
-      notifyListeners();
-      if (hadVideo) await _renegotiateAll();
+    if (!silent && _current(generation) && stream != null) {
+      await _renegotiateAll();
     }
   }
 
   Future<void> _renegotiateAll() async {
-    if (channelId.isEmpty) return;
-    for (final entry in _peerConnections.entries.toList()) {
-      try {
-        final offer = await entry.value.createOffer({
-          'offerToReceiveAudio': true,
-          'offerToReceiveVideo': true,
-        });
-        await entry.value.setLocalDescription(offer);
-        _socket?.emit('webrtc:offer', {
-          'targetSocketId': entry.key,
-          'offer': offer.toMap(),
-          'channelId': channelId,
-        });
-      } catch (_) {
-        // Пир переподключится штатным путём.
-      }
-    }
+    await Future.wait(_peerConnections.keys.toList().map(_negotiation.offer));
   }
 
   void _emitMediaState(String mode, {String? previousMode}) {
@@ -410,7 +468,9 @@ class ChannelVoiceController extends ChangeNotifier {
     if (data is! Map || channelId.isEmpty) return;
     if (asId(data['channelId']) != channelId) return;
     final socketId = asText(data['socketId']);
+    members.removeWhere((member) => asText(member['socketId']) == socketId);
     if (socketId.isNotEmpty) unawaited(_removeConnection(socketId));
+    notifyListeners();
   }
 
   void _handleVoiceLeft(dynamic data) {
@@ -419,6 +479,20 @@ class ChannelVoiceController extends ChangeNotifier {
     // Сервер завершил наше участие (например, вход с другого устройства).
     unawaited(_cleanupMedia());
     _resetToIdle();
+  }
+
+  void _handleMediaState(dynamic data) {
+    if (channelId.isEmpty ||
+        data is! Map ||
+        asId(data['channelId']) != channelId) {
+      return;
+    }
+    final id = asText(data['socketId']);
+    if (id.isEmpty || id == _socket?.socketId) return;
+    final mode = asText(data['mode']);
+    remoteMediaModes[id] = mode;
+    remoteVideo[id] = mode == 'camera' || mode == 'screen';
+    notifyListeners();
   }
 
   void _handleUserMuted(dynamic data) {
@@ -437,13 +511,39 @@ class ChannelVoiceController extends ChangeNotifier {
 
   void _applyMembers(Object? raw) {
     if (raw is! List) return;
+    final before = _memberIds();
     members
       ..clear()
       ..addAll(raw.whereType<Map>().map(
             (item) => item.cast<String, dynamic>(),
           ));
+    for (final member in members) {
+      final id = asText(member['socketId']);
+      if (id.isNotEmpty &&
+          id != _socket?.socketId &&
+          member.containsKey('mediaMode')) {
+        final mode = asText(member['mediaMode']);
+        remoteMediaModes[id] = mode;
+        remoteVideo[id] = mode == 'camera' || mode == 'screen';
+      }
+    }
+    // Кто-то другой зашёл или вышел. Свой вход уже прозвучал в join(), а
+    // первый список после входа — это уже сидящие в канале, не новые люди.
+    final after = _memberIds();
+    if (phase == ChannelVoicePhase.connected && before.isNotEmpty) {
+      if (after.difference(before).isNotEmpty) {
+        unawaited(LoveSounds.instance.play('user_join'));
+      } else if (before.difference(after).isNotEmpty) {
+        unawaited(LoveSounds.instance.play('user_leave'));
+      }
+    }
     notifyListeners();
   }
+
+  Set<String> _memberIds() => members
+      .map((member) => asId(member['userId'] ?? member['_id'] ?? member['id']))
+      .where((id) => id.isNotEmpty)
+      .toSet();
 
   // ── WebRTC mesh (тот же подход, что в DmCallController) ─────
 
@@ -452,36 +552,11 @@ class ChannelVoiceController extends ChangeNotifier {
   }
 
   Future<void> _handleOfferAsync(dynamic data) async {
-    if (data is! Map || channelId.isEmpty) return;
-    if (asId(data['channelId']) != channelId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    if (fromSocketId.isEmpty) return;
-    try {
-      var pc = _peerConnections[fromSocketId];
-      if (pc != null &&
-          pc.signalingState ==
-              RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-        // Glare: обе стороны отправили offer одновременно —
-        // пересоздаём соединение и принимаем чужой.
-        await _removeConnection(fromSocketId);
-        pc = null;
-      }
-      // Существующее stable-соединение НЕ пересоздаём:
-      // renegotiation (камера/демонстрация) приходит обычным offer.
-      pc ??= await _createPeerConnection(fromSocketId);
-      await pc.setRemoteDescription(_sessionDescription(raw['offer']));
-      await _flushIceCandidates(fromSocketId);
-      final answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      _socket?.emit('webrtc:answer', {
-        'targetSocketId': fromSocketId,
-        'answer': answer.toMap(),
-        'channelId': channelId,
-      });
-    } catch (_) {
-      // Не роняем весь войс из-за одного неудачного пира.
-    }
+    final room = channelId;
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == (_socket?.socketId ?? '')) return;
+    await _negotiation.receiveOffer(id, _sessionDescription(data['offer']));
   }
 
   void _handleAnswer(dynamic data) {
@@ -489,22 +564,11 @@ class ChannelVoiceController extends ChangeNotifier {
   }
 
   Future<void> _handleAnswerAsync(dynamic data) async {
-    if (data is! Map || channelId.isEmpty) return;
-    if (asId(data['channelId']) != channelId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    final pc = _peerConnections[fromSocketId];
-    if (pc == null) return;
-    if (pc.signalingState !=
-        RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-      return;
-    }
-    try {
-      await pc.setRemoteDescription(_sessionDescription(raw['answer']));
-      await _flushIceCandidates(fromSocketId);
-    } catch (_) {
-      // Ответ устарел (renegotiation) — пир переподключится сам.
-    }
+    final room = channelId;
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == (_socket?.socketId ?? '')) return;
+    await _negotiation.receiveAnswer(id, _sessionDescription(data['answer']));
   }
 
   void _handleIceCandidate(dynamic data) {
@@ -512,28 +576,17 @@ class ChannelVoiceController extends ChangeNotifier {
   }
 
   Future<void> _handleIceCandidateAsync(dynamic data) async {
-    if (data is! Map || channelId.isEmpty) return;
-    if (asId(data['channelId']) != channelId) return;
-    final raw = data.cast<String, dynamic>();
-    final fromSocketId = asText(raw['fromSocketId']);
-    if (fromSocketId.isEmpty) return;
-    final candidate = _iceCandidate(raw['candidate']);
-    final pc = _peerConnections[fromSocketId];
-    final remoteDescription = await pc?.getRemoteDescription();
-    if (pc == null || remoteDescription?.type == null) {
-      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
-      return;
-    }
-    try {
-      await pc.addCandidate(candidate);
-    } catch (_) {
-      _iceCandidateBuffer.putIfAbsent(fromSocketId, () => []).add(candidate);
-    }
+    final room = channelId;
+    if (room.isEmpty || data is! Map || asId(data['channelId']) != room) return;
+    final id = asText(data['fromSocketId']);
+    if (id.isEmpty || id == (_socket?.socketId ?? '')) return;
+    await _negotiation.candidate(id, _iceCandidate(data['candidate']));
   }
 
   Future<void> _ensureLocalStream() async {
     if (_localStream != null) return;
-    _localStream = await navigator.mediaDevices.getUserMedia({
+    final generation = _generation;
+    final stream = await navigator.mediaDevices.getUserMedia({
       'audio': {
         'echoCancellation':
             LovePrefs.instance.getBool(K.echoCancellation, true),
@@ -544,6 +597,11 @@ class ChannelVoiceController extends ChangeNotifier {
       },
       'video': false,
     });
+    if (!_current(generation)) {
+      await _releaseStream(stream);
+      throw StateError('stale-call');
+    }
+    _localStream = stream;
     if (muted) {
       for (final track in _localStream!.getAudioTracks()) {
         track.enabled = false;
@@ -552,129 +610,185 @@ class ChannelVoiceController extends ChangeNotifier {
   }
 
   Future<void> _refreshIceConfiguration() async {
-    _iceConfiguration = _stunIceConfiguration;
+    final generation = _generation;
     try {
       final response = await ApiClient().get('/webrtc/ice-config');
       final servers = response['iceServers'];
-      if (servers is List && servers.isNotEmpty) {
-        _iceConfiguration = {'iceServers': servers};
+      if (!_current(generation) || servers is! List || servers.isEmpty) return;
+      _iceConfiguration = {'iceServers': servers};
+      for (final entry in _peerConnections.entries.toList()) {
+        if (!_current(generation)) return;
+        try {
+          await entry.value.setConfiguration(_iceConfiguration);
+        } catch (_) {}
+        if (_current(generation)) {
+          unawaited(_negotiation.offer(entry.key, iceRestart: true));
+        }
       }
     } catch (_) {}
   }
 
-  Future<void> _initiateConnection(String socketId) async {
-    try {
-      final pc = await _createPeerConnection(socketId);
-      final offer = await pc.createOffer({
-        'offerToReceiveAudio': true,
-        'offerToReceiveVideo': true,
-      });
-      await pc.setLocalDescription(offer);
-      _socket?.emit('webrtc:offer', {
-        'targetSocketId': socketId,
-        'offer': offer.toMap(),
-        'channelId': channelId,
-      });
-    } catch (_) {
-      // Пир недоступен — остальные соединения продолжают работать.
-    }
-  }
+  Future<void> _initiateConnection(String socketId) =>
+      _negotiation.offer(socketId);
 
   Future<RTCPeerConnection> _createPeerConnection(String socketId) async {
     final existing = _peerConnections[socketId];
-    if (existing != null &&
-        existing.signalingState != RTCSignalingState.RTCSignalingStateClosed) {
-      return existing;
-    }
-
+    if (existing != null) return existing;
+    final peerGeneration = _peerGenerations[socketId] ?? 0;
+    final generation = _generation, room = channelId;
     final pc = await createPeerConnection(_iceConfiguration);
+    if ((_peerGenerations[socketId] ?? 0) != peerGeneration ||
+        !_current(generation) ||
+        channelId != room) {
+      await pc.close();
+      await pc.dispose();
+      throw StateError('stale-peer');
+    }
     _peerConnections[socketId] = pc;
-
+    bool current() =>
+        _current(generation) && identical(_peerConnections[socketId], pc);
+    _negotiation.bind(socketId, pc);
     pc.onIceCandidate = (candidate) {
-      if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
+      if (!current() || candidate.candidate?.isNotEmpty != true) return;
       _socket?.emit('webrtc:ice_candidate', {
         'targetSocketId': socketId,
         'candidate': candidate.toMap(),
-        'channelId': channelId,
+        'channelId': room
       });
     };
-
     pc.onTrack = (event) {
-      if (event.streams.isEmpty) return;
-      if (event.track.kind == 'video') {
-        remoteVideo[socketId] = true;
+      if (!current()) return;
+      final track = event.track;
+      final volume = (LovePrefs.instance.getInt(K.outputVolume, 100) / 100)
+          .clamp(0.0, 1.0);
+      if (track.kind == 'audio') {
+        // Звук собеседника Android/iOS воспроизводят сами — здесь только
+        // громкость. В рендерер звук класть не нужно.
+        unawaited(Helper.setVolume(volume, track).catchError((Object _) {}));
+        return;
       }
-      unawaited(_attachRemoteStream(socketId, event.streams.first));
+      if (track.kind != 'video') return;
+      final mode = remoteMediaModes[socketId];
+      remoteVideo[socketId] =
+          mode == null || mode == 'camera' || mode == 'screen';
+      final previous = _remoteTasks[socketId] ?? Future<void>.value();
+      final task = previous.catchError((Object _) {}).then((_) async {
+        if (!current()) return;
+        // Раньше все дорожки собеседника складывались в один «свой» поток, а
+        // старую видеодорожку из него удаляли. На Android removeTrack снимает
+        // только ЛОКАЛЬНЫЕ дорожки: на чужой он падал, ошибка глоталась, и
+        // новая видеодорожка (повторная камера, камера → демонстрация) так и
+        // не попадала в рендерер — собеседник видел застывший кадр или пусто.
+        // Теперь рендерер просто берёт поток самой дорожки.
+        MediaStream stream;
+        if (event.streams.isNotEmpty) {
+          stream = event.streams.first;
+        } else {
+          stream =
+              await createLocalMediaStream('love-remote-$socketId-${track.id}');
+          if (!current()) {
+            await stream.dispose();
+            return;
+          }
+          await stream.addTrack(track);
+        }
+        if (!current()) return;
+        var renderer = _remoteRenderers[socketId];
+        if (renderer == null) {
+          renderer = RTCVideoRenderer();
+          await renderer.initialize();
+          if (!current()) {
+            await renderer.dispose();
+            return;
+          }
+          _remoteRenderers[socketId] = renderer;
+        }
+        renderer.srcObject = stream;
+        final replaced = _remoteStreams[socketId];
+        _remoteStreams[socketId] = stream;
+        // Свои временные потоки (love-remote-…) освобождаем; потоки
+        // соединения освободит само соединение.
+        if (replaced != null &&
+            !identical(replaced, stream) &&
+            replaced.id.startsWith('love-remote-')) {
+          await replaced.dispose();
+        }
+        if (current()) notifyListeners();
+      }).catchError((Object _) {});
+      _remoteTasks[socketId] = task;
       notifyListeners();
     };
-
     pc.onRemoveTrack = (stream, track) {
-      if (track.kind == 'video') {
+      if (current() && track.kind == 'video') {
         remoteVideo[socketId] = false;
         notifyListeners();
       }
     };
-
     pc.onConnectionState = (state) {
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      if (!current()) return;
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _reconnectTimers.remove(socketId)?.cancel();
+
+        notifyListeners();
+      } else if (state ==
+              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        _reconnectTimers.putIfAbsent(
+            socketId,
+            () => Timer(const Duration(seconds: 6), () {
+                  _reconnectTimers.remove(socketId);
+                  if (current() &&
+                      pc.connectionState !=
+                          RTCPeerConnectionState
+                              .RTCPeerConnectionStateConnected) {
+                    unawaited(_negotiation.offer(socketId, iceRestart: true));
+                  }
+                }));
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         unawaited(_removeConnection(socketId));
       }
     };
-
-    final stream = _localStream;
-    if (stream != null) {
-      for (final track in stream.getAudioTracks()) {
-        await pc.addTrack(track, stream);
+    final audio = _localStream, video = _videoStream;
+    if (audio != null) {
+      for (final track in audio.getAudioTracks()) {
+        if (!current()) throw StateError('stale-peer');
+        await pc.addTrack(track, audio);
       }
     }
-    final videoStream = _videoStream;
-    if (videoStream != null) {
-      for (final track in videoStream.getVideoTracks()) {
-        await pc.addTrack(track, videoStream);
+    if (video != null) {
+      for (final track in video.getVideoTracks()) {
+        if (!current()) throw StateError('stale-peer');
+        await pc.addTrack(track, video);
       }
     }
     return pc;
   }
 
-  Future<void> _attachRemoteStream(String socketId, MediaStream stream) async {
-    var renderer = _remoteRenderers[socketId];
-    if (renderer == null) {
-      renderer = RTCVideoRenderer();
-      await renderer.initialize();
-      _remoteRenderers[socketId] = renderer;
-    }
-    renderer.srcObject = stream;
-    await renderer.setVolume(1);
-  }
-
-  Future<void> _flushIceCandidates(String socketId) async {
-    final candidates = _iceCandidateBuffer.remove(socketId);
-    final pc = _peerConnections[socketId];
-    if (pc == null || candidates == null) return;
-    for (final candidate in candidates) {
-      try {
-        await pc.addCandidate(candidate);
-      } catch (_) {
-        // Кандидат устарел во время renegotiation — пропускаем.
-      }
-    }
-  }
-
   Future<void> _removeConnection(String socketId) async {
+    _peerGenerations[socketId] = (_peerGenerations[socketId] ?? 0) + 1;
+    _negotiation.remove(socketId);
+    _reconnectTimers.remove(socketId)?.cancel();
     final pc = _peerConnections.remove(socketId);
-    await pc?.close();
-    await pc?.dispose();
     final renderer = _remoteRenderers.remove(socketId);
-    renderer?.srcObject = null;
-    await renderer?.dispose();
-    _iceCandidateBuffer.remove(socketId);
+    final stream = _remoteStreams.remove(socketId);
+    final task = _remoteTasks.remove(socketId);
     remoteVideo.remove(socketId);
+    remoteMediaModes.remove(socketId);
+    notifyListeners();
+    await task;
+    renderer?.srcObject = null;
+    try {
+      await pc?.close();
+      await pc?.dispose();
+    } catch (_) {}
+    try {
+      await renderer?.dispose();
+      await stream?.dispose();
+    } catch (_) {}
   }
 
   Future<void> _abortJoin(String message) async {
-    await _cleanupMedia();
+    final closing = _cleanupMedia();
     phase = ChannelVoicePhase.idle;
     channelId = '';
     channelTitle = '';
@@ -682,28 +796,82 @@ class ChannelVoiceController extends ChangeNotifier {
     members.clear();
     errorMessage = message;
     notifyListeners();
+    await closing;
   }
 
-  Future<void> _cleanupMedia() async {
-    await stopVideo(silent: true);
-    for (final socketId in _peerConnections.keys.toList()) {
-      await _removeConnection(socketId);
-    }
-    for (final renderer in _remoteRenderers.values) {
-      renderer.srcObject = null;
-      await renderer.dispose();
-    }
+  Future<void> _cleanupMedia({bool notify = true}) {
+    final pending = _cleanupTask;
+    if (pending != null) return pending;
+    ++_generation;
+    _peerGenerations.clear();
+    _negotiation.reset();
+    channelId = '';
+    channelTitle = '';
+    members.clear();
+    phase = ChannelVoicePhase.idle;
+    final pcs = _peerConnections.values.toList();
+    _peerConnections.clear();
+    final renderers = _remoteRenderers.values.toList();
     _remoteRenderers.clear();
-    _iceCandidateBuffer.clear();
-    remoteVideo.clear();
-    final stream = _localStream;
-    if (stream != null) {
-      for (final track in stream.getTracks()) {
-        await track.stop();
-      }
-      await stream.dispose();
+    final streams = _remoteStreams.values.toList();
+    _remoteStreams.clear();
+    final tasks = _remoteTasks.values.toList();
+    _remoteTasks.clear();
+    for (final timer in _reconnectTimers.values) {
+      timer.cancel();
     }
+    _reconnectTimers.clear();
+    remoteVideo.clear();
+    remoteMediaModes.clear();
+    final audio = _localStream, video = _videoStream, wasScreen = screenSharing;
     _localStream = null;
+    _videoStream = null;
+    localRenderer?.srcObject = null;
+    cameraOn = false;
+    screenSharing = false;
+    mediaBusy = false;
+    muted = false;
+    connectedAt = null;
+    if (notify) notifyListeners();
+    final task = () async {
+      await Future.wait(tasks);
+      for (final pc in pcs) {
+        try {
+          await pc.close();
+          await pc.dispose();
+        } catch (_) {}
+      }
+      for (final renderer in renderers) {
+        renderer.srcObject = null;
+        try {
+          await renderer.dispose();
+        } catch (_) {}
+      }
+      for (final stream in streams) {
+        try {
+          await stream.dispose();
+        } catch (_) {}
+      }
+      await _releaseStream(audio);
+      await _releaseStream(video);
+      if (wasScreen) await ScreenShareManager.stopScreenShare();
+    }();
+    _cleanupTask = task;
+    return task.whenComplete(() {
+      if (identical(_cleanupTask, task)) _cleanupTask = null;
+    });
+  }
+
+  Future<void> _releaseStream(MediaStream? stream) async {
+    if (stream == null) return;
+    for (final track in stream.getTracks()) {
+      try {
+        await track.stop();
+      } catch (_) {}
+    }
+    try {
+      await stream.dispose();
+    } catch (_) {}
   }
 
   void _resetToIdle() {

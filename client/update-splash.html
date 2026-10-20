@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Установка обновления</title>
+  <script>
+    // Сезонная тема: тот же ключ app-season, что в основном окне (общий localStorage file://).
+    try {
+      if (localStorage.getItem('app-season') === 'halloween') document.documentElement.classList.add('season-halloween');
+    } catch (e) {}
+  </script>
   <style>
     body {
       margin: 0;
@@ -75,6 +81,30 @@
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
+    }
+
+    /* Halloween: тыква с вырезанным сердцем вместо сердца, тёплый отсвет. */
+    .season-halloween body {
+      background: radial-gradient(45% 38% at 50% 40%, rgba(242, 140, 40, 0.08), transparent 72%), #111111;
+    }
+
+    .season-halloween .heart {
+      display: none;
+    }
+
+    .season-halloween .heart-container {
+      background: url("assets/season/pumpkin-heart.svg") center / 150px no-repeat;
+      animation: lantern 2.2s infinite ease-in-out;
+    }
+
+    @keyframes lantern {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 14px rgba(242, 140, 40, 0.28)); }
+      50% { transform: scale(1.06); filter: drop-shadow(0 0 26px rgba(242, 140, 40, 0.4)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .season-halloween .heart-container,
+      .season-halloween .subtitle { animation: none; }
     }
   </style>
 </head>

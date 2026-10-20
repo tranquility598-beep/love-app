@@ -19,6 +19,7 @@ import '../../widgets/love_background.dart';
 import '../../widgets/staff_role_badge.dart';
 import '../../core/prefs/love_prefs.dart';
 import '../../core/notifications/local_notifications.dart';
+import '../../core/audio/love_sounds.dart';
 import '../../core/calls/call_center.dart';
 import '../profile/user_profile_screen.dart';
 import 'capsule_sheet.dart';
@@ -944,6 +945,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     });
     _scrollToEnd();
+    unawaited(LoveSounds.instance.play('message_send'));
 
     try {
       final attachments = await _uploadPending(pendingAttachments);
@@ -1275,6 +1277,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_messages.any((item) => item.id == parsed.id)) return;
     setState(() => _messages.add(parsed));
     _scrollToEnd();
+    if (!parsed.isOwn) unawaited(LoveSounds.instance.play('message_receive'));
   }
 
   void _scrollToEnd() {

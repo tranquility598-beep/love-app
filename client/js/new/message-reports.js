@@ -1,4 +1,6 @@
-/* Multi-step message reporting flow. Taxonomy and final validation come from the server. */
+/* Multi-step message reporting flow. Taxonomy and final validation come from the server.
+   Режим «профиль» (window.openProfileReport): первым шагом выбирается, что
+   именно не так — аватар, имя, описание…, дальше то же дерево причин. */
 (function initMessageReports() {
   'use strict';
 
@@ -53,19 +55,49 @@
     }).filter(Boolean);
   }
 
+  function renderProfilePart() {
+    modal.querySelector('.message-report-dialog').innerHTML = `
+      <header class="message-report-head">
+        <div class="message-report-title-icon">${ICONS.flag}</div>
+        <div><span>Жалоба на профиль · шаг 1</span><h2>Что не так в профиле?</h2></div>
+        <button type="button" class="message-report-icon" data-report-close aria-label="Закрыть" title="Закрыть">${ICONS.close}</button>
+      </header>
+      <div class="message-report-body">
+        <div class="message-report-target"><strong>${safe(state.author || 'Профиль')}</strong><p>${safe(state.preview || '')}</p></div>
+        <div class="message-report-options">${state.parts.map(part => `
+          <button type="button" class="message-report-option" data-report-part="${safe(part.id)}">
+            <span><strong>${safe(part.label)}</strong></span>${ICONS.chevron}
+          </button>`).join('')}</div>
+      </div>
+      <footer class="message-report-footer">
+        <button type="button" class="message-report-secondary" disabled>${ICONS.back}<span>Назад</span></button>
+        <span>Выберите, где именно нарушение</span>
+      </footer>`;
+    modal.querySelector('[data-report-close]').addEventListener('click', close);
+    modal.querySelectorAll('[data-report-part]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.part = state.parts.find(part => part.id === button.dataset.reportPart) || null;
+        render();
+      });
+    });
+  }
+
   function render() {
     if (!modal || !state) return;
+    if (state.kind === 'profile' && !state.part) { renderProfilePart(); return; }
     const nodes = selectedNodes();
     const selectedLeaf = state.leaf;
     const step = selectedLeaf ? nodes.length + 1 : state.path.length + 1;
     const title = selectedLeaf ? 'Проверьте жалобу' : (state.path.length ? 'Уточните проблему' : 'Что произошло?');
     const choices = currentChoices();
-    const breadcrumbs = nodes.map(node => node.label).join(' / ');
+    const breadcrumbs = (state.part ? [state.part.label] : []).concat(nodes.map(node => node.label)).join(' / ');
+    const isProfile = state.kind === 'profile';
+    const stepNo = isProfile ? step + 1 : step;
 
     modal.querySelector('.message-report-dialog').innerHTML = `
       <header class="message-report-head">
         <div class="message-report-title-icon">${ICONS.flag}</div>
-        <div><span>Жалоба на сообщение · шаг ${step}</span><h2>${title}</h2></div>
+        <div><span>${isProfile ? 'Жалоба на профиль' : 'Жалоба на сообщение'} · шаг ${stepNo}</span><h2>${title}</h2></div>
         <button type="button" class="message-report-icon" data-report-close aria-label="Закрыть" title="Закрыть">${ICONS.close}</button>
       </header>
       <div class="message-report-body">
@@ -73,14 +105,14 @@
         ${breadcrumbs ? `<div class="message-report-path">${safe(breadcrumbs)}</div>` : ''}
         ${selectedLeaf ? `
           <label class="message-report-description"><span>Описание ${selectedLeaf.descriptionRequired ? '· обязательно' : '· необязательно'}</span><textarea name="message-report-description" rows="4" maxlength="2000" placeholder="Добавьте контекст, который поможет модератору разобраться">${safe(state.description)}</textarea></label>
-          <p class="message-report-evidence">В обращение попадёт защищённый снимок этого сообщения и его вложений. Автор жалобы не будет показан нарушителю.</p>
+          <p class="message-report-evidence">${isProfile ? 'В обращение попадёт снимок профиля в его нынешнем виде.' : 'В обращение попадёт защищённый снимок этого сообщения и его вложений.'} Автор жалобы не будет показан нарушителю.</p>
         ` : `<div class="message-report-options">${choices.map(choice => `
           <button type="button" class="message-report-option" data-report-choice="${safe(choice.id)}">
             <span><strong>${safe(choice.label)}</strong>${choice.description ? `<small>${safe(choice.description)}</small>` : ''}</span>${ICONS.chevron}
           </button>`).join('')}</div>`}
       </div>
       <footer class="message-report-footer">
-        <button type="button" class="message-report-secondary" data-report-back ${!state.path.length ? 'disabled' : ''}>${ICONS.back}<span>Назад</span></button>
+        <button type="button" class="message-report-secondary" data-report-back ${!state.path.length && !isProfile ? 'disabled' : ''}>${ICONS.back}<span>Назад</span></button>
         ${selectedLeaf ? '<button type="button" class="message-report-submit" data-report-submit>Отправить жалобу</button>' : '<span>Выберите наиболее точную причину</span>'}
       </footer>`;
 
@@ -89,8 +121,10 @@
       if (state.leaf) {
         state.leaf = null;
         state.path.pop();
-      } else {
+      } else if (state.path.length) {
         state.path.pop();
+      } else if (state.kind === 'profile') {
+        state.part = null;   // назад к выбору «что не так»
       }
       render();
     });
@@ -119,9 +153,15 @@
     button.disabled = true;
     button.textContent = 'Отправляем...';
     try {
-      await window.CasesAPI.reportMessage(state.messageId, state.path, description);
-      close();
-      window.showToast?.('Жалоба отправлена', 'Модератор проверит сообщение и примет решение.');
+      if (state.kind === 'profile') {
+        await window.CasesAPI.reportProfile(state.userId, state.part.id, state.path, description);
+        close();
+        window.showToast?.('Жалоба отправлена', 'Модератор проверит профиль и примет решение.');
+      } else {
+        await window.CasesAPI.reportMessage(state.messageId, state.path, description);
+        close();
+        window.showToast?.('Жалоба отправлена', 'Модератор проверит сообщение и примет решение.');
+      }
     } catch (error) {
       button.disabled = false;
       button.textContent = 'Отправить жалобу';
@@ -150,6 +190,37 @@
       modal = document.createElement('div');
       modal.className = 'message-report-backdrop';
       modal.innerHTML = '<section class="message-report-dialog" role="dialog" aria-modal="true" aria-label="Жалоба на сообщение"></section>';
+      modal.addEventListener('mousedown', event => { if (event.target === modal) close(); });
+      document.body.appendChild(modal);
+      document.body.classList.add('message-report-open');
+      render();
+    } catch (error) {
+      window.showToast?.('Не удалось открыть жалобу', error.message || 'Попробуйте ещё раз.');
+    }
+  };
+
+  // Жалоба на профиль пользователя (кнопка в окне профиля).
+  window.openProfileReport = async function (options = {}) {
+    const userId = String(options.userId || '');
+    if (!userId) return;
+    try {
+      const result = await window.CasesAPI.profileReportOptions();
+      state = {
+        kind: 'profile',
+        userId,
+        author: String(options.name || 'Профиль'),
+        preview: options.username ? `@${options.username}` : '',
+        parts: result.parts || [],
+        part: null,
+        categories: result.categories || [],
+        path: [],
+        leaf: null,
+        description: ''
+      };
+      modal?.remove();
+      modal = document.createElement('div');
+      modal.className = 'message-report-backdrop';
+      modal.innerHTML = '<section class="message-report-dialog" role="dialog" aria-modal="true" aria-label="Жалоба на профиль"></section>';
       modal.addEventListener('mousedown', event => { if (event.target === modal) close(); });
       document.body.appendChild(modal);
       document.body.classList.add('message-report-open');

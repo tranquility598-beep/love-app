@@ -3,7 +3,7 @@
  * Безопасный мост между renderer процессом и main процессом
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Экспортируем безопасные API в renderer процесс
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Приглашение из ссылки love-app://invite/КОД («Открыть в приложении» на
   // веб-странице приглашения).
   onDeepLinkInvite: (callback) => ipcRenderer.on('deep-link-invite', (_event, code) => callback(code)),
+  // Профиль из ссылки love-app://user/НИК («Написать в Love» на публичной странице).
+  onDeepLinkUser: (callback) => ipcRenderer.on('deep-link-user', (_event, username) => callback(username)),
 
   // Безопасное хранилище токенов (только для сохранения/удаления)
   storeToken: (token) => ipcRenderer.invoke('store-token', token),
@@ -79,5 +81,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Локальный файл музыки профиля (владелец слушает со своего диска)
   checkLocalFile: (filePath) => ipcRenderer.invoke('check-local-file', filePath),
-  readLocalFile: (filePath) => ipcRenderer.invoke('read-local-file', filePath)
+  readLocalFile: (filePath) => ipcRenderer.invoke('read-local-file', filePath),
+  // Путь выбранного файла на диске. С Electron 32 у File больше нет .path —
+  // штатная замена webUtils.getPathForFile (работает только в preload).
+  getPathForFile: (file) => {
+    try { return webUtils.getPathForFile(file) || ''; } catch (_) { return ''; }
+  }
 });

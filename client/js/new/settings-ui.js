@@ -10,12 +10,14 @@
     const shell = document.getElementById('settings-shell');
     if (!shell) return;
 
-    initNavigation(shell);
+    const showSection = initNavigation(shell);
+    initSettingsSearch(shell, showSection);
     initModal(shell);
     initProfile(shell);
     initSelects(shell);
     initSliders(shell);
     initThemeOptions(shell);
+    initSeasonOptions(shell);
     initNotifPreview(shell);
     initVoice(shell);
     initDangerActions(shell);
@@ -24,6 +26,9 @@
     initVersions(shell);
     initAdvanced(shell);
     initAccount(shell);
+    initProfilePage(shell);
+    initSubscriptions(shell);
+    initBlockedUsers(shell);
     initSupportCenter(shell);
     initPrefsPersistence(shell);
     initDirtyTracking(shell);
@@ -66,9 +71,307 @@
     if (backBtn) {
       backBtn.addEventListener('click', () => shell.classList.remove('section-open'));
     }
+
+    return showSection;
+  }
+
+  /* ───────────────  Поиск по настройкам  ─────────────── */
+
+  // Ищет и по названиям разделов, и по отдельным настройкам внутри них
+  // (подписи переключателей, полей, подзаголовки). Клик по результату
+  // открывает раздел, прокручивает к настройке и коротко её подсвечивает.
+  // Индекс строится из разметки при каждом поиске: часть строк добавляется
+  // скриптами позже (звук, темы), и так они тоже находятся.
+  const SETTINGS_SEARCH_TARGETS = '.lvs-row-label, .lvs-label, .lvs-section-subtitle, .lvs-theme-name, .lvs-plan-card-head';
+
+  // Как люди называют настройки своими словами: «микрофон», а не «Устройство
+  // ввода». Ключ — подпись в разметке, значение — дополнительные слова поиска.
+  const SETTINGS_SEARCH_SYNONYMS = {
+    'Устройство ввода': 'микрофон микро',
+    'Громкость ввода': 'микрофон чувствительность',
+    'Устройство вывода': 'динамики наушники колонки звук',
+    'Громкость вывода': 'звук громкость динамики наушники',
+    'Шумоподавление': 'шум фон',
+    'Эхоподавление': 'эхо',
+    'Пароль': 'сменить пароль безопасность',
+    'Тема': 'темная светлая тёмная оформление цвет',
+    'Сезонная тема': 'хэллоуин хеллоуин тыква праздник'
+  };
+
+  function escSearch(text) {
+    return String(text == null ? '' : text).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function normalizeSearch(text) {
+    return String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+  }
+
+  function buildSettingsIndex(shell) {
+    const entries = [];
+    shell.querySelectorAll('.settings-nav-item').forEach(nav => {
+      const sectionId = nav.dataset.settingsSection;
+      const section = shell.querySelector('#' + sectionId);
+      const sectionName = nav.querySelector('span')?.textContent.trim() || '';
+      if (!section || !sectionName) return;
+      const desc = section.querySelector('.lvs-section-desc')?.textContent || '';
+      entries.push({ sectionId, sectionName, label: sectionName, haystack: normalizeSearch(sectionName + ' ' + desc), el: null });
+      const seen = new Set();
+      section.querySelectorAll(SETTINGS_SEARCH_TARGETS).forEach(el => {
+        const label = el.textContent.replace(/\s+/g, ' ').trim();
+        if (!label || label.length > 80 || seen.has(label) || el.closest('[hidden]')) return;
+        seen.add(label);
+        const extra = SETTINGS_SEARCH_SYNONYMS[label] || '';
+        entries.push({ sectionId, sectionName, label, haystack: normalizeSearch(label + ' ' + extra), el });
+      });
+    });
+    return entries;
+  }
+
+  function initSettingsSearch(shell, showSection) {
+    const input = shell.querySelector('#settings-search-input');
+    const box = shell.querySelector('#settings-search-results');
+    const nav = shell.querySelector('.settings-nav');
+    if (!input || !box || !nav || typeof showSection !== 'function') return;
+    let matches = [];
+
+    function reset() {
+      matches = [];
+      box.hidden = true;
+      box.innerHTML = '';
+      nav.hidden = false;
+    }
+
+    function open(entry) {
+      if (!entry) return;
+      showSection(entry.sectionId);
+      if (window.innerWidth <= 768) shell.classList.add('section-open');
+      const target = entry.el && (entry.el.closest('.lvs-row, .lvs-field, .lvs-card') || entry.el);
+      if (target) {
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          target.classList.remove('lvs-search-hit');
+          void target.offsetWidth; // перезапуск анимации подсветки
+          target.classList.add('lvs-search-hit');
+          setTimeout(() => target.classList.remove('lvs-search-hit'), 1800);
+        });
+      }
+    }
+
+    function render(query) {
+      const q = normalizeSearch(query);
+      if (q.length < 2) { reset(); return; }
+      const words = q.split(' ');
+      matches = buildSettingsIndex(shell)
+        .filter(entry => words.every(word => entry.haystack.includes(word)))
+        .slice(0, 30);
+      nav.hidden = true;
+      box.hidden = false;
+      if (!matches.length) {
+        box.innerHTML = '<div class="settings-search-empty">Ничего не нашли</div>';
+        return;
+      }
+      box.innerHTML = matches.map((entry, index) => `
+        <button type="button" class="settings-search-item" data-search-index="${index}">
+          <span class="settings-search-label">${escSearch(entry.label)}</span>
+          ${entry.el ? `<span class="settings-search-where">${escSearch(entry.sectionName)}</span>` : '<span class="settings-search-where">Раздел</span>'}
+        </button>`).join('');
+    }
+
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && matches.length) {
+        e.preventDefault();
+        open(matches[0]);
+      } else if (e.key === 'Escape' && input.value) {
+        e.preventDefault();
+        e.stopPropagation();
+        input.value = '';
+        reset();
+      }
+    });
+    box.addEventListener('click', (e) => {
+      const item = e.target.closest('.settings-search-item');
+      if (item) open(matches[Number(item.dataset.searchIndex)]);
+    });
   }
 
   /* ───────────────  Помощь, обращения и нарушения  ─────────────── */
+
+  function initSubscriptions(shell) {
+    const section = shell.querySelector('#settings-subscriptions');
+    if (!section) return;
+    const names = { free: 'Free', pro: 'Pro', premium: 'Premium', duo: 'Duo' };
+
+    function render() {
+      const user = window.currentUser;
+      if (!user) {
+        section.querySelector('#lvs-current-plan').textContent = 'Нет данных об аккаунте';
+        section.querySelector('#lvs-current-plan-detail').textContent = 'Откройте раздел после входа в Love.';
+        section.querySelectorAll('[data-love-plan]').forEach(card => {
+          card.classList.remove('is-current');
+          card.querySelector('.lvs-plan-current').hidden = true;
+        });
+        return;
+      }
+      const storedPlan = Object.hasOwn(names, user.plan) ? user.plan : 'free';
+      const expiresAt = user.planExpiresAt ? new Date(user.planExpiresAt) : null;
+      const validDate = expiresAt && Number.isFinite(expiresAt.getTime());
+      const expired = storedPlan !== 'free' && validDate && expiresAt.getTime() <= Date.now();
+      const plan = expired ? 'free' : storedPlan;
+      section.querySelector('#lvs-current-plan').textContent = `Love ${names[plan]}`;
+      section.querySelector('#lvs-current-plan-detail').textContent = plan === 'free'
+        ? (expired ? 'Срок подписки завершён. Сейчас доступны возможности Free.' : 'Бесплатный тариф без ограничения по сроку.')
+        : (validDate ? `Действует до ${expiresAt.toLocaleDateString('ru-RU')}.` : 'Тариф активен на вашем аккаунте.');
+      section.querySelectorAll('[data-love-plan]').forEach(card => {
+        const current = card.dataset.lovePlan === plan;
+        card.classList.toggle('is-current', current);
+        card.querySelector('.lvs-plan-current').hidden = !current;
+      });
+    }
+
+    // Read the account again on opening: authentication may finish after DOMContentLoaded.
+    new MutationObserver(() => { if (section.classList.contains('active')) render(); })
+      .observe(section, { attributes: true, attributeFilter: ['class'] });
+    render();
+  }
+
+  /* ───────────────  Заблокированные пользователи  ─────────────── */
+
+  function initBlockedUsers(shell) {
+    const section = shell.querySelector('#settings-privacy');
+    const card = section?.querySelector('.lvs-blocked-card');
+    const list = card?.querySelector('#lvs-blocked-list');
+    const status = card?.querySelector('#lvs-blocked-status');
+    const count = card?.querySelector('#lvs-blocked-count');
+    const refresh = card?.querySelector('#lvs-blocked-refresh');
+    if (!card || !list || !status || !count || !refresh) return;
+    const view = document.getElementById('view-settings');
+    const auth = document.getElementById('auth-screen');
+    let users = [], owner = '', revision = 0, pending = '';
+    let loading = false, loaded = false, shown = false;
+    const accountId = () => String(window.currentUser?._id || '');
+    const visible = () => section.classList.contains('active')
+      && (!view || !view.classList.contains('panel-hidden'))
+      && (!auth || auth.classList.contains('auth-hidden'));
+    const current = (id, version) => id === accountId() && id === owner && version === revision;
+
+    function render(message = '') {
+      list.replaceChildren();
+      count.hidden = !loaded;
+      count.textContent = String(users.length);
+      status.textContent = message || (loaded && !users.length ? 'Вы никого не заблокировали.' : '');
+      refresh.disabled = loading || Boolean(pending) || !accountId();
+      list.setAttribute('aria-busy', String(loading || Boolean(pending)));
+      for (const user of users) {
+        const row = document.createElement('li');
+        row.className = 'lvs-blocked-user';
+        const avatar = document.createElement('div');
+        avatar.className = 'lvs-blocked-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        const name = user.nickname || user.username || 'Пользователь';
+        avatar.textContent = Array.from(name)[0]?.toLocaleUpperCase('ru-RU') || '?';
+        if (typeof user.avatar === 'string' && user.avatar) {
+          try {
+            const url = new URL(user.avatar, window.BASE_URL || window.location.href);
+            if (url.protocol === 'https:' || url.protocol === 'http:') {
+              const image = document.createElement('img');
+              image.alt = '';
+              image.loading = 'lazy';
+              image.referrerPolicy = 'no-referrer';
+              image.addEventListener('error', () => image.remove(), { once: true });
+              image.src = url.href;
+              avatar.appendChild(image);
+            }
+          } catch (_) { /* Невалидный аватар заменяется инициалом. */ }
+        }
+        const identity = document.createElement('div');
+        identity.className = 'lvs-blocked-identity';
+        const title = document.createElement('span');
+        title.className = 'lvs-blocked-name';
+        title.textContent = name;
+        const username = document.createElement('span');
+        username.className = 'lvs-blocked-username';
+        username.textContent = user.username ? '@' + user.username : 'Без имени пользователя';
+        identity.append(title, username);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'lvs-btn';
+        button.textContent = pending === user._id ? 'Разблокируем…' : 'Разблокировать';
+        button.setAttribute('aria-label', 'Разблокировать ' + name);
+        button.disabled = Boolean(pending) || loading;
+        button.addEventListener('click', () => unblock(user));
+        row.append(avatar, identity, button);
+        list.appendChild(row);
+      }
+    }
+
+    function reset() {
+      ++revision; // Поздний ответ старого аккаунта не должен попадать в новый.
+      users = []; owner = ''; pending = ''; loading = false; loaded = false;
+      render();
+    }
+
+    async function load() {
+      const id = accountId();
+      if (owner && owner !== id) reset();
+      if (!visible() || !id || pending || loading) return;
+      const version = ++revision;
+      owner = id; users = []; loaded = false; loading = true;
+      render('Загружаем список…');
+      try {
+        const result = await UsersAPI.getBlocked();
+        if (!current(id, version)) return;
+        if (!Array.isArray(result?.blockedUsers)) throw new Error('Сервер не вернул список. Попробуйте обновить приложение.');
+        users = [...new Map(result.blockedUsers
+          .filter(user => user && /^[a-f\d]{24}$/i.test(user._id))
+          .map(user => [user._id, user])).values()];
+        loaded = true; loading = false;
+        render();
+      } catch (error) {
+        if (!current(id, version)) return;
+        loading = false;
+        render(error.message || 'Не удалось загрузить список. Нажмите «Обновить», чтобы повторить.');
+      }
+    }
+
+    async function unblock(user) {
+      if (pending || loading || owner !== accountId() || !visible()) return;
+      const id = owner, version = ++revision;
+      pending = user._id;
+      render();
+      try {
+        const result = await UsersAPI.unblock(user._id);
+        if (!current(id, version)) return;
+        if (result?.userId !== user._id) throw new Error('Сервер не подтвердил разблокировку. Обновите список.');
+        users = users.filter(item => item._id !== user._id);
+        pending = '';
+        render('Пользователь разблокирован. Ваша блокировка снята.');
+        _toast('Пользователь разблокирован', user.nickname || '@' + user.username);
+      } catch (error) {
+        if (!current(id, version)) return;
+        pending = '';
+        render(error.message || 'Не удалось разблокировать пользователя. Попробуйте ещё раз.');
+      }
+    }
+
+    function sync() {
+      if (!visible() || !accountId()) {
+        if (shown || owner) reset();
+        shown = false;
+      } else if (!shown || owner !== accountId()) {
+        shown = true;
+        load();
+      }
+    }
+    refresh.addEventListener('click', load);
+    const observer = new MutationObserver(sync);
+    for (const element of [section, view, auth]) {
+      if (element) observer.observe(element, { attributes: true, attributeFilter: ['class'] });
+    }
+    window.addEventListener('focus', () => { if (visible()) load(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && visible()) load(); });
+    sync();
+  }
 
   function initSupportCenter(shell) {
     const section = shell.querySelector('#settings-support');
@@ -93,11 +396,191 @@
     let selectedCaseId = null;
     let statusData = null;
     let loading = false;
+    let submittingCase = false;
+    let submissionState = { allowed: false, code: 'CASE_POLICY_LOADING', message: 'Проверяем доступность новых обращений…' };
+    let submissionClockSkew = 0;
+    let submissionTimer;
 
     const list = section.querySelector('#support-case-list');
     const thread = section.querySelector('#support-case-thread');
     const newForm = section.querySelector('#support-new-case-form');
     const appealForm = section.querySelector('#support-appeal-form');
+    const caseDescription = section.querySelector('#support-case-description');
+
+    function resetDescriptionSize() {
+      caseDescription.style.removeProperty('height');
+      caseDescription.style.removeProperty('width');
+      caseDescription.scrollTop = 0;
+    }
+
+    // Closing a section or modal hides the same DOM instead of rebuilding it.
+    // Reset geometry on re-entry without discarding the description draft.
+    new MutationObserver(resetDescriptionSize).observe(section, { attributes: true, attributeFilter: ['class'] });
+    const settingsView = document.getElementById('view-settings');
+    if (settingsView) new MutationObserver(resetDescriptionSize)
+      .observe(settingsView, { attributes: true, attributeFilter: ['class'] });
+    const submissionNotice = section.querySelector('#support-submission-notice');
+    const submissionMessage = section.querySelector('#support-submission-message');
+    const openActiveCaseButton = section.querySelector('#support-open-active-case');
+
+    function updateSubmissionState(state) {
+      submissionState = state || { allowed: false, code: 'CASE_SERVER_OUTDATED',
+        message: 'Сервер ещё не обновился. Отправка новых обращений временно недоступна.' };
+      const serverNow = Date.parse(state?.serverNow || '');
+      submissionClockSkew = Number.isFinite(serverNow) ? Date.now() - serverNow : 0;
+      renderSubmissionLimit();
+    }
+
+    function renderSubmissionLimit() {
+      clearTimeout(submissionTimer);
+      if (submissionState?.code === 'CASE_COOLDOWN') {
+        const deadline = Date.parse(submissionState.nextAllowedAt) + submissionClockSkew;
+        const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        if (!seconds) submissionState = null;
+        else {
+          submissionMessage.textContent = `После закрытия обращения действует пауза 15 минут. Новое можно отправить через ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.`;
+          const view = document.getElementById('view-settings');
+          if (!document.hidden && section.classList.contains('active') && !view?.classList.contains('panel-hidden')) {
+            submissionTimer = setTimeout(renderSubmissionLimit, 1000);
+          }
+        }
+      } else if (submissionState?.allowed === false) {
+        submissionMessage.textContent = submissionState.message || 'У вас уже есть открытое обращение. Дождитесь его закрытия.';
+      }
+      const blocked = submissionState?.allowed === false;
+      submissionNotice.hidden = !blocked;
+      openActiveCaseButton.hidden = !submissionState?.activeCase?._id;
+      section.querySelector('#support-new-case-btn').disabled = blocked || submittingCase;
+      section.querySelector('#support-report-bug-btn').disabled = blocked || submittingCase;
+      newForm.querySelector('[type="submit"]').disabled = blocked || submittingCase;
+    }
+
+    openActiveCaseButton.addEventListener('click', () => {
+      if (submissionState?.activeCase?._id) openCase(submissionState.activeCase._id);
+    });
+    document.addEventListener('visibilitychange', renderSubmissionLimit);
+    new MutationObserver(renderSubmissionLimit).observe(section, { attributes: true, attributeFilter: ['class'] });
+    const fileInput = section.querySelector('#support-case-files');
+    const fileList = section.querySelector('#support-pending-files');
+    const fileStatus = section.querySelector('#support-file-status');
+    const prioritySelect = section.querySelector('#support-priority-select');
+    const priorityButton = prioritySelect.querySelector('button');
+    const priorityMenu = prioritySelect.querySelector('ul');
+    const priorityOptions = [...priorityMenu.querySelectorAll('li')];
+    priorityButton.setAttribute('aria-haspopup', 'listbox');
+    priorityMenu.id = 'support-priority-menu';
+    priorityMenu.setAttribute('role', 'listbox');
+    priorityMenu.setAttribute('aria-labelledby', 'support-priority-label');
+    priorityButton.setAttribute('aria-controls', priorityMenu.id);
+    function syncPriorityAccessibility() {
+      priorityButton.setAttribute('aria-expanded', String(prioritySelect.classList.contains('open')));
+      priorityOptions.forEach(option => {
+        option.tabIndex = -1;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', String(option.dataset.value === prioritySelect.dataset.value));
+      });
+    }
+    new MutationObserver(syncPriorityAccessibility).observe(prioritySelect, { attributes: true, attributeFilter: ['class', 'data-value'] });
+    syncPriorityAccessibility();
+    priorityButton.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+      event.preventDefault();
+      if (!prioritySelect.classList.contains('open')) priorityButton.click();
+      (priorityOptions.find(option => option.dataset.value === prioritySelect.dataset.value) || priorityOptions[0]).focus();
+    });
+    priorityMenu.addEventListener('keydown', event => {
+      const index = priorityOptions.indexOf(document.activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? priorityOptions.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + priorityOptions.length) % priorityOptions.length;
+        priorityOptions[next].focus();
+      } else if (['Enter', ' ', 'Escape', 'Tab'].includes(event.key)) {
+        if (event.key !== 'Tab') event.preventDefault();
+        if (event.key === 'Enter' || event.key === ' ') priorityOptions[index]?.click();
+        else if (prioritySelect.classList.contains('open')) priorityButton.click();
+        priorityButton.focus();
+      }
+    });
+    prioritySelect.addEventListener('lvs-change', event => {
+      section.querySelector('#support-case-priority').value = event.detail;
+    });
+    newForm.addEventListener('reset', () => {
+      resetDescriptionSize();
+      section.querySelector('#support-case-priority').value = 'normal';
+      prioritySelect.dataset.value = 'normal';
+      prioritySelect.querySelector('.lvs-select-btn span').textContent = 'Обычный — нужна помощь';
+      prioritySelect.querySelectorAll('li').forEach(item => item.classList.toggle('selected', item.dataset.value === 'normal'));
+      fileStatus.textContent = '';
+    });
+    const pendingFiles = [];
+    const attachmentTypes = {
+      jpg: ['image/jpeg', 10], jpeg: ['image/jpeg', 10], png: ['image/png', 10],
+      gif: ['image/gif', 10], webp: ['image/webp', 10], mp4: ['video/mp4', 50],
+      webm: ['video/webm', 50], mov: ['video/quicktime', 50], avi: ['video/x-msvideo', 50],
+      txt: ['text/plain', 5], log: ['text/plain', 5], pdf: ['application/pdf', 5]
+    };
+    const fileSize = size => Number(size) >= 1048576
+      ? `${(Number(size) / 1048576).toFixed(1)} МБ`
+      : `${Math.max(1, Math.ceil((Number(size) || 0) / 1024))} КБ`;
+
+    function renderPendingFiles() {
+      fileList.replaceChildren();
+      pendingFiles.forEach(entry => {
+        const row = document.createElement('li');
+        const info = document.createElement('span');
+        const name = document.createElement('strong');
+        name.textContent = entry.file.name;
+        const detail = document.createElement('small');
+        detail.textContent = `${fileSize(entry.file.size)} · ${entry.uploaded ? 'Загружен' : 'Готов к отправке'}`;
+        info.append(name, detail);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'support-file-remove';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', `Убрать файл ${entry.file.name}`);
+        remove.disabled = submittingCase;
+        remove.addEventListener('click', () => {
+          pendingFiles.splice(pendingFiles.indexOf(entry), 1);
+          fileStatus.textContent = '';
+          renderPendingFiles();
+        });
+        row.append(info, remove);
+        fileList.appendChild(row);
+      });
+    }
+
+    section.querySelector('#support-attach-files').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const errors = [];
+      for (const file of fileInput.files) {
+        const extension = file.name.split('.').pop().toLowerCase();
+        const type = attachmentTypes[extension];
+        if (!type) { errors.push(`${file.name}: формат не поддерживается.`); continue; }
+        if (!file.size || file.size > type[1] * 1048576) {
+          errors.push(`${file.name}: выберите непустой файл до ${type[1]} МБ.`);
+          continue;
+        }
+        if (pendingFiles.some(entry => entry.file.name === file.name && entry.file.size === file.size && entry.file.lastModified === file.lastModified)) continue;
+        if (pendingFiles.length >= 5) { errors.push('Можно прикрепить до 5 файлов.'); break; }
+        pendingFiles.push({ file, extension, mimeType: type[0], uploaded: null });
+      }
+      fileInput.value = '';
+      fileStatus.textContent = errors.join(' ');
+      renderPendingFiles();
+    });
+
+    function caseFilesMarkup(files) {
+      if (!Array.isArray(files)) return '';
+      const links = files.map(file => {
+        try {
+          const url = new URL(file.url, window.BASE_URL || location.origin);
+          if (!['http:', 'https:'].includes(url.protocol)) return '';
+          return `<a href="${safe(url.href)}" target="_blank" rel="noopener noreferrer"><span>${safe(file.name || 'Файл')}</span><small>${safe(fileSize(file.size))}</small></a>`;
+        } catch (_) { return ''; }
+      }).join('');
+      return links ? `<div class="support-case-files" aria-label="Файлы обращения">${links}</div>` : '';
+    }
 
     function supportNoteMarkup(note, forceOwn = null) {
       const own = forceOwn == null
@@ -166,6 +649,7 @@
         thread.innerHTML = `
           <header><div><span>${safe(item.number)} · ${safe(kindLabels[item.kind] || item.kind)}</span><h3>${safe(item.title)}</h3></div><i>${safe(statusLabels[item.status] || item.status)}</i></header>
           <p class="support-case-description">${safe(item.description)}</p>
+          ${caseFilesMarkup(item.attachments)}
           <div class="support-thread-messages">
             ${notes.length ? notes.map(note => supportNoteMarkup(note)).join('') : '<div class="support-thread-empty">Команда ещё не ответила.</div>'}
           </div>
@@ -253,6 +737,7 @@
           window.CasesAPI.status()
         ]);
         cases = caseResult.cases || [];
+        updateSubmissionState(window.CasesAPI.submissionStateFromResponse?.(caseResult) || caseResult.submission);
         statusData = moderationResult;
         if (selectedCaseId && !cases.some(item => String(item._id) === String(selectedCaseId))) selectedCaseId = null;
         renderCaseList();
@@ -322,27 +807,86 @@
       });
     });
 
-    section.querySelector('#support-new-case-btn').addEventListener('click', () => newForm.classList.remove('hidden'));
-    section.querySelector('#support-new-case-cancel').addEventListener('click', () => newForm.classList.add('hidden'));
+    function showNewCaseForm(kind) {
+      renderSubmissionLimit();
+      if (submittingCase || submissionState?.allowed === false) return;
+      const bug = kind === 'bug';
+      section.querySelector('#support-case-kind').value = bug ? 'bug' : 'support';
+      section.querySelector('#support-new-case-heading').textContent = bug ? 'Сообщить о баге' : 'Новое обращение';
+      section.querySelector('#support-bug-hint').hidden = !bug;
+      const title = section.querySelector('#support-case-title');
+      title.placeholder = bug ? 'Например: не включается микрофон' : 'Кратко опишите вопрос';
+      section.querySelector('#support-case-description').placeholder = bug
+        ? '1. Что вы делали?\n2. Что ожидали увидеть?\n3. Что произошло вместо этого?'
+        : 'Расскажите, что произошло и чем команда может помочь';
+      newForm.classList.remove('hidden');
+      resetDescriptionSize();
+      title.focus({ preventScroll: true });
+    }
+    section.querySelector('#support-new-case-btn').addEventListener('click', () => showNewCaseForm('support'));
+    section.querySelector('#support-report-bug-btn').addEventListener('click', () => showNewCaseForm('bug'));
+    section.querySelector('#support-new-case-cancel').addEventListener('click', () => {
+      newForm.classList.add('hidden');
+      resetDescriptionSize();
+    });
     newForm.addEventListener('submit', async event => {
       event.preventDefault();
       const title = section.querySelector('#support-case-title').value.trim();
       const description = section.querySelector('#support-case-description').value.trim();
       const priority = section.querySelector('#support-case-priority').value;
+      const kind = section.querySelector('#support-case-kind').value === 'bug' ? 'bug' : 'support';
       const submit = newForm.querySelector('[type="submit"]');
-      submit.disabled = true;
+      if (submit.disabled) return;
+      submittingCase = true;
+      const controls = [...newForm.elements].map(element => ({ element, disabled: element.disabled }));
+      controls.forEach(({ element }) => { element.disabled = true; });
+      const submitLabel = submit.textContent;
+      submit.textContent = 'Проверяем…';
+      fileStatus.textContent = '';
       try {
-        const result = await window.CasesAPI.create({ kind: 'support', title, description, priority });
+        // Refresh from the server before uploading files. Another device may
+        // already have opened a case while this form was being filled in.
+        const latest = await window.CasesAPI.mine();
+        updateSubmissionState(window.CasesAPI.submissionStateFromResponse?.(latest) || latest.submission);
+        if (submissionState?.allowed === false) {
+          throw Object.assign(new Error(submissionState.message), { data: { submission: submissionState } });
+        }
+        for (let i = 0; i < pendingFiles.length; i++) {
+          const entry = pendingFiles[i];
+          if (entry.uploaded) continue;
+          submit.textContent = `Загрузка ${i + 1} / ${pendingFiles.length}…`;
+          if (typeof apiUpload !== 'function') throw new Error('Загрузка файлов временно недоступна.');
+          // LOG отправляется как текстовый файл: серверный whitelist принимает TXT.
+          const filename = entry.extension === 'log' ? `${entry.file.name}.txt` : entry.file.name;
+          const file = new File([entry.file], filename, { type: entry.mimeType });
+          const data = new FormData();
+          data.append('file', file);
+          const uploaded = await apiUpload('/upload', data, 'POST');
+          if (!uploaded?.url) throw new Error(`Не удалось загрузить ${entry.file.name}.`);
+          entry.uploaded = { name: entry.file.name, url: uploaded.url, mimeType: entry.mimeType, size: entry.file.size };
+          renderPendingFiles();
+        }
+        submit.textContent = 'Отправляем…';
+        const attachments = pendingFiles.map(entry => entry.uploaded);
+        const result = await window.CasesAPI.create({ kind, title, description, priority, attachments });
+        pendingFiles.length = 0;
+        renderPendingFiles();
         newForm.reset();
         newForm.classList.add('hidden');
         selectedCaseId = result.case?._id || null;
         await load();
         if (selectedCaseId) await openCase(selectedCaseId);
-        _toast('Обращение создано', 'Команда Love увидит его в центре обращений.');
+        _toast(kind === 'bug' ? 'Сообщение о баге отправлено' : 'Обращение создано', 'Команда Love увидит его в центре обращений.');
       } catch (error) {
-        _toast('Не удалось создать обращение', error.message || 'Проверьте введённые данные.');
+        fileStatus.textContent = error.message || 'Попробуйте отправить ещё раз. Файлы и текст сохранены в форме.';
+        if (error.data?.submission) updateSubmissionState(error.data.submission);
+        else _toast('Не удалось создать обращение', error.message || 'Проверьте введённые данные.');
       } finally {
-        submit.disabled = false;
+        submittingCase = false;
+        submit.textContent = submitLabel;
+        controls.forEach(({ element, disabled }) => { element.disabled = disabled; });
+        renderPendingFiles();
+        renderSubmissionLimit();
       }
     });
 
@@ -370,7 +914,11 @@
       }
     });
 
-    shell.querySelector('[data-settings-section="settings-support"]')?.addEventListener('click', () => load());
+    shell.querySelector('[data-settings-section="settings-support"]')?.addEventListener('click', () => {
+      resetDescriptionSize();
+      load();
+    });
+    renderSubmissionLimit();
     load();
     window.setInterval(() => {
       if (section.classList.contains('active') && !document.hidden) load(false);
@@ -777,12 +1325,12 @@
   /* ───────────────  Слайдеры  ─────────────── */
 
   function initSliders(shell) {
-    // Масштаб применяем только когда ползунок реально двигают: на старте
-    // в разметке стоит 100%, а сохранённое значение подставит
-    // initPrefsPersistence — иначе при запуске масштаб бы моргал на 100%.
-    bindSlider(shell, '#lvs-scale-slider', '#lvs-scale-value', (v) => v + '%', (v) => {
-      if (window.settingsManager) window.settingsManager.applyUIScale(v);
-    });
+    // Пока ползунок тянут, меняется только подпись с процентами. Сам масштаб
+    // применяется, когда ползунок отпустили (change → saveSetting в
+    // initPrefsPersistence). Раньше масштаб менялся на каждом движении:
+    // окно перестраивалось, ползунок уезжал из-под курсора, и точно
+    // выставить значение было невозможно.
+    bindSlider(shell, '#lvs-scale-slider', '#lvs-scale-value', (v) => v + '%');
     bindSlider(shell, '#lvs-mic-volume', '#lvs-mic-volume-value', (v) => v + '%');
     // Громкость вывода применяем на каждом движении — иначе ползунок ощущался
     // бы мёртвым (сохранение — на change, в initPrefsPersistence).
@@ -806,7 +1354,7 @@
   /* ───────────────  Темы  ─────────────── */
 
   function initThemeOptions(shell) {
-    const options = shell.querySelectorAll('.lvs-theme-option');
+    const options = shell.querySelectorAll('.lvs-theme-option[data-theme]');
     // Все три темы рабочие; применение идёт через settingsManager.applyTheme
     // (атрибут на <html> + событие для starfield), здесь только подсветка.
     options.forEach(opt => {
@@ -817,6 +1365,28 @@
         if (sm) sm.saveSetting('app-theme', opt.dataset.theme);
       });
     });
+  }
+
+  /* ───────────────  Сезонная тема  ─────────────── */
+
+  // Отдельно от тёмной/светлой: ключ app-season, применяет settingsManager.
+  // Выбор «Обычная» сохраняется так же, как «Halloween», и сам не меняется.
+  function initSeasonOptions(shell) {
+    const options = shell.querySelectorAll('.lvs-season-option');
+    if (!options.length) return;
+    const sync = season => options.forEach(option => {
+      const active = option.dataset.seasonOption === season;
+      option.classList.toggle('active', active);
+      option.setAttribute('aria-pressed', String(active));
+    });
+    const sm = window.settingsManager;
+    sync((sm ? sm.get('app-season') : localStorage.getItem('app-season')) === 'halloween' ? 'halloween' : 'none');
+    options.forEach(option => option.addEventListener('click', () => {
+      const season = option.dataset.seasonOption === 'halloween' ? 'halloween' : 'none';
+      if (sm) sm.saveSetting('app-season', season);
+      sync(season);
+    }));
+    document.addEventListener('love:season-change', event => sync(event.detail.season));
   }
 
   /* ───────────────  Превью уведомления (повтор анимации)  ─────────────── */
@@ -840,7 +1410,23 @@
     // Список устройств меняется на ходу (подключили гарнитуру) — перечитываем,
     // иначе в меню остались бы мёртвые id.
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-      navigator.mediaDevices.addEventListener('devicechange', () => populateDevices(shell));
+      let deviceChangeTimer = null;
+      navigator.mediaDevices.addEventListener('devicechange', () => {
+        populateDevices(shell);
+        // Выбран «Микрофон по умолчанию», а в Windows сменили устройство
+        // (подключили гарнитуру): уже открытый захват так и слушал старый
+        // микрофон до перезапуска. Перезахватываем — в войсе и в проверке.
+        // devicechange приходит пачкой, поэтому с небольшой паузой.
+        clearTimeout(deviceChangeTimer);
+        deviceChangeTimer = setTimeout(() => {
+          const sm = window.settingsManager;
+          if ((sm && sm.get('voice-input-device')) && sm.get('voice-input-device') !== 'default') return;
+          if (window.voiceManager && typeof window.voiceManager.switchMicrophone === 'function') {
+            window.voiceManager.switchMicrophone();
+          }
+          window.dispatchEvent(new CustomEvent('love:mic-device-changed'));
+        }, 600);
+      });
     }
 
     const testBtn = shell.querySelector('#lvs-mic-test');
@@ -878,9 +1464,14 @@
       function ensureStream(gen) {
         if (stream) return Promise.resolve(stream);
         if (!streamPromise) {
-          const constraints = typeof window.getVoiceAudioConstraints === 'function'
+          const base = typeof window.getVoiceAudioConstraints === 'function'
             ? window.getVoiceAudioConstraints()
-            : true;
+            : {};
+          // Эхоподавление в проверке выключено: «Слышать себя» проигрывает
+          // ваш же голос, и эхоподавитель принимал его за эхо и вырезал
+          // кусками — звук рвался, пока говоришь. Шумодав и автогромкость
+          // остаются как в настройках.
+          const constraints = { ...(base && typeof base === 'object' ? base : {}), echoCancellation: false };
           streamPromise = navigator.mediaDevices
             .getUserMedia({ audio: constraints, video: false })
             .then(s => {
@@ -1289,6 +1880,12 @@
   /* ───────────────  О приложении: кнопки-заглушки  ─────────────── */
 
   function initAbout(shell) {
+    // Плитка «Поддержка» ведёт в раздел «Помощь и нарушения» здесь же.
+    shell.querySelectorAll('[data-about-open]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        shell.querySelector(`.settings-nav-item[data-settings-section="${btn.dataset.aboutOpen}"]`)?.click();
+      });
+    });
     shell.querySelectorAll('a[data-stub]').forEach(link => {
       const original = link.innerHTML;
       link.addEventListener('click', (e) => {
@@ -1333,7 +1930,7 @@
       snapshot.listening = (shell.querySelector('#lvs-input-listening') || {}).value || '';
       snapshot.mood = (window.ownProfileData && window.ownProfileData.mood) || 'tea';
       snapshot.avatarUrl = (window.ownProfileData && window.ownProfileData.avatarUrl) || '';
-      snapshot.hobbies = JSON.stringify(window.myHobbies || []);
+      snapshot.hobbies = JSON.stringify((window.myHobbies || []).map(h => ({ text: h.text, icon: h.icon })));
     }
 
     // Перечитать форму профиля из ownProfileData и зафиксировать новый снапшот.
@@ -1353,7 +1950,7 @@
         listening: (shell.querySelector('#lvs-input-listening') || {}).value || '',
         mood: (window.ownProfileData && window.ownProfileData.mood) || 'tea',
         avatarUrl: (window.ownProfileData && window.ownProfileData.avatarUrl) || '',
-        hobbies: JSON.stringify(window.myHobbies || [])
+        hobbies: JSON.stringify((window.myHobbies || []).map(h => ({ text: h.text, icon: h.icon })))
       };
       dirty = cur.name !== snapshot.name || cur.user !== snapshot.user || cur.bio !== snapshot.bio ||
               cur.status !== snapshot.status || cur.listening !== snapshot.listening ||
@@ -1364,93 +1961,138 @@
 
     window.__settingsRefreshDirty = checkDirty;
 
-    async function doSave() {
-      const usernameResult = shell.querySelector('#lvs-username-result');
-      const nameVal = ((shell.querySelector('#lvs-input-name') || {}).value || '').trim();
-      const bioVal = ((shell.querySelector('#lvs-input-bio') || {}).value || '').trim();
-      const statusVal = ((shell.querySelector('#lvs-input-status') || {}).value || '').trim();
-      const listeningVal = ((shell.querySelector('#lvs-input-listening') || {}).value || '').trim();
+    let saving = false;
+    const saveLabel = saveBtn ? saveBtn.textContent : 'Сохранить';
+    const confirmSaveLabel = confirmSave ? confirmSave.textContent : 'Сохранить';
+    const saveStatus = saveBar?.querySelector('.lvs-save-bar-text') || document.createElement('span');
+    saveStatus.className = 'lvs-save-bar-text lvs-save-status';
+    saveStatus.id = 'lvs-save-status';
+    saveStatus.setAttribute('role', 'status');
+    saveStatus.setAttribute('aria-live', 'polite');
+    if (saveBar && !saveStatus.parentNode) saveBar.prepend(saveStatus);
 
-      if (!nameVal) {
-        if (usernameResult) { usernameResult.textContent = 'Имя не может быть пустым'; usernameResult.style.color = '#ff4a4a'; }
+    function savingState(active, message) {
+      saving = active;
+      if (message) saveStatus.textContent = message;
+      for (const button of [saveBtn, confirmSave]) {
+        if (!button) continue;
+        button.disabled = active;
+        button.setAttribute('aria-busy', String(active));
+        button.textContent = active ? 'Сохраняем…' : (button === saveBtn ? saveLabel : confirmSaveLabel);
+      }
+      if (resetBtn) resetBtn.disabled = active;
+    }
+
+    async function doSave() {
+      if (saving) return;
+      const usernameResult = shell.querySelector('#lvs-username-result');
+      const inputs = {
+        name: shell.querySelector('#lvs-input-name'),
+        bio: shell.querySelector('#lvs-input-bio'),
+        status: shell.querySelector('#lvs-input-status'),
+        listening: shell.querySelector('#lvs-input-listening')
+      };
+      const submitted = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input?.value || '']));
+      Object.assign(submitted, {
+        user: shell.querySelector('#lvs-input-username')?.value || '',
+        mood: window.ownProfileData?.mood || 'tea',
+        hobbies: JSON.stringify((window.myHobbies || []).map(h => ({ text: h.text, icon: h.icon }))),
+        avatarUrl: window.ownProfileData?.avatarUrl || ''
+      });
+      const payload = {
+        nickname: submitted.name.trim(), bio: submitted.bio.trim(),
+        customStatus: submitted.status.trim(), listening: submitted.listening.trim(),
+        mood: submitted.mood,
+        hobbies: JSON.parse(submitted.hobbies).map(h => ({ text: h.text, icon: h.icon }))
+      };
+      if (!submitted.avatarUrl && snapshot.avatarUrl) payload.avatar = null;
+      if (!payload.nickname) {
+        saveStatus.textContent = 'Введите имя профиля';
+        inputs.name?.focus();
         return;
       }
-
-      const payload = {
-        nickname: nameVal,
-        bio: bioVal,
-        customStatus: statusVal,
-        listening: listeningVal,
-        mood: (window.ownProfileData && window.ownProfileData.mood) || 'tea',
-        hobbies: (window.myHobbies || []).map(h => ({ text: h.text, icon: h.icon }))
-      };
-
-      if (saveBtn) saveBtn.disabled = true;
+      // Render feedback before the first upload or network request.
+      savingState(true, 'Сохраняем изменения…');
+      const slowTimer = setTimeout(() => {
+        saveStatus.textContent = 'Сервер отвечает дольше обычного. Изменения остаются здесь.';
+      }, 5000);
       try {
-        if (typeof UsersAPI !== 'undefined') {
-          // Сначала грузим аватар, если выбран новый файл
-          if (window.__pendingAvatarFile) {
-            try {
-              const res = await UsersAPI.uploadAvatar(window.__pendingAvatarFile);
-              const url = (res && res.user && res.user.avatar) || (res && res.url) || (res && res.avatar);
-              if (url) {
-                if (window.ownProfileData) window.ownProfileData.avatarUrl = 'url("' + url + '")';
-                if (window.currentUser) window.currentUser.avatar = url;
-              }
-              window.__pendingAvatarFile = null;
-            } catch (e) {
-              console.error('[settings] avatar upload failed:', e);
+        if (typeof UsersAPI === 'undefined') throw new Error('Сервис профиля ещё не готов. Попробуйте снова.');
+        const avatarFile = window.__pendingAvatarFile;
+        if (avatarFile) {
+          saveStatus.textContent = 'Загружаем аватар…';
+          const uploaded = await UsersAPI.uploadAvatar(avatarFile);
+          const url = uploaded?.user?.avatar || uploaded?.url || uploaded?.avatar;
+          if (!url) throw new Error('Сервер не подтвердил загрузку аватара. Попробуйте ещё раз.');
+          submitted.avatarUrl = 'url("' + url + '")';
+          if (window.currentUser) window.currentUser.avatar = url;
+          if (window.__pendingAvatarFile === avatarFile) {
+            window.__pendingAvatarFile = null;
+            if (window.ownProfileData) window.ownProfileData.avatarUrl = submitted.avatarUrl;
+          }
+          saveStatus.textContent = 'Сохраняем профиль…';
+        }
+        const result = await UsersAPI.updateProfile(payload);
+        const user = result?.user || result;
+        if (!user || !user._id) throw new Error('Сервер не подтвердил сохранение. Попробуйте ещё раз.');
+        if (window.currentUser) {
+          Object.assign(window.currentUser, user);
+          try { localStorage.setItem('user', JSON.stringify(window.currentUser)); } catch (_) {}
+        }
+        const saved = {
+          name: user.nickname ?? payload.nickname, bio: user.bio ?? payload.bio,
+          status: user.customStatus ?? payload.customStatus, listening: user.listening ?? payload.listening
+        };
+        // Edits typed while a request is running remain dirty and are never
+        // labelled as saved or overwritten by the older response.
+        for (const [key, input] of Object.entries(inputs)) {
+          if (input && input.value === submitted[key]) {
+            input.value = saved[key];
+            if (window.ownProfileData) {
+              const property = key === 'status' ? 'statusText' : key;
+              window.ownProfileData[property] = saved[key];
             }
           }
-
-          const result = await UsersAPI.updateProfile(payload);
-          const u = (result && result.user) || result;
-          if (u && window.currentUser) {
-            window.currentUser.nickname     = u.nickname;
-            window.currentUser.bio          = u.bio;
-            window.currentUser.customStatus = u.customStatus;
-            window.currentUser.mood         = u.mood;
-            window.currentUser.listening    = u.listening;
-            window.currentUser.hobbies      = u.hobbies;
-          }
         }
-
-        // Синхронизируем локальную витрину
-        if (window.ownProfileData) {
-          window.ownProfileData.name       = payload.nickname;
-          window.ownProfileData.bio        = payload.bio;
-          window.ownProfileData.statusText = payload.customStatus;
-          window.ownProfileData.listening  = payload.listening;
-        }
-
-        takeSnapshot();
+        Object.assign(snapshot, submitted, saved, {
+          mood: user.mood ?? submitted.mood,
+          hobbies: JSON.stringify((user.hobbies ?? payload.hobbies).map(h => ({ text: h.text, icon: h.icon })))
+        });
         checkDirty();
-        if (typeof window.showToast === 'function') window.showToast('Профиль', 'Изменения сохранены.');
+        saveStatus.textContent = dirty ? 'Сохранено. Есть новые изменения.' : 'Все изменения сохранены';
+        if (typeof window.showToast === 'function') window.showToast('Профиль', dirty ? 'Сохранено. Новые правки можно сохранить отдельно.' : 'Изменения сохранены.');
         if (typeof window.refreshProfileVitrine === 'function') window.refreshProfileVitrine();
         const navAvatarLetter = document.querySelector('#nav-profile-btn .avatar-letter');
-        if (navAvatarLetter) navAvatarLetter.textContent = (payload.nickname || 'U').charAt(0).toUpperCase();
+        if (navAvatarLetter) navAvatarLetter.textContent = saved.name.charAt(0).toUpperCase();
         if (usernameResult) { usernameResult.textContent = 'Имя пользователя меняется в разделе «Аккаунт».'; usernameResult.style.color = ''; }
-
-        if (pendingNavBtn) {
-          const btn = pendingNavBtn;
+        if (!dirty && pendingNavBtn) {
+          const button = pendingNavBtn;
           pendingNavBtn = null;
           pendingClose = false;
-          btn.click();
-        } else if (pendingClose) {
+          button.click();
+        } else if (!dirty && pendingClose) {
           pendingClose = false;
           doClose();
         }
-      } catch (err) {
-        console.error('[settings] save profile failed:', err);
-        const msg = (err && err.message) || 'Не удалось сохранить изменения';
-        if (usernameResult) { usernameResult.textContent = msg; usernameResult.style.color = '#ff4a4a'; }
-        if (typeof window.showToast === 'function') window.showToast('Ошибка', msg);
+      } catch (error) {
+        console.warn('[settings] profile save failed:', error.status || 'network');
+        const message = error.message || 'Не удалось сохранить. Ваши изменения остались в форме.';
+        saveStatus.textContent = message;
+        if (usernameResult) { usernameResult.textContent = message; usernameResult.style.color = '#ff8080'; }
+        if (typeof window.showToast === 'function') window.showToast('Не сохранено', message);
+        checkDirty();
       } finally {
-        if (saveBtn) saveBtn.disabled = false;
+        clearTimeout(slowTimer);
+        savingState(false);
       }
     }
 
     function doReset() {
+      if (saving) return;
+      window.__pendingAvatarFile = null;
+      const hobbies = JSON.parse(snapshot.hobbies || '[]');
+      if (Array.isArray(window.myHobbies)) window.myHobbies.splice(0, window.myHobbies.length, ...hobbies);
+      else window.myHobbies = hobbies;
       const d = window.ownProfileData || {};
       const nameInput = shell.querySelector('#lvs-input-name');
       const userInput = shell.querySelector('#lvs-input-username');
@@ -1599,7 +2241,7 @@
     const activeTheme = (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system')
       ? savedTheme
       : 'dark';
-    shell.querySelectorAll('.lvs-theme-option').forEach(o =>
+    shell.querySelectorAll('.lvs-theme-option[data-theme]').forEach(o =>
       o.classList.toggle('active', o.dataset.theme === activeTheme));
 
     // Масштаб интерфейса (через settingsManager — он применяет на старте)
@@ -1638,6 +2280,130 @@
     });
   }
 
+  /* ───────────────  Публичная страница профиля  ─────────────── */
+
+  /*
+   * Карточка-вход в редактор на me.loveapp.chat/build.
+   *
+   * Сам редактор живёт на другом домене и работает со своим узким токеном:
+   * приложение просит у сервера одноразовый код и открывает ссылку во внешнем
+   * браузере. Токен из приложения на публичный хост при этом не уезжает — в
+   * этом весь смысл такой передачи.
+   *
+   * Карточка спрятана, пока сервер не ответил, и остаётся спрятанной при любой
+   * ошибке. Отдельно это важно для 404: так отвечает requireFeature, когда
+   * функция ещё выключена флагом. Показать в этом случае кнопку — значит
+   * пообещать раздел, которого нет.
+   */
+  function initProfilePage() {
+    const card = document.getElementById('lvs-pp-card');
+    const stateEl = document.getElementById('lvs-pp-state');
+    const badge = document.getElementById('lvs-pp-badge');
+    const note = document.getElementById('lvs-pp-note');
+    const button = document.getElementById('lvs-pp-open');
+    const buttonLabel = document.getElementById('lvs-pp-open-label');
+    const copyBtn = document.getElementById('lvs-pp-copy');
+    const visitBtn = document.getElementById('lvs-pp-visit');
+    if (!card || !button || !window.ProfilePageAPI) return;
+
+    let summary = null;
+    let publicUrl = '';
+
+    function paint() {
+      if (!summary) return;
+      const urls = summary.urls || {};
+      const address = (urls.shortAvailable && urls.short ? urls.short : urls.long) || '';
+      const shown = address.replace(/^https?:\/\//, '');
+
+      if (summary.enabled) {
+        badge.textContent = 'открыта';
+        badge.className = 'lvs-badge lvs-badge--success';
+      } else {
+        badge.textContent = 'не опубликована';
+        badge.className = 'lvs-badge';
+      }
+      badge.hidden = false;
+
+      stateEl.textContent = summary.enabled
+        ? shown
+        : (shown ? shown + ' — пока никому не видна' : 'Оформите визитку и откройте её по ссылке');
+
+      // Скрытую модерацией страницу настройки всё ещё считают опубликованной,
+      // а по ссылке её нет. Промолчать — оставить человека с мёртвым адресом.
+      let text = '';
+      if (summary.moderation === 'hidden') text = 'Страницу скрыла модерация — по ссылке её сейчас не видно.';
+      else if (summary.moderation === 'flagged') text = 'На страницу пожаловались, её смотрит модерация.';
+      else if (summary.restricted) text = 'Пока аккаунт ограничен, страница недоступна.';
+      note.textContent = text;
+      note.hidden = !text;
+
+      if (buttonLabel) buttonLabel.textContent = summary.exists ? 'Настроить' : 'Создать';
+      else button.textContent = summary.exists ? 'Настроить' : 'Создать';
+      // Скопировать адрес можно всегда, открыть — только опубликованную.
+      publicUrl = address;
+      if (copyBtn) copyBtn.hidden = !address;
+      if (visitBtn) visitBtn.hidden = !(address && summary.enabled && summary.moderation !== 'hidden');
+      card.classList.toggle('is-live', !!summary.enabled);
+      card.hidden = false;
+    }
+
+    async function load() {
+      try {
+        summary = await window.ProfilePageAPI.summary();
+        paint();
+      } catch (error) {
+        // 404 — функции нет; всё остальное — сервер недоступен. В обоих случаях
+        // молча ничего не рисуем: настройки не место для отчётов о недоступности.
+        card.hidden = true;
+      }
+    }
+
+    button.addEventListener('click', async () => {
+      button.classList.add('is-loading');
+      try {
+        const res = await window.ProfilePageAPI.editorSession();
+        // Код лежит во фрагменте ссылки, поэтому открывать её нужно во внешнем
+        // браузере целиком и без правок — внутри Electron редактор оказался бы
+        // на том же процессе, что и приложение с полным токеном.
+        if (window.electronAPI && window.electronAPI.openExternal) {
+          window.electronAPI.openExternal(res.url);
+        } else {
+          window.open(res.url, '_blank', 'noopener');
+        }
+        _toast('Редактор открыт', 'Продолжайте в браузере. Ссылка действует две минуты.');
+        // Состояние могло измениться, пока человек редактировал, — обновим при
+        // возврате в приложение, а не сейчас: сейчас ничего ещё не поменялось.
+        setTimeout(load, 60000);
+      } catch (error) {
+        _toast('Не удалось открыть редактор', (error && error.message) || 'Попробуйте ещё раз.');
+      } finally {
+        button.classList.remove('is-loading');
+      }
+    });
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        if (!publicUrl) return;
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          _toast('Ссылка скопирована', publicUrl.replace(/^https?:\/\//, ''));
+        } catch (_) {
+          _toast('Не удалось скопировать', 'Выделите адрес и скопируйте вручную.');
+        }
+      });
+    }
+    if (visitBtn) {
+      visitBtn.addEventListener('click', () => {
+        if (!publicUrl) return;
+        if (window.electronAPI && window.electronAPI.openExternal) window.electronAPI.openExternal(publicUrl);
+        else window.open(publicUrl, '_blank', 'noopener');
+      });
+    }
+
+    load();
+    window.__reloadProfilePageCard = load;
+  }
+
   /* ───────────────  Аккаунт: данные + безопасность  ─────────────── */
 
   let _accountSubmit = null;
@@ -1666,7 +2432,13 @@
     }
 
     const logoutBtn = document.getElementById('lvs-logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', doLogout);
+    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+      // Кнопка теперь всегда на виду внизу панели — спрашиваем, чтобы не выйти случайно.
+      const ok = typeof window.loveConfirm === 'function'
+        ? await window.loveConfirm({ title: 'Выйти из аккаунта?', text: 'Чтобы вернуться, нужно будет снова ввести почту и пароль.', confirmText: 'Выйти', danger: true })
+        : true;
+      if (ok) doLogout();
+    });
 
     const emailBtn = document.getElementById('lvs-acc-email-btn');
     const usernameBtn = document.getElementById('lvs-acc-username-btn');
@@ -1706,6 +2478,8 @@
     try { if (typeof clearAuthToken === 'function') await clearAuthToken(); } catch (e) {}
     try { localStorage.removeItem('user'); } catch (e) {}
     window.currentUser = null;
+    // Уведомления прошлого аккаунта не должны пережить выход (CODEX-0019).
+    try { if (typeof window.resetNotificationsForLogout === 'function') window.resetNotificationsForLogout(); } catch (e) {}
     if (typeof window.showAuthScreen === 'function') window.showAuthScreen();
     else location.reload();
   }

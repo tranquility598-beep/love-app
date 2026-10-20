@@ -33,8 +33,10 @@
     if (!file) return null;
     const title = file.name.replace(/\.[^.]+$/, '');
 
-    // Локальный путь (Electron отдаёт абсолютный путь у File)
-    const localPath = file.path || '';
+    // Локальный путь к файлу на диске. На Electron 32+ у File нет .path,
+    // путь отдаёт preload (webUtils.getPathForFile); .path — для старых сборок.
+    const localPath = (window.electronAPI && typeof window.electronAPI.getPathForFile === 'function'
+      ? window.electronAPI.getPathForFile(file) : '') || file.path || '';
     if (localPath) {
       try {
         localStorage.setItem(LS_PATH, localPath);

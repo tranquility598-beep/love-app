@@ -351,7 +351,7 @@ class AuthRepository {
         '/auth/login',
         body: {'email': email.trim(), 'password': password},
       );
-      return _authResultFromResponse(response);
+      return await _authResultFromResponse(response);
     } on ApiException catch (error) {
       // Неподтверждённая почта приходит как 403 (или 503, если письмо не
       // ушло): это не ошибка входа, а следующий шаг — экран кода.
@@ -395,7 +395,7 @@ class AuthRepository {
         '/auth/verify-otp',
         body: {'email': email.trim(), 'code': code.trim()},
       );
-      return _authenticatedFromResponse(response);
+      return await _authenticatedFromResponse(response);
     } on ApiException catch (error) {
       _rethrowVerificationError(error, email.trim());
     }

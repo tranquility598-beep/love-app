@@ -49,6 +49,36 @@ const hardcoded = [
     file: path.join('mobile', 'lib', 'src', 'config', 'app_config.dart'),
     what: 'AppConfig.productVersion',
     pattern: /productVersion\s*=\s*(?:String\.fromEnvironment\([\s\S]*?defaultValue:\s*)?['"]([^'"]+)['"]/
+  },
+  {
+    file: path.join('client', 'js', 'new', 'script.js'),
+    what: 'последний выпуск в Love Hub на ПК',
+    pattern: /mockHubUpdates\s*=\s*\[\s*\{\s*id:\s*\d+,\s*version:\s*['"]v([^'"]+)['"]/
+  },
+  {
+    file: path.join('mobile', 'lib', 'src', 'features', 'more', 'love_hub_screen.dart'),
+    what: 'последний выпуск в Love Hub на Android',
+    pattern: /_seedUpdates\(String version\)\s*=>\s*\[\s*(?:const\s+)?_HubUpdate\(\s*version:\s*['"]v([^'"]+)['"]/
+  },
+  {
+    file: path.join('sandbox', 'public', 'index.html'),
+    what: 'текущая версия на главной сайта',
+    pattern: /id="site-current-version"[^>]*>\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('sandbox', 'public', 'changelog.html'),
+    what: 'текущая версия истории сайта (EN)',
+    pattern: /Current version\s*·\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('sandbox', 'public', 'changelog.html'),
+    what: 'текущая версия истории сайта (RU)',
+    pattern: /Текущая версия\s*·\s*v\s*([^<\s]+)/
+  },
+  {
+    file: path.join('sandbox', 'public', 'changelog.html'),
+    what: 'последний выпуск в истории сайта',
+    pattern: /data-release-version="([^"]+)"/
   }
 ];
 
@@ -74,6 +104,19 @@ for (const item of hardcoded) {
     problems.push(
       `${item.file}: ${item.what} = ${found[1]}, а версия релиза ${desktopVersion}`
     );
+  }
+}
+
+const homepage = fs.readFileSync(path.join(rootDir, 'sandbox', 'public', 'index.html'), 'utf8');
+const installers = [
+  `Love-Setup-${desktopVersion}.exe`,
+  `Love-${desktopVersion}-arm64.dmg`,
+  `Love-${desktopVersion}-x64.dmg`,
+  `love-mobile-v${desktopVersion}-arm64-v8a.apk`
+];
+for (const installer of installers) {
+  if (!homepage.includes(`/releases/download/v${desktopVersion}/${installer}`)) {
+    problems.push(`sandbox/public/index.html: нет ссылки на установщик ${installer}`);
   }
 }
 

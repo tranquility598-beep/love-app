@@ -58,14 +58,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+
       - name: Download desktop artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
-
-      - name: Checkout release notes
-        uses: actions/checkout@v4
 
       - name: Publish desktop release assets
         uses: softprops/action-gh-release@v2
@@ -73,4 +73,5 @@ jobs:
           name: LOVE ${{ github.ref_name }}
           body_path: docs/RELEASE_NOTES_${{ github.ref_name }}.md
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: release-assets/**/*

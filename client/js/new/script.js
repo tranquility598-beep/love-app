@@ -5632,16 +5632,31 @@ const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion 
     : APP_VERSION_FALLBACK;
 window.LOVE_APP_VERSION = APP_VERSION;
 
-// История выпусков — та же, что на сайте и в мобильном Love Hub. Номер текущей
-// версии подставляется из сборки, чтобы после релиза не править его руками.
-// У прошлых выпусков номер зашит: подставлять туда версию сборки нельзя, иначе
-// старая запись подпишется свежим номером.
+// Номер установленной сборки — в шапке. Записи истории имеют собственную
+// версию и описание: новая сборка не переименовывает предыдущий выпуск.
 let mockHubUpdates = [
     {
+        id: 11,
+        version: "v2.2.0",
+        date: "20 октября 2026",
+        tag: APP_VERSION.split("-")[0] === "2.2.0" ? "Текущая версия" : "Обновление",
+        title: "Твоё пространство. Твой стиль.",
+        desc: "Публичные страницы, обновлённые звонки и настройки, Soft v3 и Halloween — на компьютере и Android.",
+        changes: [
+                    "Публичная страница: редактор с живым превью, раскладки, шрифты, эффекты, музыка и ссылки",
+                    "Кнопка «Написать в Love» открывает профиль в приложении без повторных напоминаний о входе",
+                    "Единый интерфейс звонков ЛС и комнат; исправления звука, камеры, демонстрации и выхода из войса",
+                    "Поиск по пунктам настроек, обновлённое «О приложении», рабочий выход и список заблокированных",
+                    "Вопросы, баги и идеи с вложениями: одно открытое обращение и пауза 15 минут после закрытия",
+                    "Мягкий звуковой пакет Soft v3 и Halloween-тема с возможностью вернуться к обычному оформлению",
+                    "Доработаны регистрация, коды подтверждения и сохранение профиля; тарифы предварительные, без оплаты"
+        ]
+    },
+    {
         id: 10,
-        version: "v" + APP_VERSION,
+        version: "v2.1.1",
         date: "август 2026",
-        tag: "Текущая версия",
+        tag: "Обновление",
         title: "Версия показывается правильно",
         desc: "Приложение называло себя 2.0.0 — и в настройках, и в Love Hub, и в этом самом списке. Обновлялось оно при этом честно, врала только надпись.",
         changes: [
@@ -5807,6 +5822,8 @@ function updateHubBentoPreview() {
     if (versionEl) versionEl.textContent = "v" + APP_VERSION;
     const heroTitle = document.getElementById("hub-hero-title");
     if (heroTitle) heroTitle.textContent = "Love App v" + APP_VERSION;
+    const heroDesc = document.getElementById("hub-hero-desc");
+    if (heroDesc) heroDesc.textContent = mockHubUpdates[0].desc;
 
     // Карточка идеи (заглушка Скоро)
     const bentoIdeaCard = document.querySelector(".bento-card.bento-idea");
@@ -6663,7 +6680,7 @@ window.applyHubAnnouncement = function (announcement) {
     activeHubAnnouncementId = String(announcement.id || announcement._id || '');
     const heroTitle = document.getElementById("hub-hero-title");
     const heroDesc = document.getElementById("hub-hero-desc");
-    if (heroTitle) heroTitle.textContent = announcement.title || 'Love Hub';
+    if (heroTitle) heroTitle.textContent = 'Love App v' + APP_VERSION;
     if (heroDesc) heroDesc.textContent = announcement.content || announcement.message || '';
 };
 

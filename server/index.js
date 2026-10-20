@@ -19,6 +19,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const hpp = require('hpp');
 const cookieParser = require('cookie-parser');
 const { adminSecurityHeaders, adminOriginGuard } = require('./middleware/adminSecurity');
+const { isProfileHost, profileOrigin } = require('./utils/profilePageUrls');
 
 const app = express();
 const server = http.createServer(app);
@@ -162,15 +163,23 @@ app.use(hpp());
 // CORS настройка с whitelist
 app.use('/api/admin', adminSecurityHeaders, adminOriginGuard);
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (isAllowedOrigin(origin)) return callback(null, true);
-    console.warn(`⚠️  Blocked CORS request from origin: ${origin}`);
-    return callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Request-Id'],
-  credentials: true
+app.use(cors((req, configure) => {
+  configure(null, {
+    origin(origin, callback) {
+      // Браузер отправляет Origin даже за своими ES-модулями и шрифтами.
+      // Разрешаем origin профилей только на их собственном хосте: добавление
+      // его в общий whitelist открыло бы ему API основного приложения.
+      const sameProfileOrigin = isProfileHost(req)
+        && typeof origin === 'string'
+        && origin.replace(/\/$/, '') === profileOrigin(req);
+      if (sameProfileOrigin || isAllowedOrigin(origin)) return callback(null, true);
+      console.warn(`⚠️  Blocked CORS request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Request-Id'],
+    credentials: true
+  });
 }));
 
 // Лимит тела запроса.

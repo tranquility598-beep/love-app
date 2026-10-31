@@ -160,8 +160,13 @@ export const api = {
   disable: () => send('/disable', { method: 'POST' }),
   stats: () => send('/stats'),
   resolveFriend: (username) => send('/resolve-friend', { method: 'POST', body: { username } }),
+  styleOf: (username) => send(`/style-of/${encodeURIComponent(username)}`),
+  publish: () => send('/publish', { method: 'POST' }),
+  discardDraft: () => send('/draft/discard', { method: 'POST' }),
+  versions: () => send('/versions'),
+  restoreVersion: (at) => send('/versions/restore', { method: 'POST', body: { at } }),
 
-  /** Загрузка файла в слот (avatar | banner | background | music | og). */
+  /** Загрузка файла в слот (avatar | banner | background | music | og | gallery). */
   upload(slot, file) {
     const form = new FormData();
     form.append('file', file);

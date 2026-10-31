@@ -54,7 +54,7 @@ function reportFixture(fetch) {
   const open = node(), cancel = node();
   const nodes = { 'pf-report-form': form, 'pf-report-note': note, 'pf-report': dialog, 'pf-report-open': open, 'pf-report-cancel': cancel,
     'pf-data': { textContent: JSON.stringify({ username: 'fixture', effect: 'none' }) } };
-  const document = { ...node(), documentElement: node(), getElementById: id => nodes[id] || null, querySelector: () => null };
+  const document = { ...node(), documentElement: node(), getElementById: id => nodes[id] || null, querySelector: () => null, querySelectorAll: () => [] };
   const window = { matchMedia: () => ({ matches: false }) };
   document.body = { ...node(), ownerDocument: document }; document.defaultView = window;
   const timers = new Map(); let timerId = 0;

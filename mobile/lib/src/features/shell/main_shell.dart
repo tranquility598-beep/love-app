@@ -416,12 +416,14 @@ class _BottomLoveNav extends StatelessWidget {
           top: BorderSide(
               color: context.palette.inkA(0.08)), // rgba(255,255,255,0.08)
         ),
+        // В новом дизайне панель отделена только линией, без тени.
         boxShadow: [
-          BoxShadow(
-            color: context.palette.dropA(0.4), // 0 -8px 32px var(--shade-a-40)
-            blurRadius: 32,
-            offset: Offset(0, -8),
-          ),
+          if (!context.palette.rd)
+            BoxShadow(
+              color: context.palette.dropA(0.4), // 0 -8px 32px var(--shade-a-40)
+              blurRadius: 32,
+              offset: Offset(0, -8),
+            ),
         ],
       ),
       child: Row(

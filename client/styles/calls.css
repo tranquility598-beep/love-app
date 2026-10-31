@@ -116,6 +116,22 @@
   filter: none !important;
 }
 
+/* Вертикальный кадр телефона (экран или камера) вписываем целиком:
+   cover в горизонтальной плитке обрезал верх и низ. */
+.call-live-video.is-portrait,
+.love-voice-tile-video.is-portrait,
+.voice-theater-video.is-portrait {
+  object-fit: contain;
+}
+
+/* Плитке с вертикальным кадром — всю высоту ряда вместо 16:9: иначе
+   вертикальное видео ужималось в узкую полоску посередине. */
+.love-voice-tile.has-media.has-portrait-media {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 260px;
+}
+
 #call-modal .video-placeholder {
   position: absolute;
   inset: 0;
@@ -404,37 +420,48 @@
 }
 
 /* ── Большой просмотр демки/камеры ─────────────────────────────────────────
-   Специально не системный фуллскрин: окно приложения остаётся на месте, снизу
-   видно остальных участников, а кадр можно приближать и тащить. */
+   На весь экран (requestFullscreen в call-stage.js): кадр занимает всё, панели
+   лежат поверх и прячутся, пока мышь стоит; кадр можно приближать и тащить. */
 .voice-theater {
   position: fixed;
   inset: 0;
   /* Выше экрана входа (5000) и лайтбокса картинок (17000), но ниже
      объявлений и жалоб — иначе просмотр перекрывал бы системные окна. */
   z-index: 18500;
-  display: grid;
-  place-items: center;
-  /* Титлбар в Electron лежит выше по z-index — без этого отступа шапка
-     просмотра уходила бы под него, как раньше таблетка звонка. */
-  padding: calc(var(--titlebar-h, 0px) + 18px) 18px 18px;
-  background: var(--shade-a-80);
-  backdrop-filter: blur(14px);
+  display: block;
+  background: #000;
 }
+/* Если система не дала полный экран, остаётся всё окно: полоска окна (титлбар)
+   лежит выше по z-index, поэтому панели начинаются под ней. */
+.voice-theater:not(:fullscreen) { top: var(--titlebar-h, 0px); }
 
 .voice-theater.hidden {
   display: none;
 }
 
+/* Кадр занимает весь экран, панели лежат поверх него и прячутся, пока мышь
+   стоит (.is-idle, call-stage.js). */
 .voice-theater-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  width: min(1400px, 100%);
+  position: relative;
+  width: 100%;
   height: 100%;
-  min-height: 0;
 }
 
+.voice-theater-bar,
+.voice-theater-strip {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: opacity 200ms ease;
+}
+.voice-theater.is-idle .voice-theater-bar,
+.voice-theater.is-idle .voice-theater-strip { opacity: 0; pointer-events: none; }
+.voice-theater.is-idle .voice-theater-stage { cursor: none; }
+
 .voice-theater-bar {
+  top: 14px;
+  width: min(720px, calc(100% - 28px));
   display: flex;
   align-items: center;
   gap: 12px;
@@ -505,12 +532,10 @@
 }
 
 .voice-theater-stage {
-  position: relative;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  border: 1px solid var(--tint-a-9);
-  border-radius: 16px;
-  background: var(--bg-deep);
+  background: #000;
 }
 
 .voice-theater-stage.is-zoomed {
@@ -558,6 +583,8 @@
 }
 
 .voice-theater-strip {
+  bottom: 14px;
+  max-width: calc(100% - 28px);
   display: flex;
   gap: 8px;
   overflow-x: auto;
@@ -684,4 +711,140 @@
     grid-template-columns: 1fr;
     grid-auto-rows: minmax(180px, 1fr);
   }
+}
+
+/* ── Звонок в ЛС на месте чата (js/dm-call-dock.js) ─────────────────────────
+   Как войс сферы: шапка с именем и временем, сцена с плитками, панель
+   управления снизу. Список бесед и левая панель остаются видны. */
+#call-modal.is-docked {
+  position: fixed;
+  left: var(--dm-call-left, 0);
+  top: var(--dm-call-top, 0);
+  width: var(--dm-call-width, 100vw);
+  height: var(--dm-call-height, 100vh);
+  padding: 0;
+  display: block;
+  background: transparent;
+  backdrop-filter: none;
+  z-index: 900;
+}
+
+#call-modal.is-docked .call-overlay-container {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  background: var(--bg-primary) !important;
+  justify-content: flex-start;
+}
+
+#call-modal.is-docked .call-top-bar {
+  min-height: 64px;
+  padding: 0 24px !important;
+  border-bottom: 1px solid var(--tint-a-8);
+  flex: 0 0 auto;
+}
+
+#call-modal.is-docked .call-minimize-btn {
+  position: static !important;
+  transform: none !important;
+  width: 40px !important;
+  height: 40px !important;
+  margin-left: 4px;
+  flex: 0 0 auto;
+}
+
+#call-modal.is-docked .call-main-content {
+  position: relative;
+  padding: 14px 14px 84px;
+}
+
+/* Плитки звонка — общая сцена (.love-voice-grid), прежняя сетка не показывается. */
+#call-modal #call-video-grid { display: none !important; }
+#call-modal #call-tile-grid { flex: 1; }
+
+/* ── Камера телефона на ПК: кадр целиком, без обрезки ───────────────────────
+   Раньше камера шла с cover: горизонтальную плитку заполняло, а у вертикальной
+   или 4:3 камеры телефона срезало голову и подбородок. Теперь кадр всегда
+   вписывается целиком — свободное место остаётся тёмным, как у демки. */
+.call-live-video,
+.love-voice-tile-video,
+.voice-theater-video,
+.voice-preview-content video,
+.voice-fullscreen-content video,
+.voice-mini-bar video,
+.call-mini-bar video {
+  object-fit: contain !important;
+  background: #000;
+}
+
+/* Число подряд идущих звонков рядом с заголовком (script.js, bumpCallEvent). */
+.call-event-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--tint-a-10);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.call-event-count[hidden] { display: none; }
+
+/* Широкое окно: свёрнутый звонок в ЛС живёт в кнопке войса на левой панели
+   (js/dm-call-dock.js), как войс сферы. Плашку не убираем из вёрстки —
+   от неё считается анимация сворачивания, — только делаем невидимой. */
+@media (min-width: 1025px) {
+  /* Стоит там же, где кнопка войса (низ левой панели): звонок сворачивается
+     в неё и разворачивается из неё. */
+  #call-mini-bar {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    left: 12px !important;
+    top: auto !important;
+    bottom: 72px !important;
+    width: 40px !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    transform: none !important;
+  }
+}
+
+/* Развёрнутая плитка занимает сцену, остальные — полоска снизу. Раньше она
+   брала две строки, и третья уходила за нижний край сцены, плитку обрезало. */
+.voice-constellation.love-voice-grid:has(.love-voice-tile.is-focused) {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-rows: minmax(0, 1fr) 120px;
+  grid-auto-rows: 120px;
+  justify-content: center;
+  align-content: stretch;
+}
+.voice-constellation.love-voice-grid .love-voice-tile.is-focused {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+  height: auto;
+  width: 100%;
+}
+.voice-constellation.love-voice-grid:has(.love-voice-tile.is-focused) .love-voice-tile:not(.is-focused) {
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 0;
+}
+.voice-constellation.love-voice-grid:has(.love-voice-tile.is-focused) .love-voice-tile:not(.is-focused) .love-voice-tile-avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
 }

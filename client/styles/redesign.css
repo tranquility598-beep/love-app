@@ -1,0 +1,1131 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   НОВЫЙ ДИЗАЙН (ТЕСТ) — docs/redesign/PLAN.md
+
+   Отдельный слой поверх всех стилей. Действует только при <html class="rd">:
+   класс ставит ранний скрипт в index.html (localStorage love-redesign), а
+   переключатель — «Настройки → Внешний вид → Новый дизайн». Выключили —
+   приложение выглядит ровно как раньше. rd-sysfont — системный шрифт
+   вместо Outfit (второй переключатель там же).
+
+   Полный откат: удалить этот файл, js/redesign.js, их <link>/<script>,
+   строки с love-redesign в раннем скрипте index.html и карточку rd-toggle
+   в разделе «Внешний вид».
+
+   Система:
+   - цвета: 4 ступени фона (bg / panel / raise / raise-2), линия, выбранное
+     (sel), 3 ступени текста (text / soft / mute);
+   - скругления: 8 (мелкое), 10 (кнопки, поля), 12 (карточки, меню),
+     16 (окна), круг;
+   - тень одна и только у всплывающего (меню, окна);
+   - кнопки четырёх видов: главная, обычная, тихая, опасная + иконка;
+   - Lora — заголовки экранов, моноширинный — только цифры.
+
+   !important здесь вынужденный: style.css перебивает сам себя ~2600 раз,
+   и слой сверху обязан выигрывать.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+html.rd {
+  --rd-bg: #0b0b0b;
+  --rd-panel: #0f0f0f;
+  --rd-raise: #171717;
+  --rd-raise-2: #1f1f1f;
+  --rd-sel: #2a2a2a;
+  --rd-line: #1f1f1f;
+  --rd-line-2: #2d2d2d;
+  --rd-text: #ededed;
+  --rd-soft: #a3a3a3;
+  --rd-mute: #6e6e6e;
+  --rd-own: #ededed;
+  --rd-own-text: #0b0b0b;
+  --rd-danger: #ff6b66;
+  --rd-danger-bg: rgba(255, 107, 102, .12);
+  --rd-scrim: rgba(0, 0, 0, .64);
+  --rd-pop: 0 16px 40px rgba(0, 0, 0, .55);
+  --rd-rail: 64px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --bg-deep: var(--rd-bg);
+  --bg-page-core: var(--rd-bg);
+  --bg-primary: var(--rd-bg);
+  --bg-secondary: var(--rd-panel);
+  --bg-tertiary: var(--rd-bg);
+  --surface-raised: var(--rd-raise);
+  --surface-highlight: var(--rd-raise-2);
+}
+
+html.rd[data-theme="light"] {
+  --rd-bg: #fafafa;
+  --rd-panel: #f3f3f3;
+  --rd-raise: #ebebeb;
+  --rd-raise-2: #e2e2e2;
+  --rd-sel: #ffffff;
+  --rd-line: #e4e4e4;
+  --rd-line-2: #d3d3d3;
+  --rd-text: #121212;
+  --rd-soft: #545454;
+  --rd-mute: #8a8a8a;
+  --rd-own: #121212;
+  --rd-own-text: #fafafa;
+  --rd-danger: #d43c36;
+  --rd-danger-bg: rgba(212, 60, 54, .1);
+  --rd-scrim: rgba(0, 0, 0, .28);
+  --rd-pop: 0 16px 40px rgba(0, 0, 0, .14);
+}
+
+/* Системный шрифт вместо Outfit — для сравнения. */
+html.rd.rd-sysfont {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+html.rd.rd-sysfont body,
+html.rd.rd-sysfont button,
+html.rd.rd-sysfont input,
+html.rd.rd-sysfont textarea,
+html.rd.rd-sysfont select { font-family: var(--font-sans) !important; }
+
+/* ── Основа: без стекла, звёзд, свечений и теней текста ─────────────────── */
+
+html.rd body { background: var(--rd-bg) !important; background-image: none !important; }
+html.rd #starfield-canvas { display: none !important; }
+html.rd *,
+html.rd *::before,
+html.rd *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+html.rd ::placeholder { color: var(--rd-mute) !important; opacity: 1 !important; }
+html.rd ::selection { background: var(--rd-sel); color: var(--rd-text); }
+html.rd ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.rd ::-webkit-scrollbar-thumb { background: var(--rd-line-2); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+html.rd ::-webkit-scrollbar-track { background: transparent; }
+html.rd .global-sidebar svg,
+html.rd .nav-btn svg { filter: none !important; }
+
+/* ── Типографика ─────────────────────────────────────────────────────────── */
+
+/* Заголовки экранов — Lora прямым начертанием, с заглавной буквы. */
+html.rd .sidebar-title,
+html.rd .friends-title,
+html.rd .settings-sidebar-title,
+html.rd .lvs-section-title,
+html.rd #hub-hero-title,
+html.rd .add-friend-title,
+html.rd .profile-name {
+  font-family: var(--font-serif) !important;
+  font-style: normal !important;
+  font-weight: 400 !important;
+  letter-spacing: -.01em !important;
+}
+html.rd .sidebar-title::first-letter,
+html.rd .friends-title::first-letter { text-transform: uppercase; }
+html.rd .sidebar-title { font-size: 21px !important; }
+html.rd .friends-title { font-size: 26px !important; }
+html.rd .settings-sidebar-title { font-size: 19px !important; }
+html.rd .lvs-section-title { font-size: 26px !important; }
+html.rd #hub-hero-title { font-size: 30px !important; }
+html.rd .add-friend-title { font-size: 26px !important; }
+
+/* Заголовки окон — тем же шрифтом, что интерфейс: окно — инструмент. */
+html.rd #new-chat-title,
+html.rd #hub-modal-title,
+html.rd #hub-form-modal-title,
+html.rd #hub-info-modal-title,
+html.rd .devlog-header-text h3,
+html.rd .capsule-modal h3,
+html.rd .capsule-modal-title,
+html.rd .create-space-modal h2,
+html.rd .tutorial-modal-card h2,
+html.rd .tutorial-modal-card h3 {
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+/* Названия в списках — шрифтом интерфейса. */
+html.rd .space-card-title { font-family: var(--font-sans) !important; font-size: 14px !important; font-weight: 500 !important; }
+html.rd .space-card-subtitle { font-size: 12px !important; color: var(--rd-mute) !important; }
+
+/* Подписи — обычными буквами, без моноширинного и разрядки. */
+html.rd .auth-label,
+html.rd .auth-divider span,
+html.rd .settings-nav-group,
+html.rd .lvs-preview-label,
+html.rd .profile-section-label,
+html.rd .lvs-section-subtitle,
+html.rd .support-kicker,
+html.rd .bento-tag,
+html.rd .bento-card h3,
+html.rd .profile-username,
+html.rd .call-encrypted-badge,
+html.rd .call-encrypted-badge span,
+html.rd .profile-tags-row span,
+html.rd .space-card-subtitle {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-family: var(--font-sans) !important;
+}
+html.rd .auth-label,
+html.rd .settings-nav-group,
+html.rd .lvs-preview-label,
+html.rd .profile-section-label,
+html.rd .support-kicker {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--rd-mute) !important;
+}
+html.rd .lvs-section-subtitle { font-size: 13px !important; font-weight: 600 !important; color: var(--rd-soft) !important; }
+html.rd .lvs-section-subtitle.lvs-danger-text { color: var(--rd-danger) !important; }
+html.rd .auth-brand-tag,
+html.rd .lvs-badge,
+html.rd .channel-prefix { font-family: var(--font-sans) !important; letter-spacing: 0 !important; }
+html.rd .message-meta,
+html.rd .message-meta * { font-style: normal !important; font-family: var(--font-sans) !important; }
+html.rd .lvs-section-desc { color: var(--rd-mute) !important; }
+
+/* ── Кнопки ──────────────────────────────────────────────────────────────── */
+
+/* Главная: заливка цветом текста. Одна на экран или окно. */
+html.rd .auth-submit,
+html.rd .empty-state-btn:not(.empty-state-btn-secondary),
+html.rd .hub-btn-primary,
+html.rd .capsule-btn-primary,
+html.rd .submit-action-btn,
+html.rd .profile-save-btn,
+html.rd .lvs-save-btn,
+html.rd .hub-submit-btn,
+html.rd [class*="btn-primary"] {
+  background: var(--rd-text) !important;
+  color: var(--rd-bg) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+}
+html.rd .auth-submit:disabled,
+html.rd .submit-action-btn:disabled { opacity: .45 !important; }
+
+/* Обычная: серая подложка. */
+html.rd .lvs-btn:not(.lvs-btn--ghost):not(.lvs-btn--danger),
+html.rd .profile-save-btn[style*="255,255,255,0.08"],
+html.rd .auth-google,
+html.rd .empty-state-btn-secondary,
+html.rd .capsule-btn-ghost,
+html.rd .capsule-preset,
+html.rd .call-event-btn,
+html.rd .theater-mode-btn,
+html.rd .lvs-plan-button,
+html.rd .lvs-hobby-add,
+html.rd .hub-select-btn,
+html.rd .lvs-select-btn,
+html.rd .create-space-type-btn {
+  background: var(--rd-raise) !important;
+  color: var(--rd-text) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+html.rd .lvs-btn:not(.lvs-btn--ghost):not(.lvs-btn--danger):hover,
+html.rd .auth-google:hover,
+html.rd .capsule-preset:hover,
+html.rd .call-event-btn:hover,
+html.rd .create-space-type-btn:hover { background: var(--rd-raise-2) !important; }
+html.rd .create-space-type-btn.active,
+html.rd .capsule-preset.active { background: var(--rd-sel) !important; box-shadow: inset 0 0 0 1px var(--rd-line-2) !important; }
+html.rd .call-event-btn { height: 30px !important; padding: 0 12px !important; font-size: 13px !important; }
+
+/* Тихая: только текст. */
+html.rd .lvs-btn--ghost,
+html.rd .hub-btn-ghost,
+html.rd .notif-action-text-btn,
+html.rd .settings-logout-btn,
+html.rd .auth-link {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--rd-soft) !important;
+  border-radius: 10px !important;
+}
+html.rd .lvs-btn--ghost:hover,
+html.rd .hub-btn-ghost:hover,
+html.rd .notif-action-text-btn:hover,
+html.rd .settings-logout-btn:hover { color: var(--rd-text) !important; background: var(--rd-raise) !important; }
+
+/* Опасная: красный текст на бледной подложке, не кричащая заливка.
+   В профиле человека «Удалить из друзей» и «Отклонить» — тот же класс,
+   что у главной кнопки, различаются только встроенным стилем. */
+html.rd .profile-save-btn[style*="239, 68, 68"],
+html.rd .lvs-btn--danger,
+html.rd .remove-friend-btn,
+html.rd [class*="danger-btn"] {
+  background: var(--rd-danger-bg) !important;
+  color: var(--rd-danger) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+/* Иконки-кнопки: квадрат 32–36, без рамок. */
+html.rd .compose-btn,
+html.rd .action-btn,
+html.rd .msg-action-btn,
+html.rd .room-header-settings-btn,
+html.rd .lvs-pp-icon-btn,
+html.rd .capsule-modal-close,
+html.rd .profile-close-btn,
+html.rd .settings-close-btn,
+html.rd .call-minimize-btn,
+html.rd .profile-report-btn,
+html.rd .hub-modal-close,
+html.rd [id$="-modal-close"],
+html.rd .create-space-close,
+html.rd #create-space-close,
+html.rd #add-friend-close,
+html.rd .input-control-btn,
+html.rd .send-btn {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+  color: var(--rd-soft) !important;
+}
+html.rd .compose-btn:hover,
+html.rd .action-btn:hover,
+html.rd .msg-action-btn:hover,
+html.rd .room-header-settings-btn:hover,
+html.rd .capsule-modal-close:hover,
+html.rd .profile-close-btn:hover,
+html.rd .settings-close-btn:hover,
+html.rd .call-minimize-btn:hover,
+html.rd .profile-report-btn:hover,
+html.rd .input-control-btn:hover,
+html.rd .send-btn:hover { background: var(--rd-raise) !important; color: var(--rd-text) !important; }
+html.rd .msg-action-btn.delete:hover { color: var(--rd-danger) !important; }
+
+/* ── Переключатели-вкладки (сегменты) ───────────────────────────────────── */
+
+html.rd .auth-switch,
+html.rd .notif-filter-nav,
+html.rd .friends-filter-nav,
+html.rd .support-center-tabs {
+  background: var(--rd-raise) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  padding: 3px !important;
+}
+html.rd .auth-switch-thumb {
+  background: var(--rd-sel) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+html.rd .auth-switch-btn { color: var(--rd-soft) !important; }
+html.rd .auth-switch-btn.active { color: var(--rd-text) !important; }
+html.rd .filter-tab,
+html.rd .support-center-tabs button,
+html.rd .emoji-cat {
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--rd-soft) !important;
+  box-shadow: none !important;
+}
+html.rd .filter-tab.active,
+html.rd .support-center-tabs button.active,
+html.rd .emoji-cat.active {
+  background: var(--rd-sel) !important;
+  color: var(--rd-text) !important;
+}
+html.rd .filter-tab.add-friend-tab { color: var(--rd-text) !important; }
+
+/* ── Поля ввода ──────────────────────────────────────────────────────────── */
+
+html.rd .auth-input,
+html.rd .settings-content input[type="text"],
+html.rd .settings-content input[type="email"],
+html.rd .settings-content input[type="password"],
+html.rd .settings-content input[type="url"],
+html.rd .settings-content textarea,
+html.rd .settings-content select,
+html.rd .s-select,
+html.rd .profile-status-input,
+html.rd .hub-form-card input,
+html.rd .hub-form-card textarea,
+html.rd .capsule-modal input,
+html.rd #create-space-name,
+html.rd #add-friend-modal-input,
+html.rd .new-chat-search,
+html.rd .friends-inline-search-bar,
+html.rd .settings-search {
+  background: var(--rd-bg) !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  color: var(--rd-text) !important;
+}
+html.rd .auth-input:focus,
+html.rd .settings-content input:focus,
+html.rd .settings-content textarea:focus,
+html.rd .profile-status-input:focus,
+html.rd .hub-form-card input:focus,
+html.rd .hub-form-card textarea:focus { border-color: var(--rd-mute) !important; outline: none !important; }
+html.rd .settings-search,
+html.rd .friends-inline-search-bar { background: var(--rd-raise) !important; border-color: transparent !important; }
+html.rd .friends-inline-search-bar input { background: transparent !important; border: 0 !important; }
+
+/* ── Окна, меню, всплывающее ─────────────────────────────────────────────── */
+
+/* Окно плеера (#music-mini-player-modal) исключено: его фон и карточку
+   анимирует script.js (PLAYER_LOOK), !important здесь ломал морфинг. */
+html.rd .modal-backdrop:not(#music-mini-player-modal),
+html.rd [class*="modal-overlay"],
+html.rd .hub-modal { background: var(--rd-scrim) !important; }
+html.rd #music-mini-player-modal { background: var(--rd-scrim); backdrop-filter: none; }
+html.rd #music-mini-player-modal .profile-card {
+  background: var(--rd-panel);
+  background-image: none;
+  border: 1px solid var(--rd-line-2);
+  border-radius: 16px;
+  box-shadow: var(--rd-pop);
+}
+
+html.rd .profile-card:not(#music-mini-player-modal .profile-card),
+html.rd .hub-modal-card,
+html.rd .capsule-modal,
+html.rd .tutorial-modal-card,
+html.rd .create-space-card,
+html.rd .add-friend-card,
+html.rd .modal-card,
+html.rd .modal-content {
+  background: var(--rd-panel) !important;
+  background-image: none !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--rd-pop) !important;
+}
+html.rd .emoji-picker,
+html.rd .msg-context-menu,
+html.rd .context-menu,
+html.rd .hub-select-menu,
+html.rd .msg-actions-overlay,
+html.rd .toast,
+html.rd [class*="toast-item"],
+html.rd [class*="dropdown-menu"] {
+  background: var(--rd-raise) !important;
+  background-image: none !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--rd-pop) !important;
+}
+html.rd .msg-context-item,
+html.rd .context-menu-item { border-radius: 8px !important; }
+html.rd .msg-context-item:hover,
+html.rd .context-menu-item:hover { background: var(--rd-raise-2) !important; }
+html.rd .msg-context-item.danger { color: var(--rd-danger) !important; }
+html.rd .emoji-item { border-radius: 8px !important; }
+html.rd .hub-list-item,
+html.rd .tutorial-step-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Профиль человека: плоский, без свечения вокруг аватара. */
+html.rd .profile-avatar-glow { display: none !important; }
+/* Аватары: меняем только цвет подложки под буквой. Фото лежит в
+   background-image (или <img> внутри) — его не трогаем. */
+html.rd .profile-avatar,
+html.rd #profile-modal .profile-avatar,
+html.rd .lvs-avatar,
+html.rd .lvs-avatar-preview,
+html.rd .lvs-vitrine-avatar {
+  background-color: var(--rd-raise-2) !important;
+  color: var(--rd-text) !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+html.rd .profile-avatar:not([style*="url("]),
+html.rd .lvs-avatar:not([style*="url("]) { background-image: none !important; }
+html.rd .profile-lofi-player,
+html.rd .profile-status-box,
+html.rd [class*="profile-mood"] {
+  background: var(--rd-raise) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+html.rd .lvs-mood-item { box-shadow: none !important; }
+
+/* Пустые экраны: строка и действие, без декоративного «+» в рамке. */
+html.rd .empty-state-mark { display: none !important; }
+
+/* ── Каркас (компьютер): панель, список и содержимое вплотную ───────────── */
+
+@media (min-width: 1025px) {
+  html.rd .global-sidebar {
+    width: var(--rd-rail) !important;
+    margin: 0 !important;
+    height: 100% !important;
+    padding: 14px 0 !important;
+    border: 0 !important;
+    border-right: 1px solid var(--rd-line) !important;
+    border-radius: 0 !important;
+    background: var(--rd-bg) !important;
+    box-shadow: none !important;
+  }
+  /* В приложении сверху полоска окна «LOVE» — кнопка бесед прилипала к ней.
+     В браузере полоски нет, там отступ прежний. */
+  html.rd body.is-electron .global-sidebar { padding-top: 22px !important; }
+  html.rd .view-panel {
+    left: var(--rd-rail) !important;
+    width: calc(100% - var(--rd-rail)) !important;
+    top: 0 !important;
+    height: 100% !important;
+  }
+  html.rd .conversations-sidebar,
+  html.rd .channels-sidebar,
+  html.rd .friends-sidebar,
+  html.rd .hub-sidebar,
+  html.rd .notifications-sidebar {
+    margin: 0 !important;
+    height: 100% !important;
+    border: 0 !important;
+    border-right: 1px solid var(--rd-line) !important;
+    border-radius: 0 !important;
+    background: var(--rd-panel) !important;
+    box-shadow: none !important;
+  }
+  html.rd .chat-area,
+  html.rd .server-content-wrapper,
+  html.rd .friends-main-panel,
+  html.rd .hub-content-panel,
+  html.rd .notifications-main-panel,
+  html.rd .voice-channel-panel,
+  html.rd .hub-bento-dashboard {
+    margin: 0 !important;
+    height: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: var(--rd-bg) !important;
+    box-shadow: none !important;
+  }
+
+  /* Настройки — страница рядом с левой панелью, а не окно посреди пустоты. */
+  html.rd #view-settings {
+    left: var(--rd-rail) !important;
+    width: calc(100vw - var(--rd-rail)) !important;
+    padding: 0 !important;
+    background: var(--rd-bg) !important;
+  }
+  html.rd .settings-shell {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+  }
+  html.rd .settings-sidebar { width: 260px !important; flex: 0 0 260px !important; }
+  html.rd .settings-content-scroll { max-width: 800px !important; padding: 44px 48px 72px !important; }
+  /* Крестик — справа от колонки, на уровне заголовка раздела: в углу окна он
+     стоял вплотную к крестику окна Electron, а над колонкой налезал на кнопки
+     при прокрутке. */
+  html.rd .settings-close-btn {
+    top: 42px !important;
+    right: calc(max(0px, (100% - 1060px) / 2) + 6px) !important;
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+/* Кнопки левой панели. */
+html.rd .global-sidebar .nav-btn,
+html.rd .global-sidebar .logo-nav-area {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--rd-mute) !important;
+}
+html.rd .global-sidebar .nav-btn:hover { color: var(--rd-text) !important; background: var(--rd-raise) !important; }
+html.rd .global-sidebar .nav-btn.active,
+html.rd .global-sidebar .logo-nav-area.active { color: var(--rd-text) !important; background: var(--rd-raise) !important; }
+html.rd .global-sidebar .nav-btn::before,
+html.rd .global-sidebar .nav-btn::after,
+html.rd .global-sidebar .logo-nav-area::before,
+html.rd .global-sidebar .logo-nav-area::after { display: none !important; }
+html.rd .quick-btn { border: 0 !important; background: transparent !important; color: var(--rd-mute) !important; }
+html.rd .user-avatar-btn { border: 0 !important; background-color: var(--rd-raise-2) !important; }
+
+/* ── Списки слева: беседы, сферы, каналы ─────────────────────────────────── */
+
+html.rd .sidebar-header {
+  height: 60px !important;
+  min-height: 60px !important;
+  padding: 0 18px !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
+}
+html.rd .search-box { padding: 0 14px 10px !important; border: 0 !important; }
+html.rd #conv-search,
+html.rd .search-box input {
+  height: 36px !important;
+  border-radius: 8px !important;
+  border: 0 !important;
+  background: var(--rd-raise) !important;
+  color: var(--rd-text) !important;
+  font-size: 13.5px !important;
+  box-shadow: none !important;
+}
+html.rd .conversation-item {
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  margin: 0 8px !important;
+  padding: 10px !important;
+}
+html.rd .conversation-item:hover { background: color-mix(in srgb, var(--rd-raise) 60%, transparent) !important; }
+html.rd .conversation-item.active { background: var(--rd-raise) !important; }
+html.rd .conversation-item::before,
+html.rd .conversation-item::after { display: none !important; }
+html.rd .conv-avatar,
+html.rd .partner-avatar,
+html.rd .friend-avatar,
+html.rd .msg-sender-avatar {
+  border: 0 !important;
+  background-color: var(--rd-raise-2) !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+}
+html.rd .online-dot { box-shadow: 0 0 0 2px var(--rd-panel) !important; }
+html.rd .conv-last-msg { color: var(--rd-soft) !important; }
+
+html.rd .space-card {
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html.rd .space-card.expanded,
+html.rd .space-card:hover { background: var(--rd-raise) !important; }
+html.rd .space-card-icon { border: 0 !important; border-radius: 10px !important; background-color: var(--rd-raise-2) !important; }
+html.rd .channel-item { box-shadow: none !important; border-radius: 8px !important; border: 0 !important; }
+html.rd .channel-item.active { background: var(--rd-raise-2) !important; }
+html.rd .add-space-row-btn {
+  border: 1px dashed var(--rd-line-2) !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: var(--rd-soft) !important;
+}
+
+/* ── Чат: лента на всю ширину, свои сообщения у правого края ─────────────── */
+
+html.rd .chat-header {
+  height: 60px !important;
+  min-height: 60px !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+  box-shadow: none !important;
+}
+html.rd .chat-feed {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  gap: 10px !important;
+}
+html.rd .chat-input-area {
+  border-top: 1px solid var(--rd-line) !important;
+  background: transparent !important;
+  padding-top: 14px !important;
+  padding-bottom: 16px !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+html.rd .message-input-form {
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--rd-raise) !important;
+  box-shadow: none !important;
+}
+html.rd .message-input-form:focus-within { box-shadow: inset 0 0 0 1px var(--rd-line-2) !important; }
+
+/* Пузыри: свои — светлые, чужие — тёмно-серые; угол со стороны автора. */
+html.rd .message-bubble { border: 0 !important; box-shadow: none !important; border-radius: 16px !important; }
+html.rd .message-group.partner .message-bubble {
+  background: var(--rd-raise) !important;
+  color: var(--rd-text) !important;
+  border-bottom-left-radius: 5px !important;
+}
+html.rd .message-group.own .message-bubble {
+  background: var(--rd-own) !important;
+  color: var(--rd-own-text) !important;
+  border-bottom-right-radius: 5px !important;
+}
+html.rd .message-group.own .message-bubble * { color: inherit; }
+html.rd .message-group.own .message-bubble a { color: inherit !important; text-decoration: underline !important; }
+/* Ответ на сообщение — цитата внутри пузыря, над текстом (fitBubble в
+   desktop-message-actions.js): черта слева и одна строка процитированного. */
+html.rd .message-reply-reference {
+  border-left: 2px solid var(--rd-line-2) !important;
+  padding-left: 8px !important;
+  opacity: .85;
+}
+html.rd .message-reply-reference * { color: var(--rd-mute) !important; font-size: 12px !important; }
+html.rd .message-bubble > .message-reply-reference {
+  display: flex !important;
+  max-width: 100% !important;
+  margin: 0 0 4px !important;
+  padding: 0 0 0 8px !important;
+  border-left: 2px solid currentColor !important;
+  opacity: .6;
+  color: inherit !important;
+}
+html.rd .message-bubble > .message-reply-reference:hover { opacity: .85; }
+html.rd .message-bubble > .message-reply-reference .message-reply-line { display: none !important; }
+html.rd .message-bubble > .message-reply-reference * { color: inherit !important; }
+html.rd .message-bubble > .message-reply-reference strong { display: none !important; }
+html.rd .message-bubble > .message-reply-reference .message-reply-call svg { color: var(--rd-danger) !important; }
+/* Время — мелко в конце последней строки пузыря. */
+html.rd .message-bubble > .message-meta.in-bubble {
+  display: inline-block !important;
+  margin: 0 0 0 10px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  opacity: .5;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+/* Звонок в ленте — строка, а не карточка. */
+html.rd .call-event {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+html.rd .msg-action-btn { width: 32px !important; height: 32px !important; }
+
+/* ── Друзья, уведомления ─────────────────────────────────────────────────── */
+
+html.rd .friends-unified-panel,
+html.rd .notifications-unified-panel { background: var(--rd-bg) !important; background-image: none !important; }
+html.rd .unified-glass-card {
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--rd-bg) !important;
+  box-shadow: none !important;
+}
+html.rd .friends-unified-header,
+html.rd .notifications-unified-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+}
+html.rd .friend-card { border: 0 !important; border-radius: 10px !important; background: transparent !important; }
+html.rd .friend-card:hover { background: var(--rd-raise) !important; }
+html.rd .friend-card .action-btn { border-radius: 8px !important; }
+
+/* ── Голос и звонок ──────────────────────────────────────────────────────── */
+
+html.rd .voice-header-bar {
+  border: 0 !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html.rd .screenshare-card,
+html.rd .video-stream-box {
+  border: 1px solid var(--rd-line) !important;
+  border-radius: 12px !important;
+  background: var(--rd-panel) !important;
+  box-shadow: none !important;
+}
+html.rd .call-overlay-container {
+  background: var(--rd-bg) !important;
+  background-image: none !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--rd-pop) !important;
+  filter: none !important;
+}
+html.rd .call-controls-dock {
+  background: var(--rd-raise) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html.rd .call-dock-btn,
+html.rd .voice-control-btn-circle { box-shadow: none !important; }
+html.rd .call-participant-name {
+  border-radius: 6px !important;
+  background: rgba(0, 0, 0, .55) !important;
+  border: 0 !important;
+}
+html.rd .call-dock-btn.end-call { background: var(--rd-danger-bg) !important; color: var(--rd-danger) !important; border: 0 !important; }
+
+/* ── Love Hub: без плиток-заглушек и повтора версии ─────────────────────── */
+
+html.rd .bento-hero-visual,
+html.rd .bento-circle-accent,
+html.rd .bento-stat,
+html.rd .bento-idea,
+html.rd .bento-header p { display: none !important; }
+@media (min-width: 900px) {
+  html.rd .hub-bento-dashboard { padding-left: max(40px, calc((100% - 960px) / 2)) !important; padding-right: max(40px, calc((100% - 960px) / 2)) !important; }
+  html.rd .bento-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 16px !important; }
+  html.rd .bento-hero { grid-column: 1 / -1 !important; }
+  html.rd .bento-minor,
+  html.rd .bento-devlog { grid-column: auto !important; }
+  html.rd .bento-actions { grid-column: 1 / -1 !important; order: 5; }
+}
+html.rd .bento-card {
+  border: 1px solid var(--rd-line) !important;
+  border-radius: 12px !important;
+  background: var(--rd-panel) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html.rd .bento-card:hover { border-color: var(--rd-line-2) !important; }
+html.rd .bento-tag {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--rd-mute) !important;
+  font-size: 12.5px !important;
+}
+html.rd .bento-card h3 { font-size: 16px !important; }
+html.rd .hub-btn { border-radius: 10px !important; box-shadow: none !important; }
+html.rd .bento-action-links a {
+  background: transparent !important;
+  border-bottom: 1px solid var(--rd-line) !important;
+  border-radius: 0 !important;
+}
+
+/* ── Настройки ───────────────────────────────────────────────────────────── */
+
+/* На узком окне настройки остаются окном поверх. */
+@media (max-width: 1024px) {
+  html.rd #view-settings { background: var(--rd-scrim) !important; }
+  html.rd .settings-shell {
+    border: 1px solid var(--rd-line-2) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--rd-pop) !important;
+  }
+}
+html.rd .settings-shell { background: var(--rd-bg) !important; }
+html.rd .settings-sidebar,
+html.rd .settings-sidebar-footer { background: var(--rd-panel) !important; border-color: var(--rd-line) !important; }
+html.rd .settings-sidebar { border-right: 1px solid var(--rd-line) !important; }
+html.rd .settings-content { background: var(--rd-bg) !important; }
+html.rd .settings-nav-item { border-radius: 8px !important; }
+html.rd .settings-nav-item.active { background: var(--rd-raise) !important; }
+html.rd .lvs-card,
+html.rd .lvs-plan-card,
+html.rd .lvs-plan-summary,
+html.rd .support-reputation-card,
+html.rd .support-case-workspace,
+html.rd .lvs-about-tile,
+html.rd .lvs-theme-option {
+  border: 1px solid var(--rd-line) !important;
+  border-radius: 12px !important;
+  background: var(--rd-panel) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html.rd .lvs-theme-option.active { border-color: var(--rd-text) !important; }
+html.rd .lvs-card .lvs-card { border: 0 !important; background: transparent !important; }
+html.rd .lvs-about-tile-icon { border-radius: 8px !important; background: var(--rd-raise) !important; box-shadow: none !important; }
+html.rd .lvs-about-logo,
+html.rd .lvs-about-logo * { filter: none !important; box-shadow: none !important; }
+html.rd .lvs-about-hero,
+html.rd [class*="about-hero"] { background: var(--rd-panel) !important; background-image: none !important; }
+
+/* ── Вход: без шаров, частиц и зерна ─────────────────────────────────────── */
+
+html.rd .auth-screen { background: var(--rd-bg) !important; background-image: none !important; }
+html.rd .auth-orb,
+html.rd .auth-particles,
+html.rd .auth-grain { display: none !important; }
+html.rd .auth-card {
+  border: 1px solid var(--rd-line) !important;
+  border-radius: 16px !important;
+  background: var(--rd-panel) !important;
+  box-shadow: none !important;
+}
+html.rd .auth-brand svg,
+html.rd .auth-brand img,
+html.rd .auth-brand [class*="heart"],
+html.rd .auth-brand [class*="logo"] { filter: none !important; box-shadow: none !important; }
+html.rd .auth-brand-tag { color: var(--rd-mute) !important; font-size: 13px !important; }
+
+/* ── Переключатель «Новый дизайн» ────────────────────────────────────────── */
+
+.rd-test-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(185, 171, 255, .16);
+  color: #cfc6ff;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.rd-toggle-card .lvs-row + .lvs-row { border-top: 1px solid var(--tint-a-6, rgba(255, 255, 255, .06)); }
+
+/* Окошки видео и кнопки звонка: правила звонка в style.css точнее обычных. */
+html.rd #call-modal .video-stream-box,
+html.rd #call-video-grid .video-stream-box { border-radius: 12px !important; }
+html.rd #call-modal .call-controls-dock .call-dock-btn { box-shadow: none !important; }
+html.rd #call-modal .call-video-grid.call-video-grid .video-stream-box { border-radius: 12px !important; border-color: var(--rd-line) !important; }
+
+/* Буквенные значки сфер — без градиента; картинку сферы не трогаем. */
+html.rd .space-card-icon:not([style*="url("]) { background-image: none !important; }
+
+/* Окна подтверждения и жалобы — тем же окном, что остальные. */
+html.rd .love-confirm-card,
+html.rd .message-report-dialog {
+  background: var(--rd-panel) !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--rd-pop) !important;
+}
+
+/* ── Звонок в ленте — строка по центру, как в макете ────────────────────────
+   «[трубка] Пропущенный звонок 7 · 21:14  Перезвонить». Отдельная строка без
+   аватара (script.js: .message-group.call-row), кнопка — ссылкой. */
+html.rd .message-group.call-row {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 10px 0 !important;
+  padding: 0 !important;
+}
+html.rd .message-group.call-row .message-group-content {
+  align-items: center !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+html.rd .message-group.call-row .message-bubble-wrap { align-items: center !important; }
+html.rd .message-group.call-row .call-event {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  gap: 8px !important;
+  padding: 2px 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+html.rd .message-group.call-row .call-event-icon {
+  width: auto !important;
+  height: auto !important;
+  background: transparent !important;
+}
+html.rd .message-group.call-row .call-event-icon svg { width: 15px !important; height: 15px !important; }
+html.rd .message-group.call-row .call-event.is-missed .call-event-icon { color: var(--rd-danger) !important; }
+html.rd .message-group.call-row .call-event.is-outgoing .call-event-icon { color: var(--rd-mute) !important; }
+html.rd .message-group.call-row .call-event-text {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  font-size: 13px !important;
+}
+html.rd .message-group.call-row .call-event-text b {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--rd-soft) !important;
+  overflow: visible !important;
+}
+html.rd .message-group.call-row .call-event-sub,
+html.rd .message-group.call-row .call-event-sub span { font-size: 13px !important; color: var(--rd-soft) !important; }
+html.rd .message-group.call-row .call-event-sub::before { content: " · "; white-space: pre; }
+/* У пропущенного вид звонка уже в заголовке («видеозвонок»). */
+html.rd .message-group.call-row .is-missed .call-event-kind { display: none !important; }
+html.rd .message-group.call-row .call-event-count {
+  background: var(--rd-raise-2) !important;
+  color: var(--rd-text) !important;
+}
+html.rd .message-group.call-row .call-event-btn {
+  height: auto !important;
+  margin-left: 6px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--rd-text) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+}
+html.rd .message-group.call-row .call-event-btn:hover { background: transparent !important; opacity: .75; }
+
+/* Плашка свёрнутого войса/звонка у кнопки на левой панели. */
+html.rd .voice-mini-bar {
+  background: var(--rd-raise) !important;
+  border: 1px solid var(--rd-line-2) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--rd-pop) !important;
+  backdrop-filter: none !important;
+}
+html.rd .vmb-status {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  color: var(--rd-mute) !important;
+}
+html.rd .vmb-channel { font-size: 13px !important; color: var(--rd-text) !important; }
+
+/* Поле новой беседы: рамка у обёртки, само поле прозрачное — иначе двойная. */
+html.rd .new-chat-search input { background: transparent !important; border: 0 !important; }
+html.rd .friends-empty-category { color: var(--rd-mute) !important; opacity: 1 !important; }
+
+/* «Кого ищем?»: поле и кнопка внутри — скругления вложены ровно (12 и 8). */
+html.rd .add-friend-text-input {
+  border-radius: 12px !important;
+  padding: 14px 118px 14px 46px !important;
+  font-size: 14px !important;
+  background: var(--rd-raise) !important;
+  border: 1px solid transparent !important;
+}
+html.rd .add-friend-text-input:focus { border-color: var(--rd-line-2) !important; background: var(--rd-raise) !important; }
+html.rd .add-friend-input-wrapper .search-icon-svg { left: 16px !important; width: 18px !important; height: 18px !important; color: var(--rd-mute) !important; }
+html.rd .add-friend-submit-btn {
+  right: 6px !important;
+  height: calc(100% - 12px) !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+}
+
+/* ── Итог обхода всех экранов ────────────────────────────────────────────── */
+
+/* Панель вложений: те же токены, что у поля ввода. */
+html.rd .attach-tray { background: var(--rd-panel) !important; border-color: var(--rd-line) !important; }
+html.rd .attach-tray-item { background-color: var(--rd-raise); }
+html.rd .attach-tray-ext { background: var(--rd-raise-2); color: var(--rd-text); }
+html.rd .attach-tray-name { color: var(--rd-text); }
+html.rd .attach-tray-sub { color: var(--rd-mute); }
+html.rd .attach-tray-item.is-error .attach-tray-sub { color: var(--rd-danger); }
+
+/* Настройки сферы и комнаты не закрывают полоску окна с кнопками свернуть/закрыть. */
+@media (min-width: 1025px) {
+  html.rd body.is-electron #space-settings-modal {
+    top: var(--titlebar-h, 32px) !important;
+    height: calc(100vh - var(--titlebar-h, 32px)) !important;
+  }
+}
+
+/* Крестики окон — один размер во всех окнах. */
+html.rd .profile-close-btn,
+html.rd .hub-modal-close,
+html.rd #create-space-close,
+html.rd #add-friend-close,
+html.rd #hub-form-modal-close,
+html.rd #hub-info-modal-close,
+html.rd #devlog-modal-close {
+  width: 32px !important;
+  height: 32px !important;
+  top: 14px !important;
+  right: 14px !important;
+}
+html.rd .profile-close-btn svg,
+html.rd .hub-modal-close svg,
+html.rd #create-space-close svg,
+html.rd #add-friend-close svg,
+html.rd #hub-form-modal-close svg,
+html.rd #hub-info-modal-close svg,
+html.rd #devlog-modal-close svg { width: 16px !important; height: 16px !important; }
+
+/* «Создать»: поле на всю ширину и подпись слева, а не узкий столбик по центру. */
+html.rd #create-name-field,
+html.rd #create-join-field { width: 100% !important; align-self: stretch !important; text-align: left !important; }
+
+/* Вторая кнопка профиля и кнопки окон, у которых вид задан встроенным стилем. */
+html.rd #avatar-preview-cancel,
+html.rd #hobby-btn-cancel,
+html.rd #lvs-close-confirm-cancel {
+  background: var(--rd-raise) !important;
+  color: var(--rd-text) !important;
+  border: 0 !important;
+}
+html.rd #hobby-btn-delete {
+  background: var(--rd-danger-bg) !important;
+  color: var(--rd-danger) !important;
+  border: 0 !important;
+}
+html.rd #lvs-close-confirm-save {
+  background: var(--rd-own) !important;
+  color: var(--rd-own-text) !important;
+  border: 0 !important;
+}
+html.rd input[type="range"] { accent-color: var(--rd-text); }
+html.rd #hobby-editor-modal label {
+  font-family: var(--font-sans) !important;
+  font-size: 12.5px !important;
+  text-transform: none !important;
+}
+html.rd #hobby-icon-picker { background: var(--rd-bg) !important; border-color: var(--rd-line) !important; }
+html.rd .screenshare-quality-select {
+  background: var(--rd-raise) !important;
+  color: var(--rd-text) !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  padding: 6px 8px !important;
+}
+
+/* Кнопки в профиле собеседника: длинные подписи не переносятся в две строки. */
+html.rd .profile-card .profile-save-btn { white-space: nowrap !important; }
+html.rd #profile-friend-actions { flex-wrap: wrap !important; }
+html.rd #profile-friend-actions .profile-save-btn:first-child { flex: 1 1 100% !important; }
+
+/* Друзья: подпись группы и пустая строка без капса и курсива. */
+html.rd .friends-category-header,
+html.rd .friends-category-header * {
+  font-family: var(--font-sans) !important;
+  font-size: 12.5px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--rd-mute) !important;
+}
+html.rd .friends-empty-category { font-style: normal !important; font-family: var(--font-sans) !important; }
+html.rd #friends-local-search-input:placeholder-shown ~ #friends-clear-search-btn { display: none !important; }
+
+/* Вход: на невысоком окне карточка регистрации прокручивается, а не обрезается. */
+html.rd .auth-screen { overflow-y: auto !important; align-items: safe center !important; }
+html.rd .auth-card { flex-shrink: 0; }
+
+/* Заголовки с засечками — один вес; буквы в аватарах прямым шрифтом интерфейса. */
+html.rd .empty-state-panel h3,
+html.rd .empty-state-main h3,
+html.rd #auth-doc-title,
+html.rd .space-card-icon { font-weight: 500 !important; }
+html.rd .new-chat-avatar,
+html.rd .lvs-about-member-avatar { font-family: var(--font-sans) !important; font-style: normal !important; }
+html.rd .space-member-role { text-transform: none !important; letter-spacing: 0 !important; }
+html.rd #player-track-artist { font-family: var(--font-sans) !important; }
+html.rd .screenshare-quality-select { color-scheme: dark; }
+html.rd[data-theme="light"] .screenshare-quality-select { color-scheme: light; }
+
+/* Флажок жалобы в профиле — в углу карточки напротив крестика, а не отдельной строкой. */
+html.rd #profile-friend-actions .profile-report-btn {
+  position: absolute !important;
+  top: 14px !important;
+  left: 14px !important;
+  margin: 0 !important;
+}
+html.rd #lvs-close-confirm h3 { font-weight: 500 !important; }

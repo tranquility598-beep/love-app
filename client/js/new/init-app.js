@@ -357,6 +357,7 @@
 
         const msgObj = {
           sender: isOwn ? 'own' : 'partner',
+          type: msg.type || 'default',
           text: msg.content || '',
           time: _formatTime(msg.createdAt || new Date().toISOString()),
           _id: _isTempMessageId(incomingId) ? undefined : incomingId,
@@ -916,6 +917,7 @@
           const isOwn = String(lastMsg.author?._id || lastMsg.author) === String(window.currentUser?._id);
           mockConv.messages.push({
             sender: isOwn ? 'own' : 'partner',
+            type:   lastMsg.type || 'default',
             text:   lastMsg.content || '',
             time:   _formatTime(lastMsg.createdAt),
             _id:    lastMsg._id
@@ -1217,6 +1219,7 @@
         const isOwn = String(msg.author?._id || msg.author) === String(window.currentUser?._id);
         return {
           sender: isOwn ? 'own' : 'partner',
+          type:   msg.type || 'default',
           text:   msg.content || '',
           time:   _formatTime(msg.createdAt),
           _id:    msg._id,

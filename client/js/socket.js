@@ -154,6 +154,15 @@ function handleConnect() {
   if (typeof window.initRoleSocketHandlers === 'function') {
     window.initRoleSocketHandlers();
   }
+  // Полный re-init сокета (менеджер сдался на reconnect_failed) тоже рвёт
+  // голосовую сессию — возвращаемся в канал и здесь. При первом подключении
+  // и при обычном Manager reconnect вызов ничего не делает: менеджер канала
+  // помнит, с каким socket.id он уже вошёл.
+  window.resumeVoiceAfterReconnect?.();
+  // Сервер звонил, пока мы подключались: просим ожидающие звонки явно.
+  // Догоняющая пауза 1,2 с могла пройти раньше, чем окно готово принять
+  // вызов; повторно тот же звонок сервер этому сокету не пришлёт.
+  socket.emit('call:pending');
 }
 
 function handleDisconnect(reason) {
@@ -635,8 +644,20 @@ function handleVoiceMembersUpdate(data) {
     (!manager.channelId && window.currentVoiceChannel === channelId)
   );
   if (isCurrent) {
-    manager.channelMembers = Array.isArray(members) ? members : [];
-    window.CallStageController?.syncMembers(members);
+    const list = Array.isArray(members) ? members : [];
+    // Список с сервера — источник истины по составу канала. После
+    // переподключения участник возвращается с новым socketId: в клиентах
+    // остаётся peer-соединение со старым id, которое уже не оживёт и только
+    // держит аудиоэлемент. Закрываем всех, кого больше нет в списке.
+    const liveSocketIds = new Set(list.map(member => String(member.socketId)));
+    for (const socketId of Array.from(manager.peerConnections.keys())) {
+      if (!liveSocketIds.has(String(socketId))) {
+        console.log('[Voice] dropping stale peer after members_update:', socketId);
+        manager.removeConnection(socketId);
+      }
+    }
+    manager.channelMembers = list;
+    window.CallStageController?.syncMembers(list);
   }
   updateVoiceChannelMembersUI(channelId, members);
 }
@@ -697,7 +718,15 @@ function handleVoiceUserDeafened(data) {
 }
 
 function handleVoiceLeft(data) {
-  const { channelId } = data;
+  const { channelId, socketId } = data || {};
+  // Догоняющее voice:left от прежнего соединения не должно выбивать из канала,
+  // куда мы уже вернулись после переподключения: сервер адресует событие тому
+  // сокету, который выходит, а мы уже вошли новым.
+  const currentSocketId = window.socket?.id;
+  if (socketId && currentSocketId && String(socketId) !== String(currentSocketId)) {
+    console.warn('Ignored stale voice:left from previous socket:', socketId);
+    return;
+  }
   const activeChannel = window.voiceManager?.channelId || window.currentVoiceChannel;
   if (!activeChannel || activeChannel !== channelId) {
     console.warn('Ignored stale voice:left for inactive channel:', channelId);
@@ -1304,6 +1333,10 @@ async function initSocket() {
     // Пока связи не было, сокет не получил ни одного события: тебе могли
     // написать, а в открытом чате останется дырка. Перечитываем историю.
     window.resyncActiveChat?.();
+    // Обрыв связи выбил нас из голосового канала на сервере и разорвал
+    // peer-соединения. Без повторного voice:join человек остаётся «в войсе»
+    // только на своём экране, а для собеседников он уже вышел.
+    window.resumeVoiceAfterReconnect?.();
   });
 
   // Страховка №1: если менеджер всё-таки сдался — пересоздаём соединение целиком.

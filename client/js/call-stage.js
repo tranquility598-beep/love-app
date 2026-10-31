@@ -108,34 +108,33 @@
     image.src = nextUrl;
   }
 
+  // Вертикальный кадр (экран или камера телефона) в горизонтальной плитке с
+  // object-fit: cover терял верх и низ. Смотрим на настоящие размеры кадра:
+  // вертикальное видео всегда вписываем целиком, как демонстрацию.
+  function watchAspect(video) {
+    if (video._loveAspect) return;
+    video._loveAspect = true;
+    const apply = () => {
+      const portrait = !!video.srcObject && video.videoWidth > 0 && video.videoHeight > video.videoWidth * 1.05;
+      video.classList.toggle('is-portrait', portrait);
+      video.closest('.love-voice-tile, .video-stream-box')?.classList.toggle('has-portrait-media', portrait);
+    };
+    video.addEventListener('loadedmetadata', apply);
+    video.addEventListener('resize', apply);
+    video._loveAspectApply = apply;
+  }
+
   function setVideo(video, stream, mode) {
     if (!video) return;
+    watchAspect(video);
     video.muted = true;
     video.playsInline = true;
     video.classList.toggle('is-screenshare', mode === 'screen');
     if (video.srcObject !== stream) {
       video.srcObject = stream || null;
       if (stream) video.play().catch(() => {});
+      video._loveAspectApply?.();
     }
-  }
-
-  function setDmTile(side, stream, mode) {
-    const box = document.querySelector(`#call-video-grid .video-stream-box.${side}-video`);
-    const video = document.getElementById(side === 'remote' ? 'call-remote-feed' : 'call-local-feed');
-    const kind = document.getElementById(side === 'remote' ? 'call-remote-media-kind' : 'call-local-media-kind');
-    const active = !!stream?.getVideoTracks().some(track => track.readyState === 'live') && mode !== 'none';
-    setVideo(video, active ? stream : null, mode);
-    if (active && video) {
-      // Страховка: на элементе могла остаться анимация скрытия с fill: "both".
-      // Класс hidden мы снимем, но анимация всё равно держала бы прозрачность —
-      // поток шёл бы вслепую. Поэтому чистим анимации при показе.
-      video.getAnimations?.().forEach(animation => animation.cancel());
-      video.classList.remove('stream-leaving');
-    }
-    video?.classList.toggle('hidden', !active);
-    box?.classList.toggle('has-media', active);
-    box?.classList.toggle('is-screen', mode === 'screen');
-    if (kind) kind.textContent = mode === 'screen' ? 'Демонстрация экрана' : mode === 'camera' ? 'Камера' : '';
   }
 
   function remoteDmEntry() {
@@ -146,15 +145,38 @@
     return { stream: null, mode: 'none' };
   }
 
-  function renderDm() {
-    const grid = document.getElementById('call-video-grid');
-    const modal = document.getElementById('call-modal');
-    if (!grid || !modal || modal.classList.contains('hidden')) return;
-    grid.classList.remove('hidden');
-    document.getElementById('call-voice-profile')?.classList.add('hidden');
+  // Звонок в ЛС рисуется той же сценой, что войс сферы: те же плитки, клик по
+  // плитке разворачивает её в сетке, кнопка в углу открывает большой просмотр с
+  // приближением. Участники здесь не с сервера, а собраны из собеседника и себя.
+  const dmActive = () => {
+    const channelId = asId(window.voiceManager?.channelId);
+    return !!state.dmPeer && (!channelId || channelId.startsWith('dm_call:'));
+  };
+
+  function dmMembers() {
+    const peer = state.dmPeer;
+    if (!peer) return [];
+    const selfId = asId(window.currentUser?._id) || 'dm-self';
+    const live = id => state.members.find(member => asId(member?.userId) === id) || {};
+    const remoteId = asId(peer.userId) || 'dm-peer';
     const remote = remoteDmEntry();
-    setDmTile('remote', remote.stream, remote.mode);
-    setDmTile('local', state.localStream, state.localMode);
+    return [
+      { ...live(remoteId), userId: remoteId, isOwn: false, nickname: peer.name, avatar: peer.avatar, avatarUrl: peer.avatar, _media: { ...remote, own: false } },
+      { ...live(selfId), userId: selfId, isOwn: true, nickname: window.currentUser?.nickname || window.currentUser?.username || 'Вы', _media: { stream: state.localStream, mode: state.localMode, own: true } }
+    ];
+  }
+
+  function renderDm() {
+    const grid = document.getElementById('call-tile-grid');
+    const modal = document.getElementById('call-modal');
+    if (!grid || !modal) return;
+    // Свёрнутый звонок кадры не декодирует — как скрытый войс.
+    if (modal.classList.contains('hidden')) {
+      grid.querySelectorAll('video').forEach(video => { video.srcObject = null; });
+      return;
+    }
+    document.getElementById('call-voice-profile')?.classList.add('hidden');
+    renderTiles(grid, dmMembers());
   }
 
   function memberKey(member) {
@@ -162,6 +184,11 @@
   }
 
   function streamFor(member) {
+    if (member?._media) {
+      const media = member._media;
+      const live = !!media.stream?.getVideoTracks().some(track => track.readyState === 'live');
+      return live && media.mode !== 'none' ? media : { stream: null, mode: 'none', own: media.own };
+    }
     const own = isOwnMember(member);
     const mode = mediaMode(member);
     if (own) {
@@ -185,6 +212,7 @@
   const theaterShowsKey = key => theaterOpen() && state.theaterKey === key;
 
   function theaterMembers() {
+    if (dmActive()) return dmMembers();
     const list = state.members.length
       ? state.members
       : (window.voiceManager?.channelMembers || window.voiceMembers || []);
@@ -292,6 +320,11 @@
     renderTheater();
     // Тот же поток в сетке под оверлеем декодировать незачем.
     renderServer();
+    renderDm();
+    // Просмотр — на весь экран, а не окном внутри приложения. Если система не
+    // дала (нет разрешения, старая среда), остаётся на всё окно: стили те же.
+    overlay.requestFullscreen?.().catch(() => {});
+    wakeTheaterControls();
   }
 
   function closeTheater(render = true) {
@@ -302,7 +335,23 @@
     if (video) video.srcObject = null;
     state.theaterKey = null;
     setTheaterZoom(1, { resetPan: true });
-    if (render) renderServer();
+    clearTimeout(theaterIdleTimer);
+    overlay.classList.remove('is-idle');
+    if (document.fullscreenElement === overlay) document.exitFullscreen?.().catch(() => {});
+    if (render) {
+      renderServer();
+      renderDm();
+    }
+  }
+
+  // На весь экран панели не должны закрывать кадр: прячутся, пока мышь стоит.
+  let theaterIdleTimer = null;
+  function wakeTheaterControls() {
+    const overlay = theaterEl();
+    if (!overlay) return;
+    overlay.classList.remove('is-idle');
+    clearTimeout(theaterIdleTimer);
+    theaterIdleTimer = setTimeout(() => overlay.classList.add('is-idle'), 2500);
   }
 
   function initTheater() {
@@ -318,6 +367,11 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && theaterOpen()) closeTheater();
     });
+    // Esc в полном экране система обрабатывает сама и keydown не присылает.
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && theaterOpen()) closeTheater();
+    });
+    overlay.addEventListener('pointermove', wakeTheaterControls);
 
     const stage = document.getElementById('voice-theater-stage');
     if (!stage) return;
@@ -386,6 +440,7 @@
       const toggle = () => {
         state.focusedServerKey = state.focusedServerKey === key ? null : key;
         renderServer();
+        renderDm();
       };
       // Увеличение — это смена grid-column/grid-row, а её браузер не анимирует.
       // FLIP доводит плитки трансформом, иначе кадр просто перескакивает.
@@ -439,6 +494,13 @@
     const list = state.members.length
       ? state.members
       : (window.voiceManager?.channelMembers || window.voiceMembers || []);
+    renderTiles(grid, list);
+    const count = document.getElementById(target.countId);
+    if (count) count.textContent = `${list.length} в канале`;
+    return true;
+  }
+
+  function renderTiles(grid, list) {
     const liveKeys = new Set();
     const ordered = [];
 
@@ -484,9 +546,6 @@
     ordered.forEach((tile, index) => {
       if (grid.children[index] !== tile) grid.insertBefore(tile, grid.children[index] || null);
     });
-    const count = document.getElementById(target.countId);
-    if (count) count.textContent = `${list.length} в канале`;
-    return true;
   }
 
   function openDm(peer) {
@@ -574,8 +633,7 @@
       const count = document.getElementById(id);
       if (count) count.textContent = '0 в канале';
     });
-    setDmTile('local', null, 'none');
-    setDmTile('remote', null, 'none');
+    document.getElementById('call-tile-grid')?.replaceChildren();
   }
 
   function init() {

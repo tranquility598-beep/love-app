@@ -7,8 +7,12 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>',
-    report: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>'
+    report: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
   };
+  // Событие звонка — системное сообщение с фиксированным текстом (см. callEventCard в script.js).
+  const MISSED_CALL = /^📞\s*Пропущенный (видео)?звонок$/;
 
   const TEMP_ID = /^temp[-_]/;
   let contextMenu = null;
@@ -53,7 +57,23 @@
     if (typeof msg.sender === 'string' && msg.sender !== 'partner') return msg.sender;
     const author = msg.author;
     if (author && typeof author === 'object') return author.nickname || author.username || 'Участник';
+    // В личке имён над сообщениями нет — собеседник один, его имя в шапке чата.
+    if (wrap.closest('#chat-feed-container')) {
+      const partner = document.getElementById('header-name')?.textContent?.trim();
+      if (partner) return partner;
+    }
     return wrap.closest('.message-group')?.querySelector('.msg-sender-name')?.textContent?.trim() || 'Участник';
+  }
+
+  /** Что показать в плашке ответа: звонок называем по-человечески, без эмодзи. */
+  function replySummary(wrap) {
+    const msg = wrap._msgData || {};
+    const text = sourceText(wrap);
+    if (msg.type === 'system' && MISSED_CALL.test(text)) {
+      const video = /видео/.test(text);
+      return { call: true, text: own(wrap) ? (video ? 'Видеозвонок без ответа' : 'Звонок без ответа') : (video ? 'Пропущенный видеозвонок' : 'Пропущенный звонок') };
+    }
+    return { call: false, text: text || 'Вложение' };
   }
 
   function clearReplyTarget() {
@@ -78,13 +98,28 @@
       message: msg
     };
 
+    const feed = wrap.closest('.chat-feed');
+    const atBottom = feed && feed.scrollHeight - feed.scrollTop - feed.clientHeight < 8;
+    const summary = replySummary(wrap);
     const preview = document.createElement('div');
-    preview.className = 'love-reply-preview';
-    preview.innerHTML = '<span class="love-reply-preview__icon">' + ICONS.reply + '</span><span class="love-reply-preview__body"><strong></strong><span class="love-reply-preview__text"></span></span><button type="button" aria-label="Отменить ответ">&times;</button>';
-    preview.querySelector('strong').textContent = 'Ответ для ' + authorName(wrap);
-    preview.querySelector('.love-reply-preview__text').textContent = sourceText(wrap) || 'Вложение';
-    preview.querySelector('button').addEventListener('click', clearReplyTarget);
+    preview.className = 'love-reply-preview' + (summary.call ? ' is-call' : '');
+    preview.setAttribute('role', 'group');
+    preview.setAttribute('aria-label', 'Ответ на сообщение');
+    preview.innerHTML = '<span class="love-reply-preview__icon">' + ICONS.reply + '</span>'
+      + '<span class="love-reply-preview__body"><span class="love-reply-preview__title"></span><span class="love-reply-preview__text"></span></span>'
+      + '<button type="button" class="love-reply-preview__close" aria-label="Отменить ответ" title="Отменить ответ (Esc)">' + ICONS.close + '</button>';
+    preview.querySelector('.love-reply-preview__title').textContent = authorName(wrap);
+    const line = preview.querySelector('.love-reply-preview__text');
+    if (summary.call) line.insertAdjacentHTML('afterbegin', ICONS.call);
+    line.appendChild(document.createTextNode(summary.text));
+    preview.querySelector('.love-reply-preview__close').addEventListener('click', () => {
+      clearReplyTarget();
+      input.focus();
+    });
     form.parentNode.insertBefore(preview, form);
+    // Плашка выросла над полем ввода — если лента была в самом низу, держим её там,
+    // иначе плашка закроет последнее сообщение.
+    if (atBottom) feed.scrollTop = feed.scrollHeight;
     input.focus();
   }
 
@@ -100,6 +135,9 @@
     const oldText = sourceText(wrap);
     if (!bubble || !oldText || wrap.classList.contains('editing')) return;
 
+    // Цитату и время (fitBubble) сохраняем: поле правки заменяет содержимое пузыря.
+    const quote = bubble.querySelector(':scope > .message-reply-reference');
+    const meta = bubble.querySelector(':scope > .message-meta');
     wrap.classList.add('editing');
     bubble.innerHTML = '';
     const input = document.createElement('textarea');
@@ -117,6 +155,8 @@
     const finish = (content) => {
       bubble.textContent = content;
       wrap.classList.remove('editing');
+      if (quote) bubble.prepend(quote);
+      if (meta) bubble.append(meta);
     };
     input.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
@@ -150,16 +190,25 @@
     });
   }
 
-  function deleteMessage(wrap) {
-    if (!own(wrap) || !confirm('Удалить это сообщение?')) return;
-    const msg = wrap._msgData || {};
-    const id = messageId(wrap);
-    if (!isTemporary(id) && !msg._pending) {
-      if (window.socket) window.socket.emit('message:delete', { messageId: id });
-      else if (window.MessagesAPI) window.MessagesAPI.delete(id);
-    }
-    removeFromLocalModels(msg, id);
+  async function deleteMessage(wrap) {
+    if (!own(wrap)) return;
+    // Строка звонка может держать несколько звонков подряд — удаляем все.
+    const run = wrap._callRunMsgs;
+    const confirmed = await window.loveConfirm(run
+      ? { title: run.length > 1 ? `Удалить записи о звонках (${run.length})?` : 'Удалить запись о звонке?', text: 'Их не получится вернуть.', confirmText: 'Удалить', danger: true }
+      : { title: 'Удалить это сообщение?', text: 'Его не получится вернуть.', confirmText: 'Удалить', danger: true });
+    if (!confirmed) return;
+    (run || [wrap._msgData || {}]).forEach(msg => {
+      const id = run ? (msg._id || msg._tempId || '') : messageId(wrap);
+      if (!isTemporary(id) && !msg._pending) {
+        if (window.socket) window.socket.emit('message:delete', { messageId: id });
+        else if (window.MessagesAPI) window.MessagesAPI.delete(id);
+      }
+      removeFromLocalModels(msg, id);
+    });
+    const row = wrap.closest('.call-row');
     wrap.remove();
+    row?.remove();
   }
 
   async function copyMessage(wrap) {
@@ -175,6 +224,12 @@
 
   function getActions(wrap, includeCopy) {
     const actions = [{ kind: 'reply', title: 'Ответить', run: () => startReply(wrap) }];
+    // Системная запись (звонок): ответить можно, удалить — только звонивший.
+    // Править и копировать там нечего, жаловаться не на что.
+    if (wrap._msgData?.type === 'system' || wrap.classList.contains('is-call-event')) {
+      if (own(wrap)) actions.push({ kind: 'trash', title: 'Удалить', danger: true, run: () => deleteMessage(wrap) });
+      return actions;
+    }
     if (includeCopy && sourceText(wrap)) actions.push({ kind: 'copy', title: 'Копировать', run: () => copyMessage(wrap) });
     if (!own(wrap) && !isTemporary(messageId(wrap))) actions.push({ kind: 'report', title: 'Пожаловаться', run: () => window.openMessageReport?.({ messageId: messageId(wrap), author: authorName(wrap), preview: sourceText(wrap) }) });
     if (own(wrap) && sourceText(wrap)) actions.push({ kind: 'edit', title: 'Редактировать', run: () => editMessage(wrap) });
@@ -220,9 +275,14 @@
     contextMenu.style.top = Math.max(10, Math.min(y, viewportHeight - rect.height - 10)) + 'px';
   }
 
+  // Звонки подряд схлопнуты в одну строку (script.js, bumpCallEvent): ответ на
+  // любой из них ведёт к этой строке.
   function findMessageWrap(id) {
     if (!id) return null;
-    return Array.from(document.querySelectorAll('.message-bubble-wrap')).find(wrap => String(messageId(wrap)) === String(id)) || null;
+    const wanted = String(id);
+    return Array.from(document.querySelectorAll('.message-bubble-wrap')).find(wrap =>
+      String(messageId(wrap)) === wanted
+      || (wrap._callRunMsgs || []).some(msg => String(msg._id || '') === wanted)) || null;
   }
 
   function normalizeReply(msg) {
@@ -257,22 +317,52 @@
     preview.className = 'message-reply-reference';
     preview.innerHTML = '<span class="message-reply-line"></span><span class="message-reply-copy"><strong></strong><span></span></span>';
     preview.querySelector('strong').textContent = author;
-    preview.querySelector('.message-reply-copy > span').textContent = text;
+    const quote = preview.querySelector('.message-reply-copy > span');
+    if (MISSED_CALL.test(String(text).trim())) {
+      // Цитата звонка — той же иконкой, что в карточке, а не эмодзи.
+      quote.classList.add('message-reply-call');
+      quote.innerHTML = ICONS.call;
+      quote.appendChild(document.createTextNode(String(text).replace(/^📞\s*/, '')));
+    } else {
+      quote.textContent = text;
+    }
     preview.addEventListener('click', () => {
       const target = findMessageWrap(reply.id);
-      if (!target) return;
+      if (!target) {
+        if (typeof window.showToast === 'function') window.showToast('Сообщение недоступно', 'Оно удалено или ещё не загружено.');
+        return;
+      }
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.remove('message-highlight');
+      void target.offsetWidth; // повторный клик запускает подсветку заново
       target.classList.add('message-highlight');
-      setTimeout(() => target.classList.remove('message-highlight'), 1200);
+      clearTimeout(target._highlightTimer);
+      target._highlightTimer = setTimeout(() => target.classList.remove('message-highlight'), 1800);
     });
     const bubble = wrap.querySelector('.message-bubble');
     if (bubble) wrap.insertBefore(preview, bubble);
     else wrap.prepend(preview);
   }
 
+  // Новый дизайн: цитата ответа и время — внутри пузыря, как в макете
+  // (docs/redesign/mock-chat.html). В старом виде они остаются над и под ним.
+  function fitBubble(wrap) {
+    if (!document.documentElement.classList.contains('rd') || wrap.classList.contains('editing')) return;
+    const bubble = wrap.querySelector(':scope > .message-bubble');
+    if (!bubble) return;
+    const quote = wrap.querySelector(':scope > .message-reply-reference');
+    if (quote) bubble.prepend(quote);
+    const meta = wrap.querySelector(':scope > .message-meta');
+    if (meta) {
+      meta.classList.add('in-bubble');
+      bubble.append(meta);
+    }
+  }
+
   function addActions(wrap) {
     if (!wrap) return;
     renderReplyReference(wrap);
+    fitBubble(wrap);
     if (wrap.dataset.loveActionsReady === '1') return;
     wrap.dataset.loveActionsReady = '1';
     const overlay = document.createElement('div');
@@ -324,7 +414,10 @@
     document.addEventListener('scroll', closeContextMenu, true);
     window.addEventListener('blur', closeContextMenu);
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') closeContextMenu();
+      if (event.key !== 'Escape') return;
+      closeContextMenu();
+      // Esc в поле ввода отменяет ответ — как в других мессенджерах.
+      if (window.__loveReplyTarget && event.target.closest?.('.chat-input-area')) clearReplyTarget();
     });
   }
 

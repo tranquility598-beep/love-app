@@ -257,7 +257,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           textAlign: TextAlign.center,
           style:  TextStyle(
             fontFamily: LoveFonts.serif,
-            fontStyle: FontStyle.italic,
+            fontStyle: context.palette.rd ? FontStyle.normal : FontStyle.italic,
             fontSize: 26,
             fontWeight: FontWeight.w500,
             color: context.palette.textPrimary,
@@ -265,12 +265,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          '@${username.toUpperCase()}',
+          context.palette.rd ? '@$username' : '@${username.toUpperCase()}',
           textAlign: TextAlign.center,
           style:  TextStyle(
-            fontFamily: LoveFonts.mono,
-            fontSize: 11,
-            letterSpacing: 1.5,
+            fontFamily: LoveText.labelFont(context.palette),
+            fontSize: context.palette.rd ? 13.5 : 11,
+            letterSpacing: LoveText.labelSpacing(context.palette, 1.5),
             color: context.palette.textMuted,
           ),
         ),
@@ -430,7 +430,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: LoveText.monoLabel(context.palette)),
+          Text(LoveText.caps(context.palette, label), style: LoveText.monoLabel(context.palette)),
           const SizedBox(height: 10),
           child,
         ],

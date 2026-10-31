@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Имя порта, через который фоновый изолят передаёт нажатия кнопок
 /// уведомлений в основной изолят (слушает CallCenter).
@@ -41,6 +42,10 @@ class LocalNotifications {
 
   static const _incomingCallId = 0x21001;
   static const _ongoingCallId = 0x21002;
+
+  /// Уведомление звонка сейчас принадлежит сервису микрофона.
+  static bool _micService = false;
+  static bool get micServiceOn => _micService;
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'love_messages',
@@ -196,11 +201,18 @@ class LocalNotifications {
   /// завершения. Кнопки работают БЕЗ открытия приложения: нажал —
   /// микрофон выключился, текст/кнопка в уведомлении обновились.
   /// Обновляется без звука (onlyAlertOnce).
+  ///
+  /// Первый показ запускает с этим уведомлением сервис микрофона: начиная
+  /// с Android 11 свёрнутое приложение без такого сервиса получает от
+  /// микрофона тишину. Запустить его можно только пока приложение на экране
+  /// ([canStartService]) и есть доступ к микрофону — иначе Android роняет
+  /// приложение. Дальше уведомление просто обновляется по тому же id.
   static Future<void> showOngoingCall({
     required String peer,
     required bool muted,
     String? body,
     String? payload,
+    bool canStartService = false,
   }) async {
     if (!_ready) await init();
     final details = NotificationDetails(
@@ -231,14 +243,35 @@ class LocalNotifications {
         ],
       ),
     );
-    await _plugin.show(
-      _ongoingCallId,
-      peer,
-      body ??
-          (muted ? 'Звонок идёт · микрофон выключен' : 'Звонок идёт'),
-      details,
-      payload: payload,
-    );
+    final text =
+        body ?? (muted ? 'Звонок идёт · микрофон выключен' : 'Звонок идёт');
+    if (!_micService &&
+        canStartService &&
+        await Permission.microphone.isGranted) {
+      try {
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.startForegroundService(
+              _ongoingCallId,
+              peer,
+              text,
+              notificationDetails: details.android,
+              payload: payload,
+              // Не «липкий»: убитый системой сервис не должен воскресать
+              // без звонка (и без данных уведомления).
+              startType: AndroidServiceStartType.startNotSticky,
+              foregroundServiceTypes: {
+                AndroidServiceForegroundType.foregroundServiceTypeMicrophone,
+              },
+            );
+        _micService = true;
+        return;
+      } catch (_) {
+        // Система не дала запустить сервис — хотя бы уведомление с кнопками.
+      }
+    }
+    await _plugin.show(_ongoingCallId, peer, text, details, payload: payload);
   }
 
   /// Пропущенный звонок.
@@ -252,6 +285,14 @@ class LocalNotifications {
 
   static Future<void> cancelOngoingCall() async {
     if (!_ready) return;
+    if (_micService) {
+      // Уведомление сервиса не снимается через cancel — только вместе с ним.
+      _micService = false;
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.stopForegroundService();
+    }
     await _plugin.cancel(_ongoingCallId);
   }
 

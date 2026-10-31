@@ -218,7 +218,8 @@ async function captureScreenShareWithSource(sourceId, quality, manager, session)
           // сбрасываем кнопку и НЕ шлём в сеть событие начала стрима.
           const nm = err4 && err4.name;
           if (nm !== 'NotAllowedError' && nm !== 'AbortError') {
-            alert('Не удалось запустить демонстрацию экрана: ' + err4.message);
+            if (typeof window.showToast === 'function') window.showToast('Демонстрация экрана', 'Не удалось запустить: ' + err4.message);
+            else console.error('[ScreenShare]', err4.message);
           }
           _resetShareUI(_shareOrigin);
           return;

@@ -83,6 +83,9 @@ const settingsSearchIndex = <SettingsSearchEntry>[
   // Внешний вид
   SettingsSearchEntry('appearance', 'Тема',
       keywords: 'тёмная темная светлая оформление цвет'),
+  SettingsSearchEntry('appearance', 'Новый дизайн · бета',
+      subtitle: 'Новый вид Love ещё дорабатывается',
+      keywords: 'редизайн оформление старый вид бета'),
   SettingsSearchEntry('appearance', 'Сезонная тема',
       keywords: 'хэллоуин хеллоуин halloween тыква праздник'),
   SettingsSearchEntry('appearance', 'Масштаб и режимы'),

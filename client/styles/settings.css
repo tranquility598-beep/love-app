@@ -1636,3 +1636,18 @@
   color: #f87171;
   outline: none;
 }
+
+/* Окно удаления аккаунта. */
+.lvs-account-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+#lvs-account-submit.is-danger,
+html.rd #lvs-account-submit.is-danger {
+  background: var(--danger, #e5544f) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+#lvs-account-modal .profile-card { text-align: left; align-items: stretch; }

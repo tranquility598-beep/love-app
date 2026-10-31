@@ -75,14 +75,16 @@ class SettingsSubtitle extends StatelessWidget {
     return Padding(
       padding: padding ?? const EdgeInsets.fromLTRB(4, 2, 4, 10),
       child: Text(
-        text.toUpperCase(),
-        style:  TextStyle(
-          fontFamily: LoveFonts.mono,
-          color: context.palette.textMuted,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 1.0,
-        ),
+        LoveText.caps(context.palette, text),
+        style: context.palette.rd
+            ? LoveText.monoLabel(context.palette)
+            : TextStyle(
+                fontFamily: LoveFonts.mono,
+                color: context.palette.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.0,
+              ),
       ),
     );
   }
@@ -797,7 +799,7 @@ class LoveBadge extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontFamily: LoveFonts.mono,
+          fontFamily: LoveText.labelFont(context.palette),
           fontSize: 11.5,
           fontWeight: FontWeight.w500,
           color: success ? context.settingsSuccess : context.palette.textSecondary,

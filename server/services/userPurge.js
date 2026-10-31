@@ -1,5 +1,6 @@
 /**
- * Полное удаление аккаунта из админ-панели (DELETE /api/admin/users/:id).
+ * Полное удаление аккаунта: из админ-панели (DELETE /api/admin/users/:id) и
+ * самим пользователем (POST /api/users/me/delete).
  *
  * Что удаляется: сам аккаунт, его сообщения, личные чаты (целиком — вместе
  * с сообщениями собеседника: без второго участника такой чат никому не
@@ -39,7 +40,7 @@ async function purgeFootprint(models, userId) {
 async function purgeUser(models, userId) {
   const {
     User, Message, Channel, DirectMessage, Server, Notification, LoginLog,
-    AdminSession, AdminAuthChallenge, AnalyticsEvent, CommunityVote, ProfilePage, RiskSignal
+    AdminSession, AdminAuthChallenge, AnalyticsEvent, CommunityVote, ProfilePage, RiskSignal, PushToken
   } = models;
   const counts = {};
 
@@ -111,7 +112,9 @@ async function purgeUser(models, userId) {
     AdminAuthChallenge.deleteMany({ user: userId }),
     AnalyticsEvent.deleteMany({ $or: [{ user: userId }, { relatedUser: userId }] }),
     CommunityVote.deleteMany({ user: userId }),
-    RiskSignal.deleteMany({ user: userId })
+    RiskSignal.deleteMany({ user: userId }),
+    // Иначе на телефон удалённого аккаунта продолжали бы приходить уведомления.
+    PushToken.deleteMany({ user: userId })
   ]);
 
   // 6. Сам аккаунт — последним: если что-то выше упало, аккаунт остаётся,
@@ -120,4 +123,25 @@ async function purgeUser(models, userId) {
   return counts;
 }
 
-module.exports = { purgeUser, purgeFootprint };
+/**
+ * Проверка перед удалением своего аккаунта. Сотрудника удаляет только команда
+ * (и у Разработчика это защита от потери доступа ко всему проекту). Ник нужен
+ * всегда: это защита от случайного нажатия, а у входа через Google пароля нет.
+ * Возвращает null, если удалять можно, иначе { status, code, message }.
+ */
+async function selfDeleteRefusal(user, { password, confirmUsername }, roleOf = role => role) {
+  const role = roleOf(user.role);
+  if (role && role !== 'user') {
+    return { status: 403, code: 'STAFF_ACCOUNT', message: 'Аккаунт сотрудника удаляется через команду Love' };
+  }
+  const typed = String(confirmUsername || '').trim().replace(/^@/, '').toLowerCase();
+  if (typed !== String(user.username).toLowerCase()) {
+    return { status: 400, code: 'CONFIRM_MISMATCH', message: 'Ник для подтверждения введён неверно' };
+  }
+  if (user.password && !(await user.comparePassword(String(password || '')))) {
+    return { status: 400, code: 'WRONG_PASSWORD', message: 'Пароль указан неверно' };
+  }
+  return null;
+}
+
+module.exports = { purgeUser, purgeFootprint, selfDeleteRefusal };

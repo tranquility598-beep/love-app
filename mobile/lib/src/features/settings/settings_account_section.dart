@@ -89,10 +89,10 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
               Text(
                 'Опасная зона',
                 style: TextStyle(
-                  fontFamily: LoveFonts.mono,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.0,
+                  fontFamily: LoveText.labelFont(context.palette),
+                  fontSize: context.palette.rd ? 13 : 11,
+                  fontWeight: context.palette.rd ? FontWeight.w600 : FontWeight.w500,
+                  letterSpacing: LoveText.labelSpacing(context.palette, 1.0),
                   color: context.palette.danger,
                 ),
               ),
@@ -107,7 +107,7 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
               DangerButton(
                 label: 'Удалить аккаунт',
                 icon: Icons.delete_outline_rounded,
-                onPressed: _deleteAccount,
+                onPressed: () => _deleteAccount(session),
               ),
             ],
           ),
@@ -220,14 +220,46 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
     }
   }
 
-  Future<void> _deleteAccount() async {
+  Future<void> _deleteAccount(AppSession session) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final Map<String, dynamic> info;
+    try {
+      info = await widget.api.accountDeletionPreview();
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(_friendly(error))));
+      return;
+    }
+    if (!mounted) return;
+    if (info['isStaff'] == true) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Аккаунт сотрудника удаляется через команду Love')));
+      return;
+    }
+    final footprint = info['footprint'] is Map ? info['footprint'] as Map : const {};
+    final messages = footprint['messages'] ?? 0;
+    final chats = footprint['conversations'] ?? 0;
+    final servers = footprint['ownedServers'] is List
+        ? (footprint['ownedServers'] as List)
+            .map((server) => server is Map ? '${server['name']}' : '')
+            .where((name) => name.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final username = info['username']?.toString() ?? '';
+    final hasPassword = info['hasPassword'] == true;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.palette.bgTertiary,
         title: const Text('Удалить аккаунт?'),
-        content: const Text(
-          'Это действие необратимо. Все данные будут стёрты навсегда.',
+        content: Text(
+          'Это нельзя отменить. Удалятся профиль, публичная страница, загруженные '
+          'файлы, ваши сообщения ($messages) и личные чаты целиком, у собеседников тоже '
+          '($chats).'
+          '${servers.isEmpty ? '' : '\n\nВаши сферы удалятся вместе с каналами '
+              'и сообщениями всех участников: ${servers.join(', ')}.'}'
+          '\n\nОбращения в поддержку и записи модерации сохраняются, в них '
+          'остаётся только номер аккаунта.',
         ),
         actions: [
           TextButton(
@@ -238,21 +270,33 @@ class _AccountSettingsSectionState extends State<AccountSettingsSection> {
             onPressed: () => Navigator.of(context).pop(true),
             style:
                 TextButton.styleFrom(foregroundColor: context.palette.danger),
-            child: const Text('Удалить'),
+            child: const Text('Продолжить'),
           ),
         ],
       ),
     );
-    if (confirmed == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Удаление аккаунта выполняется через поддержку: '
-            'support@loveapp.chat',
-          ),
-        ),
-      );
-    }
+    if (confirmed != true || !mounted) return;
+
+    await _openAccountModal(
+      title: 'Удалить аккаунт',
+      fields: [
+        if (hasPassword) const _FieldSpec('password', 'Пароль', obscure: true),
+        _FieldSpec('username', 'Введите ник @$username', hint: username, maxLen: 40),
+      ],
+      onSubmit: (values) async {
+        final typed = values['username']?.trim() ?? '';
+        if (hasPassword && (values['password'] ?? '').isEmpty) return 'Введите пароль';
+        if (typed.isEmpty) return 'Введите ник';
+        await widget.api.deleteAccount(
+          password: hasPassword ? values['password'] : null,
+          confirmUsername: typed,
+        );
+        messenger.showSnackBar(const SnackBar(content: Text('Аккаунт удалён')));
+        // Аккаунта больше нет: дальше экран входа. Лист закроется вместе с деревом.
+        await session.logout();
+        return null;
+      },
+    );
   }
 
   Future<void> _openAccountModal({

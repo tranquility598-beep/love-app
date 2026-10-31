@@ -1,408 +1,291 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Public catalogue of LOVE community ideas: what people asked for, what is planned and what already shipped." />
-<title>Ideas — LOVE</title>
-
-<!-- ============================================================
-     ПРИМЕНЁННЫЕ ТЕХНИКИ НА ЭТОЙ СТРАНИЦЕ
-     · WebGL-3D    — не используется: страница-каталог, читаемость важнее
-     · CSS-3D      — карточки идей отзываются на курсор (perspective + rotate),
-                     плюс наклон блока-легенды
-     · 2.5D        — 4 сцены по 3–4 слоя, амплитуда параллакса снижена до 60px
-     · Типографика — ghost-надпись за заголовком, крупный doc-заголовок
-     · Появления   — маскированный занавес строк, stagger сетки, clip-path
-     · Состояния   — статусы идей различаются знаком и весом, а не цветом
-     · GSAP        — только усиление; без него страница полностью работает
-     ============================================================ -->
-
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Рукопожатие с CDN начинаем заранее: GSAP грузится отсюда, и без этой
-     строки соединение открывается только когда парсер дойдёт до тега. -->
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
-<link rel="stylesheet" href="core.css" />
-<link rel="stylesheet" href="doc.css" />
-<script src="lang.js"></script>
-
-<style>
-  /* Обязательный фолбэк доступности прямо в документе. */
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
-  }
-  .cv { content-visibility: auto; contain-intrinsic-size: auto 900px; }
-</style>
-</head>
-<body class="doc">
-
-<a class="skip-link" href="#main"><span class="ru">К содержимому</span><span class="en">Skip to content</span></a>
-<div id="progress" aria-hidden="true"></div>
-<div class="grain" aria-hidden="true"></div>
-
-<!-- ===== Навигация ===================================================== -->
-<nav class="site-nav">
-  <div class="nav-inner">
-    <a class="brand" href="index.html" aria-label="LOVE"><span class="dot" aria-hidden="true"></span>LOVE</a>
-    <div class="nav-links">
-      <a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
-      <a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
-      <a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
-      <a href="ideas.html" aria-current="page"><span class="ru">Идеи</span><span class="en">Ideas</span></a>
-      <a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a>
-      <button class="lang-btn" onclick="toggleLang()" data-aria-ru="Сменить язык" aria-label="Switch language"><span class="ru">EN</span><span class="en">RU</span></button>
-      <a class="nav-cta" href="#catalog"><span class="ru">К каталогу</span><span class="en">To the catalogue</span></a>
-    </div>
-  </div>
-</nav>
-
-<main id="main">
-
-<!-- ===== СЦЕНА 1 — ШАПКА СТРАНИЦЫ ======================================
-     Четыре слоя глубины. Как и на поддержке, --par здесь 60px (правило .doc):
-     фон дышит, но не летает — каталог читают, а не пролистывают.
-     ===================================================================== -->
-<header class="scene" data-scene="ideas-head" style="--scene-height: auto">
-
-  <!-- дальний фон -->
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="vignette-d"></div>
-  </div>
-
-  <!-- свечение -->
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow doc-glow-a float-breathe"></div>
-    <div class="glow doc-glow-b float-breathe fd-2"></div>
-  </div>
-
-  <!-- средний декор: контурная надпись за заголовком -->
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="grid-v"></div>
-    <div class="ghost float-y" style="left:50%;top:13%">
-      <span class="ru">ИДЕИ</span><span class="en">IDEAS</span>
-    </div>
-  </div>
-
-  <!-- содержимое -->
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap doc-head">
-      <span class="kicker" data-animate="wipe"><span class="ru">Сообщество LOVE</span><span class="en">LOVE community</span></span>
-      <!-- Строк ровно две в ОБОИХ языках. Раскладка «.ln» одна на два языка,
-           поэтому третья строка, нужная только английскому, оставила бы в
-           русском пустую строку высотой в кегль — заметную дыру под «Идеи». -->
-      <h1 class="doc-h1" data-animate="lines">
-        <span class="ln"><i><span class="ru">Идеи</span><span class="en">Ideas from</span></i></span>
-        <span class="ln"><i><span class="ru">сообщества</span><span class="en">the community</span></i></span>
-      </h1>
-      <p class="doc-lede" data-animate="up">
-        <span class="ru">Здесь лежат предложения, которые прошли проверку команды и стали публичными. Видно, что уже в работе, что запланировано, а что мы решили не делать — и почему очередь выглядит именно так.</span>
-        <span class="en">These are the suggestions that passed our review and went public. You can see what’s in progress, what’s planned and what we decided against — and why the queue looks the way it does.</span>
-      </p>
-      <p class="doc-updated" data-animate="wipe">
-        <span class="ru">Голосовать и предлагать новое — из Love Hub в приложении</span>
-        <span class="en">Vote and submit new ideas from Love Hub inside the app</span>
-      </p>
-    </div>
-  </div>
-
-</header>
-
-<!-- ===== СЦЕНА 2 — ПУТЬ ИДЕИ ============================================
-     Двойная работа: рассказывает порядок и заодно служит легендой к бейджам
-     в каталоге. Статусы взяты ровно те, что существуют на сервере
-     (under_review, planned, in_progress, completed, declined) — ничего
-     придуманного. В каталоге они приходят машинными слагами, и на боевом
-     сайте так и печатаются; здесь у каждого есть человеческая подпись.
-     Различие статусов — знаком и весом, не цветом: контур, половина,
-     залитый квадрат, точка, перечёркнутый — в порядке движения по очереди.
-     ===================================================================== -->
-<section class="scene cv" id="how" data-scene="ideas-flow" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="grid-v"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe fd-2" style="right:-14%;top:-10%;width:44vw;height:44vw"></div>
-  </div>
-
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap">
-      <h2 class="flow-h2" data-animate="wipe">
-        <span class="ru">Как идея проходит очередь</span>
-        <span class="en">How an idea moves through the queue</span>
-      </h2>
-      <p class="flow-lede" data-animate="up">
-        <span class="ru">Пять состояний, ничего скрытого. Бейдж на карточке — это одно из них.</span>
-        <span class="en">Five states, nothing hidden. The badge on a card is one of them.</span>
-      </p>
-
-      <ol class="legend tilt" data-tilt="3" data-animate="stagger">
-        <li class="lg" style="--i:0">
-          <span class="state s-review" aria-hidden="true"></span>
-          <b><span class="ru">На рассмотрении</span><span class="en">Under review</span></b>
-          <span class="lg-x"><span class="ru">Прочитали, обсуждаем. Ещё не решили.</span><span class="en">We’ve read it and are talking it over. No decision yet.</span></span>
-        </li>
-        <li class="lg" style="--i:1">
-          <span class="state s-planned" aria-hidden="true"></span>
-          <b><span class="ru">Запланировано</span><span class="en">Planned</span></b>
-          <span class="lg-x"><span class="ru">Решили делать. Даты пока не обещаем.</span><span class="en">We’re doing it. We won’t promise a date yet.</span></span>
-        </li>
-        <li class="lg" style="--i:2">
-          <span class="state s-progress" aria-hidden="true"></span>
-          <b><span class="ru">В работе</span><span class="en">In progress</span></b>
-          <span class="lg-x"><span class="ru">Кто-то уже пишет этот код прямо сейчас.</span><span class="en">Someone is writing that code right now.</span></span>
-        </li>
-        <li class="lg" style="--i:3">
-          <span class="state s-done" aria-hidden="true"></span>
-          <b><span class="ru">Готово</span><span class="en">Completed</span></b>
-          <span class="lg-x"><span class="ru">Вышло в обновлении — ищите в истории версий.</span><span class="en">Shipped in an update — look for it in the changelog.</span></span>
-        </li>
-        <li class="lg" style="--i:4">
-          <span class="state s-declined" aria-hidden="true"></span>
-          <b><span class="ru">Отклонено</span><span class="en">Declined</span></b>
-          <span class="lg-x"><span class="ru">Не будем делать. Идея остаётся на виду, а не исчезает.</span><span class="en">We won’t build it. The idea stays visible instead of vanishing.</span></span>
-        </li>
-      </ol>
-    </div>
-  </div>
-
-</section>
-
-<!-- ===== СЦЕНА 3 — КАТАЛОГ ==============================================
-     Все идентификаторы — те же, что на боевом сайте (#ideas-grid, #idea-sort,
-     #ideas-status, #ideas-prev/next, #ideas-page, #ideas-count, #idea-search):
-     логика переносится файлом, а не переписыванием разметки.
-     Карточки рисует community.js. Наклон по курсору навешивается на каждую
-     карточку там же, потому что до загрузки их в DOM ещё нет.
-     ===================================================================== -->
-<section class="scene cv" id="catalog" data-scene="ideas-catalog" style="--scene-height: auto" aria-labelledby="catalog-title">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="vignette-d"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe" style="left:-16%;top:26%;width:38vw;height:38vw"></div>
-  </div>
-
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="grid-v"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap">
-      <div class="catalog">
-
-        <div class="catalog-toolbar" data-animate="up">
-          <div>
-            <h2 id="catalog-title"><span class="ru">Каталог</span><span class="en">Catalogue</span></h2>
-            <span id="ideas-count"><span class="ru">Загружаем…</span><span class="en">Loading…</span></span>
-          </div>
-          <div class="controls">
-            <label class="search">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-              <input id="idea-search" type="search" autocomplete="off"
-                     placeholder="Поиск по идеям"
-                     data-ph-ru="Поиск по идеям"
-                     data-ph-en="Search ideas"
-                     data-aria-ru="Поиск по идеям"
-                     aria-label="Search ideas" />
-            </label>
-            <!-- Подписи <option> переводит скрипт страницы: внутрь option
-                 разметку с .ru/.en положить нельзя. -->
-            <select id="idea-sort" data-aria-ru="Сортировка" aria-label="Sort order">
-              <option value="score">По рейтингу</option>
-              <option value="new">Сначала новые</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Одно место для всех «не карточек»: загрузка, пусто, ошибка.
-             role="status" оставлен от оригинала — смена текста озвучивается. -->
-        <div id="ideas-status" class="status" role="status">
-          <div class="status-in">
-            <span class="status-mark" aria-hidden="true"></span>
-            <b id="ideas-status-title"><span class="ru">Загружаем идеи</span><span class="en">Loading ideas</span></b>
-            <span id="ideas-status-text"><span class="ru">Секунду — забираем список с сервера.</span><span class="en">One moment — fetching the list from the server.</span></span>
-            <button type="button" class="btn btn-ow btn-sm" id="ideas-retry" hidden>
-              <span class="ru">Попробовать снова</span><span class="en">Try again</span>
-            </button>
-          </div>
-        </div>
-
-        <div id="ideas-grid" class="ideas-grid" hidden></div>
-
-        <div class="pagination" id="ideas-pagination" hidden>
-          <button id="ideas-prev" type="button" data-aria-ru="Предыдущая страница" aria-label="Previous page">
-            <span class="ru">Назад</span><span class="en">Back</span>
-          </button>
-          <span id="ideas-page"></span>
-          <button id="ideas-next" type="button" data-aria-ru="Следующая страница" aria-label="Next page">
-            <span class="ru">Вперёд</span><span class="en">Next</span>
-          </button>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-</section>
-
-<!-- ===== СЦЕНА 4 — ГДЕ ГОЛОСОВАТЬ =======================================
-     Оригинал говорит это одной строкой в шапке; выношу в отдельный блок,
-     потому что это единственное действие, которое человек может здесь
-     совершить. Ссылки наружу нет намеренно: Love Hub живёт в приложении.
-     ===================================================================== -->
-<section class="scene cv" data-scene="ideas-cta" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="vignette-d"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe fd-3" style="left:44%;top:-24%;width:46vw;height:46vw"></div>
-  </div>
-
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap doc-body doc-narrow doc-cta">
-      <div class="doc-card tilt" data-tilt="4" data-animate="up">
-        <h2><span class="ru">Своя идея?</span><span class="en">Got an idea?</span></h2>
-        <p>
-          <span class="ru">Предлагать своё и голосовать за чужое можно только из приложения — раздел Love Hub. Оттуда идея приходит к нам. Решим показать её всем — она появится на этой странице со своим статусом.</span>
-          <span class="en">Writing your own and voting on other people’s happens inside the app — the Love Hub section. That’s how an idea reaches us. If we decide to show it publicly, it lands on this page with a status.</span>
-        </p>
-        <p class="fhint">
-          <span class="ru">Нашли ошибку, а не идею? Это</span><span class="en">Found a bug rather than an idea? That’s</span>
-          <a href="support.html#contact"><span class="ru">поддержка</span><span class="en">support</span></a>.
-        </p>
-      </div>
-    </div>
-  </div>
-
-</section>
-
-</main>
-
-<!-- ===== Подвал ========================================================= -->
-<footer class="scene" data-scene="footer" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe fd-3" style="left:-14%;bottom:-40%;width:48vw;height:48vw"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="wrap">
-      <div class="foot-grid">
-        <div>
-          <a class="brand" href="index.html"><span class="dot" aria-hidden="true"></span>LOVE</a>
-          <p class="foot-about">
-            <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
-            <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
-          </p>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
-          <ul>
-            <li><a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
-            <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
-            <li><a href="ideas.html"><span class="ru">Идеи сообщества</span><span class="en">Community ideas</span></a></li>
-            <li><a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
-          </ul>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
-          <ul>
-            <li><a href="support.html#faq">FAQ</a></li>
-            <li><a href="support.html#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a></li>
-            <li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li>
-          </ul>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
-          <ul>
-            <li><a href="terms.html"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
-            <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="foot-bottom">
-        <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
-        <div class="mono">loveapp.chat</div>
-      </div>
-    </div>
-  </div>
-
-</footer>
-
-<!-- Порядок не косметический: скрипты с defer выполняются строго по документу,
-     поэтому каталог стоит первым — запрос данных не должен ждать выполнения
-     декоративной библиотеки. Наклон он при этом навесить ещё не сможет
-     (window.loveBindTilt появится позже), но depth.js при старте сам обходит
-     все [data-tilt], включая уже отрисованные карточки — ради этого в draw()
-     и стоит проверка на существование функции.
-     Оговорка про замеры: локально до первой карточки проходит ~3.3 с, но это
-     не порядок скриптов. Запрос уходит на 709 мс и 2351 мс умирает — столько
-     Chromium стучится в закрытый порт localhost. В продакшене API отвечает,
-     и этой задержки нет. -->
-<script src="community.js" defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Идеи сообщества — Love</title>
+<meta name="description" content="Предложения сообщества Love: что в работе, что запланировано и что уже вышло.">
+<meta name="theme-color" content="#050507">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2317171b'/%3E%3Cpath d='M32 46s-14-8.6-14-18a7.5 7.5 0 0 1 14-3.8A7.5 7.5 0 0 1 46 28c0 9.4-14 18-14 18z' fill='%23dcdce0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
-<script src="depth.js" defer></script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">К содержимому</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></g></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></g></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></g></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></g></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+    <symbol id="i-install" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 7.5v6M9.5 11l2.5 2.5 2.5-2.5"/></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M21 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/></g></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></g></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></g></symbol>
+  </defs>
+</svg>
+<header class="topbar" aria-label="Навигация">
+  <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="none" stroke="#dcdce0" stroke-width="1.6"/><path d="M12 17s-5-3.1-5-6.4A2.6 2.6 0 0 1 12 9.3a2.6 2.6 0 0 1 5 1.3c0 3.3-5 6.4-5 6.4z" fill="#dcdce0"/></svg>Love</a>
+  <nav><a href="index.html#features">Возможности</a><a href="index.html#pricing">Подписки</a><a href="changelog.html">Что нового</a><a href="ideas.html" aria-current="page">Идеи</a><a href="support.html">Поддержка</a></nav>
+  <div class="right">
+    <a class="icon-btn" href="support.html" aria-label="Поддержка" title="Поддержка"><svg aria-hidden="true"><use href="#i-help"/></svg></a>
+    <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub" title="GitHub"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+    <a class="pill" href="index.html#download"><svg aria-hidden="true"><use href="#i-down"/></svg>Скачать</a>
+    <button class="icon-btn menu-btn" type="button" data-open="menu" aria-label="Открыть меню"><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
+  </div>
+</header>
+<main id="main">
+<header class="page-head">
+  <div class="wrap">
+    <div class="ph-slab" data-shard>
+      <svg class="ph-shards" aria-hidden="true"></svg>
+      <div class="ph-body">
+        <div class="crumbs"><a href="index.html">Love</a><span aria-hidden="true">/</span><span>Идеи сообщества</span></div>
+        <span class="eyebrow">Сообщество</span>
+        <h1 class="title">Love делают<br>вместе с вами.</h1>
+        <p class="lead">Здесь лежат предложения, которые прошли проверку команды и стали публичными. Видно, что уже в работе, что запланировано, а что мы решили не делать — и почему очередь выглядит именно так.</p>
+        <div class="ph-meta"><span class="chip"><span class="dot"></span>Голосовать и предлагать — из Love Hub в приложении</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+<section class="section" style="padding-bottom:0">
+  <div class="wrap">
+    <div style="display:grid;gap:14px;margin-bottom:28px" data-rise>
+      <span class="eyebrow">Как идея проходит очередь</span>
+      <h2 class="title md">Пять состояний, ничего скрытого.</h2>
+    </div>
+    <div class="states"><div class="glass state tilt" data-shard><span class="chip s-review"><span class="dot"></span>На рассмотрении</span><p>Прочитали, обсуждаем. Ещё не решили.</p></div><div class="glass state tilt" data-shard><span class="chip s-planned"><span class="dot"></span>Запланировано</span><p>Решили делать. Даты пока не обещаем.</p></div><div class="glass state tilt" data-shard><span class="chip s-progress"><span class="dot"></span>В работе</span><p>Кто-то уже пишет этот код прямо сейчас.</p></div><div class="glass state tilt" data-shard><span class="chip s-done"><span class="dot"></span>Готово</span><p>Вышло в обновлении — ищите в истории версий.</p></div><div class="glass state tilt" data-shard><span class="chip s-declined"><span class="dot"></span>Отклонено</span><p>Не будем делать. Идея остаётся на виду, а не исчезает.</p></div></div>
+  </div>
+</section>
 
+<section class="section" id="catalog" aria-labelledby="catalog-title">
+  <div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;margin-bottom:24px" data-rise>
+      <div style="display:grid;gap:14px"><span class="eyebrow">Каталог</span><h2 class="title md" id="catalog-title">Все идеи</h2></div>
+      <span class="count" id="ideas-count" aria-live="polite">Загружаем…</span>
+    </div>
+    <div class="toolbar">
+      <label class="search"><span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Поиск по идеям</span><svg aria-hidden="true"><use href="#i-search"/></svg><input id="ideas-search" type="search" placeholder="Поиск по идеям" autocomplete="off"></label>
+      <div class="seg" role="group" aria-label="Порядок">
+        <button type="button" data-sort="score" aria-pressed="true">По рейтингу</button>
+        <button type="button" data-sort="new" aria-pressed="false">Сначала новые</button>
+      </div>
+    </div>
+    <div class="filters" role="group" aria-label="Статус"><button type="button" data-status="all" aria-pressed="true">Все</button><button type="button" data-status="under_review" aria-pressed="false"><span class="dot" style="background:#9aa0a6"></span>На рассмотрении</button><button type="button" data-status="planned" aria-pressed="false"><span class="dot" style="background:var(--lav)"></span>Запланировано</button><button type="button" data-status="in_progress" aria-pressed="false"><span class="dot" style="background:var(--amber)"></span>В работе</button><button type="button" data-status="completed" aria-pressed="false"><span class="dot" style="background:var(--green)"></span>Готово</button><button type="button" data-status="declined" aria-pressed="false"><span class="dot" style="background:#ff7a7a"></span>Отклонено</button></div>
+    <div class="ideas" id="ideas-list" aria-live="polite"></div>
+    <div class="pager" id="ideas-pager" hidden>
+      <button class="pill ghost" type="button" id="ideas-prev">Назад</button>
+      <span id="ideas-page"></span>
+      <button class="pill ghost" type="button" id="ideas-next">Вперёд</button>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <div class="wrap cta">
+    <div class="glass tilt" data-shard>
+      <h3>Своя идея?</h3>
+      <p>Предлагать своё и голосовать за чужое можно только из приложения — раздел Love Hub. Оттуда идея приходит к нам. Решим показать её всем — она появится на этой странице со своим статусом.</p>
+      <a class="pill" href="index.html#download"><svg aria-hidden="true"><use href="#i-down"/></svg>Скачать Love</a>
+    </div>
+    <div class="glass tilt" data-shard>
+      <h3>Нашли ошибку, а не идею?</h3>
+      <p>Это к поддержке: опишите, что случилось, и мы ответим в течение суток.</p>
+      <a class="pill ghost" href="support.html#contact">Написать в поддержку</a>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="none" stroke="#dcdce0" stroke-width="1.6"/><path d="M12 17s-5-3.1-5-6.4A2.6 2.6 0 0 1 12 9.3a2.6 2.6 0 0 1 5 1.3c0 3.3-5 6.4-5 6.4z" fill="#dcdce0"/></svg>Love</a>
+        <p>Мессенджер для своих. Переписки, звонки и сферы на компьютере и в телефоне.</p>
+        <div class="socials">
+          <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+          <a class="icon-btn" href="mailto:support@loveapp.chat" aria-label="Написать на почту поддержки"><svg aria-hidden="true"><use href="#i-mail"/></svg></a>
+          <a class="icon-btn" href="support.html" aria-label="Поддержка"><svg aria-hidden="true"><use href="#i-help"/></svg></a>
+        </div>
+      </div>
+      <div><h4>Продукт</h4><ul><li><a href="index.html#features">Возможности</a></li><li><a href="index.html#profile">Публичная страница</a></li><li><a href="index.html#pricing">Подписки</a></li><li><a href="index.html#download">Скачать</a></li></ul></div>
+      <div><h4>Сообщество</h4><ul><li><a href="changelog.html">Что нового</a></li><li><a href="ideas.html" aria-current="page">Идеи сообщества</a></li><li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li></ul></div>
+      <div><h4>Помощь</h4><ul><li><a href="support.html">Поддержка</a></li><li><a href="support.html#faq">Вопросы и ответы</a></li><li><a href="mailto:support@loveapp.chat">Написать нам</a></li></ul></div>
+      <div><h4>Документы</h4><ul><li><a href="terms.html">Условия использования</a></li><li><a href="privacy.html">Конфиденциальность</a></li></ul></div>
+    </div>
+    <div class="foot-bottom"><span>© Love, 2026</span><span>Сделано для своих</span></div>
+  </div>
+</footer>
+
+<div class="modal" id="modal-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" hidden>
+  <div class="glass modal-box flat">
+    <div class="modal-head"><h2 id="menu-title">Love</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть меню"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <div class="menu-list">
+      <a href="index.html">Главная<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="changelog.html">Что нового<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="ideas.html" aria-current="page">Идеи сообщества<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="support.html">Поддержка<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="terms.html">Условия использования<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="privacy.html">Конфиденциальность<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a class="pill" href="index.html#download" style="flex:1"><svg aria-hidden="true"><use href="#i-down"/></svg>Скачать</a>
+      <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub" style="width:44px;height:44px"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+      <a class="icon-btn" href="mailto:support@loveapp.chat" aria-label="Почта поддержки" style="width:44px;height:44px"><svg aria-hidden="true"><use href="#i-mail"/></svg></a>
+    </div>
+  </div>
+</div>
 <script>
 (function () {
-  "use strict";
-
-  /* ===== Заголовок вкладки и подписи сортировки =====
-     Слушаем love:lang на window — именно туда его отправляет lang.js.
-     На document это событие не приходит (проверено на поддержке: там из-за
-     этого подписи <option> молча не переводились). */
-  var SORT = {
-    score: { ru: "По рейтингу", en: "Top rated" },
-    new:   { ru: "Сначала новые", en: "Newest first" }
+  'use strict';
+  var API = 'https://api.loveapp.chat/api';
+  var STATUS = {
+    under_review: ['s-review', 'На рассмотрении'],
+    planned: ['s-planned', 'Запланировано'],
+    in_progress: ['s-progress', 'В работе'],
+    completed: ['s-done', 'Готово'],
+    declined: ['s-declined', 'Отклонено']
   };
+  var CATEGORY = { messaging: 'Переписка', voice: 'Звонки', servers: 'Сферы', profile: 'Профиль', mobile: 'Мобильные', safety: 'Безопасность', accessibility: 'Доступность', other: 'Разное' };
+  var DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  var list = document.getElementById('ideas-list');
+  var count = document.getElementById('ideas-count');
+  var pager = document.getElementById('ideas-pager');
+  var pageLabel = document.getElementById('ideas-page');
+  var prev = document.getElementById('ideas-prev');
+  var next = document.getElementById('ideas-next');
+  var search = document.getElementById('ideas-search');
+  var state = { page: 1, pages: 1, sort: 'score', status: 'all', query: '' };
+  var req = 0;
 
-  function syncTitle() {
-    document.title = (window.loveLang && loveLang() === "ru")
-      ? "Идеи сообщества — LOVE"
-      : "Ideas — LOVE";
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
   }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function chip(cls, text) { var c = el('span', 'chip ' + cls); c.appendChild(el('span', 'dot')); c.appendChild(document.createTextNode(text)); return c; }
 
-  function syncOptions() {
-    var l = (window.loveLang && loveLang()) === "ru" ? "ru" : "en";
-    var opts = document.querySelectorAll("#idea-sort option");
-    for (var i = 0; i < opts.length; i++) {
-      var t = SORT[opts[i].value];
-      if (t) opts[i].textContent = t[l];
+  function card(item) {
+    var st = STATUS[item.status] || STATUS.under_review;
+    var art = el('article', 'glass idea tilt');
+    var top = el('div', 'idea-top');
+    top.appendChild(chip(st[0], st[1]));
+    if (item.category && CATEGORY[item.category]) top.appendChild(el('span', 'chip', CATEGORY[item.category]));
+    art.appendChild(top);
+    art.appendChild(el('h3', null, item.title || 'Без названия'));
+    if (item.summary) art.appendChild(el('p', null, item.summary));
+    var meta = el('div', 'meta');
+    var sc = Number(item.score) || 0;
+    var score = el('span', 'score' + (sc > 0 ? '' : ' zero'));
+    score.innerHTML = '<svg aria-hidden="true"><use href="#i-up"/></svg>';
+    score.appendChild(document.createTextNode(String(sc)));
+    score.title = 'За: ' + (item.upVotes || 0) + ', против: ' + (item.downVotes || 0);
+    meta.appendChild(score);
+    var right = [];
+    if (item.number) right.push('№ ' + item.number);
+    if (item.createdAt) { var d = new Date(item.createdAt); if (!isNaN(d)) right.push(DATE.format(d)); }
+    meta.appendChild(el('span', null, right.join(' · ')));
+    art.appendChild(meta);
+    return art;
+  }
+  function skeleton() {
+    list.replaceChildren();
+    for (var i = 0; i < 6; i++) {
+      var s = el('div', 'glass idea flat');
+      ['70%', '95%', '82%', '60%'].forEach(function (w, j) { var b = el('div', 'skeleton'); b.style.height = j ? '12px' : '18px'; b.style.width = w; s.appendChild(b); });
+      list.appendChild(s);
     }
   }
-
-  syncTitle();
-  syncOptions();
-  window.addEventListener("love:lang", function () { syncTitle(); syncOptions(); });
+  function message(title, text, retry) {
+    list.replaceChildren();
+    var box = el('div', 'glass empty flat');
+    box.appendChild(el('b', null, title));
+    box.appendChild(el('span', null, text));
+    if (retry) { var b = el('button', 'pill ghost', 'Попробовать снова'); b.type = 'button'; b.addEventListener('click', load); box.appendChild(b); }
+    list.appendChild(box);
+  }
+  function load() {
+    var my = ++req;
+    skeleton();
+    pager.hidden = true;
+    count.textContent = 'Загружаем…';
+    var params = new URLSearchParams({ page: String(state.page), limit: '12', sort: state.sort });
+    if (state.query) params.set('query', state.query);
+    if (state.status !== 'all') params.set('status', state.status);
+    fetch(API + '/community/ideas?' + params.toString())
+      .then(function (r) { if (!r.ok) throw new Error('http'); return r.json(); })
+      .then(function (data) {
+        if (my !== req) return;
+        var items = Array.isArray(data && data.ideas) ? data.ideas : [];
+        var pg = (data && data.pagination) || {};
+        var total = Number(pg.total != null ? pg.total : items.length) || 0;
+        state.pages = Math.max(1, Number(pg.pages || 1));
+        count.textContent = total + ' ' + plural(total, 'идея', 'идеи', 'идей');
+        if (!items.length) {
+          message(state.query || state.status !== 'all' ? 'Ничего не нашлось' : 'Идей пока нет',
+            state.query || state.status !== 'all' ? 'Попробуйте другой запрос или уберите фильтр.' : 'Будьте первыми — предложите идею из Love Hub в приложении.');
+          return;
+        }
+        list.replaceChildren.apply(list, items.map(card));
+        list.querySelectorAll('.glass').forEach(function (c) { if (window.loveBindGlass) window.loveBindGlass(c); });
+        if (window.loveTypograph) window.loveTypograph(list);
+        pager.hidden = state.pages <= 1;
+        pageLabel.textContent = 'Страница ' + state.page + ' из ' + state.pages;
+        prev.disabled = state.page <= 1;
+        next.disabled = state.page >= state.pages;
+      })
+      .catch(function () {
+        if (my !== req) return;
+        count.textContent = '';
+        message('Не удалось загрузить идеи',
+          location.protocol === 'file:' ? 'Список приходит с сервера Love — с копии сайта на компьютере он может не открыться. На loveapp.chat всё работает.' : 'Проверьте интернет и попробуйте ещё раз.', true);
+      });
+  }
+  document.querySelectorAll('[data-sort]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.sort = b.getAttribute('data-sort'); state.page = 1;
+      document.querySelectorAll('[data-sort]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      load();
+    });
+  });
+  document.querySelectorAll('[data-status]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.status = b.getAttribute('data-status'); state.page = 1;
+      document.querySelectorAll('[data-status]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      load();
+    });
+  });
+  var timer = 0;
+  search.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { state.query = search.value.trim(); state.page = 1; load(); }, 300);
+  });
+  function go(delta) {
+    state.page = Math.min(state.pages, Math.max(1, state.page + delta));
+    load();
+    document.getElementById('catalog').scrollIntoView({ behavior: 'smooth' });
+  }
+  prev.addEventListener('click', function () { go(-1); });
+  next.addEventListener('click', function () { go(1); });
+  load();
 })();
 </script>
-
 </body>
 </html>

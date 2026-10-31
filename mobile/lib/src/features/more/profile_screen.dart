@@ -63,7 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 textAlign: TextAlign.center,
                 style:  TextStyle(
                   fontFamily: LoveFonts.serif,
-                  fontStyle: FontStyle.italic,
+                  fontStyle: context.palette.rd ? FontStyle.normal : FontStyle.italic,
                   fontSize: 26,
                   fontWeight: FontWeight.w500,
                   color: context.palette.textPrimary,
@@ -71,12 +71,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                '@${(user?.username ?? 'love').toUpperCase()}',
+                context.palette.rd
+                    ? '@${user?.username ?? 'love'}'
+                    : '@${(user?.username ?? 'love').toUpperCase()}',
                 textAlign: TextAlign.center,
                 style:  TextStyle(
-                  fontFamily: LoveFonts.mono,
-                  fontSize: 11,
-                  letterSpacing: 1.5,
+                  fontFamily: LoveText.labelFont(context.palette),
+                  fontSize: context.palette.rd ? 13.5 : 11,
+                  letterSpacing: LoveText.labelSpacing(context.palette, 1.5),
                   color: context.palette.textMuted,
                 ),
               ),
@@ -213,11 +215,12 @@ class _Avatar extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: context.palette.inkA(0.10),
-                  blurRadius: 34,
-                  spreadRadius: 2,
-                ),
+                if (!context.palette.rd)
+                  BoxShadow(
+                    color: context.palette.inkA(0.10),
+                    blurRadius: 34,
+                    spreadRadius: 2,
+                  ),
               ],
             ),
             child: LoveAvatar(
@@ -314,7 +317,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: LoveText.monoLabel(context.palette)),
+          Text(LoveText.caps(context.palette, label), style: LoveText.monoLabel(context.palette)),
           const SizedBox(height: 10),
           child,
         ],

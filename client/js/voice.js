@@ -127,6 +127,9 @@ class VoiceManager {
       ]
     };
     this._iceConfigFetchedAt = 0;
+    // socket.id, которым мы уже вошли в канал: Manager reconnect и полный
+    // re-init сокета дают новый id, и только тогда нужен повторный вход.
+    this._joinedSocketId = null;
   }
 
   /**
@@ -260,6 +263,7 @@ class VoiceManager {
       if (window.playVoiceSound) window.playVoiceSound('join');
 
       console.log('🎤 Joined voice channel:', channelId);
+      this._joinedSocketId = window.socket?.id || null;
       window.syncDirectCallControls?.();
       return true;
 
@@ -363,7 +367,83 @@ class VoiceManager {
     hideScreenShareVideo();
     window.syncDirectCallControls?.();
 
+    this._joinedSocketId = null;
+
     console.log('🔇 Left voice channel');
+  }
+
+  /**
+   * Тихо вернуться в канал после переподключения сокета.
+   *
+   * Разрыв связи не трогает микрофон и локальные потоки — MediaStream живёт в
+   * браузере. Но сервер снимает старую socket-сессию из канала (или теряет её
+   * при disconnect), а собеседники закрывают peer-соединения, привязанные к
+   * прежним SDP/ICE. Поэтому повторяем voice:join и заново поднимаем
+   * peer-соединения — без «вышел из канала» на экране и без повторного
+   * запроса микрофона.
+   */
+  async resumeAfterReconnect() {
+    const channelId = this.channelId;
+    const socketId = window.socket?.id;
+    const audioTracks = this.localStream?.getAudioTracks?.() || [];
+    if (!channelId || !socketId) return false;
+    if (!window.socket.connected) return false;
+    if (!audioTracks.some(track => track.readyState === 'live')) return false;
+    // Этим соединением мы уже в канале — повторный вход не нужен.
+    if (this._joinedSocketId === socketId) return false;
+
+    // Собеседники уже разорвали старые pc, а наш экземпляр помнит их с прежней
+    // socket-сессией: переговоры по ним не восстановятся. Начинаем с чистого
+    // листа, сохраняя микрофон, камеру и демонстрацию экрана.
+    this.resetPeers();
+    const session = this._session;
+    this._joinedSocketId = socketId;
+
+    let result = await socketJoinVoice(channelId);
+    if (session !== this._session || this.channelId !== channelId) return false;
+    if (result?.status !== 'ok') {
+      // Сокет мог отвалиться снова — тогда следующий reconnect попробует ещё
+      // раз; один короткий повтор закрывает гонку с регистрацией сессии.
+      if (!window.socket?.connected) return false;
+      await new Promise(resolve => setTimeout(resolve, 650));
+      if (session !== this._session || this.channelId !== channelId || !window.socket?.connected) return false;
+      result = await socketJoinVoice(channelId);
+      if (session !== this._session || this.channelId !== channelId) return false;
+    }
+    if (result?.status !== 'ok') {
+      console.warn('[Voice] rejoin after reconnect failed:', result?.message || result?.status);
+      return false;
+    }
+
+    // Если сервер успел выкинуть нас из канала, карточка создана заново и не
+    // знает про камеру/экран. Повторное объявление состояния идемпотентно.
+    const mode = this.isScreenSharing ? 'screen' : this.isCameraOn ? 'camera' : null;
+    if (mode && typeof socketSetVoiceMediaState === 'function') {
+      socketSetVoiceMediaState(channelId, mode);
+    }
+
+    console.log('♻️ Voice reconnected:', channelId);
+    return true;
+  }
+
+  /**
+   * Закрыть peer-соединения, не трогая локальные потоки и сам канал.
+   */
+  resetPeers() {
+    this.peerConnections.forEach(pc => pc.close());
+    this.peerConnections.clear();
+    this.audioElements.forEach(audio => {
+      audio.srcObject = null;
+      audio.remove();
+    });
+    this.audioElements.clear();
+    this.remoteVideoStreams.clear();
+    this.screenActiveSockets.clear();
+    this.remoteAudioStatsIntervals.forEach(intervalId => clearInterval(intervalId));
+    this.remoteAudioStatsIntervals.clear();
+    this._offerQueue.clear();
+    this._processingOffer.clear();
+    this._iceCandidateBuffer.clear();
   }
 
   /**
@@ -1635,6 +1715,23 @@ async function leaveVoiceChannel(options = {}) {
     window.syncChannelSelectionAfterVoiceLeave();
   }
 }
+
+// Точка входа для socket.js: после Manager reconnect или полного re-init
+// сокета молча возвращаемся в канал. Параллельные вызовы (connect +
+// reconnect) делят один промис, чтобы не отправить voice:join дважды.
+let _voiceResumePromise = null;
+window.resumeVoiceAfterReconnect = function resumeVoiceAfterReconnect() {
+  const manager = window.voiceManager;
+  if (!manager?.channelId) return Promise.resolve(false);
+  if (_voiceResumePromise) return _voiceResumePromise;
+  _voiceResumePromise = manager.resumeAfterReconnect()
+    .catch(error => {
+      console.warn('[Voice] resume after reconnect failed:', error?.message || error);
+      return false;
+    })
+    .finally(() => { _voiceResumePromise = null; });
+  return _voiceResumePromise;
+};
 
 /**
  * Переключить микрофон в голосовом канале

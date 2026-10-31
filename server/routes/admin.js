@@ -30,6 +30,9 @@ const DirectMessage = require('../models/DirectMessage');
 const Notification = require('../models/Notification');
 const ProfilePage = require('../models/ProfilePage');
 const { purgeUser, purgeFootprint } = require('../services/userPurge');
+const { purgeUserWithFiles, createFileStore } = require('../services/userFiles');
+const cloudinary = require('../config/cloudinary');
+const { allowedHosts } = require('../utils/profileMedia');
 
 // Middleware
 const { adminSessionAuth: authMiddleware } = require('../middleware/adminSessionAuth');
@@ -276,10 +279,7 @@ router.get('/users/:id', authMiddleware, isSupport, async (req, res) => {
 
 // ==================== УДАЛЕНИЕ АККАУНТОВ И ПОДПИСКИ ====================
 
-const PURGE_MODELS = {
-  User, Message, Channel, DirectMessage, Server, Notification, LoginLog, AdminSession,
-  AdminAuthChallenge, AnalyticsEvent, CommunityVote, ProfilePage, RiskSignal
-};
+const PURGE_MODELS = require('../services/purgeModels');
 
 // Код Authenticator проверяется ВСЕГДА, в любой среде: удаление аккаунта и
 // выдача права на удаление необратимы, тут нет «облегчённого» режима.
@@ -346,7 +346,12 @@ router.delete('/users/:id', authMiddleware, isAdmin, otpLimiter, async (req, res
     const io = req.app.get('io');
     io?.in(`user:${target._id}`).disconnectSockets(true);
 
-    const counts = await purgeUser(PURGE_MODELS, target._id);
+    const { counts } = await purgeUserWithFiles(PURGE_MODELS, target._id, {
+      purgeUser,
+      store: createFileStore(cloudinary),
+      options: { cloudName: cloudinary.config().cloud_name, ownHosts: [...allowedHosts()] },
+      onFiles: files => logAudit(actor._id, 'PURGE_USER_FILES', 'user', target._id, files, req)
+    });
     await logAudit(actor._id, 'PURGE_USER', 'user', target._id, { ...snapshot, reason, counts }, req);
     publishAdminUpdate?.('users', { action: 'purged', userId: String(target._id) });
 

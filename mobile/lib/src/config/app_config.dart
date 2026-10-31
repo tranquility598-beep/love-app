@@ -8,7 +8,7 @@ class AppConfig {
   /// fallback). Independent from the Flutter package version.
   static const productVersion = String.fromEnvironment(
     'LOVE_PRODUCT_VERSION',
-    defaultValue: '2.2.0',
+    defaultValue: '2.3.0',
   );
   static const website = 'https://loveapp.chat';
   static const supportEmail = 'support@loveapp.chat';

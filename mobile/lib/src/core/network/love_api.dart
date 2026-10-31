@@ -52,6 +52,21 @@ class LoveApi {
     return _list(response['blockedUsers']);
   }
 
+  /// Что удалится вместе с аккаунтом. Server: `GET /users/me/deletion-preview`.
+  Future<Map<String, dynamic>> accountDeletionPreview() =>
+      api.get('/users/me/deletion-preview');
+
+  /// Удаление своего аккаунта. Server: `POST /users/me/delete`.
+  Future<void> deleteAccount({
+    String? password,
+    required String confirmUsername,
+  }) async {
+    await api.post('/users/me/delete', body: {
+      if (password != null) 'password': password,
+      'confirmUsername': confirmUsername,
+    });
+  }
+
   Future<void> unblockUser(String userId) async {
     final response =
         await api.delete('/users/me/blocked/${Uri.encodeComponent(userId)}');

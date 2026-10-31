@@ -1,0 +1,313 @@
+/* Love — общие стили внутренних страниц (что нового, идеи, поддержка, документы).
+   Тот же язык, что у главной: тёмное стекло, светлые края, лаванда под курсором,
+   светлая таблетка, зеленеющая при наведении. */
+:root{
+  color-scheme:dark;
+  --bg:#050507;
+  --glass:#17171b;
+  --text:#dcdce0;
+  --soft:rgba(255,255,255,.55);
+  --faint:rgba(255,255,255,.38);
+  --dim:rgba(255,255,255,.34);
+  --line:rgba(255,255,255,.08);
+  --lav:#b9abff;
+  --green:#36d67e;
+  --amber:#f5c451;
+  --pill:#ececf0;
+  --radius:20px;
+  --wrap:min(1240px,calc(100% - 48px));
+}
+*,*::before,*::after{box-sizing:border-box}
+html{background:var(--bg);-webkit-text-size-adjust:100%;scroll-padding-top:96px}
+body{margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+main,.footer{overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+img,svg{display:block}
+::selection{background:rgba(64,120,255,.42)}
+:focus-visible{outline:2px solid var(--lav);outline-offset:3px;border-radius:6px}
+.skip{position:fixed;left:16px;top:-60px;z-index:100;padding:10px 14px;border-radius:8px;background:var(--pill);color:#08080a;font-size:14px;font-weight:500;transition:top .2s}
+.skip:focus{top:16px}
+
+/* ---------- Общие элементы ---------- */
+.eyebrow{display:block;font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.title{margin:0;font-weight:500;letter-spacing:-.045em;line-height:.97;font-size:clamp(40px,6vw,92px);background:linear-gradient(#dcdce0,#bdbdc3);-webkit-background-clip:text;background-clip:text;color:transparent;text-wrap:balance}
+.title.md{font-size:clamp(30px,3.6vw,54px);line-height:1.02}
+.lead{margin:0;color:var(--soft);font-size:clamp(16px,1.2vw,18px);line-height:1.6;max-width:60ch}
+.pill{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:44px;padding:0 20px;border-radius:6px;border:0;background:var(--pill);color:#09090b;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s,color .2s,transform .2s;white-space:nowrap}
+.pill:hover{background:var(--green);color:#03140a}
+.pill:active{transform:scale(.98)}
+.pill svg{width:17px;height:17px}
+.pill.ghost{background:rgba(255,255,255,.06);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.pill.ghost:hover{background:rgba(255,255,255,.1);color:#fff}
+.pill[disabled]{opacity:.55;cursor:not-allowed}
+.link{position:relative;display:inline-flex;align-items:center;gap:6px;color:rgba(255,255,255,.85);font-size:15px;font-weight:500;background:none;border:0;padding:0;cursor:pointer}
+.link::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+.link:hover{color:#fff}
+.link:hover::after{transform:scaleX(1)}
+.icon-btn{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:10px;border:0;cursor:pointer;color:rgba(255,255,255,.62);background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);transition:color .2s,background .2s}
+.icon-btn:hover{color:#fff;background:rgba(255,255,255,.08)}
+.icon-btn svg{width:18px;height:18px}
+.chip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;color:rgba(255,255,255,.72);background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);white-space:nowrap}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--lav)}
+.chip.green .dot,.k-add .dot,.s-done .dot{background:var(--green)}
+.k-fix .dot,.s-planned .dot{background:var(--lav)}
+.k-chg .dot,.s-progress .dot{background:var(--amber)}
+.s-review .dot{background:#9aa0a6}
+.s-declined .dot{background:#ff7a7a}
+
+/* Стекло — тот же материал, что у осколков на главной */
+.glass{position:relative;border-radius:var(--radius);background:linear-gradient(180deg,#1b1b20 0%,#141418 62%,#121216 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.65),0 40px 70px -40px rgba(0,0,0,.9);transform:perspective(1000px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(var(--lift,0px));transition:transform .55s cubic-bezier(.2,.8,.2,1.15);transform-style:preserve-3d;isolation:isolate}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(140deg,rgba(255,255,255,.2),rgba(255,255,255,.03) 28%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;transition:background .4s}
+.glass::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(320px circle at var(--mx,50%) var(--my,50%),rgba(107,95,158,.26),transparent 62%);opacity:0;transition:opacity .35s;pointer-events:none;z-index:-1}
+.glass.hot::after{opacity:1}
+.glass.hot::before{background:linear-gradient(140deg,rgba(150,255,205,.32),rgba(255,255,255,.04) 30%,rgba(255,255,255,0) 62%,rgba(185,171,255,.42))}
+.glass.tilt.hot{--lift:10px}
+.glass.rv{transition:none}
+.glass.flat{transform:none!important}
+
+.wrap{width:var(--wrap);margin:0 auto}
+.section{position:relative;padding:clamp(56px,7vw,110px) 0}
+
+/* ---------- Верхняя панель ---------- */
+.topbar{position:fixed;top:12px;left:50%;z-index:40;width:min(1240px,calc(100% - 24px));height:58px;display:flex;align-items:center;gap:18px;padding:0 10px 0 18px;border-radius:16px;background:rgba(21,21,25,.72);backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.05),0 20px 40px -20px rgba(0,0,0,.8);transform:translate(-50%,0)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-.01em}
+.mark{width:22px;height:22px;flex:none}
+.topbar nav{display:flex;gap:26px;margin:0 auto;font-size:14px;color:rgba(255,255,255,.6)}
+.topbar nav a{transition:color .2s}
+.topbar nav a:hover,.topbar nav a[aria-current="page"]{color:#fff}
+.topbar .right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.topbar .pill{height:38px;padding:0 16px;font-size:14px}
+.menu-btn{display:none!important}
+
+/* ---------- Шапка страницы: плита из отдельных осколков стекла ----------
+   Осколки рисует site.js по настоящему размеру шапки: у каждого свой
+   градиент, светлый край и щель до соседа — как на первом экране главной.
+   Пока скрипт не отработал (или его нет), шапка — одна стеклянная плита. */
+.page-head{padding-top:96px}
+.ph-slab{position:relative;isolation:isolate;border-radius:var(--radius);padding:clamp(40px,6vw,88px) clamp(26px,5vw,72px) clamp(36px,5vw,64px);background:linear-gradient(180deg,#1b1b20 0%,#141418 62%,#121216 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 40px 70px -40px rgba(0,0,0,.9)}
+.ph-slab.has-shards{background:none;box-shadow:none}
+.ph-shards{position:absolute;inset:0;width:100%;height:100%;z-index:-1;overflow:visible;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55))}
+.ph-shards .sh{fill:url(#ph-fill);stroke:url(#ph-rim);stroke-width:1;transform-box:fill-box;transform-origin:center;transition:transform .5s cubic-bezier(.2,.8,.2,1.15),fill .3s,stroke .3s}
+.ph-shards .sh.hot{fill:url(#ph-fill-hot);stroke:url(#ph-rim-hot);transform:translateY(-4px) scale(1.004)}
+.ph-shards .glow{transition:opacity .35s;pointer-events:none}
+.ph-body{position:relative;display:grid;gap:22px;max-width:780px;min-width:0}
+.ph-body .title{overflow-wrap:break-word;hyphens:auto}
+.ph-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.crumbs{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--faint)}
+.crumbs a:hover{color:#fff}
+
+/* ---------- Подвал ---------- */
+.footer{margin-top:clamp(40px,6vw,80px);padding:70px 0 40px;border-top:1px solid var(--line)}
+.foot-grid{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:32px}
+.foot-grid h4{margin:0 0 14px;font-size:12px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.foot-grid ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.foot-grid a{font-size:14.5px;color:rgba(255,255,255,.62);transition:color .2s}
+.foot-grid a:hover,.foot-grid a[aria-current="page"]{color:#fff}
+.foot-about p{margin:14px 0 20px;color:var(--soft);font-size:14.5px;max-width:30ch}
+.socials{display:flex;gap:8px}
+.foot-bottom{margin-top:56px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:var(--dim);font-size:12.5px}
+
+/* ---------- Окна ---------- */
+.modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;background:rgba(3,3,5,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+.modal.open{opacity:1;visibility:visible}
+.modal-box{width:min(480px,100%);max-height:min(82vh,820px);overflow:auto;padding:30px 30px 28px;transform:translateY(18px) scale(.98);transition:transform .45s cubic-bezier(.2,.8,.2,1.1);overscroll-behavior:contain}
+.modal.open .modal-box{transform:none}
+.modal-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+.modal-head h2{margin:0;font-size:24px;font-weight:550;letter-spacing:-.025em}
+.menu-list{display:grid;gap:4px;margin:6px 0 22px}
+.menu-list a{display:flex;justify-content:space-between;align-items:center;padding:14px 4px;border-bottom:1px solid var(--line);font-size:20px;font-weight:500;letter-spacing:-.02em}
+.menu-list a[aria-current="page"]{color:var(--lav)}
+.menu-list a svg{width:18px;height:18px;color:var(--faint)}
+
+/* ---------- Формы ---------- */
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:grid;gap:7px}
+.field.full{grid-column:1/-1}
+.field label{font-size:12.5px;font-weight:500;color:rgba(255,255,255,.62)}
+.field input,.field select,.field textarea{width:100%;border:0;border-radius:10px;padding:13px 14px;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);color:#fff;font-size:15px;outline:none;transition:box-shadow .2s}
+.field textarea{min-height:150px;resize:vertical;line-height:1.5}
+.field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.field select option{background:#17171b}
+.field input:focus,.field select:focus,.field textarea:focus{box-shadow:inset 0 0 0 1px rgba(185,171,255,.65)}
+.field [aria-invalid="true"]{box-shadow:inset 0 0 0 1px #ff6b6b}
+.form-row{margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.form-msg{font-size:14px;color:var(--soft)}
+.form-msg.err{color:#ff8a8a}
+.form-msg.ok{color:var(--green)}
+
+/* ---------- Вопросы-ответы ---------- */
+.faq details{border-bottom:1px solid var(--line)}
+.faq details:last-child{border-bottom:0}
+.faq summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 0;cursor:pointer;font-size:16px;font-weight:500}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary svg{width:18px;height:18px;flex:none;color:var(--faint);transition:transform .3s,color .2s}
+.faq details[open] summary svg{transform:rotate(45deg);color:var(--lav)}
+.faq details p{margin:-4px 0 18px;color:var(--soft);font-size:15px;line-height:1.65}
+.faq details p a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+
+/* ================== Что нового ================== */
+.cl-layout{display:grid;grid-template-columns:190px 1fr;gap:40px;align-items:start}
+.cl-nav{position:sticky;top:96px;display:grid;gap:2px;padding:14px;border-radius:16px}
+.cl-nav span{padding:6px 10px 10px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.cl-nav a{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:9px;font-size:14.5px;font-weight:500;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;transition:color .2s,background .2s}
+.cl-nav a:hover{color:#fff}
+.cl-nav a.on{color:#fff;background:rgba(255,255,255,.06)}
+.cl-nav a.on::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--lav)}
+.cl-list{display:grid;gap:16px}
+.rel-card{display:grid;grid-template-columns:200px 1fr;gap:32px;padding:34px 34px 30px}
+.rc-side{display:grid;align-content:start;gap:12px}
+.rc-v{font-size:46px;font-weight:500;letter-spacing:-.05em;line-height:1;background:linear-gradient(#ececf0,#a9a9b2);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.rc-meta{color:var(--faint);font-size:13.5px}
+.rc-side .chip{justify-self:start}
+.rc-title{margin:0 0 22px;font-size:21px;font-weight:550;letter-spacing:-.02em;line-height:1.35}
+.rc-group+.rc-group{margin-top:24px}
+.rc-group ul{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:12px}
+.rc-group li{position:relative;padding-left:18px;color:rgba(255,255,255,.7);font-size:15px;line-height:1.6}
+.rc-group li::before{content:"";position:absolute;left:0;top:.68em;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.28)}
+.rc-group li b{color:#fff;font-weight:550}
+.rel-card.next{background:linear-gradient(180deg,#201f29 0%,#16151c 60%,#131217 100%)}
+.rel-card.next .rc-group li::before{background:var(--lav);box-shadow:0 0 12px rgba(185,171,255,.6)}
+
+/* ================== Идеи ================== */
+.states{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.state{padding:20px 20px 22px;display:grid;gap:10px;align-content:start}
+.state .chip{justify-self:start}
+.state p{margin:0;color:var(--soft);font-size:14px;line-height:1.55}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+.search{position:relative;flex:1 1 280px;max-width:420px}
+.search svg{position:absolute;left:14px;top:50%;width:17px;height:17px;transform:translateY(-50%);color:var(--faint);pointer-events:none}
+.search input{width:100%;height:44px;border:0;border-radius:10px;padding:0 14px 0 42px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);color:#fff;font-size:15px;outline:none}
+.search input:focus{box-shadow:inset 0 0 0 1px rgba(185,171,255,.65)}
+.seg{display:inline-flex;gap:4px;padding:4px;border-radius:12px;background:rgba(0,0,0,.3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.seg button{height:36px;padding:0 14px;border:0;border-radius:9px;background:none;cursor:pointer;font-size:14px;font-weight:500;color:rgba(255,255,255,.6);transition:color .2s,background .2s;white-space:nowrap}
+.seg button:hover{color:#fff}
+.seg button[aria-pressed="true"]{background:rgba(255,255,255,.09);color:#fff}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
+.filters button{height:32px;padding:0 13px;border:0;border-radius:999px;cursor:pointer;font-size:13px;font-weight:500;color:rgba(255,255,255,.62);background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);display:inline-flex;align-items:center;gap:7px;transition:color .2s,background .2s,box-shadow .2s}
+.filters button .dot{width:6px;height:6px;border-radius:50%}
+.filters button:hover{color:#fff}
+.filters button[aria-pressed="true"]{color:#fff;background:rgba(185,171,255,.12);box-shadow:inset 0 0 0 1px rgba(185,171,255,.5)}
+.count{color:var(--faint);font-size:14px}
+.ideas{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.idea{padding:24px 24px 22px;display:flex;flex-direction:column;gap:12px;min-height:220px}
+.idea-top{display:flex;flex-wrap:wrap;gap:8px}
+.idea h3{margin:0;font-size:17px;font-weight:550;letter-spacing:-.015em;line-height:1.35}
+.idea p{margin:0;color:var(--soft);font-size:14px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.idea .meta{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--faint);font-size:13px}
+.score{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:#fff}
+.score svg{width:14px;height:14px;color:var(--green)}
+.score.zero{color:var(--faint)}
+.score.zero svg{color:var(--faint)}
+.empty{grid-column:1/-1;padding:44px 32px;text-align:center;color:var(--soft);display:grid;gap:8px;justify-items:center}
+.empty b{color:#fff;font-size:18px;font-weight:550}
+.pager{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:28px;color:var(--faint);font-size:14px}
+.skeleton{background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.09),rgba(255,255,255,.04));background-size:200% 100%;animation:sk 1.4s linear infinite;border-radius:8px}
+@keyframes sk{to{background-position:-200% 0}}
+.cta{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+.cta .glass{padding:32px 30px}
+.cta h3{margin:0 0 10px;font-size:22px;font-weight:550;letter-spacing:-.02em}
+.cta p{margin:0 0 22px;color:var(--soft);font-size:15px;line-height:1.6}
+
+/* ================== Поддержка ================== */
+.topics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.topic{padding:22px 22px 20px;display:grid;gap:14px}
+.topic .ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(180deg,#26262c,#1a1a1f);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.topic .ico svg{width:20px;height:20px}
+.topic strong{font-size:16px;font-weight:550}
+.topic span{color:var(--faint);font-size:13.5px}
+.sp-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;align-items:start}
+.sp-faq{display:grid;gap:16px}
+.faq-group{padding:12px 28px 6px}
+.faq-group h2{margin:18px 0 2px;display:flex;align-items:baseline;gap:12px;font-size:20px;font-weight:550;letter-spacing:-.02em}
+.faq-group h2 small{font-size:12px;font-weight:500;color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.sp-side{position:sticky;top:96px;display:grid;gap:16px}
+.form{padding:30px 28px}
+.form h2{margin:0 0 6px;font-size:22px;font-weight:550;letter-spacing:-.02em}
+.form > p{margin:0 0 22px;color:var(--soft);font-size:14.5px}
+.done{display:none;text-align:center;padding:16px 4px 6px}
+.done.show{display:grid;gap:10px;justify-items:center}
+.done .ok-ico{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:rgba(54,214,126,.12);color:var(--green)}
+.done .ok-ico svg{width:24px;height:24px}
+.done b{font-size:20px;font-weight:550}
+.done p{margin:0;color:var(--soft);font-size:14.5px;max-width:34ch}
+.contacts{padding:22px 24px;display:grid;gap:12px}
+.contacts h3{margin:0 0 4px;font-size:16px;font-weight:550}
+.contacts a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:14.5px;color:rgba(255,255,255,.8);background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);transition:color .2s,background .2s}
+.contacts a:hover{color:#fff;background:rgba(255,255,255,.07)}
+.contacts a svg{width:18px;height:18px;flex:none;color:var(--faint)}
+.contacts a small{margin-left:auto;color:var(--faint);font-size:12.5px}
+
+/* ================== Документы ================== */
+.doc-layout{display:grid;grid-template-columns:270px 1fr;gap:40px;align-items:start}
+.doc-aside{position:sticky;top:96px;display:grid;gap:12px}
+.doc-tabs{display:grid;gap:4px;padding:6px;border-radius:14px}
+.doc-tabs a{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border-radius:10px;font-size:14.5px;font-weight:500;color:rgba(255,255,255,.6);transition:color .2s,background .2s}
+.doc-tabs a:hover{color:#fff}
+.doc-tabs a[aria-current="page"]{color:#fff;background:rgba(255,255,255,.07)}
+.doc-tabs a[aria-current="page"]::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--lav)}
+.toc{padding:16px 10px;border-radius:14px;display:grid;gap:1px;max-height:calc(100vh - 230px);overflow:auto}
+.toc span{padding:4px 10px 10px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.toc a{padding:7px 10px;border-radius:8px;font-size:13.5px;color:rgba(255,255,255,.55);transition:color .2s,background .2s}
+.toc a:hover{color:#fff}
+.toc a.on{color:#fff;background:rgba(255,255,255,.06)}
+.doc-main{min-width:0}
+.short{padding:28px 30px;margin-bottom:28px}
+.short h2{margin:0 0 10px;font-size:13px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--lav)}
+.short p{margin:0;color:rgba(255,255,255,.82);font-size:17px;line-height:1.65}
+.doc-intro{margin:0 0 10px;color:var(--soft);font-size:15px;line-height:1.7}
+.doc-sec{padding:34px 0 30px;border-top:1px solid var(--line);display:grid;grid-template-columns:56px 1fr;column-gap:16px}
+.doc-sec .num{grid-row:span 30;font-size:13px;font-weight:500;color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:.06em;padding-top:6px}
+.doc-sec h2{margin:0 0 14px;font-size:22px;font-weight:550;letter-spacing:-.02em;line-height:1.3}
+.doc-sec p{margin:0 0 14px;color:rgba(255,255,255,.66);font-size:16px;line-height:1.75}
+.doc-sec ul{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:10px}
+.doc-sec li{position:relative;padding-left:20px;color:rgba(255,255,255,.66);font-size:16px;line-height:1.65}
+.doc-sec li::before{content:"";position:absolute;left:2px;top:.72em;width:6px;height:6px;border-radius:50%;background:rgba(185,171,255,.7)}
+.doc-sec strong,.doc-sec b{color:#fff;font-weight:600}
+.doc-sec a{color:#fff;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.35)}
+.doc-sec a:hover{text-decoration-color:var(--lav)}
+.doc-end{margin-top:12px;padding:24px 26px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;justify-content:space-between}
+.doc-end p{margin:0;color:var(--soft);font-size:15px}
+
+/* ---------- Адаптив ---------- */
+@media (max-width:1100px){
+  .states{grid-template-columns:repeat(3,1fr)}
+  .ideas{grid-template-columns:repeat(2,1fr)}
+  .topics{grid-template-columns:repeat(2,1fr)}
+  .foot-grid{grid-template-columns:repeat(3,1fr)}
+  .foot-about{grid-column:1/-1}
+  .cl-layout{grid-template-columns:1fr}
+  .cl-nav{display:none}
+}
+@media (max-width:900px){
+  .topbar nav{display:none}
+  .sp-grid,.doc-layout,.cta{grid-template-columns:1fr}
+  .sp-side,.doc-aside{position:static}
+  .toc{max-height:none}
+  .rel-card{grid-template-columns:1fr;gap:18px}
+  .rc-side{grid-auto-flow:column;justify-content:start;align-items:center;gap:14px}
+}
+@media (max-width:700px){
+  :root{--wrap:calc(100% - 32px)}
+  .topbar .right .icon-btn{display:none}
+  .topbar .right .menu-btn{display:inline-grid!important}
+  .states,.ideas,.topics{grid-template-columns:1fr}
+  .fields{grid-template-columns:1fr}
+  .foot-grid{grid-template-columns:repeat(2,1fr)}
+  .ph-slab{padding-bottom:calc(clamp(36px,5vw,64px) + 76px)}
+  .page-head .title{font-size:clamp(28px,7.6vw,44px);line-height:1.02}
+  .ph-meta .chip{white-space:normal;height:auto;min-height:26px;padding:4px 10px}
+  .rel-card{padding:26px 22px}
+  .rc-v{font-size:38px}
+  .doc-sec{grid-template-columns:1fr}
+  .doc-sec .num{grid-row:auto;padding:0 0 6px}
+  .faq-group{padding:8px 20px 4px}
+  .form{padding:24px 20px}
+  .toolbar{flex-direction:column;align-items:stretch}
+  .search{max-width:none}
+  .seg{align-self:flex-start}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  .glass{transform:none!important}
+}

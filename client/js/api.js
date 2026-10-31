@@ -490,6 +490,11 @@ const UsersAPI = {
   updateAccount: (data) =>
     apiFetch('/users/account', { method: 'PUT', body: JSON.stringify(data) }),
 
+  deletionPreview: () => apiFetch('/users/me/deletion-preview'),
+
+  deleteAccount: (data) =>
+    apiFetch('/users/me/delete', { method: 'POST', body: JSON.stringify(data) }),
+
   uploadAvatar: (file) => {
     const formData = new FormData();
     formData.append('avatar', file);

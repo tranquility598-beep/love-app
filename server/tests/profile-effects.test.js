@@ -113,7 +113,8 @@ test('a pair without music is rendered without player controls or missing-music 
 });
 
 test('every animated effect releases resources, including repeated disposal', () => {
-  for (const kind of ['particles', 'stars', 'rain', 'snow', 'comets', 'trail', 'bokeh', 'glow', 'aurora', 'constellation', 'grain']) {
+  for (const kind of ['particles', 'stars', 'rain', 'snow', 'comets', 'trail', 'bokeh', 'glow', 'aurora', 'constellation', 'grain',
+    'ripple', 'hearts', 'sparkles', 'fireflies', 'petals', 'waves', 'scanlines']) {
     const f = fixture();
     const dispose = mountProfileEffects(f.container, kind);
     f.step(16);

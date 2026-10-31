@@ -295,6 +295,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           onAuthorTap: message.isOwn || message.authorId.isEmpty
               ? null
               : () => _openProfile(message.authorId),
+          onCallBack: (video) => _openCall(video: video),
         );
       },
     );
@@ -493,13 +494,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   label: 'Ответить',
                   onTap: () => Navigator.of(context).pop('reply'),
                 ),
-              if (message.content.trim().isNotEmpty)
+              if (message.content.trim().isNotEmpty && message.type != 'system')
                 _MessageActionTile(
                   icon: Icons.copy_rounded,
                   label: 'Копировать текст',
                   onTap: () => Navigator.of(context).pop('copy'),
                 ),
-              if (message.isOwn && !isTemp && message.content.trim().isNotEmpty)
+              // Запись о звонке: править нельзя, удалить может только звонивший.
+              if (message.isOwn && !isTemp && message.content.trim().isNotEmpty && message.type != 'system')
                 _MessageActionTile(
                   icon: Icons.edit_rounded,
                   label: 'Редактировать',
@@ -512,7 +514,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   danger: true,
                   onTap: () => Navigator.of(context).pop('delete'),
                 ),
-              if (!message.isOwn && !isTemp)
+              if (!message.isOwn && !isTemp && message.type != 'system')
                 _MessageActionTile(
                   icon: Icons.flag_outlined,
                   label: 'Пожаловаться',
@@ -1441,6 +1443,7 @@ class _MessageBubble extends StatefulWidget {
     this.replyContent = '',
     this.onLongPress,
     this.onAuthorTap,
+    this.onCallBack,
   });
 
   final ChatMessage message;
@@ -1451,6 +1454,9 @@ class _MessageBubble extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onAuthorTap;
 
+  /// «Перезвонить» из карточки пропущенного звонка; аргумент — видеозвонок ли.
+  final ValueChanged<bool>? onCallBack;
+
   @override
   State<_MessageBubble> createState() => _MessageBubbleState();
 }
@@ -1460,6 +1466,23 @@ class _MessageBubbleState extends State<_MessageBubble> {
   Widget build(BuildContext context) {
     final message = widget.message;
     final compact = LovePrefs.instance.compactMode.value;
+    if (_CallEventCard.matches(message)) {
+      return Padding(
+        padding: EdgeInsets.only(top: compact ? 8 : 12),
+        child: Align(
+          alignment:
+              message.isOwn ? Alignment.centerRight : Alignment.centerLeft,
+          child: GestureDetector(
+            onLongPress: widget.onLongPress,
+            child: _CallEventCard(
+              message: message,
+              time: _formatTime(message.createdAt),
+              onCallBack: widget.onCallBack,
+            ),
+          ),
+        ),
+      );
+    }
     final inviteCode = InviteCard.inviteCodeOf(message.content);
     final displayText = inviteCode == null
         ? message.content
@@ -2332,6 +2355,117 @@ class _PendingAttachmentTile extends StatelessWidget {
                 color: context.palette.textMuted,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Событие звонка в ЛС. Сервер пишет его системным сообщением с фиксированным
+/// текстом (server/services/callRings.js), автор — звонивший. Поэтому у того,
+/// кому звонили, это «Пропущенный звонок», а у звонившего — «Нет ответа».
+class _CallEventCard extends StatelessWidget {
+  const _CallEventCard({
+    required this.message,
+    required this.time,
+    this.onCallBack,
+  });
+
+  static final _pattern = RegExp(r'^📞\s*Пропущенный (видео)?звонок$');
+
+  static bool matches(ChatMessage message) =>
+      message.type == 'system' && _pattern.hasMatch(message.content.trim());
+
+  final ChatMessage message;
+  final String time;
+  final ValueChanged<bool>? onCallBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final video = message.content.contains('видео');
+    final own = message.isOwn;
+    final title = own
+        ? 'Нет ответа'
+        : (video ? 'Пропущенный видеозвонок' : 'Пропущенный звонок');
+    final iconColor = own ? palette.textSecondary : palette.dangerText;
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: own ? palette.surfaceStrong : palette.dangerBg,
+            ),
+            child: Icon(
+              own
+                  ? Icons.call_made_rounded
+                  : (video
+                      ? Icons.missed_video_call_rounded
+                      : Icons.phone_missed_rounded),
+              size: 19,
+              color: iconColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: own ? palette.textBright : palette.dangerText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${video ? 'Видеозвонок' : 'Голосовой звонок'} · $time',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                ),
+              ],
+            ),
+          ),
+          if (onCallBack != null) ...[
+            const SizedBox(width: 10),
+            Material(
+              color: palette.surfaceStrong,
+              shape: StadiumBorder(side: BorderSide(color: palette.border)),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => onCallBack!(video),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  child: Text(
+                    own ? 'Позвонить ещё' : 'Перезвонить',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: palette.textBright,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

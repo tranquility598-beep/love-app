@@ -37,7 +37,15 @@ class CallCenter extends ChangeNotifier {
   DmCallController? _temp; // чат, открытый во время звонка в другом чате
 
   /// Приложение развёрнуто? Обновляется из main_shell.
-  bool foreground = true;
+  bool get foreground => _foreground;
+  bool _foreground = true;
+  set foreground(bool value) {
+    if (value == _foreground) return;
+    _foreground = value;
+    // Сервис микрофона запускается только на экране. Если звонок начался,
+    // пока приложение было свёрнуто, — запускаем, как только вернулись.
+    if (value && !LocalNotifications.micServiceOn) _refreshOngoing();
+  }
 
   DmCallPhase _lastPhase = DmCallPhase.idle;
   bool _lastMuted = false;
@@ -80,11 +88,20 @@ class CallCenter extends ChangeNotifier {
     socket.on('call:incoming', _onGlobalIncoming);
     ChannelVoiceController.instance.addListener(_onVoiceChanged);
     _registerActionPort();
+    // Если по нам уже звонят (сервер звонит 45 с, даже когда нас не было),
+    // спрашиваем ожидающие вызовы. Сервер сам догоняет через 1,2 с после
+    // подключения, но здесь обработчик может появиться позже — и звонок
+    // пропадал: человек открывал приложение и не видел, что ему звонят.
+    // Повторный запрос ничего не дублирует: сервер отдаёт звонок сокету
+    // один раз.
+    _requestPendingRings();
+    socket.addConnectListener(_requestPendingRings);
   }
 
   void detach(LoveSocket socket) {
     if (!identical(_socket, socket)) return;
     socket.off('call:incoming', _onGlobalIncoming);
+    socket.removeConnectListener(_requestPendingRings);
     ChannelVoiceController.instance.removeListener(_onVoiceChanged);
     _dropController();
     _dropTemp();
@@ -208,6 +225,13 @@ class CallCenter extends ChangeNotifier {
 
   // ── внутреннее ──
 
+  /// «Готов принимать звонки» — просим сервер отдать те, что ещё звонят.
+  void _requestPendingRings() {
+    final socket = _socket;
+    if (socket == null || !socket.isConnected) return;
+    socket.emit('call:pending');
+  }
+
   DmCallController _create({
     required LoveSocket socket,
     required String conversationId,
@@ -329,6 +353,7 @@ class CallCenter extends ChangeNotifier {
           LocalNotifications.showOngoingCall(
             peer: c!.displayName,
             muted: muted,
+            canStartService: _foreground,
           );
           break;
         case DmCallPhase.incoming:
@@ -350,6 +375,21 @@ class CallCenter extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _refreshOngoing() {
+    final dm = activeDm;
+    if (dm != null &&
+        (dm.phase == DmCallPhase.connecting ||
+            dm.phase == DmCallPhase.connected)) {
+      LocalNotifications.showOngoingCall(
+        peer: dm.displayName,
+        muted: dm.muted,
+        canStartService: true,
+      );
+    } else if (ChannelVoiceController.instance.isActive) {
+      _syncVoiceNotification(force: true);
+    }
+  }
+
   /// Постоянное уведомление для войса сфер (если нет звонка в ЛС —
   /// у него приоритет, уведомление общее).
   void _syncVoiceNotification({bool force = false}) {
@@ -369,6 +409,7 @@ class CallCenter extends ChangeNotifier {
           muted: voice.muted,
           body: voice.muted ? 'Вы в войсе · микрофон выключен' : 'Вы в войсе',
           payload: 'voice:active',
+          canStartService: _foreground,
         );
       }
     } else if (_lastVoiceActive || force) {

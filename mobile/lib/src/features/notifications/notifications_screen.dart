@@ -520,9 +520,9 @@ class _CountBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontFamily: LoveFonts.mono,
-          fontSize: 10,
-          letterSpacing: 0.2,
+          fontFamily: LoveText.labelFont(context.palette),
+          fontSize: context.palette.rd ? 11.5 : 10,
+          letterSpacing: LoveText.labelSpacing(context.palette, 0.2),
           color: unread
               ? context.palette.textPrimary
               : context.palette.inkA(0.55),

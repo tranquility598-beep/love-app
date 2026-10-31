@@ -13,10 +13,13 @@
 import { $, fill, el, lockNote, iconNode, toast } from './ui.js';
 import { state, update, fieldError, feature, onChange } from './store.js';
 import { api } from './api.js';
+import { setPreviewAlt } from './preview.js';
+import { avatarFields, avatarSummary, styleChanged, resetStyle, AVATAR_STYLE_KEYS } from './design.js';
 import {
   textField, textArea, toggle, choicePicker, colorInput, shiftHue,
-  slider, mediaField, dateField, groupTitle, ACCEPT
+  slider, mediaField, dateField, groupTitle, fold, nameOf, ACCEPT
 } from './fields.js';
+import { openLayoutEditor } from './layout-editor.js';
 
 const limits = () => (state.caps && state.caps.limits) || {};
 
@@ -149,6 +152,40 @@ function layoutPreview(item) {
   ]);
 }
 
+/**
+ * Своя расстановка поверх выбранной раскладки: кнопка открывает полноэкранный
+ * редактор (layout-editor.js). Только на компьютере — на телефоне тянуть
+ * рамки пальцем по уменьшенной странице неудобно и неточно.
+ */
+function customLayoutField() {
+  const rule = feature('customLayout');
+  const on = Boolean(state.page.customLayout && state.page.customLayout.on);
+  return el('div', { class: 'field custom-layout' }, [
+    el('div', { class: 'field-top' }, [el('span', { class: 'field-label' }, ['Своя расстановка ', el('span', { class: 'beta', text: 'Бета' })])]),
+    el('p', { class: 'hint', text: on
+      ? 'Включена: блоки стоят там, где вы их поставили. Раскладка выше задаёт их вид.'
+      : 'Двигайте и растягивайте блоки страницы как хотите — во весь экран, поверх выбранной раскладки.' }),
+    rule.allowed
+      ? el('div', { class: 'custom-layout-actions' }, [
+        el('button', {
+          class: 'btn btn--sm custom-layout-open', type: 'button',
+          text: on ? 'Изменить расстановку' : 'Настроить расстановку',
+          onClick: () => openLayoutEditor(() => renderLook())
+        }),
+        on ? el('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button', text: 'Вернуть как в раскладке',
+          onClick: () => {
+            if (!window.confirm('Убрать свою расстановку? Страница снова встанет по раскладке.')) return;
+            update({ customLayout: { on: false } }, { now: true });
+            renderLook();
+          }
+        }) : null
+      ])
+      : lockNote(rule.requires),
+    rule.allowed ? el('p', { class: 'hint custom-layout-narrow', text: 'Настраивается только с компьютера.' }) : null
+  ]);
+}
+
 function framePreview(item) {
   return el('span', { class: `frame-art frame-art--${item.id}`, 'aria-hidden': true }, [
     el('i', { class: 'frame-art-face', text: 'L' })
@@ -168,6 +205,7 @@ function accentField() {
   const paint = () => {
     const page = state.page;
     const allowed = feature('customAccent').allowed;
+    const gradientRule = feature('accentGradient');
     const base = themeAccent();
     const custom = Boolean(page.accent || page.accentTo);
     const gradient = Boolean(page.accentTo);
@@ -187,7 +225,7 @@ function accentField() {
       row.push(colorInput({
         value: page.accentTo,
         fallback: base,
-        disabled: !allowed,
+        disabled: !gradientRule.allowed,
         title: 'Второй цвет градиента',
         onPick: (hex) => update({ accentTo: hex })
       }));
@@ -197,7 +235,7 @@ function accentField() {
         // кнопка живая даже когда подписка кончилась.
         onClick: () => { update({ accentTo: null }, { now: true }); paint(); }
       }));
-    } else if (allowed) {
+    } else if (allowed && gradientRule.allowed) {
       row.push(el('button', {
         class: 'btn btn--ghost btn--sm', type: 'button', text: 'Градиент',
         onClick: () => {
@@ -226,6 +264,12 @@ function accentField() {
         })
         : null,
       !allowed && !custom ? lockNote(feature('customAccent').requires) : null,
+      allowed && !gradientRule.allowed && !gradient
+        ? el('p', { class: 'hint', text: `Градиент из двух цветов — в ${gradientRule.requires === 'premium' ? 'Love Premium' : 'Love Pro'}.` })
+        : null,
+      !gradientRule.allowed && gradient
+        ? el('p', { class: 'lock lock--soft', text: 'Подписка закончилась: на странице сейчас один цвет. Градиент сохранён.' })
+        : null,
       fieldError('accent') || fieldError('accentTo')
         ? el('p', { class: 'field-error', role: 'alert', text: fieldError('accent') || fieldError('accentTo') })
         : null
@@ -236,13 +280,252 @@ function accentField() {
   return { node, repaint: paint };
 }
 
+function effectsNow() {
+  const page = state.page;
+  if (Array.isArray(page.effects) && page.effects.length) return page.effects.slice();
+  return page.effect && page.effect !== 'none' ? [page.effect] : [];
+}
+
+/**
+ * Эффекты — несколько сразу, поэтому не choicePicker (он про один вариант), а
+ * плитки-переключатели. Порядок включения виден цифрой: при переполнении
+ * выключается самый ранний, и человеку должно быть понятно, какой именно.
+ */
+function effectsField() {
+  const node = el('div', { class: 'field' });
+
+  const paint = () => {
+    const max = limits().effectsAtOnce || 1;
+    const on = effectsNow();
+    const items = catalog('effects').filter((item) => item.id !== 'none');
+    const colorsRule = feature('effectColors');
+    const colors = (state.page.effectColors || []).slice(0, 2);
+    const base = state.page.accent || themeAccent();
+
+    const set = (next) => {
+      update({ effects: next }, { now: true });
+      paint();
+    };
+
+    const tiles = items.map((item) => {
+      const locked = item.allowed === false;
+      const active = on.includes(item.id);
+      return el('button', {
+        class: `pick${active ? ' is-on' : ''}${locked ? ' is-locked' : ''}`,
+        type: 'button',
+        'aria-pressed': active ? 'true' : 'false',
+        onClick: () => {
+          if (active) { set(on.filter((id) => id !== item.id)); return; }
+          if (locked) {
+            toast(`«${item.name}» — в ${item.tier === 'premium' ? 'Love Premium' : 'Love Pro'}`, 'err');
+            return;
+          }
+          let next = [...on, item.id];
+          if (next.length > max) {
+            const dropped = catalog('effects').find((entry) => entry.id === next[0]);
+            next = next.slice(next.length - max);
+            toast(`Сразу можно до ${max}: «${dropped ? dropped.name : next[0]}» выключен`);
+          }
+          set(next);
+        }
+      }, [
+        effectPreview(item),
+        el('span', { class: 'pick-name', text: item.name }),
+        locked ? el('span', { class: 'pick-lock', text: '🔒', 'aria-hidden': true }) : null,
+        active && max > 1 ? el('span', { class: 'pick-order', text: String(on.indexOf(item.id) + 1), 'aria-hidden': true }) : null
+      ]);
+    });
+
+    const colorRow = colors.length
+      ? el('div', { class: 'color-row' }, [
+        colorInput({
+          value: colors[0], fallback: base, disabled: !colorsRule.allowed, title: 'Первый цвет эффектов',
+          onPick: (hex) => update({ effectColors: [hex, (state.page.effectColors || [])[1] || hex] })
+        }),
+        el('span', { class: 'color-arrow', text: '+', 'aria-hidden': true }),
+        colorInput({
+          value: colors[1] || colors[0], fallback: base, disabled: !colorsRule.allowed, title: 'Второй цвет эффектов',
+          onPick: (hex) => update({ effectColors: [(state.page.effectColors || [])[0] || base, hex] })
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button', text: 'Цвета акцента',
+          onClick: () => { update({ effectColors: [] }, { now: true }); paint(); }
+        })
+      ])
+      : el('div', { class: 'row-actions' }, [
+        el('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button', text: 'Свои цвета эффектов',
+          disabled: !colorsRule.allowed,
+          onClick: () => { update({ effectColors: [base, shiftHue(base, 140)] }, { now: true }); paint(); }
+        }),
+        colorsRule.allowed ? el('span', { class: 'hint', text: 'Сейчас частицы и свечение — цветами акцента.' }) : null
+      ]);
+
+    fill(node, [
+      el('div', { class: 'field-top' }, [
+        el('span', { class: 'field-label', text: 'Эффекты' }),
+        el('span', { class: 'counter', text: `${on.length}/${max}` })
+      ]),
+      el('div', { class: 'picks picks--wide' }, tiles),
+      el('p', {
+        class: 'hint',
+        text: max > 1
+          ? `Можно включить до ${max} сразу — например, ${feature('effects').allowed ? 'снег и плёнку' : 'пылинки и плёнку'}. Нажмите ещё раз, чтобы выключить.`
+          : 'Нажмите ещё раз, чтобы выключить.'
+      }),
+      groupTitle('Цвета эффектов'),
+      colorRow,
+      colorsRule.allowed ? null : lockNote(colorsRule.requires),
+      fieldError('effects') || fieldError('effectColors')
+        ? el('p', { class: 'field-error', role: 'alert', text: fieldError('effects') || fieldError('effectColors') })
+        : null
+    ]);
+  };
+
+  paint();
+  return node;
+}
+
+let fontBusy = false;
+let registeredFont = '';
+
+/**
+ * Свой шрифт регистрируем в документе через FontFace: превью — теневое
+ * дерево, а @font-face внутри него Chrome не применяет. Плитки выбора и
+ * превью видят шрифт одинаково.
+ */
+function registerCustomFont(url) {
+  if (!url || url === registeredFont || !window.FontFace || !document.fonts) return;
+  registeredFont = url;
+  new FontFace('LoveCustom', `url("${url}")`).load()
+    .then((face) => { document.fonts.add(face); })
+    .catch(() => { registeredFont = ''; });
+}
+
+function customFontField() {
+  const rule = feature('customFont');
+  const font = state.page.customFont || {};
+  if (font.url) registerCustomFont(font.url);
+  const input = el('input', {
+    type: 'file', accept: '.woff2,.woff,.ttf,.otf', hidden: true,
+    onChange: async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      fontBusy = true;
+      renderLook();
+      try {
+        const result = await api.upload('font', file);
+        const name = String(file.name || '').replace(/\.[^.]+$/, '').slice(0, 60);
+        update({ customFont: { url: result.url, name }, font: 'custom' }, { now: true });
+        registerCustomFont(result.url);
+        toast(`Шрифт «${name}» подключён`);
+      } catch (error) {
+        toast(error.message || 'Не получилось загрузить шрифт', 'err');
+      } finally {
+        fontBusy = false;
+        renderLook();
+      }
+    }
+  });
+  return el('div', { class: 'field' }, [
+    el('div', { class: 'cursor-row' }, [
+      el('span', { class: 'font-own', style: font.url ? 'font-family:"LoveCustom",sans-serif' : '', text: 'Aa' }),
+      el('button', {
+        class: 'btn btn--sm', type: 'button',
+        text: fontBusy ? 'Загружаем…' : font.url ? 'Заменить свой шрифт' : 'Загрузить свой шрифт',
+        disabled: fontBusy || !rule.allowed,
+        onClick: () => input.click()
+      }),
+      font.url
+        ? el('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button', text: 'Убрать',
+          onClick: () => { update({ customFont: { url: null, name: '' }, font: state.page.font === 'custom' ? 'system' : state.page.font }, { now: true }); renderLook(); }
+        })
+        : null,
+      input
+    ]),
+    el('p', { class: 'hint', text: font.url ? `Сейчас: ${font.name || 'свой шрифт'}. Убедитесь, что лицензия шрифта разрешает его использовать на сайте.` : 'Файл .woff2, .woff, .ttf или .otf до 3 МБ. Лучше .woff2 — он легче.' }),
+    rule.allowed ? null : lockNote(rule.requires),
+    fieldError('customFont') ? el('p', { class: 'field-error', role: 'alert', text: fieldError('customFont') }) : null
+  ]);
+}
+
+let previewAlt = false;
+
+/**
+ * Вторая тема: страница сама переключается под светлую/тёмную систему гостя
+ * или по времени суток. Превью показывает её по кнопке — у гостя это делает
+ * браузер или часы.
+ */
+function secondTheme() {
+  const page = state.page;
+  const mode = page.themeMode || 'fixed';
+  const custom = page.customTheme && page.customTheme.enabled;
+  const nodes = [
+    choicePicker({
+      label: 'Вторая тема',
+      hint: custom
+        ? 'Со своей темой из конструктора вторая тема не работает.'
+        : 'Например, светлая днём и тёмная ночью — или как привык гость.',
+      items: catalog('themeModes'),
+      value: mode,
+      wide: true,
+      error: fieldError('themeMode'),
+      onPick: (id) => {
+        const patch = { themeMode: id };
+        // Без пары вторая тема не включится — подставим противоположную.
+        if (id !== 'fixed' && !page.altTheme) patch.altTheme = page.theme === 'porcelain' ? 'midnight' : 'porcelain';
+        update(patch, { now: true });
+        renderLook();
+      }
+    })
+  ];
+  if (mode !== 'fixed') {
+    nodes.push(choicePicker({
+      label: mode === 'time' ? 'Ночью / днём — вторая тема' : 'Для гостей с другой системной темой',
+      items: catalog('themes').filter((item) => item.id !== page.theme),
+      value: page.altTheme,
+      wide: true,
+      error: fieldError('altTheme'),
+      preview: (item) => el('span', {
+        class: 'swatch',
+        style: `background:linear-gradient(135deg,${item.tokens.bg},${item.tokens.bg2})`
+      }, [el('span', { class: 'swatch-dot', style: `background:${item.tokens.accent}` })]),
+      onPick: (id) => update({ altTheme: id }, { now: true })
+    }));
+    nodes.push(el('div', { class: 'row-actions' }, [
+      el('button', {
+        class: 'btn btn--ghost btn--sm', type: 'button',
+        text: previewAlt ? 'Показать основную тему' : 'Показать вторую тему в превью',
+        onClick: () => { previewAlt = !previewAlt; setPreviewAlt(previewAlt); renderLook(); }
+      }),
+      el('span', {
+        class: 'hint',
+        text: mode === 'time' ? 'С 20:00 до 6:00 по часам гостя, ночью — ещё и звёзды.' : 'Браузер гостя сам выбирает светлую или тёмную.'
+      })
+    ]));
+  }
+  return nodes;
+}
+
 export function renderLook() {
   const page = state.page;
   const accent = accentField();
 
+  const effectCount = effectsNow().length;
   fill($('look-body'), [
+    fold({
+      id: 'look-theme', title: 'Тема и цвет', open: true,
+      summary: page.customTheme && page.customTheme.enabled ? 'Своя тема' : nameOf(catalog('themes'), page.theme),
+      changed: page.theme !== 'midnight' || Boolean(page.accent) || Boolean(page.accentTo) || (page.themeMode || 'fixed') !== 'fixed',
+      onReset: () => { update({ theme: 'midnight', accent: null, accentTo: null, themeMode: 'fixed', altTheme: null }, { now: true }); renderLook(); },
+      children: [
     choicePicker({
       label: 'Тема',
+      hint: page.customTheme && page.customTheme.enabled
+        ? 'Сейчас включена своя тема — карточка «Конструктор темы» ниже. Готовая тема вернётся, когда её выключите.'
+        : null,
       items: catalog('themes'),
       value: page.theme,
       wide: true,
@@ -255,13 +538,23 @@ export function renderLook() {
       ]),
       onPick: (id) => {
         update({ theme: id }, { now: true });
-        // Сменилась тема — сменился и цвет по умолчанию под кружком акцента.
-        accent.repaint();
+        // Сменилась тема — сменился и цвет по умолчанию под кружком акцента,
+        // и подпись свёрнутой группы.
+        renderLook();
       }
     }),
 
     accent.node,
+    el('div', { class: 'adv-only fold-stack' }, secondTheme())
+      ]
+    }),
 
+    fold({
+      id: 'look-layout', title: 'Раскладка',
+      summary: nameOf(catalog('layouts'), page.layout) + (page.customLayout && page.customLayout.on ? ' · своя расстановка' : ''),
+      changed: (page.layout || 'stack') !== 'stack' || Boolean(page.customLayout && page.customLayout.on),
+      onReset: () => { update({ layout: 'stack' }, { now: true }); renderLook(); },
+      children: [
     choicePicker({
       label: 'Раскладка',
       hint: 'Выберите композицию страницы и сравните в превью.',
@@ -270,9 +563,18 @@ export function renderLook() {
       preview: layoutPreview,
       value: page.layout,
       error: fieldError('layout'),
-      onPick: (id) => update({ layout: id }, { now: true })
+      onPick: (id) => { update({ layout: id }, { now: true }); renderLook(); }
+    }),
+    customLayoutField()
+      ]
     }),
 
+    fold({
+      id: 'look-font', title: 'Шрифт', target: '.pf-name',
+      summary: page.font === 'custom' ? 'Свой шрифт' : nameOf(catalog('fonts'), page.font),
+      changed: (page.font || 'system') !== 'system',
+      onReset: () => { update({ font: 'system' }, { now: true }); renderLook(); },
+      children: [
     choicePicker({
       label: 'Шрифт',
       hint: 'Шрифт имени и экрана входа. Мелкий текст остаётся удобным для чтения.',
@@ -281,9 +583,26 @@ export function renderLook() {
       error: fieldError('font'),
       wide: true,
       preview: (item) => el('span', { class: 'font-sample', style: `font-family:${item.stack}`, text: 'Aa Бб' }),
-      onPick: (id) => update({ font: id }, { now: true })
+      onPick: (id) => {
+        if (id === 'custom' && !(page.customFont && page.customFont.url)) {
+          toast('Сначала загрузите свой шрифт ниже');
+          renderLook();
+          return;
+        }
+        update({ font: id }, { now: true });
+        renderLook();
+      }
+    }),
+    customFontField()
+      ]
     }),
 
+    fold({
+      id: 'look-frame', title: 'Аватар', target: '.pf-avatar',
+      summary: [nameOf(catalog('avatarFrames'), page.avatarFrame), avatarSummary()].filter(Boolean).join(' · '),
+      changed: (page.avatarFrame || 'none') !== 'none' || styleChanged(AVATAR_STYLE_KEYS),
+      onReset: () => { update({ avatarFrame: 'none' }, { now: true }); resetStyle(AVATAR_STYLE_KEYS); renderLook(); },
+      children: [
     choicePicker({
       label: 'Рамка аватара',
       hint: 'От тонкого контура до мягкого свечения. Анимация видна в превью.',
@@ -292,18 +611,17 @@ export function renderLook() {
       preview: framePreview,
       value: page.avatarFrame,
       error: fieldError('avatarFrame'),
-      onPick: (id) => update({ avatarFrame: id }, { now: true })
+      onPick: (id) => { update({ avatarFrame: id }, { now: true }); renderLook(); }
+    }),
+    ...avatarFields()
+      ]
     }),
 
-    choicePicker({
-      label: 'Эффект',
-      hint: 'Атмосфера на фоне страницы. Изменения сразу видны в превью.',
-      items: catalog('effects'),
-      value: page.effect,
-      wide: true,
-      preview: effectPreview,
-      error: fieldError('effect'),
-      onPick: (id) => update({ effect: id }, { now: true })
+    fold({
+      id: 'look-effects', title: 'Эффекты', summary: effectCount ? `Включено: ${effectCount}` : 'Без эффектов',
+      changed: effectCount > 0 || (page.effectColors || []).length > 0,
+      onReset: () => { update({ effects: [], effectColors: [] }, { now: true }); renderLook(); },
+      children: [effectsField()]
     })
   ]);
 }
@@ -331,6 +649,149 @@ function bgNow() {
 
 const patchBg = (extra, options) => update({ background: { ...bgNow(), ...extra } }, options);
 
+function gradientNow() {
+  const g = state.page.bgGradient || {};
+  return {
+    enabled: Boolean(g.enabled),
+    colors: (g.colors || []).slice(0, 3),
+    angle: g.angle ?? 160
+  };
+}
+
+const patchGradient = (extra, options) => update({ bgGradient: { ...gradientNow(), ...extra } }, options);
+
+/**
+ * Свой градиент фона. Цвета по умолчанию берём из темы, чтобы первое
+ * включение не превращало страницу в кислотный плакат.
+ */
+function gradientField(repaint) {
+  const g = gradientNow();
+  const theme = catalog('themes').find((item) => item.id === state.page.theme);
+  const tokens = (theme && theme.tokens) || {};
+  const colors = g.colors.length >= 2 ? g.colors : [tokens.bg2 || '#141414', tokens.bg || '#090909'];
+  const hasImage = bgNow().kind !== 'none' && Boolean(bgNow().url);
+
+  const setColor = (index, hex) => {
+    const next = gradientNow().colors.length >= 2 ? gradientNow().colors.slice() : colors.slice();
+    next[index] = hex;
+    patchGradient({ colors: next });
+  };
+
+  const row = colors.map((color, index) => colorInput({
+    value: color,
+    fallback: color,
+    disabled: !g.enabled,
+    title: `Цвет ${index + 1}`,
+    onPick: (hex) => setColor(index, hex)
+  }));
+
+  return [
+    toggle({
+      label: 'Свой градиент фона',
+      hint: hasImage ? 'Сейчас под картинкой — виден, пока фон-картинка не стоит.' : 'Вместо фона темы: два или три цвета и угол.',
+      checked: g.enabled,
+      error: fieldError('bgGradient'),
+      onToggle: (on) => {
+        patchGradient({ enabled: on, colors: gradientNow().colors.length >= 2 ? gradientNow().colors : colors }, { now: true });
+        repaint();
+      }
+    }),
+    g.enabled
+      ? el('div', { class: 'field' }, [
+        el('div', { class: 'field-top' }, [
+          el('span', { class: 'field-label', text: 'Цвета градиента' }),
+          colors.length < 3
+            ? el('button', {
+              class: 'btn btn--ghost btn--sm', type: 'button', text: '+ третий цвет',
+              onClick: () => { patchGradient({ colors: [...colors, shiftHue(colors[1], 60)] }, { now: true }); repaint(); }
+            })
+            : el('button', {
+              class: 'btn btn--ghost btn--sm', type: 'button', text: 'Убрать третий',
+              onClick: () => { patchGradient({ colors: colors.slice(0, 2) }, { now: true }); repaint(); }
+            })
+        ]),
+        el('div', { class: 'color-row' }, row)
+      ])
+      : null,
+    g.enabled
+      ? slider({
+        label: 'Угол',
+        value: g.angle,
+        min: 0, max: 360, unit: '°',
+        onInput: (value) => patchGradient({ angle: value })
+      })
+      : null,
+    g.enabled
+      ? toggle({
+        label: 'Переливается',
+        hint: 'Цвета медленно перетекают друг в друга.',
+        checked: Boolean(state.page.bgGradient && state.page.bgGradient.animated),
+        locked: !feature('animatedGradient').allowed,
+        requires: feature('animatedGradient').requires,
+        error: fieldError('bgGradient.animated'),
+        onToggle: (on) => patchGradient({ animated: on }, { now: true })
+      })
+      : null
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Узор и живой фон
+// ---------------------------------------------------------------------------
+
+function patternNow() {
+  const raw = state.page.bgPattern || {};
+  return { kind: raw.kind || 'none', opacity: raw.opacity ?? 35 };
+}
+
+function backgroundExtras() {
+  const pattern = patternNow();
+  return [
+    fold({
+      id: 'bg-pattern', title: 'Узор', adv: true, summary: pattern.kind === 'none' ? 'Без узора' : nameOf(catalog('bgPatterns'), pattern.kind),
+      changed: pattern.kind !== 'none',
+      onReset: () => { update({ bgPattern: { kind: 'none', opacity: 35 } }, { now: true }); renderBackground(); },
+      children: [
+    choicePicker({
+      label: 'Узор поверх фона',
+      hint: 'Тонкий рисунок, который растворяется к низу страницы.',
+      items: catalog('bgPatterns'),
+      value: pattern.kind,
+      wide: true,
+      preview: (item) => el('span', { class: `style-art style-art--pattern is-${item.id}`, 'aria-hidden': true }),
+      error: fieldError('bgPattern'),
+      onPick: (id) => { update({ bgPattern: { ...patternNow(), kind: id } }, { now: true }); renderBackground(); }
+    }),
+    pattern.kind !== 'none'
+      ? slider({
+        label: 'Заметность узора',
+        value: pattern.opacity,
+        min: 5, max: 100, unit: ' %',
+        onInput: (value) => update({ bgPattern: { ...patternNow(), opacity: value } })
+      })
+      : null
+      ]
+    }),
+    fold({
+      id: 'bg-live', title: 'Живой фон', adv: true, summary: (state.page.liveBg || 'none') === 'none' ? 'Нет' : nameOf(catalog('liveBackgrounds'), state.page.liveBg),
+      changed: (state.page.liveBg || 'none') !== 'none',
+      onReset: () => { update({ liveBg: 'none' }, { now: true }); renderBackground(); },
+      children: [
+    choicePicker({
+      label: 'Живой фон',
+      hint: 'Медленно движется под содержимым. Цвета — эффектов или акцента.',
+      items: catalog('liveBackgrounds'),
+      value: state.page.liveBg || 'none',
+      wide: true,
+      preview: (item) => el('span', { class: `style-art style-art--live is-${item.id}`, 'aria-hidden': true }),
+      error: fieldError('liveBg'),
+      onPick: (id) => { update({ liveBg: id }, { now: true }); renderBackground(); }
+    })
+      ]
+    })
+  ];
+}
+
 export function renderBackground() {
   const image = feature('backgroundImage');
   const video = feature('videoBackground');
@@ -339,7 +800,14 @@ export function renderBackground() {
     const bg = bgNow();
     const on = bg.kind !== 'none' && Boolean(bg.url);
 
+    const grad = gradientNow();
     fill($('background-body'), [
+      fold({
+        id: 'bg-media', title: 'Картинка или видео', open: true,
+        summary: on ? (bg.kind === 'video' ? 'Видео' : 'Картинка') : 'Нет',
+        changed: on,
+        onReset: () => { patchBg({ kind: 'none', url: null }, { now: true }); paint(); },
+        children: [
       mediaField({
         label: 'Фон страницы',
         shape: 'cover',
@@ -357,6 +825,7 @@ export function renderBackground() {
           : image.allowed
             ? 'Картинка. Видео-фон — в Love Premium.'
             : null,
+        guard: gifGuard('animatedBackground', 'фоном'),
         upload: (file) => api.upload('background', file),
         onDone: (result) => {
           patchBg({ kind: result.kind, url: result.url }, { now: true });
@@ -396,7 +865,17 @@ export function renderBackground() {
           role: 'alert',
           text: fieldError('background') || fieldError('background.url') || fieldError('background.kind')
         })
-        : null
+        : null,
+
+        ]
+      }),
+      fold({
+        id: 'bg-gradient', title: 'Градиент', adv: true, summary: grad.enabled ? 'Включён' : 'Выключен',
+        changed: grad.enabled,
+        onReset: () => { patchGradient({ enabled: false }, { now: true }); paint(); },
+        children: gradientField(paint)
+      }),
+      ...backgroundExtras()
     ]);
   };
 
@@ -424,63 +903,48 @@ export function renderMusic() {
 
   const paint = () => {
     const music = musicNow();
-    const on = Boolean(music.url);
+    const tracks = state.page.playlist || [];
+    // Два трека и больше — плейлист: один список вместо поля «Трек» сверху
+    // и его же копии первой строкой.
+    const isList = tracks.length >= 2;
+    const on = Boolean(music.url) || isList;
 
     fill($('music-body'), [
-      mediaField({
-        label: 'Трек',
-        shape: 'audio',
-        kind: 'audio',
-        url: music.url,
-        accept: ACCEPT.audio,
-        maxBytes: limits().assetBytes,
-        locked: !rule.allowed,
-        requires: rule.requires,
-        softNote: 'Подписка закончилась: трек на странице не играет. Файл сохранён.',
-        empty: 'трека нет',
-        // Про экран входа надо сказать здесь, а не в соседней карточке: человек
-        // ставит музыку и ждёт, что она заиграет сама.
-        hint: 'Музыка начнёт играть после нажатия на экран входа.',
-        upload: (file) => api.upload('music', file),
-        onDone: (result) => {
-          patchMusic({ url: result.url }, { now: true });
-          paint();
-          // Экран входа зависит от трека: с музыкой он показывается всегда.
-          // Перерисовываем соседнюю карточку, иначе подпись в ней врёт до
-          // перезагрузки.
-          renderEntry();
-        },
-        onClear: () => {
-          patchMusic({ url: null, title: '', artist: '' }, { now: true });
-          paint();
-          renderEntry();
-        }
-      }),
-
-      on
-        ? textField({
-          label: 'Название',
-          value: music.title,
-          max: 80,
+      isList || music.url
+        ? null
+        : mediaField({
+          label: 'Трек',
+          shape: 'audio',
+          kind: 'audio',
+          url: music.url,
+          accept: ACCEPT.audio,
+          maxBytes: limits().assetBytes,
           locked: !rule.allowed,
           requires: rule.requires,
-          placeholder: 'что играет',
-          error: fieldError('music.title'),
-          onInput: (value) => patchMusic({ title: value })
-        })
-        : null,
+          softNote: 'Подписка закончилась: трек на странице не играет. Файл сохранён.',
+          empty: 'трека нет',
+          // Про экран входа надо сказать здесь, а не в соседней карточке: человек
+          // ставит музыку и ждёт, что она заиграет сама.
+          hint: 'Музыка начнёт играть после нажатия на экран входа.',
+          upload: (file) => api.upload('music', file),
+          onDone: (result, file) => {
+            patchMusic({ url: result.url, title: musicNow().title || trackName(file) }, { now: true });
+            paint();
+            // Экран входа зависит от трека: с музыкой он показывается всегда.
+            // Перерисовываем соседнюю карточку, иначе подпись в ней врёт до
+            // перезагрузки.
+            renderEntry();
+          },
+          onClear: () => {
+            patchMusic({ url: null, title: '', artist: '' }, { now: true });
+            paint();
+            renderEntry();
+          }
+        }),
 
-      on
-        ? textField({
-          label: 'Исполнитель',
-          value: music.artist,
-          max: 80,
-          locked: !rule.allowed,
-          placeholder: 'кто играет',
-          error: fieldError('music.artist'),
-          onInput: (value) => patchMusic({ artist: value })
-        })
-        : null,
+      ...(!isList && music.url ? singleTrack(paint) : []),
+
+      ...(isList ? playlistRows(paint) : []),
 
       on
         ? slider({
@@ -488,6 +952,7 @@ export function renderMusic() {
           value: music.volume,
           min: 0, max: 100, unit: ' %',
           disabled: !rule.allowed,
+          hint: music.volume < 10 ? 'Очень тихо — гости могут решить, что музыки нет.' : null,
           onInput: (value) => patchMusic({ volume: value })
         })
         : null,
@@ -498,11 +963,227 @@ export function renderMusic() {
           role: 'alert',
           text: fieldError('music') || fieldError('music.url')
         })
-        : null
+        : null,
+
+      ...addTrack(paint)
     ]);
   };
 
   paint();
+}
+
+// ---------------------------------------------------------------------------
+// Плейлист (Premium)
+// ---------------------------------------------------------------------------
+
+let playlistBusy = false;
+let listening = null;        // { url, audio } — какой трек слушают прямо в редакторе
+
+function listen(url, button) {
+  if (listening && listening.url === url) {
+    listening.audio.pause();
+    listening = null;
+    button.textContent = '▶';
+    return;
+  }
+  if (listening) listening.audio.pause();
+  const audio = new Audio(url);
+  audio.volume = Math.max(0, Math.min(1, (musicNow().volume || 60) / 100));
+  audio.play().catch(() => toast('Не получилось воспроизвести трек', 'err'));
+  audio.addEventListener('ended', () => { if (listening && listening.audio === audio) { listening = null; button.textContent = '▶'; } });
+  listening = { url, audio };
+  document.querySelectorAll('.track-play').forEach((node) => { node.textContent = '▶'; });
+  button.textContent = '❚❚';
+}
+
+/**
+ * Название трека из имени файла — только если оно похоже на название. Файлы
+ * из мессенджеров часто называются набором цифр («-6224841128583685855»),
+ * такое лучше оставить пустым, чем показывать гостям.
+ */
+function trackName(file) {
+  const name = String((file && file.name) || '').replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+  return /[a-zа-яё]/i.test(name) ? name.slice(0, 80) : '';
+}
+
+/** Один трек — той же строкой, что и в плейлисте, вместо голого плеера браузера. */
+function singleTrack(repaint) {
+  const rule = feature('music');
+  const music = musicNow();
+  const locked = !rule.allowed;
+  let busy = false;
+  const replace = el('input', {
+    type: 'file', accept: ACCEPT.audio, hidden: true,
+    onChange: async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file || busy) return;
+      if (limits().assetBytes && file.size > limits().assetBytes) {
+        toast(`Файл больше ${Math.round(limits().assetBytes / (1024 * 1024))} МБ`, 'err');
+        return;
+      }
+      busy = true;
+      try {
+        const result = await api.upload('music', file);
+        // Новый файл — новое название, если человек не вписал своё.
+        patchMusic({ url: result.url, title: trackName(file) || musicNow().title }, { now: true });
+      } catch (error) {
+        toast(error.message || 'Не удалось загрузить трек', 'err');
+      } finally {
+        busy = false;
+        repaint();
+        renderEntry();
+      }
+    }
+  });
+  return [
+    el('div', { class: 'field-top' }, [el('span', { class: 'field-label', text: 'Трек' })]),
+    el('div', { class: 'tracks' }, [
+      el('div', { class: 'track-row' }, [
+        el('button', {
+          class: 'btn btn--ghost btn--icon track-play', type: 'button', text: listening && listening.url === music.url ? '❚❚' : '▶',
+          title: 'Послушать', onClick: (event) => listen(music.url, event.currentTarget)
+        }),
+        el('div', { class: 'track-fields' }, [
+          el('input', {
+            class: 'input', type: 'text', value: music.title, maxlength: 80, placeholder: 'название трека', disabled: locked,
+            'aria-label': 'Название трека', onInput: (event) => patchMusic({ title: event.target.value })
+          }),
+          el('input', {
+            class: 'input', type: 'text', value: music.artist, maxlength: 80, placeholder: 'исполнитель', disabled: locked,
+            'aria-label': 'Исполнитель', onInput: (event) => patchMusic({ artist: event.target.value })
+          })
+        ]),
+        el('div', { class: 'link-tools' }, [
+          el('button', {
+            class: 'btn btn--ghost btn--icon', type: 'button', text: '↻', title: 'Заменить файл', disabled: locked,
+            onClick: () => replace.click()
+          }),
+          el('button', {
+            class: 'btn btn--ghost btn--icon', type: 'button', text: '✕', title: 'Убрать трек',
+            onClick: () => {
+              if (listening && listening.url === music.url) { listening.audio.pause(); listening = null; }
+              patchMusic({ url: null, title: '', artist: '' }, { now: true });
+              repaint();
+              renderEntry();
+            }
+          })
+        ])
+      ])
+    ]),
+    replace,
+    el('p', { class: 'hint', text: 'Музыка начнёт играть после нажатия на экран входа.' }),
+    fieldError('music.title') ? el('p', { class: 'field-error', role: 'alert', text: fieldError('music.title') }) : null,
+    locked ? lockNote(rule.requires) : null
+  ];
+}
+
+/** Перевести список в одиночный трек, когда в нём остался один. */
+function collapseTo(track) {
+  update({ playlist: [], music: { ...musicNow(), url: track.url, title: track.title || '', artist: track.artist || '' } }, { now: true });
+}
+
+function playlistRows(repaint) {
+  const tracks = (state.page.playlist || []).map((track) => ({ ...track }));
+  const save = (next, now = true) => update({ playlist: next }, now ? { now: true } : {});
+
+  const row = (track, index) => el('div', { class: 'track-row' }, [
+    el('button', {
+      class: 'btn btn--ghost btn--icon track-play', type: 'button', text: listening && listening.url === track.url ? '❚❚' : '▶',
+      title: 'Послушать', onClick: (event) => listen(track.url, event.currentTarget)
+    }),
+    el('div', { class: 'track-fields' }, [
+      el('input', {
+        class: 'input', type: 'text', value: track.title || '', maxlength: 80, placeholder: `трек ${index + 1} — название`,
+        onInput: (event) => { tracks[index].title = event.target.value; save(tracks.map((t) => ({ ...t })), false); }
+      }),
+      el('input', {
+        class: 'input', type: 'text', value: track.artist || '', maxlength: 80, placeholder: 'исполнитель',
+        onInput: (event) => { tracks[index].artist = event.target.value; save(tracks.map((t) => ({ ...t })), false); }
+      })
+    ]),
+    el('div', { class: 'link-tools' }, [
+      el('button', {
+        class: 'btn btn--ghost btn--icon', type: 'button', text: '↑', title: 'Выше', disabled: index === 0,
+        onClick: () => { [tracks[index - 1], tracks[index]] = [tracks[index], tracks[index - 1]]; save(tracks); repaint(); }
+      }),
+      el('button', {
+        class: 'btn btn--ghost btn--icon', type: 'button', text: '↓', title: 'Ниже', disabled: index === tracks.length - 1,
+        onClick: () => { [tracks[index + 1], tracks[index]] = [tracks[index], tracks[index + 1]]; save(tracks); repaint(); }
+      }),
+      el('button', {
+        class: 'btn btn--ghost btn--icon', type: 'button', text: '✕', title: 'Убрать',
+        onClick: () => {
+          const left = tracks.filter((_, i) => i !== index);
+          if (left.length === 1) collapseTo(left[0]);
+          else save(left);
+          repaint();
+        }
+      })
+    ])
+  ]);
+
+  return [
+    el('div', { class: 'field-top' }, [
+      el('span', { class: 'field-label', text: 'Плейлист' }),
+      el('span', { class: 'counter', text: `${tracks.length}/${limits().playlist || 8}` })
+    ]),
+    el('div', { class: 'tracks' }, tracks.map(row)),
+    el('p', { class: 'hint', text: 'Играют по очереди, первый — после нажатия на экран входа. У гостя кнопки «назад» и «вперёд».' }),
+    fieldError('playlist') ? el('p', { class: 'field-error', role: 'alert', text: fieldError('playlist') }) : null
+  ];
+}
+
+/** «Добавить трек»: из одного трека получается плейлист. */
+function addTrack(repaint) {
+  const rule = feature('playlist');
+  const music = musicNow();
+  const tracks = state.page.playlist || [];
+  const max = limits().playlist || 8;
+  if (!music.url && tracks.length < 2) return [];
+
+  const input = el('input', {
+    type: 'file', accept: ACCEPT.audio, hidden: true,
+    onChange: async (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      if (limits().assetBytes && file.size > limits().assetBytes) {
+        toast(`Файл больше ${Math.round(limits().assetBytes / (1024 * 1024))} МБ`, 'err');
+        return;
+      }
+      playlistBusy = true;
+      repaint();
+      try {
+        const result = await api.upload('music', file);
+        const name = trackName(file);
+        const now = musicNow();
+        let next = (state.page.playlist || []).slice();
+        // Первый трек плейлиста — тот, что стоял одиночным, с его названием.
+        if (next.length < 2 && now.url) next = [{ url: now.url, title: now.title || '', artist: now.artist || '' }];
+        next = [...next, { url: result.url, title: name, artist: '' }].slice(0, max);
+        update({ playlist: next }, { now: true });
+      } catch (error) {
+        toast(error.message || 'Не удалось загрузить трек', 'err');
+      } finally {
+        playlistBusy = false;
+        repaint();
+      }
+    }
+  });
+
+  return [
+    el('div', { class: 'row-actions' }, [
+      el('button', {
+        class: 'btn btn--sm', type: 'button',
+        text: playlistBusy ? 'Загружаем…' : tracks.length >= 2 ? 'Добавить трек' : 'Добавить ещё трек — получится плейлист',
+        disabled: playlistBusy || !rule.allowed || tracks.length >= max,
+        onClick: () => input.click()
+      }),
+      input
+    ]),
+    rule.allowed ? null : lockNote(rule.requires)
+  ];
 }
 
 /** Свой пикер сервисов вместо системного select: логотип и название видны сразу. */
@@ -913,6 +1594,16 @@ export function renderBlocks() {
       requires: badges.requires,
       error: fieldError('showBadges'),
       onToggle: (on) => update({ showBadges: on }, { now: true })
+    }),
+
+    toggle({
+      label: 'Сердечко со счётчиком',
+      hint: 'Гости ставят сердечко без регистрации — одно на человека, накрутку отсекаем.',
+      checked: Boolean(page.hearts && page.hearts.enabled),
+      locked: !feature('hearts').allowed,
+      requires: feature('hearts').requires,
+      error: fieldError('hearts'),
+      onToggle: (on) => update({ hearts: { enabled: on } }, { now: true })
     }),
 
     toggle({
@@ -1419,14 +2110,6 @@ export async function renderStats() {
   const body = $('stats-body');
   const rule = feature('viewStats');
 
-  if (!rule.allowed) {
-    fill(body, [
-      el('p', { class: 'hint', text: 'Сколько людей открывали страницу: в Love Pro — за неделю, в Premium — за месяц.' }),
-      lockNote(rule.requires)
-    ]);
-    return;
-  }
-
   fill(body, [el('p', { class: 'hint', text: 'Считаем…' })]);
 
   let data;
@@ -1443,12 +2126,22 @@ export async function renderStats() {
     return;
   }
 
-  // Сервер может отказать по тарифу и здесь: между загрузкой возможностей и
-  // этим запросом подписка успевает закончиться.
+  // Общий счётчик есть на любом тарифе, график по дням — с Pro. Отказ по
+  // тарифу приходит и отсюда: подписка могла закончиться, пока вкладка открыта.
   if (!data.available) {
     fill(body, [
-      el('p', { class: 'hint', text: 'Сколько людей открывали страницу: в Love Pro — за неделю, в Premium — за месяц.' }),
-      lockNote(data.requires || rule.requires)
+      data.total != null
+        ? el('div', { class: 'stat-top' }, [
+          el('span', { class: 'stat-value', text: String(data.total || 0) }),
+          el('span', { class: 'stat-unit', text: `${viewsWord(data.total || 0)} всего` })
+        ])
+        : null,
+      el('p', { class: 'hint', text: 'График по дням: в Love Pro — за неделю, в Premium — за месяц.' }),
+      lockNote(data.requires || rule.requires),
+      heartsLine(data),
+      linkClicks(data),
+      analyticsBlock(data),
+      milestonesToggle()
     ]);
     return;
   }
@@ -1472,6 +2165,113 @@ export async function renderStats() {
     }),
     // Про способ подсчёта надо сказать честно: иначе цифра будет расходиться с
     // ожиданием «я сам открыл десять раз, где они».
-    el('p', { class: 'hint', text: 'Один человек за день считается один раз. Роботов соцсетей, которые ходят за превью, не считаем.' })
+    el('p', { class: 'hint', text: 'Один человек за день считается один раз. Роботов соцсетей, которые ходят за превью, не считаем.' }),
+    heartsLine(data),
+    linkClicks(data),
+    analyticsBlock(data),
+    milestonesToggle()
+  ]);
+}
+
+const SOURCE_NAMES = {
+  telegram: 'Telegram', tiktok: 'TikTok', discord: 'Discord', instagram: 'Instagram', youtube: 'YouTube',
+  vk: 'ВКонтакте', x: 'X (Twitter)', search: 'Поиск', love: 'Сайт Love', direct: 'Напрямую и из приложений', other: 'Другие сайты'
+};
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function bars(entries, top) {
+  return el('div', { class: 'clicks' }, entries.map(([name, value]) => el('div', { class: 'click-row' }, [
+    el('span', { class: 'click-name', text: name }),
+    el('span', { class: 'click-bar' }, [el('i', { style: `width:${Math.round((value / Math.max(1, top)) * 100)}%` })]),
+    el('span', { class: 'click-count', text: String(value) })
+  ])));
+}
+
+/**
+ * Аналитика (Pro). Часы сервер хранит по UTC — здесь сдвигаем их в часовой
+ * пояс владельца, иначе «пик в 3 ночи» был бы чужим временем.
+ */
+function analyticsBlock(data) {
+  if (!data.analytics) {
+    return el('div', { class: 'clicks' }, [
+      groupTitle('Аналитика'),
+      el('p', { class: 'hint', text: 'Откуда приходят гости, в какие часы и дни заходят, сколько нажали «Написать в Love». Данные уже копятся.' }),
+      lockNote(data.analyticsRequire || 'pro')
+    ]);
+  }
+  const a = data.analytics;
+  const sources = Object.entries(a.sources || {}).map(([key, value]) => [SOURCE_NAMES[key] || key, Number(value) || 0])
+    .filter(([, value]) => value > 0).sort((x, y) => y[1] - x[1]);
+  const offset = Math.round(-new Date().getTimezoneOffset() / 60);
+  const hours = Array(24).fill(0), days = Array(7).fill(0);
+  (a.week || []).forEach((value, utc) => {
+    const local = ((utc + offset) % 168 + 168) % 168;
+    hours[local % 24] += value;
+    days[(Math.floor(local / 24) + 6) % 7] += value;       // 0 — воскресенье, в списке оно последнее
+  });
+  const peakHour = hours.indexOf(Math.max(...hours));
+  const views = data.total || 0;
+  const cta = a.cta || 0;
+  const hourTop = Math.max(1, ...hours);
+  return el('div', { class: 'analytics' }, [
+    groupTitle('Аналитика'),
+    el('div', { class: 'stat-top' }, [
+      el('span', { class: 'stat-value', text: String(cta) }),
+      el('span', { class: 'stat-unit', text: `нажали «Написать в Love»${views ? ` — ${Math.round((cta / views) * 100)}% гостей` : ''}` })
+    ]),
+    el('p', { class: 'field-label', text: 'Откуда пришли' }),
+    sources.length ? bars(sources, sources[0][1]) : el('p', { class: 'hint', text: 'Пока нет данных.' }),
+    el('p', { class: 'field-label', text: 'Когда заходят' }),
+    el('div', { class: 'hours' }, hours.map((value, hour) => el('i', {
+      class: value ? '' : 'is-empty',
+      style: `height:${value ? Math.max(8, Math.round((value / hourTop) * 100)) : 4}%`,
+      title: `${hour}:00 — ${value}`
+    }))),
+    el('div', { class: 'chart-axis' }, [el('span', { text: '0:00' }), el('span', { text: '12:00' }), el('span', { text: '23:00' })]),
+    hours.some(Boolean) ? el('p', { class: 'hint', text: `Чаще всего — около ${peakHour}:00 по вашему времени.` }) : null,
+    bars(WEEKDAYS.map((name, i) => [name, days[i]]), Math.max(1, ...days))
+  ]);
+}
+
+function milestonesToggle() {
+  return toggle({
+    label: 'Сообщать о вехах в Love',
+    hint: '«Вашу страницу открыли 1 000 раз», «100 сердечек» — придёт уведомлением в приложении.',
+    checked: state.page.notifyMilestones !== false,
+    onToggle: (on) => update({ notifyMilestones: on }, { now: true })
+  });
+}
+
+function heartsLine(data) {
+  if (!(state.page.hearts && state.page.hearts.enabled) && !data.hearts) return null;
+  return el('div', { class: 'stat-hearts' }, [
+    el('span', { class: 'stat-hearts-mark', text: '♥', 'aria-hidden': true }),
+    el('span', { text: `${data.hearts || 0} — столько сердечек поставили гости` })
+  ]);
+}
+
+/** Нажатия по каждой ссылке — Pro. Свои нажатия владельца не считаются. */
+function linkClicks(data) {
+  if (!Array.isArray(data.links)) {
+    return el('div', { class: 'clicks' }, [
+      groupTitle('Нажатия ссылок'),
+      el('p', { class: 'hint', text: 'Сколько раз нажимали каждую ссылку.' }),
+      lockNote(data.linksRequire || 'pro')
+    ]);
+  }
+  if (!data.links.length) return null;
+  const top = Math.max(1, ...data.links.map((link) => link.clicks || 0));
+  return el('div', { class: 'clicks' }, [
+    groupTitle('Нажатия ссылок'),
+    ...data.links.map((link) => {
+      let host = link.url;
+      try { host = new URL(link.url).hostname.replace(/^www\./, ''); } catch (_) { /* покажем как есть */ }
+      return el('div', { class: 'click-row' }, [
+        el('span', { class: 'click-name', text: link.label || host }),
+        el('span', { class: 'click-bar' }, [el('i', { style: `width:${Math.round(((link.clicks || 0) / top) * 100)}%` })]),
+        el('span', { class: 'click-count', text: String(link.clicks || 0) })
+      ]);
+    }),
+    el('p', { class: 'hint', text: 'Один посетитель по одной ссылке за день — одно нажатие.' })
   ]);
 }

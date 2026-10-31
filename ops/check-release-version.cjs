@@ -67,13 +67,8 @@ const hardcoded = [
   },
   {
     file: path.join('site', 'changelog.html'),
-    what: 'текущая версия истории действующего сайта (RU)',
-    pattern: /Текущая версия\s*·\s*v\s*([^<\s]+)/
-  },
-  {
-    file: path.join('site', 'changelog.html'),
-    what: 'текущая версия истории действующего сайта (EN)',
-    pattern: /Current version\s*·\s*v\s*([^<\s]+)/
+    what: 'текущая версия истории действующего сайта',
+    pattern: /Текущая версия\s*·\s*<span data-version>([^<\s]+)/
   },
   {
     file: path.join('site', 'changelog.html'),

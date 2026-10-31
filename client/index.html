@@ -21,6 +21,11 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
         }
+        // Новый дизайн (тест, styles/redesign.css): включён, пока его не выключили.
+        try {
+          if (localStorage.getItem('love-redesign') !== 'off') document.documentElement.classList.add('rd');
+          if (localStorage.getItem('love-redesign-font') === 'system') document.documentElement.classList.add('rd-sysfont');
+        } catch (e) {}
         // Сезонное оформление (ключ app-season) — тоже до первой отрисовки.
         try {
           if (localStorage.getItem('app-season') === 'halloween') {
@@ -40,6 +45,7 @@
     <link rel="stylesheet" href="styles/perf-android.css">
     <link rel="stylesheet" href="styles/appearance.css">
     <link rel="stylesheet" href="styles/halloween.css">
+    <link rel="stylesheet" href="styles/redesign.css">
     <!-- Android WebView заметно слабее iOS: помечаем html.perf-lite, чтобы
          perf-android.css отключил дорогие эффекты (blur/backdrop/фоновые анимации). -->
     <script>(function(){try{if(/Android/i.test(navigator.userAgent||''))document.documentElement.classList.add('perf-lite');}catch(e){}})();</script>
@@ -602,10 +608,10 @@
                             </div>
                         </div>
                         <button type="button" class="room-header-settings-btn" id="server-settings-btn" title="Настройки сферы">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                            </svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
                         </button>
                     </header>
                     <div class="chat-feed" id="server-chat-feed">
@@ -667,10 +673,10 @@
                             </div>
                         </div>
                         <button type="button" class="room-header-settings-btn" id="room-settings-btn" title="Настройки комнаты">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                            </svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
                         </button>
                     </header>
 
@@ -1103,7 +1109,7 @@
                         <span class="bento-corner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></span>
                         <div class="bento-tag update">Обновления</div>
                         <h3>История версий</h3>
-                        <p>Полный список изменений будет доступен здесь.</p>
+                        <p>Что менялось в каждой версии Love.</p>
                     </div>
 
                     <!-- Dev Log (открывает модалку с голосованием) -->
@@ -1498,7 +1504,7 @@
                   <div class="lvs-plan-card-head"><h2>Free</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
                   <p class="lvs-plan-description">Всё, чтобы начать общаться.</p>
                   <p class="lvs-plan-price">0 ₽<span> / месяц</span></p>
-                  <ul><li>Основные возможности общения</li><li>Публичная страница профиля</li><li>До 3 ссылок на странице</li><li>Базовые темы оформления</li></ul>
+                  <ul><li>Основные возможности общения</li><li>Публичная страница профиля</li><li>До 6 ссылок и все статичные темы</li><li>Свой цвет ника, фон и порядок блоков</li><li>Сердечки, цитата, таймер и приглашение</li></ul>
                   <button type="button" class="lvs-plan-button" disabled>Бесплатно</button>
                 </article>
 
@@ -1506,7 +1512,7 @@
                   <div class="lvs-plan-card-head"><h2>Pro</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
                   <p class="lvs-plan-description">Больше свободы в оформлении.</p>
                   <p class="lvs-plan-price">299 ₽<span> / месяц</span></p>
-                  <ul><li>Все возможности Free</li><li>До 12 ссылок и короткий адрес</li><li>Свой фон и цвет акцента</li><li>Анимированные аватар и баннер</li><li>Статистика за 7 дней</li></ul>
+                  <ul><li>Все возможности Free</li><li>До 12 ссылок и короткий адрес</li><li>Градиенты ника, галерея и свой курсор</li><li>Анимированные аватар, баннер и фон</li><li>Шрифты, аналитика и статистика за 7 дней</li></ul>
                   <button type="button" class="lvs-plan-button" disabled>Покупка пока недоступна</button>
                 </article>
 
@@ -1514,7 +1520,7 @@
                   <div class="lvs-plan-card-head"><h2>Premium</h2><span class="lvs-plan-current" hidden>Ваш тариф</span></div>
                   <p class="lvs-plan-description">Профиль с вашим характером.</p>
                   <p class="lvs-plan-price">499 ₽<span> / месяц</span></p>
-                  <ul><li>Все возможности Pro</li><li>До 20 ссылок на странице</li><li>Музыка, эффекты и видеофон</li><li>Шрифты и рамки аватара</li><li>Статистика за 30 дней</li></ul>
+                  <ul><li>Все возможности Pro</li><li>До 20 ссылок на странице</li><li>Плейлист, видеофон и до 3 эффектов сразу</li><li>Конструктор темы и живые фоны</li><li>Свои стили и статистика за 30 дней</li></ul>
                   <button type="button" class="lvs-plan-button" disabled>Покупка пока недоступна</button>
                 </article>
 
@@ -1592,6 +1598,17 @@
                 <h1 class="lvs-section-title">Внешний вид</h1>
                 <p class="lvs-section-desc">Тема, масштаб и эффекты интерфейса</p>
               </header>
+
+              <div class="lvs-card rd-toggle-card">
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Новый дизайн <span class="rd-test-badge">Бета</span></div><div class="lvs-row-sub">Новый вид Love ещё дорабатывается. Выключите — вернётся прежний.</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" id="rd-toggle"><span class="lvs-toggle-track"></span></label>
+                </div>
+                <div class="lvs-row">
+                  <div class="lvs-row-text"><div class="lvs-row-label">Системный шрифт</div><div class="lvs-row-sub">Шрифт вашей системы вместо Outfit — сравните, что лучше.</div></div>
+                  <label class="lvs-toggle"><input type="checkbox" id="rd-font-toggle"><span class="lvs-toggle-track"></span></label>
+                </div>
+              </div>
 
               <div class="lvs-card">
                 <div class="lvs-section-subtitle">Тема</div>
@@ -1936,7 +1953,7 @@
               <div class="lvs-card">
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Текущая версия</div></div>
-                  <span class="lvs-badge" id="settings-updates-version">2.2.0</span>
+                  <span class="lvs-badge" id="settings-updates-version">2.3.0</span>
                 </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Статус</div></div>
@@ -1995,6 +2012,7 @@
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Диагностика</div><div class="lvs-row-sub">Сведения о среде выполнения</div></div>
                   <button class="lvs-btn" id="lvs-diagnostics">Открыть</button>
+                </div>
                 <div class="lvs-row">
                   <div class="lvs-row-text"><div class="lvs-row-label">Сбросить все настройки</div><div class="lvs-row-sub">Вернуть приложение к настройкам по умолчанию. Действие необратимо.</div></div>
                   <button class="lvs-btn lvs-btn--danger" id="lvs-reset-settings">Сбросить</button>
@@ -2016,7 +2034,7 @@
                 <div class="lvs-about-name">L O V E</div>
                 <p class="lvs-about-tagline">Мессенджер, сделанный с любовью.</p>
                 <div class="lvs-about-version">
-                  <span class="lvs-badge" id="settings-about-version">v2.2.0</span>
+                  <span class="lvs-badge" id="settings-about-version">v2.3.0</span>
                   <span class="lvs-badge" id="settings-about-build">build</span>
                 </div>
               </div>
@@ -2122,7 +2140,9 @@
 
             <!-- Central Content Area -->
             <div class="call-main-content">
-                <!-- Video Streams Grid (hidden by default) -->
+                <!-- Плитки звонка: та же сцена, что войс сферы (call-stage.js, renderDm) -->
+                <div class="voice-constellation love-voice-grid" id="call-tile-grid"></div>
+                <!-- Прежняя сетка: скрыта стилями, на неё ещё ссылается script.js -->
                 <div class="call-video-grid hidden layout-split" id="call-video-grid">
                     <!-- Remote Video Stream -->
                     <div class="video-stream-box remote-video">
@@ -2376,7 +2396,7 @@
     <!-- Модалка предпросмотра аватара -->
     <div class="modal-backdrop hidden" id="avatar-preview-modal">
         <div class="profile-card" style="width: 340px; text-align: center; padding: 24px;">
-            <h3 style="margin-bottom: 16px;">Превью Аватара</h3>
+            <h3 style="margin-bottom: 16px;">Аватар</h3>
             <div id="avatar-preview-box" class="profile-avatar" style="margin: 0 auto 20px; width: 120px; height: 120px; border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;"></div>
             <div style="margin-bottom: 20px;">
                 <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px;">Размер (Масштаб)</label>
@@ -2689,6 +2709,7 @@
     
     
     <!-- Real Transport Layer & APIs -->
+    <script src="js/redesign.js"></script>
     <script src="js/api.js"></script>
     <script src="js/sanitize.js"></script>
     <script src="js/external-link-guard.js"></script>
@@ -2699,6 +2720,7 @@
     <script src="js/socket.js"></script>
     <script src="js/voice.js"></script>
     <script src="js/call-stage.js"></script>
+    <script src="js/dm-call-dock.js"></script>
     <script src="js/screenshare.js"></script>
     <script src="js/sound-manager.js"></script>
     <script src="js/settings.js"></script>

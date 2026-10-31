@@ -40,6 +40,11 @@ class LovePrefs {
   /// Сезонное оформление: none | halloween (matches web `app-season`).
   final ValueNotifier<String> season = ValueNotifier<String>('none');
 
+  /// Новый дизайн (бета): палитра, шрифты и скругления по системе ПК-клиента
+  /// (`client/styles/redesign.css`). Включён по умолчанию, как на ПК; выключение
+  /// возвращает прежний вид целиком.
+  final ValueNotifier<bool> redesign = ValueNotifier<bool>(true);
+
   Future<void> init() async {
     if (_prefs != null) return;
     _prefs = await SharedPreferences.getInstance();
@@ -50,6 +55,7 @@ class LovePrefs {
     theme.value =
         savedTheme == 'light' || savedTheme == 'system' ? savedTheme : 'dark';
     season.value = getString(K.season, 'none') == 'halloween' ? 'halloween' : 'none';
+    redesign.value = getBool(K.redesign, true);
   }
 
   // ── Typed accessors ──────────────────────────────────────────────────
@@ -60,6 +66,7 @@ class LovePrefs {
     await _p.setBool(key, value);
     if (key == K.animations) reduceMotion.value = !value;
     if (key == K.compactMode) compactMode.value = value;
+    if (key == K.redesign) redesign.value = value;
   }
 
   int getInt(String key, int fallback) => _p.getInt(key) ?? fallback;
@@ -112,6 +119,7 @@ class LovePrefs {
     uiScale.value = 1.0;
     reduceMotion.value = false;
     compactMode.value = false;
+    redesign.value = true;
   }
 }
 
@@ -125,6 +133,7 @@ class K {
   static const compactMode = 'compact-mode';
   static const animations = 'animations';
   static const transparency = 'transparency-effects';
+  static const redesign = 'love-redesign'; // как localStorage на ПК
 
   // Privacy
   static const privacyOnline = 'privacy-online-status';
@@ -174,7 +183,7 @@ class K {
   static const devLogVotes = 'love_devlog_votes';
 
   static const all = <String>[
-    theme, uiScale, compactMode, animations, transparency,
+    theme, uiScale, compactMode, animations, transparency, redesign,
     privacyOnline, privacyProfile, privacyActivity, privacyFriendReq, privacyDm,
     linkWarning,
     notifDesktop, notifPush, notifMessages, notifMentions, notifAppUpdates,

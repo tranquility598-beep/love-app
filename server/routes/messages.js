@@ -447,6 +447,11 @@ router.put('/:id', authMiddleware, requireCanCommunicate, async (req, res) => {
       return res.status(403).json({ message: 'Вы можете редактировать только свои сообщения' });
     }
 
+    // Запись о звонке пишет сервер, её текст не меняется.
+    if (message.type === 'system') {
+      return res.status(403).json({ message: 'Системное сообщение нельзя редактировать' });
+    }
+
     // Автор мог потерять доступ к каналу (выгнали с сервера, удалили из ЛС).
     const access = await requireChannelAccess(req, res, message.channel);
     if (!access) return;

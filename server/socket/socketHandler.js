@@ -28,6 +28,7 @@ const { parseDeliverAt } = require('../services/capsuleService');
 const { normalizeMessageAttachments } = require('../utils/messageAttachments');
 const { buildMessagePreview } = require('../utils/messagePreview');
 const { createRingRegistry, recordMissedCall } = require('../services/callRings');
+const push = require('../services/push');
 const registerAdminStaffSocket = require('./adminStaffSocket');
 const {
   applyVoiceMediaMode,
@@ -58,6 +59,19 @@ function removeConnectedSocket(userId, socketId) {
   return true;
 }
 
+/**
+ * Есть ли у человека живое соединение прямо сейчас.
+ *
+ * Источник правды — комната `user:<id>`, а не карта connectedUsers: при
+ * переподключении карта на доли секунды расходится с составом комнаты.
+ * От этого ответа зависит, надо ли будить телефон пушем, поэтому берём
+ * то, что видит сам socket.io.
+ */
+function isUserConnected(io, userId) {
+  if (!userId) return false;
+  return !!io.sockets.adapter.rooms.get(`user:${userId.toString()}`)?.size;
+}
+
 function socketIsInVoiceChannel(channelId, socketId) {
   return !!voiceChannels.get(channelId)?.some((member) => member.socketId === socketId);
 }
@@ -80,6 +94,19 @@ module.exports = (io) => {
       io.to(`user:${ring.targetId}`).emit('call:terminated', { by: ring.callerId, reason: 'no_answer' });
       recordMissedCall({ io, ring, Message, DirectMessage, createNotification })
         .catch(error => console.error('[calls] missed call record failed:', error));
+
+      // Телефона нет в сети — событие выше до него не дошло, и после
+      // 45 секунд звонка человек даже не узнает, что ему звонили.
+      // Пушем сообщаем о пропущенном; онлайн-устройства уже показали звонок
+      // и сами нарисуют «Пропущенный», дублировать им не нужно.
+      if (!isUserConnected(io, ring.targetId)) {
+        push.sendMissedCallPush(ring.targetId, {
+          callerName: ring.from?.username || '',
+          conversationId: ring.conversationId,
+          channelId: ring.channelId,
+          kind: ring.kind
+        }).catch(error => console.error('[push] missed call:', error.message));
+      }
     }
   });
 
@@ -227,17 +254,33 @@ module.exports = (io) => {
     addConnectedSocket(userId, socket.id);
     socket.join(`user:${userId}`);
 
+    // Ожидающие звонки этому человеку отдаём один раз на сокет: сервер сам
+    // догоняет клиента через паузу после подключения, а клиент, который
+    // повесил обработчики позже (мобильный после входа в аккаунт), просит
+    // их сам событием call:pending. Без этой памяти на телефоне звонок
+    // начинался бы дважды — от догоняющей паузы и от собственного запроса.
+    const deliveredRings = new Set();
+    const emitPendingRings = () => {
+      if (!socket.connected) return;
+      for (const ring of callRings.forTarget(userId)) {
+        const key = `${ring.callerId}:${ring.startedAt}`;
+        if (deliveredRings.has(key)) continue;
+        deliveredRings.add(key);
+        socket.emit('call:incoming', ring.incoming);
+      }
+    };
+
     // Человеку звонили, пока он был не в сети, и звонок ещё ждёт ответа —
     // показываем вызов. С паузой: клиенту нужно успеть повесить обработчики
     // звонков после подключения.
     if (callRings.forTarget(userId).length) {
-      setTimeout(() => {
-        if (!socket.connected) return;
-        for (const ring of callRings.forTarget(userId)) {
-          socket.emit('call:incoming', ring.incoming);
-        }
-      }, 1200);
+      setTimeout(emitPendingRings, 1200);
     }
+
+    // Явный запрос: клиент говорит «готов принимать звонки». Нужен, когда
+    // обработчики появились позже паузы — иначе человек открывал приложение,
+    // а звонок, который ещё звонил, не показывался.
+    socket.on('call:pending', emitPendingRings);
     console.log(`🔍 CONNECTION SET: userId=${userId}, new socket=${socket.id}`);
     
     // Статус «в сети» и комнаты серверов — в фоне. Раньше здесь стояли три
@@ -532,16 +575,30 @@ module.exports = (io) => {
                 // Онлайн-получатель увидит запись в окне уведомлений (createNotification
                 // сам шлёт notification:new, type new_dm → клиент кладёт в ленту без
                 // дублирующего тоста), а живой тост придёт через dm:new_message выше.
+                const preview = buildMessagePreview(content, normalizedAttachments);
                 createNotification(io, {
                   user: otherParticipant,
                   type: 'new_dm',
                   actor: userId,
                   actorName: socket.user.username,
                   actorAvatar: socket.user.avatar,
-                  ...buildMessagePreview(content, normalizedAttachments),
+                  ...preview,
                   conversationId: dm._id,
                   channelId
                 });
+
+                // Приложение получателя закрыто — соединения нет, событие выше
+                // ушло в пустую комнату. Будим телефон push'ем: без него о
+                // сообщении человек узнает, только открыв приложение сам.
+                if (!isUserConnected(io, otherParticipant)) {
+                  push.sendMessagePush(otherParticipant.toString(), {
+                    title: socket.user.username,
+                    body: preview.preview || 'Новое сообщение',
+                    conversationId: dm._id.toString(),
+                    channelId: channelId.toString(),
+                    messageId: message._id.toString()
+                  }).catch(error => console.error('[push] new message:', error.message));
+                }
               }
               
               // Отправляем обновление сообщения обоим участникам
@@ -621,6 +678,11 @@ module.exports = (io) => {
         
         if (message.author.toString() !== userId) {
           return socket.emit('error', { message: 'Нет прав для редактирования' });
+        }
+
+        // Запись о звонке пишет сервер, её текст не меняется.
+        if (message.type === 'system') {
+          return socket.emit('error', { message: 'Системное сообщение нельзя редактировать' });
         }
 
         // Автор мог потерять доступ к каналу после отправки.
@@ -1366,6 +1428,20 @@ module.exports = (io) => {
       } else {
         socket.emit('call:ringing', { targetUserId: targetIdStr, online: false });
       }
+
+      // Соединения у собеседника нет — звонок сам до телефона не дойдёт,
+      // ведь FCM умеет поднять даже закрытое приложение. Проснувшись,
+      // оно спросит ожидающие звонки (call:pending) и покажет вызов.
+      // Звонок и так живёт 45 с, дольше этого пуша не нужна.
+      if (!isUserConnected(io, targetIdStr)) {
+        push.sendCallPush(targetIdStr, {
+          callerName: socket.user.username,
+          callerId: userId,
+          conversationId: incoming.conversationId,
+          channelId: incoming.channelId,
+          kind
+        }).catch(error => console.error('[push] incoming call:', error.message));
+      }
     });
 
     /**
@@ -1557,8 +1633,10 @@ module.exports = (io) => {
         }
       }
       
-      // Уведомляем клиента что он вышел
-      socket.emit('voice:left', { channelId });
+      // Уведомляем клиента что он вышел. socketId нужен, чтобы клиент отличил
+      // догоняющее событие прежнего соединения от собственного выхода: после
+      // переподключения он уже вернулся в канал с новым id.
+      socket.emit('voice:left', { channelId, socketId: socket.id });
       
       console.log(`🔇 ${socket.user.username} left voice channel ${channelId}`);
     }

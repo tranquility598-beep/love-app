@@ -326,13 +326,15 @@ class _CategoryHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Text(
-        text.toUpperCase(),
-        style:  TextStyle(
-          color: context.palette.inkA(0.35),
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-        ),
+        LoveText.caps(context.palette, text),
+        style: context.palette.rd
+            ? LoveText.monoLabel(context.palette)
+            : TextStyle(
+                color: context.palette.inkA(0.35),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
       ),
     );
   }

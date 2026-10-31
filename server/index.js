@@ -163,7 +163,17 @@ app.use(hpp());
 // CORS настройка с whitelist
 app.use('/api/admin', adminSecurityHeaders, adminOriginGuard);
 
+// Свои шрифты страниц профиля (/uploads/fonts, см. profileMedia.storeFont)
+// подключает страница на другом домене — me.loveapp.chat, и браузер шлёт за
+// шрифтом Origin. Общий whitelist такой запрос отклонял ещё до раздачи файла.
+// Шрифт публичный и не личный: отдаём кому угодно, но только чтение и без
+// cookies — origin профилей при этом не получает доступа к API.
+const PUBLIC_FONT = /^\/uploads\/fonts\/[a-f0-9]+\.(woff2|woff|ttf|otf)$/i;
+
 app.use(cors((req, configure) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) && PUBLIC_FONT.test(req.path)) {
+    return configure(null, { origin: '*', methods: ['GET', 'HEAD'], credentials: false });
+  }
   configure(null, {
     origin(origin, callback) {
       // Браузер отправляет Origin даже за своими ES-модулями и шрифтами.
@@ -251,6 +261,10 @@ app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res, filePath) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const ext = path.extname(filePath).toLowerCase();
+    // Свои шрифты страниц профиля грузятся с другого домена (me.loveapp.chat),
+    // а браузер подключает шрифт только с разрешающим CORS-заголовком.
+    // Шрифт — не исполняемый файл и не личные данные, поэтому разрешаем всем.
+    if (['.woff2', '.woff', '.ttf', '.otf'].includes(ext)) res.setHeader('Access-Control-Allow-Origin', '*');
     if (!INLINE_SAFE_TYPES.has(ext)) {
       res.setHeader('Content-Disposition', 'attachment');
     }
@@ -308,6 +322,7 @@ const earlyAccessRoutes = require('./routes/earlyAccess');
 const supportRoutes = require('./routes/support');
 const releaseRoutes = require('./routes/release');
 const notificationRoutes = require('./routes/notifications');
+const pushRoutes = require('./routes/push');
 const webrtcRoutes = require('./routes/webrtc');
 const { featureFlags, requireFeature } = require('./config/featureFlags');
 
@@ -337,6 +352,8 @@ app.use('/api/early-access', earlyAccessRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/release', releaseRoutes);
 app.use('/api/notifications', notificationRoutes);
+// Токены устройств для push (FCM). Молча живёт и без ключа Firebase.
+app.use('/api/push', pushRoutes);
 app.use('/api/webrtc', webrtcRoutes);
 // API страниц профиля. Доступно с ДВУХ хостов, и это не упущение: приложение
 // просит одноразовый код на api.loveapp.chat (там лежит полный токен), а сам

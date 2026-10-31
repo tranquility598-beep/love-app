@@ -175,6 +175,70 @@ export function groupTitle(text) {
 }
 
 /**
+ * Раскрывающаяся группа настроек. Карточки «Внешнего вида» пересобираются
+ * после многих правок, поэтому открыта группа или нет — помним сами (и между
+ * заходами в редактор), иначе после каждого клика всё схлопывалось бы.
+ * summary — короткая подпись текущего значения, видна и в свёрнутом виде.
+ */
+const FOLD_KEY = 'love-editor-folds';
+let foldMemory = null;
+function folds() {
+  if (foldMemory) return foldMemory;
+  try { foldMemory = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') || {}; } catch (_) { foldMemory = {}; }
+  return foldMemory;
+}
+export function fold({ id, title, summary, open = false, adv = false, changed = false, onReset = null, target = null, children = [] }) {
+  const memory = folds();
+  const node = el('details', {
+    class: 'fold',
+    open: Object.prototype.hasOwnProperty.call(memory, id) ? memory[id] : open,
+    // adv — группа только для режима «Подробно» (см. app.js, look mode);
+    // target — что подсветить в превью, пока курсор над группой.
+    dataset: { fold: id, def: open ? '1' : '0', ...(adv ? { adv: '1' } : {}), ...(target ? { target } : {}) }
+  }, [
+    el('summary', { class: 'fold-head' }, [
+      el('span', { class: 'fold-title', text: title }),
+      changed ? el('span', { class: 'fold-dot', title: 'Здесь что-то изменено', 'aria-label': 'изменено' }) : null,
+      summary ? el('span', { class: 'fold-summary', text: summary }) : null,
+      el('span', { class: 'fold-chev', 'aria-hidden': true })
+    ]),
+    el('div', { class: 'fold-body' }, [
+      ...children,
+      changed && onReset
+        ? el('div', { class: 'fold-foot' }, [
+          el('button', {
+            class: 'btn btn--ghost btn--sm', type: 'button', text: 'Сбросить группу',
+            onClick: () => { if (window.confirm(`Вернуть «${title}» к настройкам по умолчанию?`)) onReset(); }
+          })
+        ])
+        : null
+    ])
+  ]);
+  node.addEventListener('toggle', () => {
+    // Во время поиска группы раскрываются сами — это не выбор человека.
+    if (document.getElementById('editor')?.classList.contains('is-searching')) return;
+    memory[id] = node.open;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(memory)); } catch (_) { /* приватный режим — просто не запомним */ }
+  });
+  return node;
+}
+
+/** После поиска вернуть группам то состояние, которое выбрал человек. */
+export function restoreFolds() {
+  const memory = folds();
+  document.querySelectorAll('.fold[data-fold]').forEach((node) => {
+    const id = node.dataset.fold;
+    node.open = Object.prototype.hasOwnProperty.call(memory, id) ? memory[id] : node.dataset.def === '1';
+  });
+}
+
+/** Название варианта по id — для подписи свёрнутой группы. */
+export function nameOf(list, id, fallback = '') {
+  const item = (list || []).find((entry) => entry.id === id);
+  return item ? item.name : fallback;
+}
+
+/**
  * Дата.
  *
  * Родной input[type=date] вместо своего календаря — по той же причине, что и с
@@ -518,7 +582,8 @@ export function mediaField({
       setShown(good);
       busy = false;
       paint();
-      if (onDone) onDone(result);
+      // Второй аргумент — сам файл: по его имени, например, подставляется название трека.
+      if (onDone) onDone(result, file);
     } catch (failure) {
       busy = false;
       problem = failure.message || 'Не удалось загрузить файл';

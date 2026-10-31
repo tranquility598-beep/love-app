@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Заменяет боевой сайт (site/) новым дизайном из opus5-site-mock/.
+# Заменяет боевой сайт (site/) новым дизайном из love-site/.
 #
 # Зачем скрипт, а не «скопируй руками»: у нового дизайна другой набор файлов
 # (core.css, land.css, depth.js, hero-webgl.js), а у старого остаётся лишний
@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-SRC="opus5-site-mock"
+SRC="love-site"
 DST="site"
 
 if [ ! -d "$SRC" ] || [ ! -d "$DST" ]; then
@@ -34,7 +34,7 @@ echo "Старый сайт сохранён в $BACKUP"
 
 rm -rf "$DST"
 mkdir -p "$DST"
-cp "$SRC"/*.html "$SRC"/*.css "$SRC"/*.js "$DST"/
+cp -r "$SRC"/. "$DST"/
 
 echo
 echo "Новый сайт собран. Файлы в $DST:"

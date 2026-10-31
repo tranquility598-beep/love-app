@@ -548,6 +548,18 @@ class _AppearanceSectionState extends State<_AppearanceSection> {
           desc: 'Тема, масштаб и эффекты интерфейса',
         ),
         const SizedBox(height: 16),
+        // Новый дизайн (бета) — как переключатель в «Внешнем виде» на ПК.
+        const SettingsCard(
+          children: [
+            PrefToggleRow(
+              title: 'Новый дизайн · бета',
+              subtitle: 'Новый вид Love ещё дорабатывается. Выключите — вернётся прежний.',
+              prefKey: K.redesign,
+              defaultValue: true,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         SettingsCard(
           title: 'Тема',
           children: [

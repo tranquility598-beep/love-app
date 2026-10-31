@@ -13,12 +13,17 @@
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const cloudinary = require('../config/cloudinary');
 const { validateFile, generateSafeFilename } = require('./fileValidator');
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const VIDEO_EXT = new Set(['.mp4', '.webm']);
 const AUDIO_EXT = new Set(['.mp3', '.m4a', '.ogg', '.wav']);
+// Шрифты узнаём по расширению и сигнатуре файла: браузеры часто шлют их как
+// application/octet-stream, и по MIME их не отличить от чего угодно.
+const FONT_EXT = new Set(['.woff2', '.woff', '.ttf', '.otf']);
+const FONT_MAGIC = [Buffer.from('wOF2'), Buffer.from('wOFF'), Buffer.from([0, 1, 0, 0]), Buffer.from('OTTO'), Buffer.from('true')];
 
 const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const VIDEO_MIME = new Set(['video/mp4', 'video/webm']);
@@ -78,6 +83,7 @@ function classifyMediaUrl(rawUrl) {
       if (AUDIO_EXT.has(ext)) return { kind: 'audio', url: parsed.toString() };
       if (VIDEO_EXT.has(ext) || !ext) return { kind: 'video', url: parsed.toString() };
     }
+    if (parsed.pathname.includes('/raw/upload/') && FONT_EXT.has(ext)) return { kind: 'font', url: parsed.toString() };
     return null;
   }
 
@@ -86,6 +92,7 @@ function classifyMediaUrl(rawUrl) {
   if (IMAGE_EXT.has(ext)) return { kind: 'image', url: parsed.toString() };
   if (VIDEO_EXT.has(ext)) return { kind: 'video', url: parsed.toString() };
   if (AUDIO_EXT.has(ext)) return { kind: 'audio', url: parsed.toString() };
+  if (FONT_EXT.has(ext) && parsed.pathname.startsWith('/uploads/fonts/')) return { kind: 'font', url: parsed.toString() };
   return null;
 }
 
@@ -125,7 +132,49 @@ function detectKind(mimetype) {
  * причинам: редактор ходит с узким токеном, который в общий /api/upload не
  * пускают, и лимит размера здесь зависит от тарифа, а не от типа файла.
  */
+/** Шрифт: расширение из списка и настоящая сигнатура в начале файла. */
+function fontHead(file) {
+  try {
+    if (file.data && file.data.length >= 4) return file.data.subarray(0, 4);
+    if (file.tempFilePath) {
+      const fd = fs.openSync(file.tempFilePath, 'r');
+      const head = Buffer.alloc(4);
+      fs.readSync(fd, head, 0, 4, 0);
+      fs.closeSync(fd);
+      return head;
+    }
+  } catch (_) { /* не прочитали — значит не шрифт */ }
+  return Buffer.alloc(0);
+}
+
+async function storeFont(file, maxBytes) {
+  const ext = path.extname(String(file.name || '')).toLowerCase();
+  if (!FONT_EXT.has(ext)) return { error: 'Нужен файл шрифта: .woff2, .woff, .ttf или .otf' };
+  if (file.size > Math.min(maxBytes, 3 * 1024 * 1024)) return { error: 'Шрифт больше 3 МБ — возьмите .woff2, он в разы легче' };
+  const head = fontHead(file);
+  if (!FONT_MAGIC.some(magic => head.length >= 4 && head.subarray(0, 4).equals(magic))) {
+    return { error: 'Файл не похож на шрифт' };
+  }
+  const cloudinaryConfigured = Boolean(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
+  if (!cloudinaryConfigured) {
+    const targetDir = path.join(__dirname, '..', 'uploads', 'fonts');
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+    const safeName = `${crypto.randomBytes(12).toString('hex')}${ext}`;
+    await file.mv(path.join(targetDir, safeName));
+    return { kind: 'font', path: `/uploads/fonts/${safeName}`, storage: 'local' };
+  }
+  const uploadResult = await cloudinary.uploader.upload(file.tempFilePath || file.data, {
+    folder: 'profile-pages/fonts',
+    resource_type: 'raw',
+    use_filename: false,
+    unique_filename: true,
+    format: ext.slice(1)
+  });
+  return { kind: 'font', url: uploadResult.secure_url, storage: 'cloudinary' };
+}
+
 async function storeProfileAsset(file, { maxBytes, allowedKinds }) {
+  if (allowedKinds.includes('font')) return storeFont(file, maxBytes);
   const kind = detectKind(file.mimetype);
   if (!kind || !allowedKinds.includes(kind)) {
     return { error: 'Такой тип файла здесь не поддерживается' };

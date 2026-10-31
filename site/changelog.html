@@ -1,702 +1,171 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="LOVE release history: eleven versions from the 2.0.0 rebuild to 2.2.0. Public profiles, refreshed calls and settings, Soft v3 sounds and optional Halloween styling." />
-<title>Changelog — LOVE</title>
-
-<!-- ============================================================
-     ПРИМЕНЁННЫЕ ТЕХНИКИ НА ЭТОЙ СТРАНИЦЕ
-     · WebGL-3D    — не используется: это документ, его читают
-     · CSS-3D      — только карточка «как обновиться» (perspective + rotate)
-     · 2.5D        — 3 сцены по 3–4 слоя, амплитуда параллакса 60px (.doc)
-     · Типографика — номер версии как крупный акцент, ghost-надпись за h1
-     · Появления   — занавес строк, протяжка, короткий подъём абзацев
-     · Состояния   — added/fixed/changed различаются знаком, не цветом
-     · GSAP        — только усиление; без него страница работает полностью
-
-     Дата указана для выпуска 2.2.0; у старых выпусков сохранены исходные
-     метрики изменений без выдуманных дат.
-     ============================================================ -->
-
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Рукопожатие с CDN начинаем заранее: GSAP грузится отсюда. -->
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
-<link rel="stylesheet" href="core.css" />
-<link rel="stylesheet" href="doc.css" />
-<script src="lang.js"></script>
-
-<style>
-  /* Обязательный фолбэк доступности прямо в документе. */
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
-  }
-  .cv { content-visibility: auto; contain-intrinsic-size: auto 900px; }
-</style>
-</head>
-<body class="doc">
-
-<a class="skip-link" href="#main"><span class="ru">К содержимому</span><span class="en">Skip to content</span></a>
-<div id="progress" aria-hidden="true"></div>
-<div class="grain" aria-hidden="true"></div>
-
-<!-- ===== Навигация ===================================================== -->
-<nav class="site-nav">
-  <div class="nav-inner">
-    <a class="brand" href="index.html" aria-label="LOVE"><span class="dot" aria-hidden="true"></span>LOVE</a>
-    <div class="nav-links">
-      <a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a>
-      <a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a>
-      <a href="changelog.html" aria-current="page"><span class="ru">Что нового</span><span class="en">What’s new</span></a>
-      <a href="ideas.html"><span class="ru">Идеи</span><span class="en">Ideas</span></a>
-      <a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a>
-      <button class="lang-btn" onclick="toggleLang()" data-aria-ru="Сменить язык" aria-label="Switch language"><span class="ru">EN</span><span class="en">RU</span></button>
-      <a class="nav-cta" href="index.html#download"><span class="ru">Скачать</span><span class="en">Get LOVE</span></a>
-    </div>
-  </div>
-</nav>
-
-<main id="main">
-
-<!-- ===== СЦЕНА 1 — ШАПКА ================================================
-     Четыре слоя. Ghost-надпись за заголовком — номер текущей версии: он
-     одинаков на двух языках, поэтому пары .ru/.en тут не нужны.
-     ===================================================================== -->
-<header class="scene" data-scene="log-head" style="--scene-height: auto">
-
-  <!-- дальний фон -->
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="vignette-d"></div>
-  </div>
-
-  <!-- свечение -->
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow doc-glow-a float-breathe"></div>
-    <div class="glow doc-glow-b float-breathe fd-2"></div>
-  </div>
-
-  <!-- средний декор -->
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="grid-v"></div>
-    <div class="ghost float-y" style="left:50%;top:11%">2.2.0</div>
-  </div>
-
-  <!-- содержимое -->
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap doc-head">
-      <span class="kicker" data-animate="wipe"><span class="ru">Заметки о выпусках</span><span class="en">Release notes</span></span>
-      <h1 class="doc-h1" data-animate="lines">
-        <span class="ln"><i><span class="ru">История</span><span class="en">Release</span></i></span>
-        <span class="ln"><i><span class="ru">версий</span><span class="en">history</span></i></span>
-      </h1>
-      <p class="doc-lede" data-animate="up">
-        <span class="ru">Одиннадцать выпусков: от первых голосовых комнат до 2.2.0 — с публичными профилями, обновлёнными звонками, настройками и звуками. Здесь всё, что добавилось и стало лучше.</span>
-        <span class="en">Eleven releases: from the first voice rooms to 2.2.0, with public profiles, refreshed calls, settings and sounds. Here is everything we added and improved.</span>
-      </p>
-      <p class="doc-updated" data-animate="wipe">
-        <span class="ru">Текущая версия · v 2.2.0</span>
-        <span class="en">Current version · v 2.2.0</span>
-      </p>
-    </div>
-  </div>
-
-</header>
-
-<!-- ===== СЦЕНА 2 — ТАЙМЛАЙН ==============================================
-     Волосяная вертикаль на всю длину, узел напротив каждого выпуска, у
-     свежего узел крупнее и со свечением. Группы added / fixed / changed
-     различаются знаком: залитый квадрат, контур, половина — цвета нет.
-
-     Разбивка по группам — это подача, не новые данные. В боевом changelog
-     пункты идут одним списком; я разложил ИХ ЖЕ по смыслу, который у них уже
-     был написан («no longer breaks voice» — исправление, «reworked» —
-     изменение). Ни один пункт не добавлен, не выброшен и не переосмыслен.
-
-     Анимация появления живёт на .rel, а не на clip-path: узел таймлайна
-     нарисован как ::before со сдвигом за левый край элемента, и любой
-     clip-path обрезал бы его насовсем.
-     ===================================================================== -->
-<section class="scene cv" id="log" data-scene="log-tl" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="grid-v"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe fd-2" style="right:-16%;top:-6%;width:46vw;height:46vw"></div>
-    <div class="glow float-breathe fd-3" style="left:-18%;top:52%;width:38vw;height:38vw"></div>
-  </div>
-
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap">
-      <div class="tl">
-
-        <!-- ===== v 2.2.0 — текущая ===== -->
-        <article class="rel is-latest" data-release-version="2.2.0" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.2.0</h2>
-            <span class="rel-badge"><span class="ru">Актуальная</span><span class="en">Current</span></span>
-            <span class="rel-meta"><span class="ru">20 октября 2026</span><span class="en">20 October 2026</span></span>
-          </div>
-          <p class="rel-title"><span class="ru">Твоё пространство. Твой стиль.</span><span class="en">Your space. Your style.</span></p>
-          <div class="rel-group">
-            <span class="rel-kind k-add"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Публичная страница.</b> Собственное оформление, ссылки, музыка, шрифты и эффекты. Редактор с живым превью и переход в приложение по кнопке «Написать в Love».</li>
-              <li><b>Твой звук и настроение.</b> Мягкий звуковой пакет Soft v3 и Halloween-тема с оранжевыми акцентами. Обычную тему можно вернуть в настройках.</li>
-              <li><b>Поддержка рядом.</b> Вопросы, идеи и сообщения о багах с вложениями и ответами команды. Одно активное обращение и пауза 15 минут после закрытия.</li>
-              <li><b>Настройки на ПК и Android.</b> Поиск, список заблокированных, обновлённый раздел «О приложении» и предварительные тарифы подписок без оплаты.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Your public page.</b> Custom layouts, links, music, fonts and effects. An editor with live preview and a “Message in Love” button that opens the app.</li>
-              <li><b>Your sounds and atmosphere.</b> The Soft v3 sound pack and optional Halloween styling with orange accents. Switch back to the regular theme anytime.</li>
-              <li><b>Support, in one place.</b> Questions, ideas and bug reports with attachments and team replies. One active request and a 15-minute cooldown after closure.</li>
-              <li><b>Settings on desktop and Android.</b> Search, blocked users, a refreshed About page and draft subscription plans with payments disabled.</li>
-            </ul>
-          </div>
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Звонки и голосовые комнаты.</b> Общий интерфейс, исправления звука, камеры, демонстрации экрана и выхода из канала.</li>
-              <li><b>Повседневные мелочи.</b> Доработаны регистрация, коды подтверждения, сохранение профиля, выход из аккаунта и история уведомлений.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Calls and voice rooms.</b> A shared interface and fixes for audio, cameras, screen sharing and leaving a channel.</li>
-              <li><b>Everyday details.</b> Refined registration, verification codes, profile saving, signing out and notification history.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.1.1 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.1.1</h2>
-            <span class="rel-meta"><span class="ru">3 изменения</span><span class="en">3 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Приложение больше не называет себя версией 2.0.0.</span>
-            <span class="en">The app no longer calls itself version 2.0.0.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Версия показывалась неправильно.</b> В настройках, в Love Hub и в этой самой истории стояло 2.0.0, хотя установлено было 2.1.0. Обновлялось всё честно — врала только надпись. Теперь номер берётся у самой сборки.</li>
-              <li><b>Свежая запись в истории подписывалась чужим номером.</b> Верхняя запись подставляла номер установленной сборки, из-за чего прошлый выпуск мог оказаться подписан новой версией.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>The version was displayed wrong.</b> Settings, Love Hub and this very history all said 2.0.0 while 2.1.0 was installed. The update itself was real — only the label lied. The number now comes from the build itself.</li>
-              <li><b>The newest entry borrowed the wrong number.</b> The top entry took the installed version, so an older release could end up labelled with a newer number.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Сборка релиза проверяет номер версии.</b> Если его забыли обновить хоть в одном месте, релиз просто не собирается — так этот баг больше не вернётся.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>The release build now checks the version number.</b> Miss it in a single place and the build stops — so this bug can’t come back.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.1.0 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.1.0</h2>
-            <span class="rel-meta"><span class="ru">12 изменений</span><span class="en">12 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Приглашения работают везде, уведомления перестали шуметь, войс успокоился.</span>
-            <span class="en">Invites work everywhere, notifications stopped shouting, voice calmed down.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Одна ссылка на приглашение — и всё.</b> Она открывается в браузере страницей с превью: видно, кто зовёт, куда и сколько там людей. С телефона та же ссылка ведёт прямо в сферу внутри приложения. Молча вас никуда больше не вступает — сначала показываем, потом спрашиваем.</li>
-              <li><b>Демонстрацию можно рассмотреть.</b> Нажали на картинку — она раскрылась во весь экран, приближается пальцами или колесом, а остальные участники остались полоской сбоку, чтобы разговор не превращался в слепой.</li>
-              <li><b>Голосовые с живой волной.</b> Пока говорите, видно уровень — понятно, что микрофон слышит вас, а не тишину.</li>
-              <li><b>Светлая тема целиком.</b> Не «местами белое», а полноценный светлый режим — и нормальные иконки выбора темы в Настройках → Внешний вид.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>One invite link, everywhere.</b> Open it in a browser and you get a preview page: who’s inviting you, where, and how many people are already there. On a phone the same link opens the sphere inside the app. Nothing joins you silently any more — you see it first, then decide.</li>
-              <li><b>Screen sharing you can actually look at.</b> Tap the picture and it fills the screen, zooms with a pinch or the wheel, and everyone else stays in a strip on the side so the call doesn’t go blind.</li>
-              <li><b>Voice messages with a live waveform.</b> While you talk you can see the level — proof the mic hears you and not silence.</li>
-              <li><b>A real light theme.</b> Not “white in places” but a proper light mode — plus decent theme icons in Settings → Appearance.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Сообщения, пришедшие пока приложение было свёрнуто.</b> Раньше можно было вернуться в переписку и не увидеть новых сообщений — даже если вам продолжали писать. Теперь при возвращении диалог дочитывается сам, на телефоне и на компьютере.</li>
-              <li><b>Своя кнопка камеры включала камеру собеседника.</b> Кнопки в войсе управляют только вашим потоком — как и ожидается.</li>
-              <li><b>Аватарка в войсе.</b> Была видна только после первого нажатия на микрофон и мигала при заглушении. Теперь на месте с первой секунды, и то, что вы в муте, видят остальные.</li>
-              <li><b>Спам по кнопке войса.</b> Десять нажатий подряд больше не заставляют вас десять раз перезаходить в канал.</li>
-              <li><b>Скачивание на Android с сайта.</b> Кнопка уносила на GitHub и файл не начинался. Теперь установщик отдаёт наш сервер — ссылка ведёт сразу на файл.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Messages that arrived while the app was in the background.</b> You could come back to a chat and not see the new messages at all — even while someone kept writing. Now the conversation catches up by itself, on phone and desktop.</li>
-              <li><b>Your camera button turned on their camera.</b> Voice controls now touch only your own stream, as you’d expect.</li>
-              <li><b>Avatars in voice.</b> They only appeared after your first mic tap and flickered when you muted. They’re there from the first second now, and your mute state is visible to everyone else.</li>
-              <li><b>Spamming the voice button.</b> Ten taps no longer means rejoining the channel ten times.</li>
-              <li><b>Android downloads from the site.</b> The button used to bounce you to GitHub without starting a file. Our own server hands over the installer now, so the link is the file.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Уведомления группируются по человеку.</b> Десять сообщений от одного — одна карточка, а не десять. Фото показывается миниатюрой, голосовое, видео или файл — подписью, чтобы понятно было без открытия.</li>
-              <li><b>Войс в сферах — как звонок в личке.</b> Та же панель и те же кнопки: микрофон, наушники, камера, демонстрация, выход. Больше не два разных интерфейса для одного и того же.</li>
-              <li><b>Ссылки на чужие сайты спрашивают подтверждение.</b> Перед переходом видно, куда именно вы идёте.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Notifications group by person.</b> Ten messages from one person is one card, not ten. A photo shows a thumbnail; a voice note, video or file gets a label, so you know what it is without opening it.</li>
-              <li><b>Voice in spheres looks like a DM call.</b> Same panel, same buttons: mic, headphones, camera, screen share, leave. No more two interfaces for one thing.</li>
-              <li><b>Links to other sites ask first.</b> You see exactly where you’re about to go before you go there.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.7 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.7</h2>
-            <span class="rel-meta"><span class="ru">4 изменения</span><span class="en">4 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Звонки, которые не мешают разговаривать.</span>
-            <span class="en">Calls that stay out of the way.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Приближение и «картинка в картинке» в звонке.</b> Мелкий текст на чужом экране можно наконец прочитать, а разговор — свернуть в уголок и делать свои дела.</li>
-              <li><b>Действия с сообщением по правому клику на компьютере.</b> Ответить, скопировать, удалить — там, где рука их и ищет.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Zoom and picture-in-picture during calls.</b> Small text on someone’s shared screen is finally readable, and the call itself tucks into a corner while you do something else.</li>
-              <li><b>Right-click actions on messages on desktop.</b> Reply, copy, delete — where your hand already looks for them.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Чёрный кадр вместо демонстрации.</b> Экран запускался в неправильном порядке, и собеседник видел пустоту. Запускается с первого раза.</li>
-              <li><b>Видео из сообщений.</b> Открывается одинаково на телефоне и на компьютере, а не по-своему на каждом.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>A black frame instead of a shared screen.</b> The stream started in the wrong order and the other side saw nothing. It works on the first try now.</li>
-              <li><b>Videos in messages.</b> They open the same way on phone and desktop instead of each doing its own thing.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.6 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.6</h2>
-            <span class="rel-meta"><span class="ru">11 изменений</span><span class="en">11 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Звонок слышно, даже когда приложение свёрнуто.</span>
-            <span class="en">You hear the call even with the app in the background.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Обновления внутри приложения — на Android.</b> Приложение проверяет новую версию при запуске, скачивает и ставит её само. Браузер больше не нужен. Кому интересно раньше — в Настройках → Обновления есть бета-канал.</li>
-              <li><b>Звонок в шторке.</b> Входящий приходит полноэкранным уведомлением с «Принять» и «Отклонить», даже если приложение свёрнуто. Пропущенный — с именем того, кто звонил. Пока разговор идёт, в шторке висит уведомление с микрофоном и кнопкой «Завершить».</li>
-              <li><b>Настройки под себя.</b> Компактный вид сообщений, отдельные переключатели уведомлений — сообщения, упоминания, хаб, друзья — и выключатель анимаций.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>In-app updates on Android.</b> The app checks for a new version at startup, then downloads and installs it itself. No browser step. If you like being early, Settings → Updates has a beta channel.</li>
-              <li><b>Calls in the notification shade.</b> An incoming call arrives as a full-screen notification with Accept and Decline, even with the app in the background. A missed one names who called. While you’re talking, a notification stays up with a mic toggle and an end-call button.</li>
-              <li><b>Settings that fit you.</b> Compact message layout, separate notification switches — messages, mentions, hub, friends — and a toggle for animations.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Выйти из переписки — не значит сбросить звонок.</b> Раньше уход с экрана диалога завершал разговор. Теперь нет.</li>
-              <li><b>Кнопка микрофона.</b> На части Android-телефонов она срабатывала через раз. Работает на всех.</li>
-              <li><b>Ложное «доступно обновление».</b> Версия читается из настоящей сборки, а не из константы в коде — приложение больше не предлагает обновиться до того, что уже стоит.</li>
-              <li><b>Тест звука.</b> Играет настоящие тона и записывает микрофон с воспроизведением, а не просто рисует полоску.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Leaving a chat no longer drops the call.</b> Walking off the DM screen used to end the conversation. It doesn’t now.</li>
-              <li><b>The mic button.</b> On some Android phones it worked every other tap. It works on all of them.</li>
-              <li><b>The phantom “update available”.</b> The version now comes from the real build instead of a constant in the code, so the app stops offering you what you already have.</li>
-              <li><b>The sound test.</b> It plays real tones and records your mic back to you, instead of just moving a meter.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Соединение не сдаётся.</b> Переподключение бесконечное, с растущей паузой, а отдельный наблюдатель дёргает его сам — когда вернулась сеть, когда приложение снова открыли, когда вкладка снова в фокусе.</li>
-              <li><b>Уведомления смотрят, где вы.</b> Открытая переписка больше не звенит сама себе, а несколько сообщений из одного диалога складываются в одно уведомление.</li>
-              <li><b>Обновление на macOS ведёт на GitHub Releases.</b> Ставить само оно пока не может: для этого нужен сертификат Apple, которого у нас нет. На десктопе кнопка «Скачать» в разделе обновлений работает так же.</li>
-              <li><b>В форме поддержки больше нет вложений.</b> Крупные файлы обрывали отправку — письмо просто не доходило. Пишите текстом, при необходимости попросим прислать файл в ответ.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>The connection doesn’t give up.</b> Reconnection is now unlimited with a growing pause between tries, and a watchdog kicks it off on its own — when the network is back, when the app returns to the foreground, when the tab regains focus.</li>
-              <li><b>Notifications know where you are.</b> An open conversation no longer pings itself, and several messages from one chat collapse into a single notification.</li>
-              <li><b>The macOS update button opens GitHub Releases.</b> Installing by itself needs an Apple certificate we don’t have yet. On desktop, Download in the updates screen behaves the same way.</li>
-              <li><b>No more attachments in the support form.</b> Large files broke the send — the message simply never arrived. Write it out, and we’ll ask for a file in reply if we need one.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.5 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.5</h2>
-            <span class="rel-meta"><span class="ru">6 изменений</span><span class="en">6 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Стабильный войс и присутствие на мобильном.</span>
-            <span class="en">Stable voice, and presence on mobile.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Мульти-устройства в войсе.</b> Вошли на ПК и на телефоне сразу? Звонок приходит на оба, и в голосовой канал каждое устройство заходит само по себе.</li>
-              <li><b>Панель войса на мобильном.</b> Нативный экран присутствия: видно, кто в канале, микрофон выключается одной кнопкой, вход и выход подтверждает сервер.</li>
-              <li><b>Иконки и баннеры для сфер и комнат.</b> Загруженный баннер виден на карточке, в шапке комнаты и в настройках.</li>
-              <li><b>Публичный сайт.</b> loveapp.chat — с историей версий, политикой, условиями и поддержкой.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Voice across devices.</b> Signed in on both your PC and your phone? Calls ring on both, and each device joins a voice channel on its own.</li>
-              <li><b>Voice panel on mobile.</b> A native presence screen: see who is in the channel, mute yourself with one tap, join and leave with a server acknowledgement.</li>
-              <li><b>Icons and banners for spheres and rooms.</b> An uploaded banner shows on the card, in the room header and in settings.</li>
-              <li><b>The public site.</b> loveapp.chat — with the changelog, privacy policy, terms and support.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Микрофон на десктопе.</b> Переключить или выдернуть микрофон больше не значит уронить войс — приложение само переходит на устройство по умолчанию.</li>
-              <li><b>Определение типов файлов.</b> Сервер больше не путает форматы аватарок, иконок и баннеров.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Microphone on desktop.</b> Switching or unplugging a mic no longer takes voice down — the app falls back to the default device by itself.</li>
-              <li><b>File type detection.</b> The server no longer confuses formats for avatars, icons and banners.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.4 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.4</h2>
-            <span class="rel-meta"><span class="ru">3 изменения</span><span class="en">3 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Уведомления — как надо.</span>
-            <span class="en">Notifications, done right.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Нативные уведомления Windows.</b> Сообщения, заявки в друзья, упоминания и пропущенные звонки доходят, пока приложение свёрнуто. Клик ведёт сразу в нужное место.</li>
-              <li><b>Переворот камеры на мобильном.</b> Фронтальная и основная переключаются прямо во время видеозвонка.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Native Windows notifications.</b> Messages, friend requests, mentions and missed calls reach you while the app is minimised. A click takes you straight to the right place.</li>
-              <li><b>Camera flip on mobile.</b> Front and rear cameras swap mid video call.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Панель уведомлений переработана.</b> Две вкладки — обычные и системные. Заявку в друзья можно принять или отклонить на месте, ответить и перезвонить тоже, не уходя из панели.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>The notifications panel was reworked.</b> Two tabs — normal and system. A friend request can be accepted or declined right there, and you can reply or call back without leaving the panel.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.3 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.3</h2>
-            <span class="rel-meta"><span class="ru">4 изменения</span><span class="en">4 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Версия обновляется сама.</span>
-            <span class="en">The app keeps itself up to date.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Автообновления.</b> Новая версия скачивается в фоне и встаёт при перезапуске.</li>
-              <li><b>Настройки → Обновления.</b> Текущая версия, статус, прогресс загрузки и кнопка «Перезапустить и установить».</li>
-              <li><b>Бета-канал.</b> Предрелизы — тем, кто хочет раньше всех.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Auto-updates.</b> A new version downloads in the background and installs on restart.</li>
-              <li><b>Settings → Updates.</b> Current version, status, download progress and a “Restart &amp; install” button.</li>
-              <li><b>The beta channel.</b> Pre-releases, for anyone who wants them early.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li><b>Музыка в профиле.</b> MP3-трек снова стабильно слышен друзьям.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Profile music.</b> An MP3 track is reliably audible to friends again.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.2 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.2</h2>
-            <span class="rel-meta"><span class="ru">2 изменения</span><span class="en">2 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Голос, который соединяет.</span>
-            <span class="en">Voice that connects.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li>Голосовые соединения стали устойчивее, а переподключения — аккуратнее.</li>
-              <li>Качество звука подтянули и в звонках, и в голосовых комнатах.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li>Voice connections hold better, and reconnects are cleaner.</li>
-              <li>Audio quality improved in both calls and voice rooms.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.1 ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.1</h2>
-            <span class="rel-meta"><span class="ru">2 изменения</span><span class="en">2 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Спокойный первый запуск.</span>
-            <span class="en">A calmer first run.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind k-chg"><span class="ru">Изменено</span><span class="en">Changed</span></span>
-            <ul class="rel-list ru">
-              <li>Первый запуск и вход стали быстрее и тише.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li>The first run and sign-in got faster and quieter.</li>
-            </ul>
-          </div>
-
-          <div class="rel-group">
-            <span class="rel-kind k-fix"><span class="ru">Исправлено</span><span class="en">Fixed</span></span>
-            <ul class="rel-list ru">
-              <li>Полировка и правки по всей оболочке приложения.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li>Polish and fixes across the app shell.</li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- ===== v 2.0.0 — с этого начался отсчёт ===== -->
-        <article class="rel" data-animate="up">
-          <div class="rel-head">
-            <h2 class="rel-v">2.0.0</h2>
-            <span class="rel-meta"><span class="ru">4 изменения</span><span class="en">4 changes</span></span>
-          </div>
-          <p class="rel-title">
-            <span class="ru">Общение, собранное заново.</span>
-            <span class="en">Communication, built again from scratch.</span>
-          </p>
-
-          <div class="rel-group">
-            <span class="rel-kind"><span class="ru">Добавлено</span><span class="en">Added</span></span>
-            <ul class="rel-list ru">
-              <li><b>Голосовые комнаты 2.0.</b> Новый голосовой движок, орбы присутствия, демонстрация экрана до 1080p при 60 кадрах и поддержка камеры.</li>
-              <li><b>Демонстрация экрана без оговорок.</b> Выбор окна или дисплея, чёткий текст, мгновенный старт, чистое завершение.</li>
-              <li><b>Всё в реальном времени.</b> Сообщения, звонки и статусы приходят сразу. Перезагружать нечего.</li>
-              <li><b>Дизайн ваби-саби.</b> Тихий чёрно-белый мир под фокус: профили, настроения, музыка и интересы в одном спокойном интерфейсе.</li>
-            </ul>
-            <ul class="rel-list en">
-              <li><b>Voice rooms 2.0.</b> A new voice engine, presence orbs, screen sharing up to 1080p at 60fps and camera support.</li>
-              <li><b>Screen sharing without caveats.</b> Pick a window or a display, keep text crisp, start instantly, stop cleanly.</li>
-              <li><b>Everything in real time.</b> Messages, calls and statuses arrive at once. There is nothing to reload.</li>
-              <li><b>Wabi-sabi design.</b> A quiet black and white world built for focus: profiles, moods, music and interests in one calm interface.</li>
-            </ul>
-          </div>
-        </article>
-
-      </div>
-    </div>
-  </div>
-
-</section>
-
-<!-- ===== СЦЕНА 3 — КАК ОБНОВИТЬСЯ =======================================
-     Единственное место на странице с настоящим CSS-3D: карточка стоит в
-     контейнере с perspective и наклоняется за курсором через --rx/--ry,
-     которые пишет depth.js. Класс .tilt обязателен вместе с data-tilt —
-     переменные без него никуда не применяются.
-
-     Внутри только факты из истории версий: автообновления появились в 2.0.3,
-     там же экран «Настройки → Обновления» и бета-канал. Ничего про сроки
-     будущих выпусков — таких данных нет.
-     ===================================================================== -->
-<section class="scene cv" id="update" data-scene="log-how" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="vignette-d"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe" style="left:50%;top:-10%;width:52vw;height:52vw;transform:translateX(-50%)"></div>
-  </div>
-
-  <div class="layer depth-2" data-depth="2" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-    <div class="grid-v"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="doc-wrap doc-body doc-cta">
-      <div class="doc-card tilt" data-tilt="4" data-animate="up">
-        <span class="kicker"><span class="ru">Обновление</span><span class="en">Updating</span></span>
-        <h2>
-          <span class="ru">Почти ничего делать не нужно</span>
-          <span class="en">Almost nothing to do</span>
-        </h2>
-        <p>
-          <span class="ru">На Windows и Android приложение обновляется само: новая сборка приходит в фоне и встаёт при перезапуске — на десктопе так с 2.0.3, на Android с 2.0.6. Хочется посмотреть, что происходит, — <b>Настройки → Обновления</b>: текущая версия, статус, прогресс и кнопка «Перезапустить и установить». Там же включается бета-канал, если нравится получать выпуски раньше остальных.</span>
-          <span class="en">On Windows and Android the app updates itself: a new build arrives in the background and installs on restart — desktop since 2.0.3, Android since 2.0.6. Want to watch it happen? <b>Settings → Updates</b> shows the current version, status, progress and a “Restart &amp; install” button. The beta channel lives there too, if you like getting releases early.</span>
-        </p>
-        <p>
-          <span class="ru">macOS пока обновляется руками — кнопка просто открывает страницу релизов. Автоустановка требует сертификата Apple, а его у нас нет, и притворяться не будем. У версий старше 2.0.3 автообновления тоже ещё нет: быстрее скачать установщик заново.</span>
-          <span class="en">macOS still updates by hand — the button just opens the releases page. Auto-install needs an Apple certificate we don’t have, and we’d rather say so than pretend otherwise. Anything older than 2.0.3 has no auto-update either: downloading the installer again is quicker.</span>
-        </p>
-        <p class="doc-actions">
-          <a class="btn btn-w btn-sm" href="index.html#download"><span class="ru">Скачать LOVE</span><span class="en">Download LOVE</span></a>
-          <a class="btn btn-ow btn-sm" href="support.html"><span class="ru">Спросить в поддержке</span><span class="en">Ask support</span></a>
-        </p>
-      </div>
-    </div>
-  </div>
-
-</section>
-
-</main>
-
-<!-- ===== Подвал ========================================================= -->
-<footer class="scene" data-scene="footer" style="--scene-height: auto">
-
-  <div class="layer depth-0" data-depth="0" aria-hidden="true">
-    <div class="hair-h" style="top:0"></div>
-  </div>
-
-  <div class="layer depth-1" data-depth="1" aria-hidden="true">
-    <div class="glow float-breathe fd-3" style="left:-14%;bottom:-40%;width:48vw;height:48vw"></div>
-  </div>
-
-  <div class="layer layer--flow depth-4" data-depth="4">
-    <div class="wrap">
-      <div class="foot-grid">
-        <div>
-          <a class="brand" href="index.html"><span class="dot" aria-hidden="true"></span>LOVE</a>
-          <p class="foot-about">
-            <span class="ru">Бесплатный мессенджер для друзей и сообществ. Windows, macOS и Android.</span>
-            <span class="en">A free messenger for friends and communities. Windows, macOS and Android.</span>
-          </p>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Продукт</span><span class="en">Product</span></div>
-          <ul>
-            <li><a href="index.html#download"><span class="ru">Скачать</span><span class="en">Download</span></a></li>
-            <li><a href="changelog.html"><span class="ru">Что нового</span><span class="en">What’s new</span></a></li>
-            <li><a href="ideas.html"><span class="ru">Идеи сообщества</span><span class="en">Community ideas</span></a></li>
-            <li><a href="index.html#features"><span class="ru">Возможности</span><span class="en">Features</span></a></li>
-          </ul>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Помощь</span><span class="en">Help</span></div>
-          <ul>
-            <li><a href="support.html"><span class="ru">Поддержка</span><span class="en">Support</span></a></li>
-            <li><a href="support.html#contact"><span class="ru">Написать нам</span><span class="en">Contact us</span></a></li>
-          </ul>
-        </div>
-        <div>
-          <div class="foot-title"><span class="ru">Документы</span><span class="en">Legal</span></div>
-          <ul>
-            <li><a href="terms.html"><span class="ru">Условия использования</span><span class="en">Terms of Service</span></a></li>
-            <li><a href="privacy.html"><span class="ru">Конфиденциальность</span><span class="en">Privacy Policy</span></a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="foot-bottom">
-        <div>© 2026 LOVE. <span class="ru">Все права защищены.</span><span class="en">All rights reserved.</span></div>
-        <div class="mono">loveapp.chat</div>
-      </div>
-    </div>
-  </div>
-
-</footer>
-
-<!-- GSAP только усиливает уже работающие появления: без него отрабатывает
-     IntersectionObserver в depth.js. Порядок важен — ScrollTrigger должен
-     существовать к моменту старта depth.js. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Что нового — Love</title>
+<meta name="description" content="История версий Love: что добавилось, что исправлено и что мы делаем дальше.">
+<meta name="theme-color" content="#050507">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2317171b'/%3E%3Cpath d='M32 46s-14-8.6-14-18a7.5 7.5 0 0 1 14-3.8A7.5 7.5 0 0 1 46 28c0 9.4-14 18-14 18z' fill='%23dcdce0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
-<script src="depth.js" defer></script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">К содержимому</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></g></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></g></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></g></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></g></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20.5a7 7 0 0 1 14 0"/></g></symbol>
+    <symbol id="i-install" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 7.5v6M9.5 11l2.5 2.5 2.5-2.5"/></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M21 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/></g></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></g></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></g></symbol>
+  </defs>
+</svg>
+<header class="topbar" aria-label="Навигация">
+  <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="none" stroke="#dcdce0" stroke-width="1.6"/><path d="M12 17s-5-3.1-5-6.4A2.6 2.6 0 0 1 12 9.3a2.6 2.6 0 0 1 5 1.3c0 3.3-5 6.4-5 6.4z" fill="#dcdce0"/></svg>Love</a>
+  <nav><a href="index.html#features">Возможности</a><a href="index.html#pricing">Подписки</a><a href="changelog.html" aria-current="page">Что нового</a><a href="ideas.html">Идеи</a><a href="support.html">Поддержка</a></nav>
+  <div class="right">
+    <a class="icon-btn" href="support.html" aria-label="Поддержка" title="Поддержка"><svg aria-hidden="true"><use href="#i-help"/></svg></a>
+    <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub" title="GitHub"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+    <a class="pill" href="index.html#download"><svg aria-hidden="true"><use href="#i-down"/></svg>Скачать</a>
+    <button class="icon-btn menu-btn" type="button" data-open="menu" aria-label="Открыть меню"><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
+  </div>
+</header>
+<main id="main">
+<header class="page-head">
+  <div class="wrap">
+    <div class="ph-slab" data-shard>
+      <svg class="ph-shards" aria-hidden="true"></svg>
+      <div class="ph-body">
+        <div class="crumbs"><a href="index.html">Love</a><span aria-hidden="true">/</span><span>Что нового</span></div>
+        <span class="eyebrow">История версий</span>
+        <h1 class="title">Что нового<br>в Love.</h1>
+        <p class="lead">Двенадцать выпусков: от первых голосовых комнат до 2.3.0 — с публичными профилями, обновлёнными звонками, настройками и звуками. Здесь всё, что добавилось и стало лучше.</p>
+        <div class="ph-meta"><span class="chip green"><span class="dot"></span>Текущая версия · <span data-version>2.3.0</span></span><a class="chip" href="index.html#download">Скачать</a></div>
+      </div>
+    </div>
+  </div>
+</header>
+<section class="section">
+  <div class="wrap cl-layout">
+    <nav class="glass cl-nav flat" data-toc aria-label="Версии"><span>Версии</span><a href="#next">Дальше</a><a href="#v2-3-0">2.3.0</a><a href="#v2-2-0">2.2.0</a><a href="#v2-1-1">2.1.1</a><a href="#v2-1-0">2.1.0</a><a href="#v2-0-7">2.0.7</a><a href="#v2-0-6">2.0.6</a><a href="#v2-0-5">2.0.5</a><a href="#v2-0-4">2.0.4</a><a href="#v2-0-3">2.0.3</a><a href="#v2-0-2">2.0.2</a><a href="#v2-0-1">2.0.1</a><a href="#v2-0-0">2.0.0</a></nav>
+    <div class="cl-list">
+      <article class="glass rel-card next flat" id="next" data-shard>
+        <div class="rc-side"><span class="rc-v">Дальше</span><span class="chip"><span class="dot"></span>В работе</span><span class="rc-meta">следующее обновление</span></div>
+        <div class="rc-main"><h2 class="rc-title">Что мы доделываем прямо сейчас.</h2>
+          <div class="rc-group"><ul>
+            <li><b>Оплата подписок.</b> Тарифы можно будет оформить прямо в приложении.</li>
+            <li><b>Google Play.</b> Love появится в магазине приложений для Android.</li>
+          </ul></div>
+        </div>
+      </article>
+      <article class="glass rel-card flat" id="v2-3-0" data-release-version="2.3.0" data-shard>
+        <div class="rc-side"><span class="rc-v">2.3.0</span><span class="chip green"><span class="dot"></span>Актуальная</span><span class="rc-meta">31 октября 2026</span></div>
+        <div class="rc-main"><h2 class="rc-title">Новый вид и звонки как в сферах.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Новый вид (бета).</b> Спокойный дизайн на ПК и Android. Прежний возвращается одним переключателем.</li><li><b>Звонки в личке как в сферах.</b> Те же плитки и большой просмотр с приближением, демка и камера на весь экран.</li><li><b>Страница ещё свободнее.</b> Десять шаблонов, новые раскладки, свой шрифт и курсор, в Premium своя расстановка блоков.</li><li><b>Звонки на Android.</b> Вас слышно в свёрнутом приложении, микрофон и завершение прямо в уведомлении.</li><li><b>На компьютере.</b> Предпросмотр файлов до отправки, подсветка сообщения по клику на ответ, пропущенные звонки одной строкой с числом.</li><li><b>Записи о звонках.</b> Их нельзя редактировать, удалить запись может только звонивший.</li><li><b>Удаление аккаунта.</b> Прямо в настройках, вместе с загруженными файлами.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-2-0" data-shard>
+        <div class="rc-side"><span class="rc-v">2.2.0</span><span class="rc-meta">20 октября 2026</span></div>
+        <div class="rc-main"><h2 class="rc-title">Твоё пространство. Твой стиль.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Публичная страница.</b> Собственное оформление, ссылки, музыка, шрифты и эффекты. Редактор с живым превью и переход в приложение по кнопке «Написать в Love».</li><li><b>Твой звук и настроение.</b> Мягкий звуковой пакет Soft v3 и Halloween-тема с оранжевыми акцентами. Обычную тему можно вернуть в настройках.</li><li><b>Поддержка рядом.</b> Вопросы, идеи и сообщения о багах с вложениями и ответами команды. Одно активное обращение и пауза 15 минут после закрытия.</li><li><b>Настройки на ПК и Android.</b> Поиск, список заблокированных, обновлённый раздел «О приложении» и предварительные тарифы подписок без оплаты.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Звонки и голосовые комнаты.</b> Общий интерфейс, исправления звука, камеры, демонстрации экрана и выхода из канала.</li><li><b>Повседневные мелочи.</b> Доработаны регистрация, коды подтверждения, сохранение профиля, выход из аккаунта и история уведомлений.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-1-1" data-shard>
+        <div class="rc-side"><span class="rc-v">2.1.1</span><span class="rc-meta">3 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Приложение больше не называет себя версией 2.0.0.</h2><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Версия показывалась неправильно.</b> В настройках, в Love Hub и в этой самой истории стояло 2.0.0, хотя установлено было 2.1.0. Обновлялось всё честно — врала только надпись. Теперь номер берётся у самой сборки.</li><li><b>Свежая запись в истории подписывалась чужим номером.</b> Верхняя запись подставляла номер установленной сборки, из-за чего прошлый выпуск мог оказаться подписан новой версией.</li></ul></div><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li><b>Сборка релиза проверяет номер версии.</b> Если его забыли обновить хоть в одном месте, релиз просто не собирается — так этот баг больше не вернётся.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-1-0" data-shard>
+        <div class="rc-side"><span class="rc-v">2.1.0</span><span class="rc-meta">12 изменений</span></div>
+        <div class="rc-main"><h2 class="rc-title">Приглашения работают везде, уведомления перестали шуметь, войс успокоился.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Одна ссылка на приглашение — и всё.</b> Она открывается в браузере страницей с превью: видно, кто зовёт, куда и сколько там людей. С телефона та же ссылка ведёт прямо в сферу внутри приложения. Молча вас никуда больше не вступает — сначала показываем, потом спрашиваем.</li><li><b>Демонстрацию можно рассмотреть.</b> Нажали на картинку — она раскрылась во весь экран, приближается пальцами или колесом, а остальные участники остались полоской сбоку, чтобы разговор не превращался в слепой.</li><li><b>Голосовые с живой волной.</b> Пока говорите, видно уровень — понятно, что микрофон слышит вас, а не тишину.</li><li><b>Светлая тема целиком.</b> Не «местами белое», а полноценный светлый режим — и нормальные иконки выбора темы в Настройках → Внешний вид.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Сообщения, пришедшие пока приложение было свёрнуто.</b> Раньше можно было вернуться в переписку и не увидеть новых сообщений — даже если вам продолжали писать. Теперь при возвращении диалог дочитывается сам, на телефоне и на компьютере.</li><li><b>Своя кнопка камеры включала камеру собеседника.</b> Кнопки в войсе управляют только вашим потоком — как и ожидается.</li><li><b>Аватарка в войсе.</b> Была видна только после первого нажатия на микрофон и мигала при заглушении. Теперь на месте с первой секунды, и то, что вы в муте, видят остальные.</li><li><b>Спам по кнопке войса.</b> Десять нажатий подряд больше не заставляют вас десять раз перезаходить в канал.</li><li><b>Скачивание на Android с сайта.</b> Кнопка уносила на GitHub и файл не начинался. Теперь установщик отдаёт наш сервер — ссылка ведёт сразу на файл.</li></ul></div><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li><b>Уведомления группируются по человеку.</b> Десять сообщений от одного — одна карточка, а не десять. Фото показывается миниатюрой, голосовое, видео или файл — подписью, чтобы понятно было без открытия.</li><li><b>Войс в сферах — как звонок в личке.</b> Та же панель и те же кнопки: микрофон, наушники, камера, демонстрация, выход. Больше не два разных интерфейса для одного и того же.</li><li><b>Ссылки на чужие сайты спрашивают подтверждение.</b> Перед переходом видно, куда именно вы идёте.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-7" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.7</span><span class="rc-meta">4 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Звонки, которые не мешают разговаривать.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Приближение и «картинка в картинке» в звонке.</b> Мелкий текст на чужом экране можно наконец прочитать, а разговор — свернуть в уголок и делать свои дела.</li><li><b>Действия с сообщением по правому клику на компьютере.</b> Ответить, скопировать, удалить — там, где рука их и ищет.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Чёрный кадр вместо демонстрации.</b> Экран запускался в неправильном порядке, и собеседник видел пустоту. Запускается с первого раза.</li><li><b>Видео из сообщений.</b> Открывается одинаково на телефоне и на компьютере, а не по-своему на каждом.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-6" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.6</span><span class="rc-meta">11 изменений</span></div>
+        <div class="rc-main"><h2 class="rc-title">Звонок слышно, даже когда приложение свёрнуто.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Обновления внутри приложения — на Android.</b> Приложение проверяет новую версию при запуске, скачивает и ставит её само. Браузер больше не нужен. Кому интересно раньше — в Настройках → Обновления есть бета-канал.</li><li><b>Звонок в шторке.</b> Входящий приходит полноэкранным уведомлением с «Принять» и «Отклонить», даже если приложение свёрнуто. Пропущенный — с именем того, кто звонил. Пока разговор идёт, в шторке висит уведомление с микрофоном и кнопкой «Завершить».</li><li><b>Настройки под себя.</b> Компактный вид сообщений, отдельные переключатели уведомлений — сообщения, упоминания, хаб, друзья — и выключатель анимаций.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Выйти из переписки — не значит сбросить звонок.</b> Раньше уход с экрана диалога завершал разговор. Теперь нет.</li><li><b>Кнопка микрофона.</b> На части Android-телефонов она срабатывала через раз. Работает на всех.</li><li><b>Ложное «доступно обновление».</b> Версия читается из настоящей сборки, а не из константы в коде — приложение больше не предлагает обновиться до того, что уже стоит.</li><li><b>Тест звука.</b> Играет настоящие тона и записывает микрофон с воспроизведением, а не просто рисует полоску.</li></ul></div><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li><b>Соединение не сдаётся.</b> Переподключение бесконечное, с растущей паузой, а отдельный наблюдатель дёргает его сам — когда вернулась сеть, когда приложение снова открыли, когда вкладка снова в фокусе.</li><li><b>Уведомления смотрят, где вы.</b> Открытая переписка больше не звенит сама себе, а несколько сообщений из одного диалога складываются в одно уведомление.</li><li><b>Обновление на macOS ведёт на GitHub Releases.</b> Ставить само оно пока не может: для этого нужен сертификат Apple, которого у нас нет. На десктопе кнопка «Скачать» в разделе обновлений работает так же.</li><li><b>В форме поддержки больше нет вложений.</b> Крупные файлы обрывали отправку — письмо просто не доходило. Пишите текстом, при необходимости попросим прислать файл в ответ.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-5" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.5</span><span class="rc-meta">6 изменений</span></div>
+        <div class="rc-main"><h2 class="rc-title">Стабильный войс и присутствие на мобильном.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Мульти-устройства в войсе.</b> Вошли на ПК и на телефоне сразу? Звонок приходит на оба, и в голосовой канал каждое устройство заходит само по себе.</li><li><b>Панель войса на мобильном.</b> Нативный экран присутствия: видно, кто в канале, микрофон выключается одной кнопкой, вход и выход подтверждает сервер.</li><li><b>Иконки и баннеры для сфер и комнат.</b> Загруженный баннер виден на карточке, в шапке комнаты и в настройках.</li><li><b>Публичный сайт.</b> loveapp.chat — с историей версий, политикой, условиями и поддержкой.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Микрофон на десктопе.</b> Переключить или выдернуть микрофон больше не значит уронить войс — приложение само переходит на устройство по умолчанию.</li><li><b>Определение типов файлов.</b> Сервер больше не путает форматы аватарок, иконок и баннеров.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-4" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.4</span><span class="rc-meta">3 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Уведомления — как надо.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Нативные уведомления Windows.</b> Сообщения, заявки в друзья, упоминания и пропущенные звонки доходят, пока приложение свёрнуто. Клик ведёт сразу в нужное место.</li><li><b>Переворот камеры на мобильном.</b> Фронтальная и основная переключаются прямо во время видеозвонка.</li></ul></div><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li><b>Панель уведомлений переработана.</b> Две вкладки — обычные и системные. Заявку в друзья можно принять или отклонить на месте, ответить и перезвонить тоже, не уходя из панели.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-3" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.3</span><span class="rc-meta">4 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Версия обновляется сама.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Автообновления.</b> Новая версия скачивается в фоне и встаёт при перезапуске.</li><li><b>Настройки → Обновления.</b> Текущая версия, статус, прогресс загрузки и кнопка «Перезапустить и установить».</li><li><b>Бета-канал.</b> Предрелизы — тем, кто хочет раньше всех.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li><b>Музыка в профиле.</b> MP3-трек снова стабильно слышен друзьям.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-2" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.2</span><span class="rc-meta">2 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Голос, который соединяет.</h2><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li>Голосовые соединения стали устойчивее, а переподключения — аккуратнее.</li><li>Качество звука подтянули и в звонках, и в голосовых комнатах.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-1" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.1</span><span class="rc-meta">2 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Спокойный первый запуск.</h2><div class="rc-group"><span class="chip k-chg"><span class="dot"></span>Изменено</span><ul><li>Первый запуск и вход стали быстрее и тише.</li></ul></div><div class="rc-group"><span class="chip k-fix"><span class="dot"></span>Исправлено</span><ul><li>Полировка и правки по всей оболочке приложения.</li></ul></div></div>
+      </article>
+      <article class="glass rel-card flat" id="v2-0-0" data-shard>
+        <div class="rc-side"><span class="rc-v">2.0.0</span><span class="rc-meta">4 изменения</span></div>
+        <div class="rc-main"><h2 class="rc-title">Общение, собранное заново.</h2><div class="rc-group"><span class="chip k-add"><span class="dot"></span>Добавлено</span><ul><li><b>Голосовые комнаты 2.0.</b> Новый голосовой движок, орбы присутствия, демонстрация экрана до 1080p при 60 кадрах и поддержка камеры.</li><li><b>Демонстрация экрана без оговорок.</b> Выбор окна или дисплея, чёткий текст, мгновенный старт, чистое завершение.</li><li><b>Всё в реальном времени.</b> Сообщения, звонки и статусы приходят сразу. Перезагружать нечего.</li><li><b>Дизайн ваби-саби.</b> Тихий чёрно-белый мир под фокус: профили, настроения, музыка и интересы в одном спокойном интерфейсе.</li></ul></div></div>
+      </article>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="none" stroke="#dcdce0" stroke-width="1.6"/><path d="M12 17s-5-3.1-5-6.4A2.6 2.6 0 0 1 12 9.3a2.6 2.6 0 0 1 5 1.3c0 3.3-5 6.4-5 6.4z" fill="#dcdce0"/></svg>Love</a>
+        <p>Мессенджер для своих. Переписки, звонки и сферы на компьютере и в телефоне.</p>
+        <div class="socials">
+          <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+          <a class="icon-btn" href="mailto:support@loveapp.chat" aria-label="Написать на почту поддержки"><svg aria-hidden="true"><use href="#i-mail"/></svg></a>
+          <a class="icon-btn" href="support.html" aria-label="Поддержка"><svg aria-hidden="true"><use href="#i-help"/></svg></a>
+        </div>
+      </div>
+      <div><h4>Продукт</h4><ul><li><a href="index.html#features">Возможности</a></li><li><a href="index.html#profile">Публичная страница</a></li><li><a href="index.html#pricing">Подписки</a></li><li><a href="index.html#download">Скачать</a></li></ul></div>
+      <div><h4>Сообщество</h4><ul><li><a href="changelog.html" aria-current="page">Что нового</a></li><li><a href="ideas.html">Идеи сообщества</a></li><li><a href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener">GitHub</a></li></ul></div>
+      <div><h4>Помощь</h4><ul><li><a href="support.html">Поддержка</a></li><li><a href="support.html#faq">Вопросы и ответы</a></li><li><a href="mailto:support@loveapp.chat">Написать нам</a></li></ul></div>
+      <div><h4>Документы</h4><ul><li><a href="terms.html">Условия использования</a></li><li><a href="privacy.html">Конфиденциальность</a></li></ul></div>
+    </div>
+    <div class="foot-bottom"><span>© Love, 2026</span><span>Сделано для своих</span></div>
+  </div>
+</footer>
 
-<script>
-(function () {
-  "use strict";
-  /* Заголовок вкладки — единственный текст вне DOM-пар .ru/.en, поэтому его
-     переключаем руками. Событие love:lang приходит на window: lang.js
-     отправляет его именно туда, на document оно не всплывает. */
-  function syncTitle() {
-    document.title = (window.loveLang && loveLang() === "ru")
-      ? "История версий — LOVE"
-      : "Changelog — LOVE";
-  }
-  syncTitle();
-  window.addEventListener("love:lang", syncTitle);
-})();
-</script>
-
+<div class="modal" id="modal-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" hidden>
+  <div class="glass modal-box flat">
+    <div class="modal-head"><h2 id="menu-title">Love</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть меню"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div>
+    <div class="menu-list">
+      <a href="index.html">Главная<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="changelog.html" aria-current="page">Что нового<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="ideas.html">Идеи сообщества<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="support.html">Поддержка<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="terms.html">Условия использования<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="privacy.html">Конфиденциальность<svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a class="pill" href="index.html#download" style="flex:1"><svg aria-hidden="true"><use href="#i-down"/></svg>Скачать</a>
+      <a class="icon-btn" href="https://github.com/tranquility598-beep/love-app" target="_blank" rel="noopener" aria-label="Love на GitHub" style="width:44px;height:44px"><svg aria-hidden="true"><use href="#i-github"/></svg></a>
+      <a class="icon-btn" href="mailto:support@loveapp.chat" aria-label="Почта поддержки" style="width:44px;height:44px"><svg aria-hidden="true"><use href="#i-mail"/></svg></a>
+    </div>
+  </div>
+</div>
 </body>
 </html>

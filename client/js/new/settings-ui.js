@@ -1722,13 +1722,11 @@
 
   function initDangerActions(shell) {
     const del = shell.querySelector('#lvs-delete-account');
-    if (del) del.addEventListener('click', () => {
-      confirmDanger('Удалить аккаунт безвозвратно? Все данные будут стёрты.');
-    });
+    if (del) del.addEventListener('click', openDeleteAccount);
 
     const reset = shell.querySelector('#lvs-reset-settings');
-    if (reset) reset.addEventListener('click', () => {
-      if (confirmDanger('Сбросить все настройки к значениям по умолчанию?')) {
+    if (reset) reset.addEventListener('click', async () => {
+      if (await confirmDanger('Сбросить все настройки к значениям по умолчанию?')) {
         resetSettings(shell);
       }
     });
@@ -1769,7 +1767,7 @@
   }
 
   function confirmDanger(msg) {
-    return window.confirm(msg);
+    return window.loveConfirm({ title: msg, confirmText: 'Да', danger: true });
   }
 
   function resetSettings(shell) {
@@ -2484,6 +2482,28 @@
     else location.reload();
   }
 
+  // Счёт по-русски: 1 сообщение, 2 сообщения, 5 сообщений.
+  function ruCount(n, one, few, many) {
+    const d = n % 10, h = n % 100;
+    const word = d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many;
+    return n + ' ' + word;
+  }
+
+  async function openDeleteAccount() {
+    let info;
+    try {
+      info = await UsersAPI.deletionPreview();
+    } catch (err) {
+      _toast('Аккаунт', (err && err.message) || 'Не удалось подготовить удаление');
+      return;
+    }
+    if (info.isStaff) {
+      _toast('Аккаунт', 'Аккаунт сотрудника удаляется через команду Love');
+      return;
+    }
+    openAccountModal('delete', info);
+  }
+
   function initAccountModal() {
     const modal = document.getElementById('lvs-account-modal');
     if (!modal) return;
@@ -2509,7 +2529,7 @@
     });
   }
 
-  function openAccountModal(type) {
+  function openAccountModal(type, deleteInfo) {
     const modal = document.getElementById('lvs-account-modal');
     const title = document.getElementById('lvs-account-title');
     const fields = document.getElementById('lvs-account-fields');
@@ -2517,6 +2537,11 @@
     if (!modal || !fields) return;
     if (errorEl) errorEl.textContent = '';
     fields.innerHTML = '';
+    const submitBtn = document.getElementById('lvs-account-submit');
+    if (submitBtn) {
+      submitBtn.textContent = type === 'delete' ? 'Удалить навсегда' : 'Подтвердить';
+      submitBtn.classList.toggle('is-danger', type === 'delete');
+    }
 
     const mk = (labelText, inputType, placeholder, maxlen) => {
       const wrap = document.createElement('div');
@@ -2576,6 +2601,36 @@
         if (userInput) userInput.value = newName;
         fillAccountInfo();
         return 'Имя пользователя обновлено';
+      };
+    } else if (type === 'delete') {
+      title.textContent = 'Удалить аккаунт';
+      const footprint = deleteInfo.footprint || {};
+      const servers = footprint.ownedServers || [];
+      const lines = [
+        'Это нельзя отменить. Удалятся профиль, публичная страница, загруженные файлы, ваши сообщения ('
+          + ruCount(footprint.messages || 0, 'сообщение', 'сообщения', 'сообщений') + ') и личные чаты целиком, у собеседников тоже ('
+          + ruCount(footprint.conversations || 0, 'чат', 'чата', 'чатов') + ').'
+      ];
+      if (servers.length) {
+        lines.push('Ваши сферы удалятся вместе с каналами и сообщениями всех участников: '
+          + servers.map(s => s.name).join(', ') + '.');
+      }
+      lines.push('Обращения в поддержку и записи модерации сохраняются, в них остаётся только номер аккаунта.');
+      lines.forEach(text => {
+        const p = document.createElement('p');
+        p.className = 'lvs-account-note';
+        p.textContent = text;
+        fields.appendChild(p);
+      });
+      const pass = deleteInfo.hasPassword ? mk('Пароль', 'password', '••••••••') : null;
+      const uname = mk('Введите ник @' + deleteInfo.username + ' для подтверждения', 'text', deleteInfo.username, 40);
+      _accountSubmit = async () => {
+        if (pass && !pass.value) throw new Error('Введите пароль');
+        if (!uname.value.trim()) throw new Error('Введите ник');
+        await UsersAPI.deleteAccount({ password: pass ? pass.value : undefined, confirmUsername: uname.value.trim() });
+        // Аккаунта больше нет: выходим так же, как по кнопке «Выйти».
+        await doLogout();
+        return 'Аккаунт удалён';
       };
     }
 

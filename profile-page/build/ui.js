@@ -53,9 +53,13 @@ export function el(tag, props = {}, children = []) {
  */
 export function iconNode(svg) {
   if (!svg) return null;
-  const doc = new DOMParser().parseFromString(String(svg), 'image/svg+xml');
+  // Сервер отдаёт иконки без xmlns (их вставляют прямо в HTML страницы, там
+  // он не нужен). Строгому разбору SVG без него элемент достаётся «никакой»
+  // — браузер рисует его 0×0, и в выборе сервиса были пустые квадраты.
+  const source = String(svg).replace(/^\s*<svg(?![^>]*\sxmlns=)/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
   const root = doc.documentElement;
-  if (!root || root.nodeName.toLowerCase() !== 'svg') return null;
+  if (!root || root.nodeName.toLowerCase() !== 'svg' || root.namespaceURI !== 'http://www.w3.org/2000/svg') return null;
   return document.importNode(root, true);
 }
 
@@ -64,8 +68,75 @@ export function clear(node) {
   return node;
 }
 
+/** Путь от node до потомка — номера среди детей-элементов на каждом уровне. */
+function pathOf(node, target) {
+  const path = [];
+  for (let current = target; current !== node; current = current.parentElement) {
+    path.unshift(Array.prototype.indexOf.call(current.parentElement.children, current));
+  }
+  return path;
+}
+
+function nodeAt(node, path) {
+  let current = node;
+  for (const index of path) {
+    current = current && current.children[index];
+  }
+  return current || null;
+}
+
+/** Чем кнопка отличается от соседей: id варианта, подпись или текст без цифр (счётчики, порядок). */
+function keyOf(node) {
+  return (node.dataset && node.dataset.id) || node.getAttribute('aria-label')
+    || String(node.textContent || '').replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Тот же элемент в пересобранном содержимом. Ищем по смыслу (keyOf), а не
+ * только по месту: плитки эффектов, например, после клика переставляются, и
+ * по номеру фокус уезжал на соседнюю.
+ */
+function twinOf(node, active, path) {
+  const byPath = nodeAt(node, path);
+  const key = keyOf(active);
+  if (!key) return byPath && byPath.tagName === active.tagName ? byPath : null;
+  if (byPath && byPath.tagName === active.tagName && keyOf(byPath) === key) return byPath;
+  const same = [...node.getElementsByTagName(active.tagName)].filter((item) => keyOf(item) === key);
+  return same.length === 1 ? same[0] : null;
+}
+
+/**
+ * Заменить содержимое узла.
+ *
+ * То, на что человек только что нажал (элемент в фокусе), остаётся на том же
+ * месте экрана. Без этого редактор прыгал после кликов: Chrome держит экран
+ * «за» элементом в фокусе (scroll anchoring), и когда карточка с этой кнопкой
+ * пересобиралась, страницу уносило к самому верху, а когда менялась высота
+ * карточек выше — всё съезжало. Если пересобирается сама карточка с фокусом,
+ * фокус переходит на такую же кнопку в новом содержимом.
+ */
 export function fill(node, children) {
+  const active = document.activeElement;
+  // Пересборка ниже фокуса его не сдвигает — тогда и мерить нечего.
+  const watch = Boolean(active && active !== document.body && active !== node
+    && (node.contains(active) || (node.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING)));
+  const path = watch && node.contains(active) ? pathOf(node, active) : null;
+  const top = watch ? window.scrollY : 0;
+  const before = watch ? active.getBoundingClientRect().top : 0;
   append(clear(node), children);
+  if (watch) {
+    let anchor = active;
+    if (path) {
+      anchor = twinOf(node, active, path);
+      if (anchor && typeof anchor.focus === 'function') anchor.focus({ preventScroll: true });
+    }
+    if (anchor && anchor.isConnected) {
+      const shift = anchor.getBoundingClientRect().top - before;
+      if (Math.abs(shift) > 1) window.scrollBy(0, shift);
+    } else if (Math.abs(window.scrollY - top) > 1) {
+      window.scrollTo(window.scrollX, top);
+    }
+  }
   return node;
 }
 

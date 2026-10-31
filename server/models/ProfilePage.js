@@ -24,7 +24,18 @@ const linkSchema = new mongoose.Schema({
   // Идентификатор иконки из набора редактора (telegram, tiktok, github…).
   // Свои картинки сюда не пускаем: это был бы способ грузить произвольные
   // файлы и трекать заходы через внешний домен.
-  icon: { type: String, trim: true, maxlength: 24, default: 'link' }
+  icon: { type: String, trim: true, maxlength: 24, default: 'link' },
+  // Сколько раз ссылку нажимали посетители. Пишется атомарным $inc из
+  // POST /api/profile-page/click, при сохранении списка переносится по адресу.
+  clicks: { type: Number, default: 0, min: 0 }
+}, { _id: false });
+
+// Набор оформления: сохранённый стиль или стиль, взятый с чужой страницы.
+// Содержимое проверяет роут (sanitizeStyleSnapshot) — здесь только потолок.
+const stylePresetSchema = new mongoose.Schema({
+  name: { type: String, trim: true, maxlength: 30, default: '' },
+  data: { type: mongoose.Schema.Types.Mixed, default: {} },
+  createdAt: { type: Date, default: Date.now }
 }, { _id: false });
 
 const profilePageSchema = new mongoose.Schema({
@@ -44,11 +55,56 @@ const profilePageSchema = new mongoose.Schema({
   // Оформление
   theme: { type: String, default: 'midnight', maxlength: 32 },
   layout: { type: String, default: 'stack', maxlength: 32 },
+  // Своя расстановка (Premium) поверх выбранной раскладки: клетки сетки из
+  // utils/profileCustomLayout. on=false — страница как в раскладке.
+  customLayout: {
+    on: { type: Boolean, default: false },
+    items: {
+      type: [{
+        _id: false,
+        id: { type: String, maxlength: 24 },
+        x: Number, y: Number, w: Number, h: Number
+      }],
+      default: []
+    },
+    rows: { type: Number, default: 0 },
+    // Отдельная расстановка для телефона (пусто — столбиком в порядке ПК).
+    phone: {
+      type: [{
+        _id: false,
+        id: { type: String, maxlength: 24 },
+        x: Number, y: Number, w: Number, h: Number
+      }],
+      default: []
+    },
+    phoneRows: { type: Number, default: 0 }
+  },
   font: { type: String, default: 'system', maxlength: 32 },
+  // Свой шрифт (Premium): файл на наших хостах и его название для редактора.
+  customFont: {
+    url: { type: String, default: null },
+    name: { type: String, trim: true, maxlength: 60, default: '' }
+  },
   accent: { type: String, default: null, maxlength: 9 },          // #rrggbb
   accentTo: { type: String, default: null, maxlength: 9 },        // второй цвет градиента
   avatarFrame: { type: String, default: 'none', maxlength: 32 },
   effect: { type: String, default: 'none', maxlength: 32 },
+  // Несколько эффектов сразу. Пустой список — работает прежнее поле effect,
+  // чтобы страницы, сохранённые до этого, выглядели как раньше.
+  effects: { type: [{ type: String, maxlength: 32 }], default: [] },
+  // Свои цвета частиц и свечения (1–2 цвета #rrggbb). Пусто — цвета акцента.
+  effectColors: { type: [{ type: String, maxlength: 9 }], default: [] },
+
+  // Конструктор темы (Premium): свои цвета вместо готовой темы. Читаемость
+  // подстраивает utils/profileTheme при показе.
+  customTheme: {
+    enabled: { type: Boolean, default: false },
+    bg: { type: String, maxlength: 9, default: null },
+    bg2: { type: String, maxlength: 9, default: null },
+    text: { type: String, maxlength: 9, default: null },
+    muted: { type: String, maxlength: 9, default: null },
+    accent: { type: String, maxlength: 9, default: null }
+  },
 
   // Содержимое
   displayName: { type: String, trim: true, maxlength: 40, default: '' },
@@ -75,10 +131,138 @@ const profilePageSchema = new mongoose.Schema({
   // Браузеры блокируют автоплей без жеста пользователя, поэтому экран
   // «нажми, чтобы войти» — не украшение, а единственный способ включить
   // музыку. Заодно это красивый первый кадр.
+  // Плейлист (Premium). Пустой — играет одиночный music, как раньше.
+  playlist: {
+    type: [{
+      url: { type: String, required: true },
+      title: { type: String, trim: true, maxlength: 80, default: '' },
+      artist: { type: String, trim: true, maxlength: 80, default: '' },
+      _id: false
+    }],
+    default: []
+  },
+
   enterOverlay: {
     enabled: { type: Boolean, default: false },
     text: { type: String, trim: true, maxlength: 40, default: 'нажми, чтобы войти' }
   },
+
+  // Свой градиент фона вместо фона темы. Под картинкой или видео не виден.
+  bgGradient: {
+    enabled: { type: Boolean, default: false },
+    colors: { type: [{ type: String, maxlength: 9 }], default: [] },  // 2–3 цвета #rrggbb
+    angle: { type: Number, default: 160, min: 0, max: 360 },
+    animated: { type: Boolean, default: false }                      // переливается (Pro)
+  },
+
+  // Узор поверх фона (точки, сетка…) и живой фон (жидкий металл, дымка, шум).
+  bgPattern: {
+    kind: { type: String, default: 'none', maxlength: 16 },
+    opacity: { type: Number, default: 35, min: 0, max: 100 }
+  },
+  liveBg: { type: String, default: 'none', maxlength: 16 },
+
+  // Вторая тема: под светлую/тёмную систему гостя или по времени суток.
+  altTheme: { type: String, default: null, maxlength: 32 },
+  themeMode: { type: String, default: 'fixed', maxlength: 16 },
+
+  // Свой курсор (картинка с наших хостов) и настройки шлейфа курсора.
+  cursorImage: { type: String, default: null },
+  trailStyle: {
+    colors: { type: [{ type: String, maxlength: 9 }], default: [] },
+    width: { type: Number, default: 100, min: 40, max: 300 },      // % от обычной толщины
+    length: { type: Number, default: 560, min: 200, max: 1600 },   // сколько живёт след, мс
+    glow: { type: Boolean, default: true }
+  },
+
+  // Детали оформления. Идентификаторы из STYLE_OPTIONS (config/profileTiers),
+  // значения по умолчанию — STYLE_DEFAULTS: прежний вид страницы.
+  style: {
+    blockOrder: { type: [{ type: String, maxlength: 24 }], default: [] },
+    hiddenBlocks: { type: [{ type: String, maxlength: 24 }], default: [] },
+    linkShape: { type: String, default: 'rounded', maxlength: 16 },
+    linkFill: { type: String, default: 'glass', maxlength: 16 },
+    linkLayout: { type: String, default: 'auto', maxlength: 16 },
+    cardShadow: { type: String, default: 'none', maxlength: 16 },
+    cardAlpha: { type: Number, default: 64, min: 0, max: 100 },
+    cardRadius: { type: Number, default: 13, min: 0, max: 32 },
+    cardBorder: { type: Boolean, default: true },
+    avatarShape: { type: String, default: 'circle', maxlength: 16 },
+    avatarSize: { type: String, default: 'md', maxlength: 8 },
+    nameAlign: { type: String, default: 'left', maxlength: 8 },
+    nameSize: { type: String, default: 'md', maxlength: 8 },
+    nameGradient: { type: Boolean, default: false },
+    // Цвет имени отдельно от акцента: theme | solid | accent | gradient.
+    nameFill: { type: String, default: 'theme', maxlength: 16 },
+    nameColors: { type: [{ type: String, maxlength: 9 }], default: [] },
+    nameAngle: { type: Number, default: 90, min: 0, max: 360 },
+    linkMotion: { type: String, default: 'none', maxlength: 16 },
+    cursorHotspot: { type: String, default: 'corner', maxlength: 16 },
+    // Свой цвет готового курсора: один цвет или переход из двух. Пусто — акцент.
+    cursorColors: { type: [{ type: String, maxlength: 9 }], default: [] },
+    avatarTilt: { type: Boolean, default: false },
+    sounds: { type: Boolean, default: false },
+    nameEffect: { type: String, default: 'none', maxlength: 16 },
+    cursor: { type: String, default: 'default', maxlength: 16 },
+    entrance: { type: String, default: 'none', maxlength: 16 },
+    allowCopy: { type: Boolean, default: true }
+  },
+
+  // Блоки содержимого (этап 2). Медиа — только адреса на наших хостах.
+  gallery: { type: [{ type: String, maxlength: 600 }], default: [] },
+  invite: {
+    code: { type: String, maxlength: 32, default: null },
+    server: { type: mongoose.Schema.Types.ObjectId, ref: 'Server', default: null }
+  },
+  tags: { type: [{ type: String, maxlength: 24 }], default: [] },
+  quote: {
+    text: { type: String, trim: true, maxlength: 240, default: '' },
+    author: { type: String, trim: true, maxlength: 60, default: '' }
+  },
+  countdown: {
+    title: { type: String, trim: true, maxlength: 60, default: '' },
+    at: { type: Date, default: null }
+  },
+
+  stylePresets: { type: [stylePresetSchema], default: [] },
+
+  // Сердечко посетителей. Счётчик меняется только атомарным $inc из
+  // POST /api/profile-page/heart, отметки «уже нажимал» — в ProfileHeartMark.
+  hearts: {
+    enabled: { type: Boolean, default: false },
+    count: { type: Number, default: 0, min: 0 }
+  },
+
+  // Опубликованная версия. Редактор правит поля выше — это черновик; гости
+  // видят published.data, пока владелец не нажмёт «Опубликовать». Пустой
+  // published (страницы до этой возможности) — гости видят поля как есть.
+  published: {
+    at: { type: Date, default: null },
+    data: { type: mongoose.Schema.Types.Mixed, default: null }
+  },
+  // Прошлые публикации для «вернуть как было». Не читаются при показе
+  // страницы — поэтому select:false.
+  versions: {
+    type: [{ at: { type: Date, required: true }, data: { type: mongoose.Schema.Types.Mixed }, _id: false }],
+    default: [],
+    select: false
+  },
+
+  // Аналитика (показывается с Pro, копится всем): источники переходов,
+  // час недели по UTC (0..167), нажатия «Написать в Love».
+  analytics: {
+    sources: { type: mongoose.Schema.Types.Mixed, default: {} },
+    week: { type: mongoose.Schema.Types.Mixed, default: {} },
+    cta: { type: Number, default: 0 }
+  },
+
+  // Вехи, о которых уже сообщили в Love (null — ещё не считали: старые
+  // страницы не получают пачку уведомлений в первый же показ).
+  milestones: {
+    views: { type: Number, default: null },
+    hearts: { type: Number, default: null }
+  },
+  notifyMilestones: { type: Boolean, default: true },
 
   showStatus: { type: Boolean, default: false },
   showBadges: { type: Boolean, default: true },

@@ -43,6 +43,35 @@ const { allowedHosts } = require('../utils/profileMedia');
 const { buildView } = require('../utils/profilePageView');
 const { renderPage, renderNotice } = require('../utils/profilePageHtml');
 const { isOwnerVisit } = require('../utils/profileViews');
+const { loadInviteCard } = require('../utils/profileInvite');
+const { issueHeartToken } = require('../utils/profileHearts');
+const { publicSource } = require('../utils/profileDraft');
+const { checkMilestones } = require('../utils/profileMilestones');
+
+/**
+ * Откуда пришёл гость — по заголовку Referer, без своих меток и куки.
+ * Встроенные браузеры (Telegram, TikTok) часто его не шлют — это «напрямую».
+ */
+const SOURCE_RULES = [
+  ['telegram', /(^|\.)(t\.me|telegram\.org|telegram\.me)$/],
+  ['tiktok', /(^|\.)tiktok\.com$/],
+  ['discord', /(^|\.)(discord\.com|discordapp\.com|discord\.gg)$/],
+  ['instagram', /(^|\.)instagram\.com$/],
+  ['youtube', /(^|\.)(youtube\.com|youtu\.be)$/],
+  ['vk', /(^|\.)(vk\.com|vk\.ru|vkontakte\.ru)$/],
+  ['x', /(^|\.)(twitter\.com|x\.com|t\.co)$/],
+  ['search', /(^|\.)(google\.[a-z.]+|yandex\.[a-z.]+|ya\.ru|bing\.com|duckduckgo\.com)$/],
+  ['love', /(^|\.)loveapp\.chat$/]
+];
+
+function sourceOf(req) {
+  let host = '';
+  try { host = new URL(String(req.headers.referer || '')).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { /* без заголовка */ }
+  if (!host) return 'direct';
+  if (host === String(req.hostname || '').toLowerCase()) return 'direct';   // переход внутри страницы
+  const rule = SOURCE_RULES.find(([, pattern]) => pattern.test(host));
+  return rule ? rule[0] : 'other';
+}
 
 const router = express.Router();
 
@@ -169,7 +198,8 @@ function pageCsp(nonce) {
     `style-src 'nonce-${nonce}'`,
     `img-src ${media} data:`,
     `media-src ${media}`,
-    "font-src 'self'",
+    // Свои шрифты страниц лежат на тех же медиа-хостах, что и картинки.
+    `font-src 'self' ${media}`,
     // connect-src нужен только для отправки жалобы на страницу.
     "connect-src 'self'",
     "form-action 'none'",
@@ -314,7 +344,7 @@ function builderCsp() {
     "style-src 'self' 'unsafe-inline'",
     `img-src ${media} data: blob:`,
     `media-src ${media} blob:`,
-    "font-src 'self' data:",
+    `font-src 'self' data: ${mediaSources()}`,
     "connect-src 'self'",
     "object-src 'none'",
     "frame-src 'none'",
@@ -419,8 +449,21 @@ function countView(req, page, username) {
   const key = viewerKey(req, username, day);
   if (alreadyCounted(key)) return;
 
+  const now = new Date();
+  const hourOfWeek = now.getUTCDay() * 24 + now.getUTCHours();
   Promise.resolve()
     .then(() => page.recordView(day, key))
+    .then(counted => {
+      if (!counted) return null;
+      // Аналитика копится всем, показывается с Pro: после апгрейда у человека
+      // сразу есть данные, а не пустые графики.
+      return Promise.all([
+        ProfilePage.updateOne({ _id: page._id }, {
+          $inc: { [`analytics.sources.${sourceOf(req)}`]: 1, [`analytics.week.${hourOfWeek}`]: 1 }
+        }),
+        checkMilestones(req.app.get('io'), page._id)
+      ]);
+    })
     .catch(error => {
       console.error('[profile-page] не смог записать просмотр:', error.message);
     });
@@ -474,7 +517,10 @@ async function servePage(req, res, { short }) {
     return res.redirect(302, longUrl(user.username, req));
   }
 
-  const view = buildView(page, user, tier);
+  // Гости видят опубликованное, а не черновик из редактора.
+  const source = await publicSource(page, User);
+  const view = buildView(source, user, tier);
+  view.invite = await loadInviteCard(source, req);
   const og = ogFor(view, req);
 
   // Короткая ссылка теперь работает и локально (devShortLink), поэтому
@@ -489,6 +535,7 @@ async function servePage(req, res, { short }) {
     ogImageUrl: og.url,
     ogImageWide: og.wide,
     siteUrl: SITE_URL,
+    heartToken: view.hearts ? issueHeartToken(page._id) : null,
     // Страницу под вопросом у модерации из индекса убираем, но людям по
     // прямой ссылке показываем: жалоба ещё не приговор.
     noindex: page.moderation?.status === 'flagged'

@@ -36,12 +36,16 @@ class LoveHubScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
             children: [
-              Text(
-                'Центр управления сообществом и обновлениями',
-                style: TextStyle(
-                    color: context.palette.textSecondary, fontSize: 14),
-              ),
-              const SizedBox(height: 14),
+              // Новый дизайн (как на ПК): без рекламного подзаголовка, без
+              // повторной плитки версии и без заглушек «Скоро» / «будет здесь».
+              if (!context.palette.rd) ...[
+                Text(
+                  'Центр управления сообществом и обновлениями',
+                  style: TextStyle(
+                      color: context.palette.textSecondary, fontSize: 14),
+                ),
+                const SizedBox(height: 14),
+              ],
               // Action buttons
               Wrap(
                 spacing: 8,
@@ -95,6 +99,7 @@ class LoveHubScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (!context.palette.rd) ...[
               const SizedBox(height: 12),
               // Version stat
               _BentoCard(
@@ -153,6 +158,7 @@ class LoveHubScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              ],
               const SizedBox(height: 12),
               // Useful links
               _BentoCard(
@@ -182,6 +188,7 @@ class LoveHubScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (!context.palette.rd) ...[
               const SizedBox(height: 12),
               // Minor update / history
               _BentoCard(
@@ -202,6 +209,7 @@ class LoveHubScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              ],
               const SizedBox(height: 12),
               // Dev Log
               _BentoCard(
@@ -777,11 +785,11 @@ class _BentoTag extends StatelessWidget {
         border: solid ? null : Border.all(color: context.palette.borderActive),
       ),
       child: Text(
-        text.toUpperCase(),
+        LoveText.caps(context.palette, text),
         style: TextStyle(
-          fontFamily: LoveFonts.mono,
-          fontSize: 10,
-          letterSpacing: 0.6,
+          fontFamily: LoveText.labelFont(context.palette),
+          fontSize: context.palette.rd ? 11.5 : 10,
+          letterSpacing: LoveText.labelSpacing(context.palette, 0.6),
           fontWeight: FontWeight.w500,
           color: solid
               ? context.palette.onAccent
@@ -874,6 +882,26 @@ class _HubUpdate {
 // телефона, между делом. У каждой записи свой номер: новая сборка
 // не переименовывает историю предыдущих выпусков.
 List<_HubUpdate> _seedUpdates(String version) => [
+      _HubUpdate(
+        version: 'v2.3.0',
+        date: '31 октября 2026',
+        tag: version.split('-').first == '2.3.0'
+            ? 'Текущая версия'
+            : 'Обновление',
+        title: 'Новый вид и звонки как в сферах',
+        desc:
+            'Новый дизайн (бета), удобные звонки в личке, больше возможностей для страницы и удаление аккаунта в настройках.',
+        changes: const [
+          'Новый дизайн (бета) на ПК и Android: спокойнее и понятнее, прежний вид возвращается в настройках',
+          'Звонки в личке теперь как в сферах: те же плитки и большой просмотр с приближением',
+          'Демка и камера открываются на весь экран, камера телефона больше не обрезается',
+          'Публичная страница: десять шаблонов, новые раскладки, свой шрифт и курсор; в Premium своя расстановка блоков (бета)',
+          'На Android вас слышно в свёрнутом приложении, микрофон и завершение звонка прямо в уведомлении',
+          'На ПК: предпросмотр файлов до отправки, подсветка сообщения по клику на ответ, пропущенные звонки одной строкой с числом',
+          'Записи о звонках нельзя редактировать; удалить запись может только звонивший',
+          'Аккаунт можно удалить прямо в настройках, вместе с загруженными файлами',
+        ],
+      ),
       _HubUpdate(
         version: 'v2.2.0',
         date: '20 октября 2026',

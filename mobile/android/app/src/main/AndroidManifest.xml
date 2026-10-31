@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- Сервис микрофона на время звонка/войса: без него Android глушит
+         микрофон свёрнутому приложению и собеседник слышит тишину. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -63,6 +66,20 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection"
             android:stopWithTask="false" />
+        <!-- Звонок/войс идёт: уведомление с кнопками микрофона и «Завершить»
+             и есть уведомление этого сервиса (LocalNotifications.showOngoingCall).
+             stopWithTask: смахнули приложение — звонок не висит без экрана. -->
+        <service
+            android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="true" />
+        <!-- Без этого приёмника кнопки в уведомлениях («Выкл. микрофон»,
+             «Завершить», «Отклонить») нажимались вхолостую: плагину некуда
+             доставить нажатие. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
         <!-- Автообновление (AppUpdater → ota_update): без этого провайдера
              скачанный APK нельзя передать установщику, и обновление
              молча уходило в браузер. -->

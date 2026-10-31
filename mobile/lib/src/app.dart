@@ -66,17 +66,21 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
       // Тема живёт в LovePrefs: dark | light | system. «Системная»
       // резолвится здесь, над MaterialApp, — и по смене темы ОС тоже
       // (слушатель платформенной яркости в _LoveThemeHost).
-      child: ValueListenableBuilder<String>(
+      // Новый дизайн (бета) меняет палитру и тему целиком — тоже над MaterialApp.
+      child: ValueListenableBuilder<bool>(
+        valueListenable: LovePrefs.instance.redesign,
+        builder: (context, rd, _) => ValueListenableBuilder<String>(
         valueListenable: LovePrefs.instance.theme,
         builder: (context, mode, _) => _LoveThemeHost(
           mode: mode,
+          rd: rd,
           child: MaterialApp(
             title: 'Love',
             navigatorKey: CallCenter.navigatorKey,
             scaffoldMessengerKey: _messengerKey,
             debugShowCheckedModeBanner: false,
-            theme: LoveTheme.light(),
-            darkTheme: LoveTheme.dark(),
+            theme: rd ? LoveTheme.build(lovePaletteLightRd) : LoveTheme.light(),
+            darkTheme: rd ? LoveTheme.build(lovePaletteDarkRd) : LoveTheme.dark(),
             themeMode: mode == 'light'
                 ? ThemeMode.light
                 : mode == 'system'
@@ -114,6 +118,7 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
               },
             ),
           ),
+        ),
         ),
       ),
     );
@@ -300,9 +305,10 @@ class _LoveMobileAppState extends State<LoveMobileApp> {
 /// AnnotatedRegion красит иконки статус-бара: белые на тёмном, тёмные
 /// на светлом.
 class _LoveThemeHost extends StatefulWidget {
-  const _LoveThemeHost({required this.mode, required this.child});
+  const _LoveThemeHost({required this.mode, required this.rd, required this.child});
 
   final String mode;
+  final bool rd;
   final Widget child;
 
   @override
@@ -339,7 +345,9 @@ class _LoveThemeHostState extends State<_LoveThemeHost>
   Widget build(BuildContext context) {
     final light = widget.mode == 'light' ||
         (widget.mode == 'system' && _platformBrightness == Brightness.light);
-    final palette = light ? lovePaletteLight : lovePaletteDark;
+    final palette = widget.rd
+        ? (light ? lovePaletteLightRd : lovePaletteDarkRd)
+        : (light ? lovePaletteLight : lovePaletteDark);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: palette.systemUiOverlay,
       child: LovePaletteScope(

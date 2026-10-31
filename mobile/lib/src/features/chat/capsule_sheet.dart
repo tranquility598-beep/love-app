@@ -205,13 +205,15 @@ class _CapsuleSheetBodyState extends State<_CapsuleSheetBody> {
                       ],
                       const SizedBox(height: 20),
                        Text(
-                        'ЗАПЛАНИРОВАННЫЕ',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2,
-                          color: context.palette.textMuted,
-                        ),
+                        context.palette.rd ? 'Запланированные' : 'ЗАПЛАНИРОВАННЫЕ',
+                        style: context.palette.rd
+                            ? LoveText.monoLabel(context.palette)
+                            : TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.2,
+                                color: context.palette.textMuted,
+                              ),
                       ),
                       const SizedBox(height: 10),
                       _capsuleList(),

@@ -955,6 +955,46 @@ function _restoreVideoStates(container) {
     });
 }
 
+// Событие звонка в ЛС. Сервер пишет его системным сообщением с фиксированным
+// текстом (server/services/callRings.js); автор — звонивший. Поэтому у того,
+// кому звонили, это «Пропущенный звонок», а у звонившего — «Нет ответа».
+const MISSED_CALL_RE = /^📞\s*Пропущенный (видео)?звонок$/;
+const CALL_ICON_MISSED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/><path d="m16 2 6 6M22 2l-6 6"/></svg>';
+const CALL_ICON_OUT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/><path d="M16 2h6v6M22 2l-7 7"/></svg>';
+
+function callEventCard(msg) {
+    if (msg.type !== 'system' || !MISSED_CALL_RE.test(String(msg.text || '').trim())) return '';
+    const video = /видео/.test(msg.text);
+    const own = msg.sender === 'own';
+    const title = own ? 'Нет ответа' : (video ? 'Пропущенный видеозвонок' : 'Пропущенный звонок');
+    const kind = video ? 'Видеозвонок' : 'Голосовой звонок';
+    return `<div class="call-event ${own ? 'is-outgoing' : 'is-missed'}">
+        <span class="call-event-icon">${own ? CALL_ICON_OUT : CALL_ICON_MISSED}</span>
+        <span class="call-event-text"><b>${title}<span class="call-event-count" hidden></span></b><span class="call-event-sub"><span class="call-event-kind">${escHTML(kind)} · </span><span class="call-event-time">${escHTML(msg.time)}</span></span></span>
+        <button type="button" class="call-event-btn" data-call-kind="${video ? 'video' : 'voice'}">${own ? 'Позвонить ещё' : 'Перезвонить'}</button>
+    </div>`;
+}
+
+// Подряд идущие звонки одного вида (тот же звонящий, тот же тип) — одной
+// строкой с числом: семь «Нет ответа» подряд заваливали ленту.
+function callEventKey(msg) {
+    if (msg.type !== 'system' || !MISSED_CALL_RE.test(String(msg.text || '').trim())) return '';
+    return (msg.sender === 'own' ? 'own' : 'in') + (/видео/.test(msg.text) ? ':video' : ':voice');
+}
+
+function bumpCallEvent(run, msg) {
+    run.count += 1;
+    run.wrap._callRunMsgs.push(msg);
+    const count = run.wrap.querySelector('.call-event-count');
+    if (count) {
+        count.hidden = false;
+        count.textContent = String(run.count);
+        count.title = `${run.count} подряд`;
+    }
+    const time = run.wrap.querySelector('.call-event-time');
+    if (time) time.textContent = msg.time;
+}
+
 function renderChatMessages(conv) {
     _saveVideoStates(chatFeedContainer);
     chatFeedContainer.innerHTML = "";
@@ -962,8 +1002,18 @@ function renderChatMessages(conv) {
     let lastSender = null;
     let groupContainer = null;
     let groupContent = null;
+    let callRun = null;
+    // Новый дизайн: звонок — строка по центру ленты, без аватара (как в макете).
+    const callRows = document.documentElement.classList.contains('rd');
 
     conv.messages.forEach(msg => {
+        const callKey = callEventKey(msg);
+        if (callKey && callRun && callRun.key === callKey) {
+            bumpCallEvent(callRun, msg);
+            return;
+        }
+        if (!callKey) callRun = null;
+
         if (msg.sender === "system") {
             const systemDiv = document.createElement("div");
             systemDiv.className = "system-message-divider";
@@ -980,7 +1030,15 @@ function renderChatMessages(conv) {
             return;
         }
 
-        if (msg.sender !== lastSender) {
+        if (callKey && callRows) {
+            groupContainer = document.createElement("div");
+            groupContainer.className = `message-group call-row ${msg.sender}`;
+            groupContent = document.createElement("div");
+            groupContent.className = "message-group-content";
+            groupContainer.appendChild(groupContent);
+            chatFeedContainer.appendChild(groupContainer);
+            lastSender = "call";
+        } else if (msg.sender !== lastSender) {
             // New group
             groupContainer = document.createElement("div");
             groupContainer.className = `message-group ${msg.sender}`;
@@ -1013,12 +1071,24 @@ function renderChatMessages(conv) {
         const isOwn = msg.sender === 'own';
         let actionsHtml = '';
 
-        const bubbleText = msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${renderMessageText(msg.text)}</div>` : '';
+        const callCard = callEventCard(msg);
+        const bubbleText = callCard || (msg.text ? `<div class="message-bubble${emojiBubbleClass(msg.text)}">${renderMessageText(msg.text)}</div>` : '');
         bubbleWrap.innerHTML = `
             ${bubbleText}
-            <span class="message-meta">${escHTML(msg.time)}</span>
+            ${callCard ? '' : `<span class="message-meta">${escHTML(msg.time)}</span>`}
             ${actionsHtml}
         `;
+        if (callCard) {
+            callRun = { key: callKey, count: 1, wrap: bubbleWrap };
+            bubbleWrap._callRunMsgs = [msg];
+            bubbleWrap.classList.add('is-call-event');
+            // «Перезвонить» — те же кнопки звонка из шапки этого чата: вся логика
+            // вызова (оверлей, звук, сокет) уже там.
+            bubbleWrap.querySelector('.call-event-btn')?.addEventListener('click', (event) => {
+                const video = event.currentTarget.dataset.callKind === 'video';
+                document.getElementById(video ? 'action-video' : 'action-call')?.click();
+            });
+        }
 
         if (isOwn && msg._id) {
             const editBtn = bubbleWrap.querySelector(".edit-btn");
@@ -1062,8 +1132,8 @@ function renderChatMessages(conv) {
             }
 
             if (deleteBtn) {
-                deleteBtn.addEventListener("click", () => {
-                    if (confirm("Удалить это сообщение?")) {
+                deleteBtn.addEventListener("click", async () => {
+                    if (await window.loveConfirm({ title: 'Удалить это сообщение?', text: 'Его не получится вернуть.', confirmText: 'Удалить', danger: true })) {
                         const id = msg._id;
                         if (id && !String(id).startsWith('temp-') && !String(id).startsWith('temp_')) {
                             if (window.socket) {
@@ -1192,7 +1262,7 @@ let isCallVideoActive = false;
 let isCallScreenSharing = false;
 let isCallMinimized = false;
 
-// Обновление иконок expand/collapse на кнопках зума
+// Обновление иконок expand/collapse на кнопках зума (прежняя сетка ЛС, скрыта)
 function updateZoomButtons(currentLayout) {
     const grid = document.getElementById("call-video-grid");
     if (!grid) return;
@@ -1306,6 +1376,7 @@ function animateMiniToCallModal() {
 
     const from = mini.getBoundingClientRect();
     modal.classList.remove("hidden");
+    window.dmCallDock?.sync(); // встать на место чата до замера (js/dm-call-dock.js)
     modal.style.pointerEvents = "none";
     container.style.opacity = "0";
     const to = container.getBoundingClientRect();
@@ -4095,9 +4166,9 @@ function renderServerChat() {
         }
 
         if (deleteBtn) {
-            deleteBtn.addEventListener("click", () => {
+            deleteBtn.addEventListener("click", async () => {
                 const confirmText = isMsgOwn ? "Удалить это сообщение?" : "Удалить это сообщение как модератор/владелец?";
-                if (confirm(confirmText)) {
+                if (await window.loveConfirm({ title: confirmText, text: 'Его не получится вернуть.', confirmText: 'Удалить', danger: true })) {
                     const id = msg._id;
                     if (id && !String(id).startsWith('temp-') && !String(id).startsWith('temp_')) {
                         if (window.socket) {
@@ -4351,6 +4422,54 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
     function escName(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
     function removeTray() { if (trayEl) { trayEl.remove(); } }
+
+    function fmtSize(bytes) {
+        if (!bytes) return '';
+        if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' КБ';
+        return (bytes / (1024 * 1024)).toFixed(1).replace('.', ',') + ' МБ';
+    }
+    function extOf(name) {
+        const m = String(name || '').match(/\.([a-z0-9]{1,5})$/i);
+        return m ? m[1].toUpperCase() : 'ФАЙЛ';
+    }
+    const canPreview = s => !!s.previewUrl && ['image', 'video', 'audio'].includes(s.type);
+
+    // Большой просмотр вложения до отправки: картинка, видео или звук.
+    function openAttachPreview(s) {
+        const overlay = document.createElement('div');
+        overlay.className = 'attach-preview';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', s.name);
+        const media = document.createElement(s.type === 'image' ? 'img' : s.type);
+        media.className = 'attach-preview-media';
+        media.src = s.previewUrl;
+        if (s.type === 'image') media.alt = s.name;
+        else media.controls = true;
+        const caption = document.createElement('div');
+        caption.className = 'attach-preview-caption';
+        caption.textContent = [s.name, fmtSize(s.size)].filter(Boolean).join(' · ');
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'attach-preview-close';
+        close.title = 'Закрыть';
+        close.setAttribute('aria-label', 'Закрыть');
+        close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        const finish = () => {
+            document.removeEventListener('keydown', onKey, true);
+            overlay.remove();
+        };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            finish();
+        };
+        close.addEventListener('click', finish);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(); });
+        document.addEventListener('keydown', onKey, true);
+        overlay.append(media, caption, close);
+        document.body.appendChild(overlay);
+    }
     function clearStaged() { staged.forEach(s => { if (s.previewUrl) URL.revokeObjectURL(s.previewUrl); }); staged = []; renderTray(); }
 
     function renderTray() {
@@ -4358,22 +4477,55 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         if (!trayEl) { trayEl = document.createElement('div'); trayEl.className = 'attach-tray'; }
         if (trayForm && trayEl.parentElement !== trayForm.parentElement) {
             trayForm.parentElement.insertBefore(trayEl, trayForm);
+            // Панель лежит поверх низа ленты: стили дают ленте место, а последние
+            // сообщения остаются на виду.
+            const feed = trayForm.closest('.chat-input-area')?.parentElement?.querySelector('.chat-feed');
+            if (feed) requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
         }
         trayEl.innerHTML = '';
         staged.forEach(s => {
             const item = document.createElement('div');
             item.className = 'attach-tray-item' + (s.status === 'uploading' ? ' is-uploading' : '') + (s.status === 'error' ? ' is-error' : '');
+            const sub = s.status === 'error' ? 'Не загрузилось' : s.status === 'uploading' ? 'Загрузка…' : fmtSize(s.size);
+            item.title = s.name;
             if (s.type === 'image' && s.previewUrl) {
                 item.classList.add('has-thumb');
                 item.style.backgroundImage = `url("${s.previewUrl}")`;
+            } else if (s.type === 'video' && s.previewUrl) {
+                item.classList.add('has-thumb', 'is-video');
+                // #t=0.1 — браузер покажет кадр, а не чёрный прямоугольник.
+                item.innerHTML = `<video class="attach-tray-frame" src="${s.previewUrl}#t=0.1" muted playsinline preload="metadata"></video>
+                    <svg class="attach-tray-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
             } else {
-                item.innerHTML = `<span class="attach-tray-name">${escName(s.name)}</span>`;
+                item.classList.add('is-file');
+                const badge = s.type === 'audio'
+                    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+                    : escName(extOf(s.name));
+                item.innerHTML = `<span class="attach-tray-ext">${badge}</span>
+                    <span class="attach-tray-meta"><span class="attach-tray-name">${escName(s.name)}</span><span class="attach-tray-sub">${escName(sub)}</span></span>`;
             }
-            if (s.status === 'uploading') {
+            if (canPreview(s)) {
+                item.classList.add('can-preview');
+                item.tabIndex = 0;
+                item.setAttribute('role', 'button');
+                item.setAttribute('aria-label', 'Посмотреть: ' + s.name);
+                item.addEventListener('click', () => openAttachPreview(s));
+                item.addEventListener('keydown', (ev) => {
+                    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                    ev.preventDefault();
+                    openAttachPreview(s);
+                });
+            }
+            if (s.status === 'uploading' && item.classList.contains('has-thumb')) {
                 const sp = document.createElement('div'); sp.className = 'attach-tray-spinner'; item.appendChild(sp);
             }
+            if (s.status === 'error' && item.classList.contains('has-thumb')) {
+                const err = document.createElement('span'); err.className = 'attach-tray-thumb-error'; err.textContent = 'Ошибка'; item.appendChild(err);
+            }
             const x = document.createElement('button');
-            x.type = 'button'; x.className = 'attach-tray-remove'; x.innerHTML = '&times;';
+            x.type = 'button'; x.className = 'attach-tray-remove';
+            x.title = 'Убрать'; x.setAttribute('aria-label', 'Убрать ' + s.name);
+            x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
             x.addEventListener('click', (ev) => {
                 ev.preventDefault();
                 ev.stopPropagation();
@@ -4436,8 +4588,8 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
                 : file.type.startsWith('audio/') ? 'audio' : 'file';
             const item = {
                 id: 'st-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-                name: file.name, type, status: 'uploading', att: null,
-                previewUrl: type === 'image' ? URL.createObjectURL(file) : null
+                name: file.name, size: file.size, type, status: 'uploading', att: null,
+                previewUrl: type !== 'file' ? URL.createObjectURL(file) : null
             };
             staged.push(item);
             uploadStaged(item, file);
@@ -4493,8 +4645,8 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
                 : file.type.startsWith('audio/') ? 'audio' : 'file';
             const item = {
                 id: 'st-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-                name: file.name || 'screenshot.png', type, status: 'uploading', att: null,
-                previewUrl: type === 'image' ? URL.createObjectURL(file) : null
+                name: file.name || 'screenshot.png', size: file.size, type, status: 'uploading', att: null,
+                previewUrl: type !== 'file' ? URL.createObjectURL(file) : null
             };
             staged.push(item);
             uploadStaged(item, file);
@@ -4958,7 +5110,8 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         close();
         const isOwn = isOwnMessage(wrap);
         const bubble = wrap.querySelector('.message-bubble');
-        const text = bubble ? bubble.textContent.trim() : '';
+        // Текст — из данных: в новом дизайне в пузыре ещё цитата ответа и время.
+        const text = String(wrap._msgData?.text || (bubble ? bubble.textContent : '')).trim();
         const editBtn = wrap.querySelector('.edit-btn');
         const delBtn = wrap.querySelector('.delete-btn');
         const messageId = wrap.getAttribute('data-message-id');
@@ -4970,11 +5123,11 @@ window.sendMessageWithAttachments = function (attachments, text = '') {
         const reportable = !isOwn && realMessageId && !String(realMessageId).startsWith('temp-') && !String(realMessageId).startsWith('temp_');
         if (reportable) items.push({ label: 'Пожаловаться', icon: REPORT_SVG, action: () => window.openMessageReport?.({ messageId: realMessageId, preview: text }) });
         if (isOwn) items.push({
-            label: 'Удалить', icon: DEL_SVG, danger: true, action: () => {
+            label: 'Удалить', icon: DEL_SVG, danger: true, action: async () => {
                 // Предпочитаем штатную кнопку удаления (она чистит модель и
                 // корректно обрабатывает оптимистичные сообщения).
                 if (delBtn) { delBtn.click(); return; }
-                if (!confirm('Удалить это сообщение?')) return;
+                if (!(await window.loveConfirm({ title: 'Удалить это сообщение?', text: 'Его не получится вернуть.', confirmText: 'Удалить', danger: true }))) return;
                 // Реальный id берём из данных сообщения; временный/pending не шлём
                 // на сервер (иначе прилетает «Нельзя удалить до его сохранения»).
                 const realId = (wrap._msgData && wrap._msgData._id) || messageId;
@@ -5626,7 +5779,7 @@ function loadFriends(type) {
 // Зашитый номер здесь один на весь интерфейс — на него падаем, только если
 // Electron не ответил (например, страница открыта в браузере). Строку сверяет
 // ops/check-release-version.cjs с package.json, чтобы она не отстала от релиза.
-const APP_VERSION_FALLBACK = '2.2.0';
+const APP_VERSION_FALLBACK = '2.3.0';
 const APP_VERSION = (window.electronAPI && typeof window.electronAPI.getVersion === 'function')
     ? (window.electronAPI.getVersion() || APP_VERSION_FALLBACK)
     : APP_VERSION_FALLBACK;
@@ -5635,6 +5788,24 @@ window.LOVE_APP_VERSION = APP_VERSION;
 // Номер установленной сборки — в шапке. Записи истории имеют собственную
 // версию и описание: новая сборка не переименовывает предыдущий выпуск.
 let mockHubUpdates = [
+    {
+        id: 12,
+        version: "v2.3.0",
+        date: "31 октября 2026",
+        tag: APP_VERSION.split("-")[0] === "2.3.0" ? "Текущая версия" : "Обновление",
+        title: "Новый вид и звонки как в сферах",
+        desc: "Новый дизайн (бета), удобные звонки в личке, больше возможностей для страницы и удаление аккаунта в настройках.",
+        changes: [
+                    "Новый дизайн (бета) на ПК и Android: спокойнее и понятнее, прежний вид возвращается в настройках",
+                    "Звонки в личке теперь как в сферах: те же плитки и большой просмотр с приближением",
+                    "Демка и камера открываются на весь экран, камера телефона больше не обрезается",
+                    "Публичная страница: десять шаблонов, новые раскладки, свой шрифт и курсор; в Premium своя расстановка блоков (бета)",
+                    "На Android вас слышно в свёрнутом приложении, микрофон и завершение звонка прямо в уведомлении",
+                    "На ПК: предпросмотр файлов до отправки, подсветка сообщения по клику на ответ, пропущенные звонки одной строкой с числом",
+                    "Записи о звонках нельзя редактировать; удалить запись может только звонивший",
+                    "Аккаунт можно удалить прямо в настройках, вместе с загруженными файлами"
+        ]
+    },
     {
         id: 11,
         version: "v2.2.0",
@@ -7928,7 +8099,7 @@ function showProfileModal(profileName = "own", realId = null) {
                     btnRemove.style.color = "rgba(239, 68, 68, 0.8)";
                     btnRemove.textContent = "Удалить из друзей";
                     btnRemove.addEventListener("click", async () => {
-                        if (confirm(`Вы уверены, что хотите удалить ${targetName} из друзей?`)) {
+                        if (await window.loveConfirm({ title: `Удалить ${targetName} из друзей?`, confirmText: 'Удалить', danger: true })) {
                             try {
                                 if (typeof FriendsAPI !== 'undefined') {
                                     await FriendsAPI.remove(targetId);
@@ -9174,8 +9345,8 @@ function openMusicPlayer(title, artist) {
         playerCard.style.left = `${rect.left}px`;
         playerCard.style.width = `${rect.width}px`;
         playerCard.style.height = `${rect.height}px`;
-        playerCard.style.borderRadius = "16px";
-        playerCard.style.background = "rgba(255, 255, 255, 0.03)";
+        playerCard.style.borderRadius = PLAYER_LOOK().boxRadius;
+        playerCard.style.background = PLAYER_LOOK().boxBg;
         playerCard.style.backdropFilter = "none";
         playerCard.style.boxShadow = "none";
         playerCard.style.transition = "none";
@@ -9192,17 +9363,17 @@ function openMusicPlayer(title, artist) {
         void playerCard.offsetHeight;
         
         // Плавно морфим в полноценную карточку плеера (iOS-style cubic-bezier)
-        playerModal.style.background = "rgba(0,0,0,0.85)";
-        playerModal.style.backdropFilter = "blur(15px)";
+        playerModal.style.background = PLAYER_LOOK().scrim;
+        playerModal.style.backdropFilter = PLAYER_LOOK().blur;
         
         playerCard.style.transition = "top 0.45s cubic-bezier(0.25, 1, 0.2, 1), left 0.45s cubic-bezier(0.25, 1, 0.2, 1), width 0.45s cubic-bezier(0.25, 1, 0.2, 1), height 0.45s cubic-bezier(0.25, 1, 0.2, 1), border-radius 0.45s cubic-bezier(0.25, 1, 0.2, 1), background 0.45s ease";
         playerCard.style.top = `${finalTop}px`;
         playerCard.style.left = `${finalLeft}px`;
         playerCard.style.width = `${finalWidth}px`;
         playerCard.style.height = `${finalHeight}px`;
-        playerCard.style.borderRadius = "28px";
-        playerCard.style.background = "rgba(15,15,15,0.7)";
-        playerCard.style.boxShadow = "0 20px 40px rgba(0,0,0,0.5)";
+        playerCard.style.borderRadius = PLAYER_LOOK().cardRadius;
+        playerCard.style.background = PLAYER_LOOK().cardBg;
+        playerCard.style.boxShadow = PLAYER_LOOK().cardShadow;
         
         // Показываем контент с небольшой задержкой
         setTimeout(() => {
@@ -9241,8 +9412,8 @@ function openMusicPlayer(title, artist) {
         void playerCard.offsetHeight;
         
         // Плавно проявляем фон и карточку
-        playerModal.style.background = "rgba(0,0,0,0.85)";
-        playerModal.style.backdropFilter = "blur(15px)";
+        playerModal.style.background = PLAYER_LOOK().scrim;
+        playerModal.style.backdropFilter = PLAYER_LOOK().blur;
         
         playerCard.style.transition = "transform 0.38s cubic-bezier(0.25, 1, 0.2, 1), opacity 0.38s ease";
         playerCard.style.transform = "translateY(0) scale(1)";
@@ -9528,6 +9699,17 @@ function initProgressDragging() {
     });
 }
 
+// Вид морфинга «плашка в профиле ↔ плеер». Новый дизайн красит окна и фон
+// правилами с !important — обычные инлайн-стили анимации они перебивали, и
+// плеер закрывался рывком. Поэтому значения берём из его токенов, а сами
+// окно и карточку плеера новый дизайн не трогает (redesign.css).
+function PLAYER_LOOK() {
+    if (document.documentElement.classList.contains('rd')) {
+        return { boxRadius: '12px', boxBg: 'var(--rd-raise)', cardRadius: '16px', cardBg: 'var(--rd-panel)', cardShadow: 'var(--rd-pop)', scrim: 'var(--rd-scrim)', blur: 'none' };
+    }
+    return { boxRadius: '16px', boxBg: 'rgba(255, 255, 255, 0.03)', cardRadius: '28px', cardBg: 'rgba(15,15,15,0.7)', cardShadow: '0 20px 40px rgba(0,0,0,0.5)', scrim: 'rgba(0,0,0,0.85)', blur: 'blur(15px)' };
+}
+
 // Клик по карточке прослушивания музыки в профиле
 const profileListeningBox = document.getElementById("profile-listening-box");
 if (profileListeningBox) {
@@ -9575,14 +9757,19 @@ const closePlayer = () => {
             pModal.style.backdropFilter = "blur(0px)";
 
             // Деформируем карточку обратно в форму и положение плашки (iOS-style)
-            pCard.style.transition = "top 0.42s cubic-bezier(0.25, 1, 0.2, 1), left 0.42s cubic-bezier(0.25, 1, 0.2, 1), width 0.42s cubic-bezier(0.25, 1, 0.2, 1), height 0.42s cubic-bezier(0.25, 1, 0.2, 1), border-radius 0.42s cubic-bezier(0.25, 1, 0.2, 1), background 0.42s ease";
+            // Под конец карточка растворяется, а плашка в профиле проявляется
+            // навстречу — без рывка в момент подмены.
+            pCard.style.transition = "top 0.42s cubic-bezier(0.25, 1, 0.2, 1), left 0.42s cubic-bezier(0.25, 1, 0.2, 1), width 0.42s cubic-bezier(0.25, 1, 0.2, 1), height 0.42s cubic-bezier(0.25, 1, 0.2, 1), border-radius 0.42s cubic-bezier(0.25, 1, 0.2, 1), background 0.42s ease, box-shadow 0.3s ease, opacity 0.16s ease 0.26s";
             pCard.style.top = `${rect.top}px`;
             pCard.style.left = `${rect.left}px`;
             pCard.style.width = `${rect.width}px`;
             pCard.style.height = `${rect.height}px`;
-            pCard.style.borderRadius = "16px";
-            pCard.style.background = "rgba(255, 255, 255, 0.03)";
+            pCard.style.borderRadius = PLAYER_LOOK().boxRadius;
+            pCard.style.background = PLAYER_LOOK().boxBg;
             pCard.style.boxShadow = "none";
+            pCard.style.opacity = "0";
+            pBox.style.transition = "opacity 0.18s ease";
+            setTimeout(() => { pBox.style.opacity = "1"; }, 240);
 
             setTimeout(() => {
                 pBox.style.opacity = "1";
@@ -9600,6 +9787,7 @@ const closePlayer = () => {
                 pCard.style.backdropFilter = "";
                 pCard.style.boxShadow = "";
                 pCard.style.transition = "";
+                pCard.style.opacity = "";
                 
                 pContent.style.opacity = "";
                 pModal.style.background = "";

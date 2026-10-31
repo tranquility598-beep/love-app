@@ -67,6 +67,9 @@
     <div class="ed-top-right">
       <span class="ed-saved" id="ed-saved" role="status" aria-live="polite"></span><button class="btn btn--ghost" id="btn-retry-save" type="button" hidden>Повторить</button>
       <button class="btn btn--ghost" id="btn-preview-mobile" type="button" hidden>Превью</button>
+      <span class="draft-chip" id="draft-chip" hidden>Гости видят прошлую версию</span>
+      <button class="btn btn--ghost" id="btn-discard-draft" type="button" hidden>Отменить</button>
+      <button class="btn btn--primary" id="btn-publish-draft" type="button" hidden>Опубликовать<span class="wide-only"> изменения</span></button>
       <button class="btn btn--primary" id="btn-publish" type="button" hidden>Опубликовать</button>
     </div>
   </header>
@@ -93,7 +96,18 @@
           <h1 class="ed-section-title" id="ed-section-title">Профиль</h1>
           <p class="ed-section-description" id="ed-section-description">Расскажи о себе и выбери, как тебя увидят.</p>
         </div>
-        
+        <div class="look-tools" id="look-tools" hidden>
+          <label class="look-search">
+            <span class="sr-only">Найти настройку</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input id="look-search" type="search" placeholder="Найти настройку: курсор, шрифт, градиент…" autocomplete="off">
+          </label>
+          <div class="look-mode" id="look-mode" role="group" aria-label="Сколько настроек показывать">
+            <button type="button" data-look-mode="simple" aria-pressed="true">Просто</button>
+            <button type="button" data-look-mode="detailed" aria-pressed="false">Подробно</button>
+          </div>
+        </div>
+        <p class="hint look-search-empty" id="look-search-empty" hidden>Ничего не нашлось. Попробуйте другое слово — например «кнопки», «фон» или «имя».</p>
       </div>
 
       <!-- Ссылка на страницу + переключатель публикации -->
@@ -111,6 +125,11 @@
         <div class="card-body" id="basics-body"></div>
       </section>
 
+      <section class="card" id="sec-templates" data-editor-group="appearance">
+        <div class="card-head"><h2 class="card-title">Шаблоны</h2></div>
+        <div class="card-body" id="templates-body"></div>
+      </section>
+
       <section class="card" id="sec-look" data-editor-group="appearance">
         <div class="card-head"><h2 class="card-title">Оформление</h2></div>
         <div class="card-body" id="look-body"></div>
@@ -119,6 +138,31 @@
       <section class="card" id="sec-background" data-editor-group="appearance">
         <div class="card-head"><h2 class="card-title">Фон</h2></div>
         <div class="card-body" id="background-body"></div>
+      </section>
+
+      <section class="card" id="sec-theme" data-editor-group="appearance" data-adv="1">
+        <div class="card-head"><h2 class="card-title">Конструктор темы <span class="beta">Бета</span></h2></div>
+        <div class="card-body" id="theme-body"></div>
+      </section>
+
+      <section class="card" id="sec-style" data-editor-group="appearance" data-adv="1">
+        <div class="card-head"><h2 class="card-title">Детали</h2></div>
+        <div class="card-body" id="style-body"></div>
+      </section>
+
+      <section class="card" id="sec-presets" data-editor-group="appearance" data-adv="1">
+        <div class="card-head"><h2 class="card-title">Свои стили</h2></div>
+        <div class="card-body" id="presets-body"></div>
+      </section>
+
+      <section class="card simple-only" id="sec-look-more" data-editor-group="appearance">
+        <div class="card-body look-more">
+          <div>
+            <p class="look-more-title">Хочется тоньше?</p>
+            <p class="hint">В режиме «Подробно» — вторая тема, градиент, узоры и живой фон, свой набор цветов, форма кнопок и карточек, имя, курсор, шлейф и сохранённые стили.</p>
+          </div>
+          <button class="btn btn--ghost" type="button" data-look-mode="detailed">Показать все настройки</button>
+        </div>
       </section>
 
       <section class="card" id="sec-links" data-editor-group="links">
@@ -144,6 +188,26 @@
         <div class="card-body" id="blocks-body"></div>
       </section>
 
+      <section class="card" id="sec-order" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Порядок блоков</h2></div>
+        <div class="card-body" id="order-body"></div>
+      </section>
+
+      <section class="card" id="sec-gallery" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Галерея</h2></div>
+        <div class="card-body" id="gallery-body"></div>
+      </section>
+
+      <section class="card" id="sec-invite" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Приглашение в сферу</h2></div>
+        <div class="card-body" id="invite-body"></div>
+      </section>
+
+      <section class="card" id="sec-more" data-editor-group="blocks">
+        <div class="card-head"><h2 class="card-title">Интересы, цитата и таймер</h2></div>
+        <div class="card-body" id="more-body"></div>
+      </section>
+
       <section class="card" id="sec-people" data-editor-group="blocks">
         <div class="card-head"><h2 class="card-title">Пара и близкие</h2></div>
         <div class="card-body" id="people-body"></div>
@@ -161,7 +225,7 @@
 
       <footer class="ed-foot" data-editor-group="publish">
         <button class="btn btn--danger-quiet" id="btn-disable" type="button" hidden>Скрыть страницу</button>
-        <p class="ed-foot-note">Изменения сохраняются сами.</p>
+        <p class="ed-foot-note">Правки сохраняются сами в черновик. Гости увидят их после «Опубликовать изменения».</p>
       </footer>
 
     </div>

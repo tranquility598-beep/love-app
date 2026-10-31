@@ -285,13 +285,15 @@ class _InviteBody extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                          Text(
-                          'ПРИГЛАШЕНИЕ В LOVE',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.3,
-                            color: context.palette.textMuted,
-                          ),
+                          context.palette.rd ? 'Приглашение в Love' : 'ПРИГЛАШЕНИЕ В LOVE',
+                          style: context.palette.rd
+                              ? LoveText.monoLabel(context.palette)
+                              : TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.3,
+                                  color: context.palette.textMuted,
+                                ),
                         ),
                         const SizedBox(height: 3),
                         Text(

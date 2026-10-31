@@ -17,6 +17,13 @@ const { escapeRegex } = require('../utils/security');
 const { blockedIdsFor, isBlockedBetween } = require('../utils/blocking');
 const { validateFile } = require('../utils/fileValidator');
 const { createSubmittedCase, sendSubmissionError } = require('../services/caseSubmissions');
+const { purgeUser, purgeFootprint, selfDeleteRefusal } = require('../services/userPurge');
+const PURGE_MODELS = require('../services/purgeModels');
+const { purgeUserWithFiles, createFileStore } = require('../services/userFiles');
+const { allowedHosts } = require('../utils/profileMedia');
+const { canonicalRole } = require('../config/adminRoles');
+const { logAudit } = require('../services/auditService');
+const { otpLimiter } = require('../middleware/rateLimiter');
 
 const USERNAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -27,6 +34,63 @@ function buildPublicUser(user) {
     hasGoogle: Boolean(user.googleId)
   };
 }
+
+// Удаление читает пароль только так: select('+password role username') включает
+// режим «только перечисленные поля», пароль не загружается, и его проверка молча
+// пропускалась бы как у входа через Google.
+/** Что удалится вместе с аккаунтом — для окна подтверждения. */
+router.get('/me/deletion-preview', authMiddleware, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) return res.status(404).json({ message: 'Аккаунт не найден' });
+    const role = canonicalRole(user.role);
+    res.json({
+      footprint: await purgeFootprint(PURGE_MODELS, user._id),
+      hasPassword: Boolean(user.password),
+      username: user.username,
+      isStaff: Boolean(role && role !== 'user')
+    });
+  } catch (error) {
+    console.error('Deletion preview error:', error);
+    res.status(500).json({ message: 'Не удалось подготовить удаление. Попробуйте позже.' });
+  }
+});
+
+/**
+ * Удаление своего аккаунта: пароль (если он есть) и ник вручную. Заблокированный
+ * сюда не попадёт: authMiddleware отвечает ему 403, иначе бан снимался бы
+ * удалением и новой регистрацией на ту же почту.
+ */
+router.post('/me/delete', authMiddleware, otpLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) return res.status(404).json({ message: 'Аккаунт не найден' });
+    const refusal = await selfDeleteRefusal(user, req.body || {}, canonicalRole);
+    if (refusal) return res.status(refusal.status).json({ code: refusal.code, message: refusal.message });
+
+    req.app.get('io')?.in(`user:${user._id}`).disconnectSockets(true);
+    const { counts } = await purgeUserWithFiles(PURGE_MODELS, user._id, {
+      purgeUser,
+      store: createFileStore(cloudinary),
+      options: { cloudName: cloudinary.config().cloud_name, ownHosts: [...allowedHosts()] },
+      onFiles: files => logAudit({
+        req, actor: user._id, action: 'SELF_DELETE_USER_FILES', targetType: 'user', targetId: user._id, details: files
+      })
+    });
+    // Аккаунт уже удалён: сбой журнала не должен выглядеть как неудачное удаление.
+    await logAudit({
+      req, actor: user._id, action: 'SELF_DELETE_USER', targetType: 'user', targetId: user._id,
+      details: { username: user.username, counts }
+    }).catch(error => console.error('Self delete audit error:', error));
+
+    res.json({ message: 'Аккаунт удалён' });
+  } catch (error) {
+    console.error('Self delete error:', error);
+    res.status(500).json({ message: 'Не удалось удалить аккаунт. Попробуйте позже.' });
+  }
+});
 
 /** Список блокировок доступен только владельцу текущей сессии. */
 router.get('/me/blocked', authMiddleware, async (req, res) => {

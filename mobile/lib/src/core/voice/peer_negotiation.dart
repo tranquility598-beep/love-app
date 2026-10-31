@@ -21,6 +21,25 @@ class PeerNegotiation {
   int _epoch = 0;
 
   _PeerState _state(String id) => _states.putIfAbsent(id, _PeerState.new);
+
+  // У нового соединения flutter_webrtc держит signalingState = null, пока
+  // Android не пришлёт первое событие (для начального stable его нет).
+  // Сравнение `!= stable` было истинным: телефон не отправлял первый offer,
+  // а чужой offer принимал за встречный (glare) — звонок ПК ↔ телефон не
+  // соединялся вовсе. Решения принимаем по настоящему состоянию из
+  // нативного слоя; пустое значение — это начальный stable.
+  static const _stable = RTCSignalingState.RTCSignalingStateStable;
+
+  Future<RTCSignalingState> _signaling(RTCPeerConnection pc) async {
+    try {
+      return await pc.getSignalingState() ?? pc.signalingState ?? _stable;
+    } catch (_) {
+      return pc.signalingState ?? _stable;
+    }
+  }
+
+  bool _stableNow(RTCPeerConnection pc) =>
+      (pc.signalingState ?? _stable) == _stable;
   bool _current(String id, RTCPeerConnection pc, int epoch, String room) =>
       epoch == _epoch &&
       room.isNotEmpty &&
@@ -61,9 +80,9 @@ class PeerNegotiation {
       final flags = _state(id);
       flags.pending = true;
       flags.restart = flags.restart || iceRestart;
-      if (flags.making ||
-          flags.answering ||
-          pc.signalingState != RTCSignalingState.RTCSignalingStateStable) {
+      final state = await _signaling(pc);
+      if (!_current(id, pc, epoch, room)) return;
+      if (flags.making || flags.answering || state != _stable) {
         return;
       }
       flags.pending = false;
@@ -95,7 +114,7 @@ class PeerNegotiation {
         if (_current(id, pc, epoch, room) &&
             flags.pending &&
             !flags.answering &&
-            pc.signalingState == RTCSignalingState.RTCSignalingStateStable) {
+            _stableNow(pc)) {
           scheduleMicrotask(() => unawaited(offer(id)));
         }
       }
@@ -117,8 +136,9 @@ class PeerNegotiation {
       if (epoch != _epoch || channelId() != room) return;
       final pc = await _getPeer(id);
       if (!_current(id, pc, epoch, room)) return;
-      final collision = flags.making ||
-          pc.signalingState != RTCSignalingState.RTCSignalingStateStable;
+      final state = await _signaling(pc);
+      if (!_current(id, pc, epoch, room)) return;
+      final collision = flags.making || state != _stable;
       flags.ignoreOffer = collision && localSocketId().compareTo(id) < 0;
       if (flags.ignoreOffer) return;
       flags.answering = true;
@@ -127,7 +147,7 @@ class PeerNegotiation {
           await flags.outgoing;
         } catch (_) {}
         if (!_current(id, pc, epoch, room)) return;
-        if (pc.signalingState != RTCSignalingState.RTCSignalingStateStable) {
+        if (await _signaling(pc) != _stable) {
           await pc.setLocalDescription(RTCSessionDescription('', 'rollback'));
         }
         await pc.setRemoteDescription(description);
@@ -161,7 +181,7 @@ class PeerNegotiation {
       String id, RTCSessionDescription description) async {
     final pc = peer(id), epoch = _epoch, room = channelId();
     if (pc == null ||
-        pc.signalingState !=
+        await _signaling(pc) !=
             RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
       return;
     }

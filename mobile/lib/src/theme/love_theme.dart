@@ -16,6 +16,14 @@ class LoveTheme {
     // Outfit lacks Cyrillic → fall back to platform fonts for those glyphs.
     const fallback = <String>['Roboto', 'sans-serif'];
 
+    // Новый дизайн (бета): поля и вторичные кнопки — заливка на ступень выше
+    // фона без обводки, скругления из системы ПК (8 / 10 / 12 / 16).
+    final rd = p.rd;
+    final fieldFill = rd ? p.surfaceRaised : p.inkA(0.03);
+    final fieldLine = rd ? Colors.transparent : p.inkA(0.08);
+    final fieldFocus = rd ? p.borderActive : p.inkA(0.35);
+    final buttonRadius = rd ? 10.0 : 12.0;
+
     final textTheme = base.textTheme
         .apply(
           fontFamily: LoveFonts.sans,
@@ -54,20 +62,20 @@ class LoveTheme {
       textTheme: textTheme,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: p.inkA(0.03),
+        fillColor: fieldFill,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: const BorderRadius.all(LoveRadii.md),
-          borderSide: BorderSide(color: p.inkA(0.08)),
+          borderSide: BorderSide(color: fieldLine),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(LoveRadii.md),
-          borderSide: BorderSide(color: p.inkA(0.08)),
+          borderSide: BorderSide(color: fieldLine),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(LoveRadii.md),
-          borderSide: BorderSide(color: p.inkA(0.35)),
+          borderSide: BorderSide(color: fieldFocus),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(LoveRadii.md),
@@ -94,23 +102,23 @@ class LoveTheme {
             fontSize: 14,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(buttonRadius),
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          backgroundColor: p.inkA(0.06),
+          backgroundColor: rd ? p.surfaceRaised : p.inkA(0.06),
           foregroundColor: p.textPrimary,
           minimumSize: const Size.fromHeight(46),
-          side: BorderSide(color: p.inkA(0.10)),
+          side: rd ? BorderSide.none : BorderSide(color: p.inkA(0.10)),
           textStyle: const TextStyle(
             fontFamily: LoveFonts.sans,
             fontWeight: FontWeight.w500,
             fontSize: 13.5,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(buttonRadius),
           ),
         ),
       ),
@@ -130,8 +138,8 @@ class LoveTheme {
         ),
       ),
       chipTheme: base.chipTheme.copyWith(
-        backgroundColor: p.inkA(0.05),
-        selectedColor: p.inkA(0.12),
+        backgroundColor: rd ? p.surfaceRaised : p.inkA(0.05),
+        selectedColor: rd ? p.surfaceHighlight : p.inkA(0.12),
         disabledColor: p.inkA(0.04),
         labelStyle: TextStyle(
           color: p.textPrimary,
@@ -139,12 +147,12 @@ class LoveTheme {
           fontSize: 13,
         ),
         secondaryLabelStyle: TextStyle(color: p.textPrimary),
-        side: BorderSide(color: p.inkA(0.08)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: rd ? BorderSide.none : BorderSide(color: p.inkA(0.08)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(rd ? 8 : 10)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: p.glassStrong,
+        backgroundColor: rd ? p.surfaceHighlight : p.glassStrong,
         contentTextStyle: TextStyle(
           color: p.textPrimary,
           fontFamily: LoveFonts.sans,

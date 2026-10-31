@@ -57,9 +57,15 @@ class LovePalette {
     required this.authError,
     required this.presenceOnline,
     required this.presenceOffline,
+    this.rd = false,
   });
 
   final Brightness brightness;
+
+  /// Новый дизайн (бета, [lovePaletteDarkRd]/[lovePaletteLightRd]): кроме
+  /// цветов меняет и типографику — заголовки без курсива, подписи обычными
+  /// буквами вместо моноширинного капса (см. [LoveText]).
+  final bool rd;
 
   // Backgrounds
   final Color bgDeep;
@@ -186,7 +192,9 @@ class LovePalette {
   /// приём не переводится: [inkA] там чёрный, и вокруг маленькой тёмной точки
   /// получается грязное пятно. Сама точка на светлом фоне видна и без ореола,
   /// поэтому в светлой теме свечения нет.
-  Color glowA(double a) => brightness == Brightness.dark
+  ///
+  /// В новом дизайне свечений нет ни в одной теме.
+  Color glowA(double a) => brightness == Brightness.dark && !rd
       ? accent.withValues(alpha: a)
       : const Color(0x00000000);
 
@@ -306,6 +314,100 @@ final LovePalette lovePaletteLight = LovePalette(
   presenceOffline: const Color(0x33000000),
 );
 
+/// Новый дизайн — тёмная. Значения 1:1 с токенами ПК-клиента
+/// (`client/styles/redesign.css`, `--rd-*`): фон, панель, две ступени подъёма,
+/// линии и три уровня текста. Свой баббл светлый, чужой — тёмно-серый.
+final LovePalette lovePaletteDarkRd = LovePalette(
+  rd: true,
+  brightness: Brightness.dark,
+  bgDeep: const Color(0xFF0B0B0B),
+  bgPrimary: const Color(0xFF0B0B0B),
+  bgSecondary: const Color(0xFF0F0F0F),
+  bgTertiary: const Color(0xFF171717),
+  bgAndroid: const Color(0xFF0B0B0B),
+  surface: const Color(0xFF0F0F0F),
+  surfaceStrong: const Color(0xFF171717),
+  surfaceRaised: const Color(0xFF171717),
+  surfaceHighlight: const Color(0xFF1F1F1F),
+  accent: const Color(0xFFEDEDED),
+  accentWarm: const Color(0xFFE2E2E2),
+  accentCool: const Color(0xFFA3A3A3),
+  onAccent: const Color(0xFF0B0B0B),
+  success: const Color(0xFFEDEDED),
+  successBg: const Color(0x1A4CB96A),
+  successBorder: const Color(0x404CB96A),
+  warning: const Color(0xFFE8B341),
+  warningBg: const Color(0x12E8B341),
+  bubbleOwn: const Color(0xFFEDEDED),
+  bubbleOwnText: const Color(0xFF0B0B0B),
+  bubblePartner: const Color(0xFF171717),
+  bubblePartnerText: const Color(0xFFEDEDED),
+  textPrimary: const Color(0xFFEDEDED),
+  textSecondary: const Color(0xFFA3A3A3),
+  textMuted: const Color(0xFF6E6E6E),
+  textBright: const Color(0xFFFFFFFF),
+  border: const Color(0xFF1F1F1F),
+  borderActive: const Color(0xFF2D2D2D),
+  borderStrong: const Color(0xFF3A3A3A),
+  glass: const Color(0xFF0B0B0B),
+  glassStrong: const Color(0xFF1F1F1F),
+  scrim: const Color(0xA3000000), // rgba(0,0,0,.64)
+  danger: const Color(0xFFFF6B66),
+  dangerHover: const Color(0xFFE5544F),
+  dangerText: const Color(0xFFFF6B66),
+  dangerBg: const Color(0x1FFF6B66), // rgba(255,107,102,.12)
+  dangerBorder: const Color(0x38FF6B66),
+  authError: const Color(0xFFFF6B66),
+  presenceOnline: const Color(0xFFEDEDED),
+  presenceOffline: const Color(0xFF3A3A3A),
+);
+
+/// Новый дизайн — светлая (`html.rd[data-theme="light"]` на ПК).
+final LovePalette lovePaletteLightRd = LovePalette(
+  rd: true,
+  brightness: Brightness.light,
+  bgDeep: const Color(0xFFFAFAFA),
+  bgPrimary: const Color(0xFFFAFAFA),
+  bgSecondary: const Color(0xFFF3F3F3),
+  bgTertiary: const Color(0xFFEBEBEB),
+  bgAndroid: const Color(0xFFFAFAFA),
+  surface: const Color(0xFFF3F3F3),
+  surfaceStrong: const Color(0xFFEBEBEB),
+  surfaceRaised: const Color(0xFFEBEBEB),
+  surfaceHighlight: const Color(0xFFE2E2E2),
+  accent: const Color(0xFF121212),
+  accentWarm: const Color(0xFF2A2A2A),
+  accentCool: const Color(0xFF545454),
+  onAccent: const Color(0xFFFAFAFA),
+  success: const Color(0xFF1F7A3D),
+  successBg: const Color(0x1A4CB96A),
+  successBorder: const Color(0x404CB96A),
+  warning: const Color(0xFF8F6300),
+  warningBg: const Color(0x14E8B341),
+  bubbleOwn: const Color(0xFF121212),
+  bubbleOwnText: const Color(0xFFFAFAFA),
+  bubblePartner: const Color(0xFFEBEBEB),
+  bubblePartnerText: const Color(0xFF121212),
+  textPrimary: const Color(0xFF121212),
+  textSecondary: const Color(0xFF545454),
+  textMuted: const Color(0xFF8A8A8A),
+  textBright: const Color(0xFF0A0A0A),
+  border: const Color(0xFFE4E4E4),
+  borderActive: const Color(0xFFD3D3D3),
+  borderStrong: const Color(0xFFBDBDBD),
+  glass: const Color(0xFFFAFAFA),
+  glassStrong: const Color(0xFFFFFFFF),
+  scrim: const Color(0x47000000), // rgba(0,0,0,.28)
+  danger: const Color(0xFFD43C36),
+  dangerHover: const Color(0xFFBF302A),
+  dangerText: const Color(0xFFD43C36),
+  dangerBg: const Color(0x1AD43C36),
+  dangerBorder: const Color(0x40D43C36),
+  authError: const Color(0xFFD43C36),
+  presenceOnline: const Color(0xFF121212),
+  presenceOffline: const Color(0xFFBDBDBD),
+);
+
 /// Носитель активной палитры. Ставится выше MaterialApp (см. app.dart),
 /// чтобы `context.palette` был доступен везде, включая вложенные
 /// навигаторы и диалоги.
@@ -366,12 +468,13 @@ class LoveSpacing {
 class LoveText {
   /// Big serif title used for list/page headers ("беседы", "Друзья"…).
   /// Lora italic, lowercase in the source, ~20px, weight 400, tight tracking.
+  /// В новом дизайне — прямой Lora, без курсива (как «Беседы» на ПК).
   static TextStyle screenTitle(LovePalette palette) => TextStyle(
         fontFamily: LoveFonts.serif,
-        fontStyle: FontStyle.italic,
-        fontSize: 26,
+        fontStyle: palette.rd ? FontStyle.normal : FontStyle.italic,
+        fontSize: palette.rd ? 24 : 26,
         fontWeight: FontWeight.w500,
-        letterSpacing: -0.5,
+        letterSpacing: palette.rd ? -0.2 : -0.5,
         color: palette.textPrimary,
         height: 1.0,
       );
@@ -386,20 +489,56 @@ class LoveText {
       );
 
   /// Tiny uppercase mono label (input labels, section headers, timestamps).
-  static TextStyle monoLabel(LovePalette palette) => TextStyle(
-        fontFamily: LoveFonts.mono,
-        fontSize: 10,
-        fontWeight: FontWeight.w400,
-        letterSpacing: 1.4,
-        color: palette.textMuted,
-      );
+  /// В новом дизайне — обычная подпись шрифтом интерфейса: моноширинный
+  /// капс с разрядкой — главная примета «сгенерированного» вида.
+  static TextStyle monoLabel(LovePalette palette) => palette.rd
+      ? TextStyle(
+          fontFamily: LoveFonts.sans,
+          fontFamilyFallback: const ['Roboto', 'sans-serif'],
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+          color: palette.textMuted,
+        )
+      : TextStyle(
+          fontFamily: LoveFonts.mono,
+          fontSize: 10,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 1.4,
+          color: palette.textMuted,
+        );
 
   /// Mono timestamp inside chat / notifications.
-  static TextStyle monoTime(LovePalette palette) => TextStyle(
-        fontFamily: LoveFonts.mono,
-        fontSize: 10,
-        fontWeight: FontWeight.w400,
-        letterSpacing: 0.2,
-        color: palette.inkA(0.35),
-      );
+  static TextStyle monoTime(LovePalette palette) => palette.rd
+      ? TextStyle(
+          fontFamily: LoveFonts.sans,
+          fontFamilyFallback: const ['Roboto', 'sans-serif'],
+          fontSize: 11,
+          fontWeight: FontWeight.w400,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          color: palette.textMuted,
+        )
+      : TextStyle(
+          fontFamily: LoveFonts.mono,
+          fontSize: 10,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.2,
+          color: palette.inkA(0.35),
+        );
+
+  /// Подпись-метка: в старом виде капсом, в новом — как написана
+  /// (первая буква заглавная).
+  static String caps(LovePalette palette, String text) {
+    if (!palette.rd) return text.toUpperCase();
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
+  /// Шрифт мелких служебных подписей: моноширинный в старом виде, шрифт
+  /// интерфейса в новом. Для цифр (время, коды) моноширинный оставляют явно.
+  static String labelFont(LovePalette palette) =>
+      palette.rd ? LoveFonts.sans : LoveFonts.mono;
+
+  /// Разрядка служебных подписей: в новом виде её нет.
+  static double labelSpacing(LovePalette palette, double old) =>
+      palette.rd ? 0 : old;
 }

@@ -501,7 +501,7 @@ html.gl-wait .hero-static{opacity:0}
   <div class="wrap">
     <div class="numbers">
       <div class="glass num" data-shard><b data-count="3">3</b><span>системы: Windows, macOS и Android — переписка везде одна.</span></div>
-      <div class="glass num" data-shard><b data-count="0" data-suffix=" ₽">0 ₽</b><span>за переписки, звонки, демонстрацию экрана и сферы.</span></div>
+      <div class="glass num" data-shard><b data-count="0" data-prefix="$">$0</b><span>за переписки, звонки, демонстрацию экрана и сферы.</span></div>
       <div class="glass num" data-shard><b data-count="24" data-suffix=" ч">24 ч</b><span>— столько максимум ждать ответа поддержки. Отвечает живой человек.</span></div>
       <div class="glass num" data-shard><b data-count="10">10</b><span>готовых шаблонов для своей страницы в новой версии.</span></div>
     </div>
@@ -560,7 +560,7 @@ html.gl-wait .hero-static{opacity:0}
       <article class="glass plan" data-shard>
         <div class="plan-top"><h3>Free</h3></div>
         <p class="desc">Всё, чтобы начать общаться.</p>
-        <div class="price"><b>0 ₽</b><span>без срока</span></div>
+        <div class="price"><b>$0</b><span>без срока</span></div>
         <ul>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Основные возможности общения</li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Публичная страница профиля</li>
@@ -573,7 +573,7 @@ html.gl-wait .hero-static{opacity:0}
       <article class="glass plan" data-shard>
         <div class="plan-top"><h3>Pro</h3></div>
         <p class="desc">Больше свободы в оформлении.</p>
-        <div class="price"><b>299 ₽</b><span>в месяц</span></div>
+        <div class="price"><b>$3.99</b><span>в месяц</span></div>
         <ul>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Все возможности Free</li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>До 12 ссылок и короткий адрес</li>
@@ -586,7 +586,7 @@ html.gl-wait .hero-static{opacity:0}
       <article class="glass plan featured" data-shard>
         <div class="plan-top"><h3>Premium</h3><span class="chip"><span class="dot"></span>Самый полный</span></div>
         <p class="desc">Страница с вашим характером.</p>
-        <div class="price"><b>499 ₽</b><span>в месяц</span></div>
+        <div class="price"><b>$5.99</b><span>в месяц</span></div>
         <ul>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Все возможности Pro</li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>До 20 ссылок на странице</li>
@@ -599,7 +599,7 @@ html.gl-wait .hero-static{opacity:0}
       <article class="glass plan" data-shard>
         <div class="plan-top"><h3>Duo</h3></div>
         <p class="desc">Один тариф для вас двоих.</p>
-        <div class="price"><b>799 ₽</b><span>в месяц</span></div>
+        <div class="price"><b>$8.99</b><span>в месяц</span></div>
         <ul>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Premium для двух аккаунтов</li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Отдельный профиль у каждого</li>
@@ -1836,12 +1836,12 @@ async function start() {
 
   function countAll() {
     document.querySelectorAll('[data-count]').forEach(function (node) {
-      var to = Number(node.getAttribute('data-count')), suffix = node.getAttribute('data-suffix') || '';
-      if (reduce || !to) { node.textContent = to + suffix; return; }
+      var to = Number(node.getAttribute('data-count')), suffix = node.getAttribute('data-suffix') || '', prefix = node.getAttribute('data-prefix') || '';
+      if (reduce || !to) { node.textContent = prefix + to + suffix; return; }
       var start = performance.now(), dur = 1200;
       (function tick(now) {
         var t = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - t, 3);
-        node.textContent = Math.round(to * e) + suffix;
+        node.textContent = prefix + Math.round(to * e) + suffix;
         if (t < 1) requestAnimationFrame(tick);
       })(start);
     });

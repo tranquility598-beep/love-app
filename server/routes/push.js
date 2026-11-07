@@ -26,6 +26,7 @@ router.post('/token', authMiddleware, async (req, res) => {
     }
 
     const device = String(req.body?.device || '').slice(0, 120);
+    const socketId = String(req.body?.socketId || '').slice(0, 120);
     await PushToken.findOneAndUpdate(
       { token },
       {
@@ -33,6 +34,7 @@ router.post('/token', authMiddleware, async (req, res) => {
         token,
         platform: 'android',
         device,
+        socketId,
         lastSeenAt: new Date()
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }

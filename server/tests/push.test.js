@@ -60,7 +60,7 @@ function sendCalls() {
 function stubTokens(tokens) {
   PushToken.find = () => ({
     select: () => ({
-      lean: async () => tokens.map(token => ({ token }))
+      lean: async () => tokens.map(token => typeof token === 'string' ? { token } : token)
     })
   });
 }
@@ -126,7 +126,7 @@ test('access token запрашивается один раз и кешируе�
   assert.equal(decoded.payload.aud, TOKEN_URL);
 });
 
-test('сообщение уходит уведомлением в канал сообщений', async () => {
+test('сообщение уходит данными с получателем для проверки аккаунта на телефоне', async () => {
   stubTokens(['tok-a', 'tok-b']);
 
   const result = await push.sendMessagePush('user-1', {
@@ -141,9 +141,11 @@ test('сообщение уходит уведомлением в канал с�
   const messages = sendCalls();
   assert.equal(messages.length, 2);
   for (const message of messages) {
-    assert.equal(message.notification.title, 'Александр');
-    assert.equal(message.notification.body, 'привет');
-    assert.equal(message.android.notification.channel_id, 'love_messages');
+    assert.equal(message.notification, undefined);
+    assert.equal(message.android.notification, undefined);
+    assert.equal(message.data.title, 'Александр');
+    assert.equal(message.data.body, 'привет');
+    assert.equal(message.data.recipientId, 'user-1');
     assert.equal(message.android.priority, 'high');
     assert.equal(message.data.type, 'new_dm');
     assert.equal(message.data.conversationId, 'conv-1');
@@ -155,6 +157,7 @@ test('сообщение уходит уведомлением в канал с�
 
 test('входящий звонок — только данные, чтобы клиент открыл полный экран', async () => {
   stubTokens(['tok-a']);
+  const before = Date.now();
 
   await push.sendCallPush('user-2', {
     callerName: 'Мария',
@@ -172,9 +175,12 @@ test('входящий звонок — только данные, чтобы к
   assert.equal(message.data.type, 'incoming_call');
   assert.equal(message.data.callKind, 'video');
   assert.equal(message.data.callerName, 'Мария');
+  assert.equal(message.data.recipientId, 'user-2');
+  assert.ok(Number(message.data.expiresAt) >= before + 45000);
+  assert.ok(Number(message.data.expiresAt) <= Date.now() + 45000);
 });
 
-test('пропущенный звонок — обычное уведомление в канал звонков', async () => {
+test('пропущенный звонок — данные для уведомления с проверкой получателя', async () => {
   stubTokens(['tok-a']);
 
   await push.sendMissedCallPush('user-3', {
@@ -185,10 +191,55 @@ test('пропущенный звонок — обычное уведомлен�
   });
 
   const [message] = sendCalls();
-  assert.equal(message.notification.title, 'Пропущенный звонок');
-  assert.equal(message.notification.body, 'от Мария');
-  assert.equal(message.android.notification.channel_id, 'love_calls');
+  assert.equal(message.notification, undefined);
+  assert.equal(message.android.notification, undefined);
+  assert.equal(message.data.title, 'Пропущенный звонок');
+  assert.equal(message.data.body, 'от Мария');
+  assert.equal(message.data.recipientId, 'user-3');
   assert.equal(message.data.type, 'missed_call');
+});
+
+test('живой сокет исключает только своё устройство, другой телефон получает push', async () => {
+  stubTokens([
+    { token: 'online-phone', socketId: 'socket-1' },
+    { token: 'offline-phone', socketId: 'old-socket' },
+    { token: 'legacy-phone' }
+  ]);
+  const checked = [];
+  push.setDeviceConnectionChecker((userId, socketId) => {
+    checked.push([userId, socketId]);
+    return userId === 'user-7' && socketId === 'socket-1';
+  });
+
+  const result = await push.sendMessagePush('user-7', { body: 'привет' });
+  assert.equal(result.sent, 2);
+  assert.deepEqual(sendCalls().map(m => m.token).sort(), ['legacy-phone', 'offline-phone']);
+  assert.deepEqual(checked, [
+    ['user-7', 'socket-1'], ['user-7', 'old-socket'], ['user-7', undefined]
+  ]);
+});
+
+test('получатель в данных всегда берётся из адресата, автоматическая плашка запрещена', async () => {
+  stubTokens(['tok-a']);
+  await push.sendToUser('user-8', {
+    kind: 'message', dataOnly: false, title: 'Love', body: 'текст',
+    data: { type: 'new_dm', recipientId: 'other-user', title: 'подмена' }
+  });
+  const [message] = sendCalls();
+  assert.equal(message.notification, undefined);
+  assert.equal(message.data.recipientId, 'user-8');
+  assert.equal(message.data.title, 'Love');
+  assert.equal(message.data.body, 'текст');
+});
+
+test('явный sendToTokens сохраняет поддержку обычной плашки', async () => {
+  await push.sendToTokens(['tok-a'], {
+    kind: 'message', title: 'Love', body: 'текст', data: { type: 'notice' }
+  });
+  const [message] = sendCalls();
+  assert.equal(message.notification.title, 'Love');
+  assert.equal(message.notification.body, 'текст');
+  assert.equal(message.android.notification.channel_id, 'love_messages');
 });
 
 test('мёртвый токен удаляется, живой остаётся', async () => {

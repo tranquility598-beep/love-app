@@ -59,19 +59,6 @@ function removeConnectedSocket(userId, socketId) {
   return true;
 }
 
-/**
- * Есть ли у человека живое соединение прямо сейчас.
- *
- * Источник правды — комната `user:<id>`, а не карта connectedUsers: при
- * переподключении карта на доли секунды расходится с составом комнаты.
- * От этого ответа зависит, надо ли будить телефон пушем, поэтому берём
- * то, что видит сам socket.io.
- */
-function isUserConnected(io, userId) {
-  if (!userId) return false;
-  return !!io.sockets.adapter.rooms.get(`user:${userId.toString()}`)?.size;
-}
-
 function socketIsInVoiceChannel(channelId, socketId) {
   return !!voiceChannels.get(channelId)?.some((member) => member.socketId === socketId);
 }
@@ -81,6 +68,11 @@ function socketIsInVoiceChannel(channelId, socketId) {
 const voiceChannels = new Map();
 
 module.exports = (io) => {
+  push.setDeviceConnectionChecker((userId, socketId) => {
+    if (!socketId) return false;
+    const deviceSocket = io.sockets.sockets.get(socketId);
+    return Boolean(deviceSocket && String(deviceSocket.user?._id) === userId);
+  });
 
   // Звонки, на которые ещё не ответили (services/callRings.js). Общие для
   // всех сокетов, поэтому живут вне io.on('connection').
@@ -97,16 +89,14 @@ module.exports = (io) => {
 
       // Телефона нет в сети — событие выше до него не дошло, и после
       // 45 секунд звонка человек даже не узнает, что ему звонили.
-      // Пушем сообщаем о пропущенном; онлайн-устройства уже показали звонок
-      // и сами нарисуют «Пропущенный», дублировать им не нужно.
-      if (!isUserConnected(io, ring.targetId)) {
-        push.sendMissedCallPush(ring.targetId, {
-          callerName: ring.from?.username || '',
-          conversationId: ring.conversationId,
-          channelId: ring.channelId,
-          kind: ring.kind
-        }).catch(error => console.error('[push] missed call:', error.message));
-      }
+      // Push service исключает только конкретные устройства с живым сокетом.
+      // Открытый ПК не должен подавлять уведомление на закрытом телефоне.
+      push.sendMissedCallPush(ring.targetId, {
+        callerName: ring.from?.username || '',
+        conversationId: ring.conversationId,
+        channelId: ring.channelId,
+        kind: ring.kind
+      }).catch(error => console.error('[push] missed call:', error.message));
     }
   });
 
@@ -587,18 +577,14 @@ module.exports = (io) => {
                   channelId
                 });
 
-                // Приложение получателя закрыто — соединения нет, событие выше
-                // ушло в пустую комнату. Будим телефон push'ем: без него о
-                // сообщении человек узнает, только открыв приложение сам.
-                if (!isUserConnected(io, otherParticipant)) {
-                  push.sendMessagePush(otherParticipant.toString(), {
-                    title: socket.user.username,
-                    body: preview.preview || 'Новое сообщение',
-                    conversationId: dm._id.toString(),
-                    channelId: channelId.toString(),
-                    messageId: message._id.toString()
-                  }).catch(error => console.error('[push] new message:', error.message));
-                }
+                // Сокет доставляет онлайн-устройствам, push service — остальным.
+                push.sendMessagePush(otherParticipant.toString(), {
+                  title: socket.user.username,
+                  body: preview.preview || 'Новое сообщение',
+                  conversationId: dm._id.toString(),
+                  channelId: channelId.toString(),
+                  messageId: message._id.toString()
+                }).catch(error => console.error('[push] new message:', error.message));
               }
               
               // Отправляем обновление сообщения обоим участникам
@@ -1433,15 +1419,13 @@ module.exports = (io) => {
       // ведь FCM умеет поднять даже закрытое приложение. Проснувшись,
       // оно спросит ожидающие звонки (call:pending) и покажет вызов.
       // Звонок и так живёт 45 с, дольше этого пуша не нужна.
-      if (!isUserConnected(io, targetIdStr)) {
-        push.sendCallPush(targetIdStr, {
-          callerName: socket.user.username,
-          callerId: userId,
-          conversationId: incoming.conversationId,
-          channelId: incoming.channelId,
-          kind
-        }).catch(error => console.error('[push] incoming call:', error.message));
-      }
+      push.sendCallPush(targetIdStr, {
+        callerName: socket.user.username,
+        callerId: userId,
+        conversationId: incoming.conversationId,
+        channelId: incoming.channelId,
+        kind
+      }).catch(error => console.error('[push] incoming call:', error.message));
     });
 
     /**

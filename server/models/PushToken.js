@@ -33,6 +33,10 @@ const pushTokenSchema = new mongoose.Schema({
     default: 'android'
   },
 
+  // Only this device's authenticated live socket suppresses FCM. Another
+  // online device (for example the desktop app) must not silence this phone.
+  socketId: { type: String, default: '', maxlength: 120 },
+
   // Чтобы было видно, чем именно устройство: пригодится в поддержке.
   device: {
     type: String,

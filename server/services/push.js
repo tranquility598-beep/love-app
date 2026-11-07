@@ -130,7 +130,8 @@ async function getAccessToken() {
  *
  * kind 'call' — data-only с высоким приоритетом: приложение само показывает
  * полноэкранный вызов (обычная плашка FCM не умеет fullScreenIntent).
- * kind 'message' — обычное уведомление в канал сообщений.
+ * sendToUser sets dataOnly so Android checks account/preferences itself.
+ * Direct callers may still explicitly request a notification payload.
  */
 async function sendToToken(token, message) {
   const tokenValue = await getAccessToken();
@@ -152,7 +153,7 @@ async function sendToToken(token, message) {
     data[key] = String(value);
   }
 
-  if (message.kind === 'call') {
+  if (message.kind === 'call' || message.dataOnly) {
     // Только данные: уведомление строит клиент, чтобы показать звонок
     // поверх экрана блокировки.
     body.message.data = data;
@@ -234,12 +235,32 @@ async function sendToTokens(tokens, message) {
   return { sent, removed: dead.length };
 }
 
-/** Отправка человеку на все его устройства. */
+let deviceConnected = () => false;
+
+function setDeviceConnectionChecker(checker) {
+  deviceConnected = typeof checker === 'function' ? checker : () => false;
+}
+
+/** Отправка человеку на его устройства без собственного живого сокета. */
 async function sendToUser(userId, message) {
   if (!userId || !isConfigured()) return { sent: 0, removed: 0 };
   try {
-    const rows = await PushToken.find({ user: userId }).select('token').lean();
-    return await sendToTokens(rows.map(row => row.token), message);
+    const rows = await PushToken.find({ user: userId }).select('token socketId').lean();
+    // Keep Android notifications data-only: the client checks the currently
+    // signed-in account and its notification settings before displaying them.
+    // The OS would display a notification payload even after offline logout.
+    const tokens = rows.filter(row => !deviceConnected(String(userId), row.socketId))
+      .map(row => row.token);
+    return await sendToTokens(tokens, {
+      ...message,
+      dataOnly: true,
+      data: {
+        ...message.data,
+        recipientId: String(userId),
+        title: message.title || 'Love',
+        body: message.body || ''
+      }
+    });
   } catch (error) {
     console.warn('[push] не удалось получить токены:', error.message);
     return { sent: 0, removed: 0 };
@@ -281,7 +302,8 @@ function sendCallPush(userId, { callerName, callerId, conversationId, channelId,
       callerId,
       conversationId,
       channelId,
-      callKind: kind === 'video' ? 'video' : 'audio'
+      callKind: kind === 'video' ? 'video' : 'audio',
+      expiresAt: String(Date.now() + 45000)
     }
   });
 }
@@ -310,10 +332,12 @@ function __resetForTests() {
   accessTokenExpiresAt = 0;
   accessTokenPromise = null;
   missingCredentialsLogged = false;
+  deviceConnected = () => false;
 }
 
 module.exports = {
   isConfigured,
+  setDeviceConnectionChecker,
   getAccessToken,
   sendToTokens,
   sendToUser,
